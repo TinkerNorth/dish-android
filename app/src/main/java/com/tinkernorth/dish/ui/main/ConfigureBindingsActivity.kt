@@ -17,9 +17,6 @@ import androidx.annotation.StringRes
 import androidx.appcompat.app.AlertDialog
 import androidx.core.net.toUri
 import androidx.core.view.isEmpty
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
@@ -40,6 +37,7 @@ import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setLeadingIcon
 import com.tinkernorth.dish.ui.common.tierPillSpec
 import com.tinkernorth.dish.ui.donate.wireDonateButton
@@ -96,24 +94,12 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
     }
 
     private fun observe() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.ui.collect { state ->
-                    if (state.loaded) renderContent(state)
-                    renderBlocker(state)
-                }
-            }
+        observeWhileStarted(viewModel.ui) { state ->
+            if (state.loaded) renderContent(state)
+            renderBlocker(state)
         }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.applyState.collect { renderApplyState(it) }
-            }
-        }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.micPermissionRequests.collect { requestMicPermission() }
-            }
-        }
+        observeWhileStarted(viewModel.applyState) { renderApplyState(it) }
+        observeWhileStarted(viewModel.micPermissionRequests) { requestMicPermission() }
     }
 
     private val micPermissionLauncher =

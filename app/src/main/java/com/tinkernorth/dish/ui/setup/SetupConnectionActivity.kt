@@ -9,9 +9,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.LinkState
@@ -27,6 +24,7 @@ import com.tinkernorth.dish.source.system.PERMISSION
 import com.tinkernorth.dish.source.system.isGranted
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.paintTierBadge
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.connections.PairPinDialog
@@ -124,20 +122,12 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
     }
 
     private fun observe() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.state.collect { render(it) }
-            }
-        }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.events.collect { event ->
-                    when (event) {
-                        is SetupConnectionViewModel.Event.ShowPairing -> pairing.show(event.server)
-                        is SetupConnectionViewModel.Event.Connected -> onConnected(event.hostId)
-                        is SetupConnectionViewModel.Event.Error -> onConnectionError(event.message)
-                    }
-                }
+        observeWhileStarted(viewModel.state) { render(it) }
+        observeWhileStarted(viewModel.events) { event ->
+            when (event) {
+                is SetupConnectionViewModel.Event.ShowPairing -> pairing.show(event.server)
+                is SetupConnectionViewModel.Event.Connected -> onConnected(event.hostId)
+                is SetupConnectionViewModel.Event.Error -> onConnectionError(event.message)
             }
         }
     }

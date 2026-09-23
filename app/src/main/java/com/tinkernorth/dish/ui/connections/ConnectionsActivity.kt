@@ -69,6 +69,7 @@ import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.StaticViewAdapter
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setLoading
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.donate.attachDonatePill
@@ -299,11 +300,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     }
 
     private fun observeUiState() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.ui.collect { state -> renderConnections(state) }
-            }
-        }
+        observeWhileStarted(viewModel.ui) { state -> renderConnections(state) }
     }
 
     private fun renderConnections(state: ConnectionsUiState) {
@@ -397,11 +394,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     }
 
     private fun observeSystemStateBanners() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                btAdapterState.state.collect { state -> applyBtAdapterBanner(state) }
-            }
-        }
+        observeWhileStarted(btAdapterState.state) { state -> applyBtAdapterBanner(state) }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 val bannerFlow =
@@ -414,33 +407,21 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 bannerFlow.collect { variant -> btPermissionBanner.apply(variant) }
             }
         }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                networkState.state.collect { state -> connectionBanners.applyNetwork(state) }
-            }
-        }
+        observeWhileStarted(networkState.state) { state -> connectionBanners.applyNetwork(state) }
     }
 
     private fun observeBluetoothRegistry() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                btRegistry.staleBtIds.collect { stale -> connectionBanners.applyStaleBt(stale) }
-            }
-        }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                btRegistry.errors.collect { msg ->
-                    notifications.error(
-                        title = "Bluetooth",
-                        body = msg,
-                        glyph = R.drawable.ic_bluetooth_off,
-                        action =
-                            DishNotification.Action(
-                                label = getString(R.string.action_retry),
-                            ) { requestBtPermissions(continueToAdd = true) },
-                    )
-                }
-            }
+        observeWhileStarted(btRegistry.staleBtIds) { stale -> connectionBanners.applyStaleBt(stale) }
+        observeWhileStarted(btRegistry.errors) { msg ->
+            notifications.error(
+                title = "Bluetooth",
+                body = msg,
+                glyph = R.drawable.ic_bluetooth_off,
+                action =
+                    DishNotification.Action(
+                        label = getString(R.string.action_retry),
+                    ) { requestBtPermissions(continueToAdd = true) },
+            )
         }
     }
 

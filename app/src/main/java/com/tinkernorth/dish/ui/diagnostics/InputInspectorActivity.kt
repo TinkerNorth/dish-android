@@ -26,6 +26,7 @@ import com.tinkernorth.dish.source.store.MIC_LED_ON
 import com.tinkernorth.dish.source.store.MIC_LED_PULSE
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.diagnostics.InputInspectorViewModel.Companion.TEST_MAGNITUDE
 import dagger.hilt.android.AndroidEntryPoint
@@ -126,11 +127,7 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         flow: Flow<T>,
         render: (T) -> Unit,
     ) {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                flow.collect { render(it) }
-            }
-        }
+        observeWhileStarted(flow) { render(it) }
     }
 
     override fun onStart() {

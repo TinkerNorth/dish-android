@@ -8,9 +8,6 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.viewModels
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.tinkernorth.dish.R
@@ -24,13 +21,13 @@ import com.tinkernorth.dish.source.system.WifiBand
 import com.tinkernorth.dish.source.system.WifiLink
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.common.statusChipTextRes
 import com.tinkernorth.dish.ui.diagnostics.DiagnosticsViewModel.LatencyUi
 import com.tinkernorth.dish.ui.diagnostics.DiagnosticsViewModel.Overview
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -82,11 +79,7 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
         flow: Flow<T>,
         render: (T) -> Unit,
     ) {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                flow.collect { render(it) }
-            }
-        }
+        observeWhileStarted(flow) { render(it) }
     }
 
     private fun renderOverview(overview: Overview) {

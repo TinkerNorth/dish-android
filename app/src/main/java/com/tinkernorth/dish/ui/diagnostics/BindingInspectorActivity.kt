@@ -5,15 +5,12 @@ package com.tinkernorth.dish.ui.diagnostics
 import android.os.Bundle
 import android.view.View
 import androidx.activity.viewModels
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivityBindingInspectorBinding
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class BindingInspectorActivity : BaseGamepadHostActivity() {
@@ -35,11 +32,7 @@ class BindingInspectorActivity : BaseGamepadHostActivity() {
         binding.sectionFeedback.labelSection.setText(R.string.diagnostics_section_feedback)
         binding.sectionLatency.labelSection.setText(R.string.diagnostics_section_latency)
 
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.ui.collect { render(it) }
-            }
-        }
+        observeWhileStarted(viewModel.ui) { render(it) }
     }
 
     private fun render(state: BindingInspectorUiState) {
