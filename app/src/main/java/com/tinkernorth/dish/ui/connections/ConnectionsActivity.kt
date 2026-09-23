@@ -131,7 +131,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
         override fun onRepair(id: String) {
             val remembered = satellite.remembered().firstOrNull { it.id == id } ?: return
-            showPairingDialog(remembered.toDiscovered())
+            satellitePairing.show(remembered.toDiscovered())
         }
 
         override fun onForget(id: String) {
@@ -186,9 +186,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     // caller (the new wait-for-host-first flow), bypassing the legacy pendingBtRegistration path.
     private var onDiscoverableResult: ((granted: Boolean, durationSec: Int) -> Unit)? = null
 
-    private var pinDialog: PairPinDialog? = null
-
-    private var pairingServer: com.tinkernorth.dish.core.model.DiscoveredServer? = null
+    private val satellitePairing = SatellitePairing()
 
     // Nothing the user presses here may end in a shrug: a row whose button does nothing
     // is indistinguishable from a broken app, and used to be exactly that.
@@ -316,7 +314,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             getString(R.string.action_scan),
         )
         // The success path emits no ConnectionEvent, so the PIN dialog is dismissed off state.
-        dismissPinDialogIfPaired(state)
+        satellitePairing.dismissIfPaired(state)
     }
 
     private fun observeSatelliteEvents() {
@@ -330,7 +328,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     private fun onSatelliteEvent(ev: ConnectionEvent) {
         when (ev) {
             is ConnectionEvent.Error -> onConnectionError(ev.message)
-            is ConnectionEvent.PairingRequired -> showPairingDialog(ev.server)
+            is ConnectionEvent.PairingRequired -> satellitePairing.show(ev.server)
         }
     }
 
@@ -454,7 +452,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     private fun handlePairPromptIntent(intent: Intent) {
         val targetId = intent.getStringExtra(EXTRA_PAIR_PROMPT_FOR_ID) ?: return
         val remembered = satellite.remembered().firstOrNull { it.id == targetId } ?: return
-        showPairingDialog(remembered.toDiscovered())
+        satellitePairing.show(remembered.toDiscovered())
         intent.removeExtra(EXTRA_PAIR_PROMPT_FOR_ID)
     }
 
@@ -521,16 +519,6 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         adapter = concat
         setHasFixedSize(true)
         (itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
-    }
-
-    private fun dismissPinDialogIfPaired(state: ConnectionsUiState) {
-        val pairing = pairingServer ?: return
-        val pid = SatelliteConnection.idFor(pairing)
-        val connected =
-            state.satelliteRows.any {
-                it is SatelliteRow.Known && it.summary.id == pid && it.summary.live == LinkState.Connected
-            }
-        if (connected) pinDialog?.dismiss()
     }
 
     private fun render(state: ConnectionsUiState) {
@@ -1017,61 +1005,17 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         return if (port in 1..MAX_PORT) port else null
     }
 
-    private fun showPairingDialog(server: com.tinkernorth.dish.core.model.DiscoveredServer) {
-        pinDialog?.dismiss()
-        pairingServer = server
-        // This dish's own PIN for the reverse direction. The operator can
-        // accept it on the satellite instead of the user typing the server PIN.
-        val clientPin = generatePin()
-        val dialog =
-            PairPinDialog(
-                this,
-                clientPin = clientPin,
-                onRequestApproval = {
-                    pinDialog?.setAwaitingApproval(true)
-                    pinDialog?.showError(null)
-                    satellite.requestApproval(server, clientPin)
-                },
-            ) { pin ->
-                pinDialog?.setBusy(true)
-                pinDialog?.showError(null)
-                satellite.pairWithPin(server, pin)
-            }.apply {
-                dishTitle = getString(R.string.pair_dialog_title)
-                dishSubtitle =
-                    if (server.name.isNotEmpty()) {
-                        getString(R.string.pair_dialog_subtitle_named, server.name)
-                    } else {
-                        getString(R.string.pair_dialog_subtitle)
-                    }
-                setOnDismissListener {
-                    if (pinDialog === this) {
-                        pinDialog = null
-                        pairingServer = null
-                    }
-                }
-            }
-        pinDialog = dialog
-        dialog.show()
-        // Send the satellite request immediately so the operator is notified the
-        // moment the user taps Connect, with no extra "Accept on satellite" tap.
-        // The satellite-PIN field stays available as a fallback.
-        dialog.setAwaitingApproval(true)
-        satellite.requestApproval(server, clientPin)
-    }
-
+    // A pairing in flight owns the error: it belongs in the dialog the user is looking at, not in
+    // a banner behind it.
     private fun onConnectionError(message: String) {
-        val dialog = pinDialog
-        val pairing = pairingServer
-        if (dialog != null && pairing != null) {
-            dialog.setBusy(false)
-            dialog.setAwaitingApproval(false)
-            dialog.showError(message)
-            return
-        }
+        if (satellitePairing.showError(message)) return
         notifications.error(
             glyph = R.drawable.ic_satellite_off,
-            title = getString(R.string.notif_server_unreachable_title, pairing?.name ?: getString(R.string.satellite_fallback_name)),
+            title =
+                getString(
+                    R.string.notif_server_unreachable_title,
+                    satellitePairing.serverName ?: getString(R.string.satellite_fallback_name),
+                ),
             body = message,
         )
     }
@@ -1125,6 +1069,97 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                         durationMs = DishNotification.DURATION_PERSISTENT,
                     )
             }
+    }
+
+    // The satellite PIN exchange: one dialog at a time and the server it belongs to, kept together
+    // so the Activity does not carry either.
+    private inner class SatellitePairing {
+        private var dialog: PairPinDialog? = null
+        private var server: DiscoveredServer? = null
+
+        val serverName: String? get() = server?.name
+
+        fun show(target: DiscoveredServer) {
+            dialog?.dismiss()
+            server = target
+            // This dish's own PIN for the reverse direction: the operator can accept it on the
+            // satellite instead of the user typing the server's PIN.
+            val clientPin = generatePin()
+            val built = build(target, clientPin)
+            dialog = built
+            built.show()
+            // Sent immediately so the operator is notified the moment the user taps Connect, with
+            // no extra "Accept on satellite" tap. The satellite-PIN field stays a fallback.
+            built.setAwaitingApproval(true)
+            satellite.requestApproval(target, clientPin)
+        }
+
+        /** Answers whether a pairing was in flight to take the error. */
+        fun showError(message: String): Boolean {
+            val live = dialog ?: return false
+            if (server == null) return false
+            live.setBusy(false)
+            live.setAwaitingApproval(false)
+            live.showError(message)
+            return true
+        }
+
+        fun dismissIfPaired(state: ConnectionsUiState) {
+            val pairing = server ?: return
+            val pid = SatelliteConnection.idFor(pairing)
+            val connected =
+                state.satelliteRows.any {
+                    it is SatelliteRow.Known && it.summary.id == pid && it.summary.live == LinkState.Connected
+                }
+            if (connected) dialog?.dismiss()
+        }
+
+        private fun build(
+            target: DiscoveredServer,
+            clientPin: String,
+        ): PairPinDialog =
+            PairPinDialog(
+                this@ConnectionsActivity,
+                clientPin = clientPin,
+                onRequestApproval = { requestApprovalAgain(target, clientPin) },
+            ) { pin -> submitServerPin(target, pin) }
+                .apply {
+                    dishTitle = getString(R.string.pair_dialog_title)
+                    dishSubtitle = subtitleFor(target)
+                    setOnDismissListener { forget(this) }
+                }
+
+        private fun requestApprovalAgain(
+            target: DiscoveredServer,
+            clientPin: String,
+        ) {
+            dialog?.setAwaitingApproval(true)
+            dialog?.showError(null)
+            satellite.requestApproval(target, clientPin)
+        }
+
+        private fun submitServerPin(
+            target: DiscoveredServer,
+            pin: String,
+        ) {
+            dialog?.setBusy(true)
+            dialog?.showError(null)
+            satellite.pairWithPin(target, pin)
+        }
+
+        private fun subtitleFor(target: DiscoveredServer): String {
+            val isNamed = target.name.isNotEmpty()
+            if (isNamed) return getString(R.string.pair_dialog_subtitle_named, target.name)
+            return getString(R.string.pair_dialog_subtitle)
+        }
+
+        // Only the dialog still on screen may clear the fields; a late dismiss from a replaced one
+        // must not wipe the new attempt.
+        private fun forget(dismissed: PairPinDialog) {
+            if (dialog !== dismissed) return
+            dialog = null
+            server = null
+        }
     }
 
     // Two banner families with their own ids, kept together so the Activity does not carry the
