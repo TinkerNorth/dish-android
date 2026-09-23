@@ -66,31 +66,21 @@ class PhysicalGamepadRegistry
             val disconnectingTimeLeftSec: Int? = null,
             val hasGyro: Boolean = false,
             val hasRumble: Boolean = false,
-            // The pad's driver exposes an RGB light the Android lights API can drive. Only meaningful
-            // on a Bluetooth-transport pad (the API can write a uhid pad's LEDs, not a USB one's);
-            // the capability layer gates on transport, this is just the presence probe.
+            // Presence only. The lights API can write a uhid pad's LEDs and not a USB one's, so
+            // the capability layer is what gates this on transport.
             val hasLightbar: Boolean = false,
-            // The InputDevice carrying this pad's own touch surface on the framework path: the
-            // pad's merged device itself when the kernel driver's touchpad node merged into it
-            // (hid-playstation, hid-sony: same phys and uniq, so Android folds them), a sibling
-            // device of the same identity otherwise, null when the framework exposes none. What
-            // marks it is a pointer source: Android reads such a surface as a system mouse until
-            // a view captures the pointer, which is how the app reads it as fingers
-            // (hotpath/overlay/PadTouchpadCapture). Never set on a Direct synthetic, whose raw
-            // reports carry the surface; and only a model with a trackpad can be routed through
-            // it (the composer's TouchpadRouting gate).
+            // The pad's own touch surface on the framework path: its merged device where the
+            // kernel driver folded the touchpad node in (hid-playstation, hid-sony share phys and
+            // uniq, so Android merges them), a sibling of the same identity otherwise. Android
+            // reads such a surface as a system mouse until a view captures the pointer, which is
+            // how the app reads it as fingers (hotpath/overlay/PadTouchpadCapture).
             val touchpadDeviceId: Int? = null,
             val isUsbSynthetic: Boolean = false,
-            // A loader placeholder held visible while the manager switches this controller's path. Its
-            // backing device (framework or synthetic) is being torn down/brought up; not actionable.
             val transitioning: Boolean = false,
-            // A placeholder kept visible after the OS dropped the device on a failed claim and never
-            // gave it back; the user must physically replug. Not actionable.
             val needsReplug: Boolean = false,
-            // A held synthetic whose return-to-Standard never re-enumerated; the toggle stays live so the
-            // user picks Direct / retry / replug instead of the app silently reverting.
+            // The toggle stays live here so the user picks Direct / retry / replug rather than the
+            // app silently reverting.
             val restoreStuck: Boolean = false,
-            // Why the last Direct claim for this model failed, surfaced on the card under the toggle.
             val directFailure: DirectClaimFailure? = null,
             val pollRateHz: Int = 0,
             val vendorId: Int = 0,
@@ -110,8 +100,6 @@ class PhysicalGamepadRegistry
             val hasTouchpad: Boolean = false,
         )
 
-        // Build the pure transient projection of a Device. restoreStuck is gated on isUsbSynthetic, so
-        // that identity flag rides along for the reducer's guards.
         private fun Device.placeholderState(): PlaceholderState =
             PlaceholderState(
                 transitioning = transitioning,
@@ -121,8 +109,6 @@ class PhysicalGamepadRegistry
                 isUsbSynthetic = isUsbSynthetic,
             )
 
-        // Copy a reducer result back onto a Device. Only the transient fields move; identity and the
-        // hot-path fields are untouched.
         private fun Device.withPlaceholder(state: PlaceholderState): Device =
             copy(
                 transitioning = state.transitioning,
@@ -175,8 +161,6 @@ class PhysicalGamepadRegistry
             cancelDisconnect(deviceId)
             val device = makeRoutedDevice(deviceId, dev)
             _devices.update { map ->
-                // A live device is back: drop any stale loader placeholder for the same model so the
-                // slot swaps cleanly to the re-enumerated device instead of briefly showing two cards.
                 val withoutStalePlaceholder =
                     map.filterNot { (id, d) ->
                         id != deviceId &&
@@ -210,7 +194,6 @@ class PhysicalGamepadRegistry
                 hasRumble = hasRumble,
                 hasLightbar = hasLightbar,
                 touchpadDeviceId = touchpadDeviceId,
-                // A model that just failed a Direct claim re-enumerates with the cause already attached.
                 directFailure = directFailed[vpKey(vid, pid)],
                 vendorId = vid,
                 productId = pid,
