@@ -1714,86 +1714,98 @@ size_t buildMicMuteLedReport(Parser p, FeedbackState& st, uint8_t state, uint8_t
 }
 
 #ifdef __ANDROID__
+namespace {
+
+bool runSteamQuietInit(const int fd, const int interfaceNumber) {
+    uint8_t buf[16];
+    for (int i = 0;; i++) {
+        const size_t n = buildSteamConfigPacket(SteamConfig::QUIET, i, buf, sizeof(buf));
+        if (n == 0) break;
+        if (!sendFeatureReport(fd, interfaceNumber, buf, n)) {
+            LOGE("Steam Controller: quiet-mode packet %d failed", i);
+            return false;
+        }
+    }
+    LOGI("Steam Controller quiet-mode sequence sent");
+    return true;
+}
+
+// GIP init: power-on tells the pad to start sending input reports; the rest of the sequence (LED,
+// auth-done, and the S set-mode) starts the models the lone power-on left silent.
+bool runGipInit(const int fd, const uint8_t epOut, const InitKind init) {
+    uint8_t buf[16];
+    for (int i = 0;; i++) {
+        const size_t n = buildGipInitPacket(init, i, (uint8_t)i, buf, sizeof(buf));
+        if (n == 0) break;
+        const bool ok = bulkWrite(fd, epOut, buf, n, 200);
+        const bool powerOnFailed = i == 0 && !ok;
+        if (powerOnFailed) {
+            LOGE("Xbox One power-on write failed");
+            return false;
+        }
+        usleep(10000);
+    }
+    return true;
+}
+
+bool runSwitchProHandshake(const int fd, const uint8_t epOut) {
+    if (epOut == 0) {
+        LOGE("Switch Pro: no OUT endpoint, cannot init");
+        return false;
+    }
+    // Status request. The Pro responds with controller info on its IN endpoint; we don't need to
+    // read the reply, only send the request so the device transitions out of any residual state
+    // the kernel driver left it in when we stole the interface.
+    static const uint8_t kStatus[] = {0x80, 0x02};
+    if (!bulkWrite(fd, epOut, kStatus, sizeof(kStatus), 100)) {
+        LOGE("Switch Pro: status request failed");
+        return false;
+    }
+    usleep(40000);
+
+    // Without this the controller sleeps after a few seconds of idle and stops emitting reports.
+    static const uint8_t kDisableTimeout[] = {0x80, 0x04};
+    if (!bulkWrite(fd, epOut, kDisableTimeout, sizeof(kDisableTimeout), 100)) {
+        LOGI("Switch Pro: disable-timeout write failed (non-fatal)");
+    }
+    usleep(40000);
+
+    // Set input report mode 0x30 (standard full report: buttons + sticks + IMU). The format is one
+    // rumble + subcommand HID output report: report id 0x01, packet counter, 8-byte neutral rumble
+    // pattern, subcommand id 0x03, argument 0x30.
+    uint8_t setReportMode[] = {
+        0x01, 0x00, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x03, 0x30,
+    };
+    if (!bulkWrite(fd, epOut, setReportMode, sizeof(setReportMode), 200)) {
+        LOGE("Switch Pro: set-report-mode write failed");
+        return false;
+    }
+    usleep(40000);
+
+    // Subcommand 0x48 arg 0x01, so later rumble-only (0x10) reports take effect.
+    uint8_t enableVibration[] = {
+        0x01, 0x01, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x48, 0x01,
+    };
+    if (!bulkWrite(fd, epOut, enableVibration, sizeof(enableVibration), 200)) {
+        LOGI("Switch Pro: enable-vibration write failed (non-fatal)");
+    }
+    LOGI("Switch Pro USB init sequence sent");
+    return true;
+}
+
+} // namespace
+
 bool runInit(int fd, int interfaceNumber, uint8_t epOut, InitKind init) {
     switch (init) {
     case InitKind::NONE:
         return true;
-    case InitKind::STEAM_QUIET: {
-        uint8_t buf[16];
-        for (int i = 0;; i++) {
-            size_t n = buildSteamConfigPacket(SteamConfig::QUIET, i, buf, sizeof(buf));
-            if (n == 0) break;
-            if (!sendFeatureReport(fd, interfaceNumber, buf, n)) {
-                LOGE("Steam Controller: quiet-mode packet %d failed", i);
-                return false;
-            }
-        }
-        LOGI("Steam Controller quiet-mode sequence sent");
-        return true;
-    }
+    case InitKind::STEAM_QUIET:
+        return runSteamQuietInit(fd, interfaceNumber);
     case InitKind::XBOX_ONE_POWERON:
-    case InitKind::XBOX_ONE_S: {
-        // GIP init: power-on tells the pad to start sending input reports; the rest of the sequence
-        // (LED, auth-done, and the S set-mode) starts the models the lone power-on left silent.
-        uint8_t buf[16];
-        for (int i = 0;; i++) {
-            size_t n = buildGipInitPacket(init, i, (uint8_t)i, buf, sizeof(buf));
-            if (n == 0) break;
-            bool ok = bulkWrite(fd, epOut, buf, n, 200);
-            if (i == 0 && !ok) {
-                LOGE("Xbox One power-on write failed");
-                return false;
-            }
-            usleep(10000);
-        }
-        return true;
-    }
-    case InitKind::SWITCH_PRO_HANDSHAKE: {
-        if (epOut == 0) {
-            LOGE("Switch Pro: no OUT endpoint, cannot init");
-            return false;
-        }
-        // Status request. The Pro responds with controller info on its IN endpoint; we don't
-        // need to read the reply, only send the request so the device transitions out of any
-        // residual state the kernel driver left it in when we stole the interface.
-        static const uint8_t kStatus[] = {0x80, 0x02};
-        if (!bulkWrite(fd, epOut, kStatus, sizeof(kStatus), 100)) {
-            LOGE("Switch Pro: status request failed");
-            return false;
-        }
-        usleep(40000);
-
-        // Disable USB timeout. Without this the controller sleeps after a few seconds of idle
-        // and stops emitting input reports.
-        static const uint8_t kDisableTimeout[] = {0x80, 0x04};
-        if (!bulkWrite(fd, epOut, kDisableTimeout, sizeof(kDisableTimeout), 100)) {
-            LOGI("Switch Pro: disable-timeout write failed (non-fatal)");
-        }
-        usleep(40000);
-
-        // Set input report mode 0x30 (standard full report: buttons + sticks + IMU). The format
-        // is one rumble + subcommand HID output report: report id 0x01, packet counter, 8-byte
-        // neutral rumble pattern, subcommand id 0x03, argument 0x30.
-        uint8_t setReportMode[] = {
-            0x01, 0x00, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x03, 0x30,
-        };
-        if (!bulkWrite(fd, epOut, setReportMode, sizeof(setReportMode), 200)) {
-            LOGE("Switch Pro: set-report-mode write failed");
-            return false;
-        }
-        usleep(40000);
-
-        // Enable vibration (subcommand 0x48, arg 0x01) so later rumble-only (0x10) reports take
-        // effect.
-        uint8_t enableVibration[] = {
-            0x01, 0x01, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x48, 0x01,
-        };
-        if (!bulkWrite(fd, epOut, enableVibration, sizeof(enableVibration), 200)) {
-            LOGI("Switch Pro: enable-vibration write failed (non-fatal)");
-        }
-        LOGI("Switch Pro USB init sequence sent");
-        return true;
-    }
+    case InitKind::XBOX_ONE_S:
+        return runGipInit(fd, epOut, init);
+    case InitKind::SWITCH_PRO_HANDSHAKE:
+        return runSwitchProHandshake(fd, epOut);
     }
     return false;
 }
