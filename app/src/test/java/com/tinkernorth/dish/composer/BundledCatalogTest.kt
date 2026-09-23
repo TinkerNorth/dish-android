@@ -11,7 +11,7 @@ import org.junit.Test
 class BundledCatalogTest {
     @Test
     fun `xbox360 lacks motion and touchpad`() {
-        val caps = typeCapabilities(SLUG_XBOX360)!!
+        val caps = bundledTypeCapabilities(SLUG_XBOX360)!!
         assertTrue(Feature.GAMEPAD in caps)
         assertTrue(Feature.ANALOG_TRIGGERS in caps)
         assertTrue(Feature.RUMBLE in caps)
@@ -24,7 +24,7 @@ class BundledCatalogTest {
 
     @Test
     fun `ds4 carries motion touchpad and lightbar`() {
-        val caps = typeCapabilities(SLUG_DS4)!!
+        val caps = bundledTypeCapabilities(SLUG_DS4)!!
         assertTrue(Feature.MOTION in caps)
         assertTrue(Feature.TOUCHPAD in caps)
         assertTrue(Feature.LIGHTBAR in caps)
@@ -35,7 +35,7 @@ class BundledCatalogTest {
 
     @Test
     fun `dualsense carries motion touchpad and lightbar`() {
-        val caps = typeCapabilities(SLUG_DUALSENSE)!!
+        val caps = bundledTypeCapabilities(SLUG_DUALSENSE)!!
         assertTrue(Feature.MOTION in caps)
         assertTrue(Feature.TOUCHPAD in caps)
         assertTrue(Feature.LIGHTBAR in caps)
@@ -44,7 +44,7 @@ class BundledCatalogTest {
 
     @Test
     fun `switchpro carries motion and rumble but no touchpad or lightbar`() {
-        val caps = typeCapabilities(SLUG_SWITCHPRO)!!
+        val caps = bundledTypeCapabilities(SLUG_SWITCHPRO)!!
         assertTrue(Feature.MOTION in caps)
         assertTrue(Feature.RUMBLE in caps)
         assertFalse(Feature.TOUCHPAD in caps)
@@ -53,7 +53,7 @@ class BundledCatalogTest {
 
     @Test
     fun `an unknown slug falls through to the server catalog`() {
-        assertNull(typeCapabilities("gamecube"))
+        assertNull(bundledTypeCapabilities("gamecube"))
     }
 
     @Test
@@ -61,12 +61,12 @@ class BundledCatalogTest {
         // The composite personas that give an emulated pad real speaker and microphone
         // endpoints exist for DualSense and DualShock 4 v2 only.
         for (slug in listOf(SLUG_DS4, SLUG_DUALSENSE)) {
-            val caps = typeCapabilities(slug)!!
+            val caps = bundledTypeCapabilities(slug)!!
             assertTrue(slug, Feature.MIC in caps)
             assertTrue(slug, Feature.SPEAKER in caps)
         }
         for (slug in listOf(SLUG_XBOX360, SLUG_SWITCHPRO)) {
-            val caps = typeCapabilities(slug)!!
+            val caps = bundledTypeCapabilities(slug)!!
             assertFalse(slug, Feature.MIC in caps)
             assertFalse(slug, Feature.SPEAKER in caps)
         }

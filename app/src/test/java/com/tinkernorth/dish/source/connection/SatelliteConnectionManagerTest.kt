@@ -1386,7 +1386,7 @@ class SatelliteConnectionManagerTest {
         }
 
     private companion object {
-        // What CapabilityResolver.wireCaps resolves for a pad with nothing else on.
+        // What wireCaps resolves for a pad with nothing else on.
         val BASE_WIRE_CAPS =
             com.tinkernorth.dish.core.net.ControllerDescriptor.CAP_ANALOG_TRIGGERS or
                 com.tinkernorth.dish.core.net.ControllerDescriptor.CAP_RUMBLE

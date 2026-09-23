@@ -1528,7 +1528,7 @@ class CapabilityComposerTest {
             testScheduler.runCurrent()
 
             assertEquals(
-                CapabilityResolver.wireCaps(composer.capabilityFor(VIRTUAL_SLOT_ID)),
+                wireCaps(composer.capabilityFor(VIRTUAL_SLOT_ID)),
                 composer.wireCapsFor(VIRTUAL_SLOT_ID),
             )
         }
@@ -1545,7 +1545,7 @@ class CapabilityComposerTest {
                     scope = backgroundScope,
                 )
             assertEquals(
-                CapabilityResolver.wireCaps(SlotCapabilities.NONE),
+                wireCaps(SlotCapabilities.NONE),
                 composer.wireCapsFor("no-such-slot"),
             )
         }

@@ -148,7 +148,7 @@ class MoonlightSessionController
                     candidateHostKind = ConnectionKind.MOONLIGHT,
                     candidateHostId = hostId,
                 )
-            val bits = MoonlightCatalog.capabilityBits(resolved, caps.available)
+            val bits = capabilityBits(resolved, caps.available)
             return MoonlightPadRequest(
                 slotId = slotId,
                 emulatedType = resolved,

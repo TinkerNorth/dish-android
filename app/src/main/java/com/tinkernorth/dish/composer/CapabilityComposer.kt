@@ -140,7 +140,7 @@ class CapabilityComposer
         val wireProjection: Flow<Map<String, WireProjection>> =
             combine(state, mouseSurface.state) { caps, _ ->
                 caps.mapValues { (slotId, slot) ->
-                    WireProjection(CapabilityResolver.wireCaps(slot), touchpadWireMode(slotId))
+                    WireProjection(wireCaps(slot), touchpadWireMode(slotId))
                 }
             }.distinctUntilChanged()
 
@@ -152,13 +152,13 @@ class CapabilityComposer
          * The whole caps word the satellite descriptor carries for [slotId]: the base a pad always
          * has, motion gated on the input gyro and the user toggle, the feedback caps gated on what
          * the bound input can actuate, and the audio caps on their toggles too
-         * ([CapabilityResolver.wireCaps] holds the rules). Deliberately NOT gated on
+         * ([wireCaps] holds the rules). Deliberately NOT gated on
          * link-liveness: a reconnect must recover the pad's capabilities without a re-handshake,
          * so this is a different projection from the `available`/`live` views.
          *
          * This is the per-connection lambda SatelliteConnection builds every descriptor from.
          */
-        fun wireCapsFor(slotId: String): Int = CapabilityResolver.wireCaps(capabilityFor(slotId))
+        fun wireCapsFor(slotId: String): Int = wireCaps(capabilityFor(slotId))
 
         /**
          * The descriptor's touchpadMode for [slotId], pulled at descriptor-build time like
@@ -196,7 +196,7 @@ class CapabilityComposer
             candidateHostId: String?,
             candidateDirect: Boolean? = null,
         ): SlotCapabilities =
-            CapabilityResolver.resolve(
+            resolve(
                 controller = candidateControllerLayer(slotId, candidateDirect),
                 transport = transportProfileFor(candidateHostKind),
                 type = typeCapabilitiesFor(candidateType, candidateHostId, candidateHostKind),
@@ -219,12 +219,12 @@ class CapabilityComposer
             val rumbleOn = userToggles.rumble[slotId] ?: RumbleEnabledStore.DEFAULT_ENABLED
             val micOn = userToggles.mic[slotId] ?: MicEnabledStore.DEFAULT_ENABLED
             val speakerOn = userToggles.speaker[slotId] ?: SpeakerEnabledStore.DEFAULT_ENABLED
-            return CapabilityResolver.resolve(
+            return resolve(
                 controller = controller,
                 transport = transportLayer(summary),
                 type = typeLayer(slotId, summary),
                 host = hostLayer(connId, summary, hosts.features),
-                userEnabled = CapabilityResolver.userEnabledCapabilities(motionOn, rumbleOn, micOn, speakerOn),
+                userEnabled = userEnabledCapabilities(motionOn, rumbleOn, micOn, speakerOn),
                 runtimeDown = runtimeDownLayer(connId, slotId, hosts.motionBackend),
             )
         }
@@ -399,7 +399,7 @@ class CapabilityComposer
             kind: ConnectionKind,
         ): CapabilitySet {
             if (kind == ConnectionKind.MOONLIGHT) {
-                return MoonlightCatalog.typeCapabilities(
+                return moonlightTypeCapabilities(
                     resolveMoonlightEmulatedType(
                         fromStored(typeId),
                         sourceHasMotion = false,
@@ -411,7 +411,7 @@ class CapabilityComposer
                     ?.let { hostFacts.catalog.cached(it) }
                     ?.controllerTypes
                     ?.firstOrNull { it.id == typeId }
-            return catalogType?.let { CapabilityResolver.typeCapabilities(it) }
+            return catalogType?.let { catalogTypeCapabilities(it) }
                 ?: typeCapabilitiesById(typeId)
         }
 
@@ -423,7 +423,7 @@ class CapabilityComposer
             hostMap: Map<String, HostFeatureSet>,
         ): CapabilitySet {
             if (summary == null || connId == null) return ALL
-            if (summary.kind == ConnectionKind.MOONLIGHT) return MoonlightCatalog.HOST_LAYER
+            if (summary.kind == ConnectionKind.MOONLIGHT) return HOST_LAYER
             if (summary.kind != ConnectionKind.SATELLITE) return ALL
             return (hostMap[connId] ?: HostFeatureSet.SATELLITE_DEFAULT).toCapabilitySet()
         }
@@ -432,7 +432,7 @@ class CapabilityComposer
             kind: ConnectionKind,
             hostId: String?,
         ): CapabilitySet {
-            if (kind == ConnectionKind.MOONLIGHT) return MoonlightCatalog.HOST_LAYER
+            if (kind == ConnectionKind.MOONLIGHT) return HOST_LAYER
             if (kind != ConnectionKind.SATELLITE) return ALL
             val features = hostId?.let { hostFacts.features.featuresFor(it) } ?: HostFeatureSet.SATELLITE_DEFAULT
             return features.toCapabilitySet()

@@ -11,7 +11,7 @@ import org.junit.Test
 class MoonlightRtspTest {
     @Test
     fun `OPTIONS request is CRLF framed with CSeq`() {
-        val encoded = MoonlightRtsp.options("rtsp://192.168.1.100:48010", cseq = 1).encode()
+        val encoded = options("rtsp://192.168.1.100:48010", cseq = 1).encode()
         assertEquals(
             "OPTIONS rtsp://192.168.1.100:48010 RTSP/1.0\r\n" +
                 "CSeq: 1\r\n" +
@@ -23,15 +23,15 @@ class MoonlightRtspTest {
 
     @Test
     fun `SETUP targets the stream id`() {
-        val encoded = MoonlightRtsp.setup("control", cseq = 4).encode()
+        val encoded = setup("control", cseq = 4).encode()
         assertTrue(encoded.startsWith("SETUP streamid=control RTSP/1.0\r\n"))
         assertTrue(encoded.contains("CSeq: 4\r\n"))
     }
 
     @Test
     fun `ANNOUNCE carries the SDP payload and a content-length`() {
-        val sdp = MoonlightRtsp.announceSdp(1280, 720, 30)
-        val encoded = MoonlightRtsp.announce("rtsp://host:48010", cseq = 5, sdpPayload = sdp).encode()
+        val sdp = announceSdp(1280, 720, 30)
+        val encoded = announce("rtsp://host:48010", cseq = 5, sdpPayload = sdp).encode()
         assertTrue(encoded.contains("Content-length: ${sdp.toByteArray().size}\r\n"))
         assertTrue(encoded.endsWith(sdp))
         assertTrue(sdp.contains("clientViewportWd:1280"))
@@ -45,7 +45,7 @@ class MoonlightRtspTest {
                 "Session: DEADBEEFCAFE;timeout = 90\r\n" +
                 "Transport: server_port=47999\r\n" +
                 "\r\n"
-        val response = MoonlightRtsp.parseResponse(raw)!!
+        val response = parseResponse(raw)!!
         assertTrue(response.ok)
         assertEquals(200, response.statusCode)
         assertEquals(4, response.cseq)
@@ -54,7 +54,7 @@ class MoonlightRtspTest {
 
     @Test
     fun `parses an error response`() {
-        val response = MoonlightRtsp.parseResponse("RTSP/1.0 404 NOT FOUND\r\nCSeq: 2\r\n\r\n")!!
+        val response = parseResponse("RTSP/1.0 404 NOT FOUND\r\nCSeq: 2\r\n\r\n")!!
         assertEquals(404, response.statusCode)
         assertEquals("NOT FOUND", response.statusMessage)
         assertTrue(!response.ok)
@@ -62,13 +62,13 @@ class MoonlightRtspTest {
 
     @Test
     fun `rejects a non-RTSP reply`() {
-        assertNull(MoonlightRtsp.parseResponse("HTTP/1.1 200 OK\r\n\r\n"))
-        assertNull(MoonlightRtsp.parseResponse(""))
+        assertNull(parseResponse("HTTP/1.1 200 OK\r\n\r\n"))
+        assertNull(parseResponse(""))
     }
 
     @Test
     fun `serverPort is null when the transport option is absent`() {
-        val response = MoonlightRtsp.parseResponse("RTSP/1.0 200 OK\r\nCSeq: 1\r\n\r\n")!!
+        val response = parseResponse("RTSP/1.0 200 OK\r\nCSeq: 1\r\n\r\n")!!
         assertNull(response.serverPort())
     }
 
@@ -78,7 +78,7 @@ class MoonlightRtspTest {
         // Int it is out of range, and the control stream then connected with a
         // token of 0.
         val response =
-            MoonlightRtsp.parseResponse(
+            parseResponse(
                 "RTSP/1.0 200 OK\r\nCSeq: 5\r\nX-SS-Connect-Data: 4270471497\r\n\r\n",
             )!!
         assertEquals(4270471497L.toInt(), response.enetConnectData())
@@ -87,24 +87,24 @@ class MoonlightRtspTest {
 
     @Test
     fun `reads a connect token that does fit, and reports an absent one`() {
-        val small = MoonlightRtsp.parseResponse("RTSP/1.0 200 OK\r\nCSeq: 5\r\nX-SS-Connect-Data: 12345\r\n\r\n")!!
+        val small = parseResponse("RTSP/1.0 200 OK\r\nCSeq: 5\r\nX-SS-Connect-Data: 12345\r\n\r\n")!!
         assertEquals(12345, small.enetConnectData())
-        assertNull(MoonlightRtsp.parseResponse("RTSP/1.0 200 OK\r\nCSeq: 5\r\n\r\n")!!.enetConnectData())
+        assertNull(parseResponse("RTSP/1.0 200 OK\r\nCSeq: 5\r\n\r\n")!!.enetConnectData())
     }
 
     @Test
     fun `reads the media ping payload the host wants echoed`() {
         val response =
-            MoonlightRtsp.parseResponse(
+            parseResponse(
                 "RTSP/1.0 200 OK\r\nCSeq: 3\r\nX-SS-Ping-Payload: 9A615601970AEC19\r\n\r\n",
             )!!
         assertEquals("9A615601970AEC19", response.pingPayload())
-        assertNull(MoonlightRtsp.parseResponse("RTSP/1.0 200 OK\r\nCSeq: 3\r\n\r\n")!!.pingPayload())
+        assertNull(parseResponse("RTSP/1.0 200 OK\r\nCSeq: 3\r\n\r\n")!!.pingPayload())
     }
 
     @Test
     fun `the ANNOUNCE description carries every attribute a host looks up`() {
-        val sdp = MoonlightRtsp.announceSdp(1280, 720, 30)
+        val sdp = announceSdp(1280, 720, 30)
 
         // Carrying only the handful the dish itself cares about is answered
         // 400 BAD REQUEST by a real host: it looks each of these up by name and

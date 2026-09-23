@@ -4,7 +4,7 @@ package com.tinkernorth.dish.repository
 
 import com.tinkernorth.dish.composer.SLUG_DS4
 import com.tinkernorth.dish.composer.SLUG_XBOX360
-import com.tinkernorth.dish.composer.typeCapabilities
+import com.tinkernorth.dish.composer.bundledTypeCapabilities
 import com.tinkernorth.dish.core.model.CatalogDto
 import com.tinkernorth.dish.core.model.CatalogFeatureDto
 import com.tinkernorth.dish.core.model.CatalogTypeDto
@@ -44,7 +44,7 @@ class LegacyCatalogTranslator
         ): CatalogTypeDto = CatalogTypeDto(id = id, slug = slug, features = legacyFeatures(slug))
 
         private fun legacyFeatures(slug: String): Map<String, CatalogFeatureDto> {
-            val caps = typeCapabilities(slug) ?: return emptyMap()
+            val caps = bundledTypeCapabilities(slug) ?: return emptyMap()
             return buildMap {
                 for (feature in caps.features) {
                     val featureSlug = feature.catalogSlug ?: continue

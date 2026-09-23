@@ -1070,7 +1070,7 @@ class SatelliteConnectionTest {
     }
 
     private companion object {
-        // What CapabilityResolver.wireCaps gives every pad; the tests build caps
+        // What wireCaps gives every pad; the tests build caps
         // words on top of it the way the composer does.
         const val BASE_CAPS =
             ControllerDescriptor.CAP_ANALOG_TRIGGERS or ControllerDescriptor.CAP_RUMBLE

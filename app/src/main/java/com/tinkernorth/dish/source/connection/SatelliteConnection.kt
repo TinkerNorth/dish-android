@@ -46,7 +46,7 @@ class SatelliteConnection(
     /** What the owning manager lends a connection: descriptor-time lookups and REST sync hooks. */
     class Hooks(
         // The WHOLE caps word for a slot, pulled at descriptor-build time from the composer
-        // (CapabilityResolver.wireCaps). Not a base plus one bit: every cap the client advertises
+        // (wireCaps). Not a base plus one bit: every cap the client advertises
         // is a live per-slot fact, and computing part of it here would let the descriptor drift
         // from the capability model the rest of the app renders.
         val wireCapsFor: (slotId: String) -> Int = { DEFAULT_WIRE_CAPABILITIES },

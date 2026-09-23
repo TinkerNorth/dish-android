@@ -412,9 +412,9 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
     }
 
     private fun driftResult(): String {
-        val driftL = StickHealth.drift(leftSamples)
-        val driftR = StickHealth.drift(rightSamples)
-        val suggested = StickHealth.suggestedDeadzone(maxOf(driftL, driftR))
+        val driftL = drift(leftSamples)
+        val driftR = drift(rightSamples)
+        val suggested = suggestedDeadzone(maxOf(driftL, driftR))
         viewModel.noteDrift(driftL, driftR, suggested)
         return getString(
             R.string.inspector_drift_result,
@@ -425,8 +425,8 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
     }
 
     private fun rangeResult(): String {
-        val left = StickHealth.envelope(leftSamples)
-        val right = StickHealth.envelope(rightSamples)
+        val left = envelope(leftSamples)
+        val right = envelope(rightSamples)
         binding.plotLeftStick.clearTrail()
         binding.plotRightStick.clearTrail()
         viewModel.noteRange(worstReach(left), worstReach(right), left.circularityError, right.circularityError)
@@ -440,7 +440,7 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
     }
 
     // The rail the stick struggles to reach is the one that matters in game.
-    private fun worstReach(e: StickHealth.Envelope): Float = minOf(-e.minX, e.maxX, -e.minY, e.maxY).coerceAtLeast(0f)
+    private fun worstReach(e: Envelope): Float = minOf(-e.minX, e.maxX, -e.minY, e.maxY).coerceAtLeast(0f)
 
     private fun percent(fraction: Float): String = getString(R.string.inspector_percent, (fraction * 100).roundToInt())
 

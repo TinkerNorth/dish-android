@@ -6,7 +6,7 @@ import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 
 // Offline fallback for the slugs the app ships art for; unknown slugs fall through to the
-// server catalog (CapabilityResolver.typeCapabilities), so this never masks a richer remote type.
+// server catalog (typeCapabilities), so this never masks a richer remote type.
 const val SLUG_XBOX360 = "xbox360"
 const val SLUG_DS4 = "ds4"
 const val SLUG_DUALSENSE = "dualsense"
@@ -17,7 +17,7 @@ const val SLUG_SWITCHPRO = "switchpro"
 // any. Offering them here cannot outrun the host, which gates audio on its own
 // runtime `audio` switch, and a satellite old enough to serve no catalog reports no
 // switch at all.
-fun typeCapabilities(slug: String): CapabilitySet? =
+fun bundledTypeCapabilities(slug: String): CapabilitySet? =
     when (slug) {
         SLUG_XBOX360 -> padType(Feature.RUMBLE)
         SLUG_DS4 ->
@@ -64,8 +64,8 @@ private fun padType(vararg padFeatures: Feature): CapabilitySet =
 
 fun typeCapabilitiesById(typeId: Int): CapabilitySet =
     when (typeId) {
-        CONTROLLER_TYPE_PLAYSTATION -> typeCapabilities(SLUG_DS4)!!
-        CONTROLLER_TYPE_DUALSENSE -> typeCapabilities(SLUG_DUALSENSE)!!
-        CONTROLLER_TYPE_SWITCHPRO -> typeCapabilities(SLUG_SWITCHPRO)!!
-        else -> typeCapabilities(SLUG_XBOX360)!!
+        CONTROLLER_TYPE_PLAYSTATION -> bundledTypeCapabilities(SLUG_DS4)!!
+        CONTROLLER_TYPE_DUALSENSE -> bundledTypeCapabilities(SLUG_DUALSENSE)!!
+        CONTROLLER_TYPE_SWITCHPRO -> bundledTypeCapabilities(SLUG_SWITCHPRO)!!
+        else -> bundledTypeCapabilities(SLUG_XBOX360)!!
     }
