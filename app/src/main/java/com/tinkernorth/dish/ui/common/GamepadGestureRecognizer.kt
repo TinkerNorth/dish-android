@@ -155,6 +155,12 @@ internal class GamepadGestureRecognizer {
 
     fun reset() {
         state = GamepadTouchView.GamepadState()
+        resetStickDeltas()
+        resetPointerIds()
+        resetTrackpad()
+    }
+
+    private fun resetStickDeltas() {
         leftStickDx = 0f
         leftStickDy = 0f
         rightStickDx = 0f
@@ -163,6 +169,9 @@ internal class GamepadGestureRecognizer {
         l3StickDy = 0f
         r3StickDx = 0f
         r3StickDy = 0f
+    }
+
+    private fun resetPointerIds() {
         leftStickPointerId = INVALID_POINTER
         rightStickPointerId = INVALID_POINTER
         l3StickPointerId = INVALID_POINTER
@@ -173,21 +182,25 @@ internal class GamepadGestureRecognizer {
         lbPointerId = INVALID_POINTER
         rbPointerId = INVALID_POINTER
         abxyPointerBits.clear()
+    }
+
+    private fun resetTrackpad() {
         trackpadSlotForPointer.clear()
         trackpadTouches.clear()
         trackpadClickPointers.clear()
         pendingTrackpadTap = null
-        if (trackpadState.anyFingerDown()) {
-            // Clean lift so the receiver never keeps a finger the screen no longer holds.
-            trackpadState.finger0Active = false
-            trackpadState.finger1Active = false
-            trackpadState.finger0X = 0
-            trackpadState.finger0Y = 0
-            trackpadState.finger1X = 0
-            trackpadState.finger1Y = 0
-            trackpadState.buttonPressed = false
-            trackpadDirty = true
-        }
+
+        val hadFingersDown = trackpadState.anyFingerDown()
+        if (!hadFingersDown) return
+        // Clean lift so the receiver never keeps a finger the screen no longer holds.
+        trackpadState.finger0Active = false
+        trackpadState.finger1Active = false
+        trackpadState.finger0X = 0
+        trackpadState.finger0Y = 0
+        trackpadState.finger1X = 0
+        trackpadState.finger1Y = 0
+        trackpadState.buttonPressed = false
+        trackpadDirty = true
     }
 
     // The controls a finger can land on, in hit-test precedence.

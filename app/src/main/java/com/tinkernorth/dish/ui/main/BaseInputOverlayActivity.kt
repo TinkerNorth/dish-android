@@ -97,21 +97,39 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         installGamepadHost(rootView())
         hideSystemBars()
-
-        ViewCompat.setOnApplyWindowInsetsListener(rootView()) { v, wi ->
-            val ins =
-                wi.getInsets(
-                    WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
-                )
-            val mirror = max(ins.left, ins.right)
-            v.updatePadding(left = mirror, top = ins.top, right = mirror, bottom = ins.bottom)
-            wi
-        }
+        installEdgeToEdgeInsets()
 
         connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID).orEmpty()
 
         installFoldAwareness()
+        observeConnectionSummary()
+        observeSatelliteEvents()
+        startResendLoop()
+        installLinkGuard()
+    }
 
+    // The left and right insets are mirrored so a cutout on one edge does not shift the pad
+    // off-centre.
+    private fun installEdgeToEdgeInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(rootView()) { view, windowInsets ->
+            applyMirroredInsets(view, windowInsets)
+        }
+    }
+
+    private fun applyMirroredInsets(
+        view: View,
+        windowInsets: WindowInsetsCompat,
+    ): WindowInsetsCompat {
+        val insets =
+            windowInsets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+            )
+        val mirror = max(insets.left, insets.right)
+        view.updatePadding(left = mirror, top = insets.top, right = mirror, bottom = insets.bottom)
+        return windowInsets
+    }
+
+    private fun observeConnectionSummary() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 hub.connections
@@ -120,20 +138,20 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
                     .collect { onConnectionSummaryChanged(it) }
             }
         }
+    }
 
+    private fun observeSatelliteEvents() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 satellite.events.collect(::handleConnectionEvent)
             }
         }
+    }
 
+    private fun startResendLoop() {
         lifecycleScope.launch(resendDispatcher) {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                runResendLoop()
-            }
+            repeatOnLifecycle(Lifecycle.State.STARTED) { runResendLoop() }
         }
-
-        installLinkGuard()
     }
 
     private var guardCloseJob: Job? = null
