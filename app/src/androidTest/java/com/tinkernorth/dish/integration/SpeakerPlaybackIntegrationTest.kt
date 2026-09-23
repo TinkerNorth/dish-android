@@ -74,6 +74,19 @@ class SpeakerPlaybackIntegrationTest {
         val closes = AtomicInteger()
         val played = ConcurrentLinkedQueue<ShortArray>()
 
+        // Keeps every sample that reached the track, so the assertions can look at the audio
+        // rather than at a write count.
+        private inner class RecordingSession : SpeakerPlayoutSession {
+            override fun write(pcmStereo: ShortArray): Int {
+                played += pcmStereo
+                return pcmStereo.size
+            }
+
+            override fun close() {
+                closes.incrementAndGet()
+            }
+        }
+
         override fun open(
             frameSamples: Int,
             preferredDeviceId: Int,
@@ -81,16 +94,7 @@ class SpeakerPlaybackIntegrationTest {
             lane: PlayoutLane,
         ): SpeakerPlayoutSession {
             opens.incrementAndGet()
-            return object : SpeakerPlayoutSession {
-                override fun write(pcmStereo: ShortArray): Int {
-                    played += pcmStereo
-                    return pcmStereo.size
-                }
-
-                override fun close() {
-                    closes.incrementAndGet()
-                }
-            }
+            return RecordingSession()
         }
     }
 

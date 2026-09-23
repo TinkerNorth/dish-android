@@ -22,37 +22,40 @@ class MicLevelProbeTest {
         var openedEndpoint: Int? = null
         var closed = false
 
+        // Serves a fixed number of windows of a constant tone, then reads zero, which is how the
+        // real recorder reports that it has died.
+        private inner class ToneSession : MicCaptureSession {
+            private var served = 0
+
+            override val voiceProcessed = true
+
+            override fun read(out: ShortArray): Int {
+                if (served >= windows) return 0
+                served++
+                out.fill(amplitude.toShort())
+                return out.size
+            }
+
+            override fun close() {
+                closed = true
+            }
+        }
+
         override fun open(
             frameSamples: Int,
             preferredDeviceId: Int,
         ): MicCaptureSession? {
             if (refuse) return null
             openedEndpoint = preferredDeviceId
-            return object : MicCaptureSession {
-                private var served = 0
-                override val voiceProcessed = true
-
-                override fun read(out: ShortArray): Int {
-                    if (served >= windows) return 0
-                    served++
-                    out.fill(amplitude.toShort())
-                    return out.size
-                }
-
-                override fun close() {
-                    closed = true
-                }
-            }
+            return ToneSession()
         }
     }
 
     private val routing =
-        object : SlotAudioRoutes {
-            override val changes = MutableStateFlow(emptyMap<Int, PadAudioRoute>())
-
-            override fun forSlot(slotId: String): PadAudioRoute =
-                if (slotId == "-5") PadAudioRoute(microphone = true, speaker = false, captureDeviceId = 7) else PadAudioRoute.NONE
-        }
+        MapSlotAudioRoutes(
+            MutableStateFlow(emptyMap()),
+            mapOf("-5" to PadAudioRoute(microphone = true, speaker = false, captureDeviceId = 7)),
+        )
 
     private fun kotlinx.coroutines.test.TestScope.probe(mic: FakeMic) =
         MicLevelProbe(mic, routing, StandardTestDispatcher(testScheduler), MicEngine.FRAME_SAMPLES)

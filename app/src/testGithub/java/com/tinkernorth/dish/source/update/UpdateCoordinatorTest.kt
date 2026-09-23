@@ -38,10 +38,13 @@ class UpdateCoordinatorTest {
         }
     }
 
-    private val owner =
-        object : LifecycleOwner {
-            override val lifecycle: Lifecycle get() = error("not used by the coordinator")
-        }
+    // The coordinator takes an owner but never reads its lifecycle; the error says so rather
+    // than handing over a registry that would quietly make a missed read pass.
+    private class UnusedOwner : LifecycleOwner {
+        override val lifecycle: Lifecycle get() = error("not used by the coordinator")
+    }
+
+    private val owner = UnusedOwner()
 
     private val notes = "https://github.com/TinkerNorth/dish-android/releases/tag/2.1.0"
 

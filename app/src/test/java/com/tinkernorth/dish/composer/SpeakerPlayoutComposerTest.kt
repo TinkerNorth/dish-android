@@ -5,9 +5,9 @@ package com.tinkernorth.dish.composer
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.source.audio.MapSlotAudioRoutes
 import com.tinkernorth.dish.source.audio.PadAudioRoute
 import com.tinkernorth.dish.source.audio.PadAudioRoutes
-import com.tinkernorth.dish.source.audio.SlotAudioRoutes
 import com.tinkernorth.dish.source.audio.SpeakerPlayoutPlan
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
@@ -59,12 +59,7 @@ class SpeakerPlayoutComposerTest {
             every { this@mockk.connections } returns MutableStateFlow(mapOf(CONN to connection))
         }
 
-    private val routing =
-        object : SlotAudioRoutes {
-            override val changes get() = routeTable
-
-            override fun forSlot(slotId: String) = padRoutes[slotId] ?: PadAudioRoute.NONE
-        }
+    private val routing = MapSlotAudioRoutes(routeTable, padRoutes)
 
     private val composer = SpeakerPlayoutComposer(hub, capabilities, satellite, routing, scope)
 

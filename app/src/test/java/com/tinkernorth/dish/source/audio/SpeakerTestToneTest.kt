@@ -23,6 +23,19 @@ class SpeakerTestToneTest {
         var openedChannels: Int? = null
         var openedLane: PlayoutLane? = null
 
+        // Accepts every frame whole, so a short write never stands in for the assertion that the
+        // tone reached the track.
+        private inner class WritingSession : SpeakerPlayoutSession {
+            override fun write(pcmStereo: ShortArray): Int {
+                written += pcmStereo
+                return pcmStereo.size
+            }
+
+            override fun close() {
+                closed = true
+            }
+        }
+
         override fun open(
             frameSamples: Int,
             preferredDeviceId: Int,
@@ -33,26 +46,15 @@ class SpeakerTestToneTest {
             openedEndpoint = preferredDeviceId
             openedChannels = channels
             openedLane = lane
-            return object : SpeakerPlayoutSession {
-                override fun write(pcmStereo: ShortArray): Int {
-                    written += pcmStereo
-                    return pcmStereo.size
-                }
-
-                override fun close() {
-                    closed = true
-                }
-            }
+            return WritingSession()
         }
     }
 
     private val routing =
-        object : SlotAudioRoutes {
-            override val changes = MutableStateFlow(emptyMap<Int, PadAudioRoute>())
-
-            override fun forSlot(slotId: String): PadAudioRoute =
-                if (slotId == "-5") PadAudioRoute(microphone = false, speaker = true, playbackDeviceId = 42) else PadAudioRoute.NONE
-        }
+        MapSlotAudioRoutes(
+            MutableStateFlow(emptyMap()),
+            mapOf("-5" to PadAudioRoute(microphone = false, speaker = true, playbackDeviceId = 42)),
+        )
 
     @Test
     fun `plays every frame on the pad's own endpoint and closes the track`() =

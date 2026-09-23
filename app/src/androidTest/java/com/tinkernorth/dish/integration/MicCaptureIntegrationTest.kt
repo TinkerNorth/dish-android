@@ -60,30 +60,34 @@ class MicCaptureIntegrationTest {
         private val phase = AtomicInteger()
         private val open = AtomicBoolean(false)
 
+        // A 220 Hz tone at real time: the sleep is what makes this an integration test rather
+        // than a scheduler one, since the engine's cadence is what is under test.
+        private inner class ToneSession : MicCaptureSession {
+            override val voiceProcessed = true
+
+            override fun read(out: ShortArray): Int {
+                Thread.sleep(WINDOW_MS)
+                val base = phase.getAndIncrement() * out.size
+                for (i in out.indices) {
+                    val t = (base + i) / SAMPLE_RATE.toDouble()
+                    out[i] = (sin(2.0 * PI * 220.0 * t) * 8000.0).toInt().toShort()
+                }
+                return out.size
+            }
+
+            override fun close() {
+                open.set(false)
+                closes.incrementAndGet()
+            }
+        }
+
         override fun open(
             frameSamples: Int,
             preferredDeviceId: Int,
         ): MicCaptureSession? {
             opens.incrementAndGet()
             open.set(true)
-            return object : MicCaptureSession {
-                override val voiceProcessed = true
-
-                override fun read(out: ShortArray): Int {
-                    Thread.sleep(WINDOW_MS)
-                    val base = phase.getAndIncrement() * out.size
-                    for (i in out.indices) {
-                        val t = (base + i) / SAMPLE_RATE.toDouble()
-                        out[i] = (sin(2.0 * PI * 220.0 * t) * 8000.0).toInt().toShort()
-                    }
-                    return out.size
-                }
-
-                override fun close() {
-                    open.set(false)
-                    closes.incrementAndGet()
-                }
-            }
+            return ToneSession()
         }
     }
 

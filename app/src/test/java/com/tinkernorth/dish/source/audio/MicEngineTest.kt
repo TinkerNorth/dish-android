@@ -146,12 +146,7 @@ class MicEngineTest {
     /** Per-slot capture endpoints, so a pad with its own microphone can be moved under the engine. */
     private val slotRoutes = ConcurrentHashMap<String, PadAudioRoute>()
 
-    private val routing =
-        object : SlotAudioRoutes {
-            override val changes get() = routeTable
-
-            override fun forSlot(slotId: String) = slotRoutes[slotId] ?: PadAudioRoute.NONE
-        }
+    private val routing = MapSlotAudioRoutes(routeTable, slotRoutes)
 
     private val connection =
         mockk<SatelliteConnection> {
