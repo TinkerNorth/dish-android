@@ -331,24 +331,39 @@ class ConfigureBindingsViewModel
         fun load(slotId: String) {
             if (loadedSlotId == slotId) return
             loadedSlotId = slotId
-            val snapshot = buildSnapshot(slotId)
-            val hosts = buildHosts()
+
             val draft = buildSeedDraft(slotId)
-            val conns = hub.connections.value
-            _ui.value =
-                ConfigUiState(
-                    loaded = true,
-                    snapshot = snapshot,
-                    hosts = hosts,
-                    draft = draft,
-                    typeOptions = bundledTypeOptions(),
-                    connections = conns,
-                    knownHostLabels = conns.associate { it.id to it.label },
-                    controllerPresent = controllerPresent(snapshot),
-                    micPermissionGranted = micPermission.granted,
-                ).withCapabilities()
+            _ui.value = seedStateFor(slotId, draft)
             draft.hostId?.let { refreshTypeOptions(it) }
-            // Refresh the host list as connections come and go, without disturbing the in-progress draft.
+
+            observeConnections()
+            observeControllerPresence()
+            observeHostCompat()
+            observeMoonlightEvents()
+        }
+
+        private fun seedStateFor(
+            slotId: String,
+            draft: BindingDraft,
+        ): ConfigUiState {
+            val snapshot = buildSnapshot(slotId)
+            val conns = hub.connections.value
+            return ConfigUiState(
+                loaded = true,
+                snapshot = snapshot,
+                hosts = buildHosts(),
+                draft = draft,
+                typeOptions = bundledTypeOptions(),
+                connections = conns,
+                knownHostLabels = conns.associate { it.id to it.label },
+                controllerPresent = controllerPresent(snapshot),
+                micPermissionGranted = micPermission.granted,
+            ).withCapabilities()
+        }
+
+        // Refresh the host list as connections come and go, without disturbing the in-progress
+        // draft.
+        private fun observeConnections() {
             hub.connections
                 .onEach { latest ->
                     _ui.update { state ->
@@ -360,14 +375,22 @@ class ConfigureBindingsViewModel
                             ).withCapabilities()
                     }
                 }.launchIn(viewModelScope)
+        }
+
+        private fun observeControllerPresence() {
             gamepadRegistry.devices
-                .onEach { _ui.update { state -> state.copy(controllerPresent = controllerPresent(state.snapshot)).withCapabilities() } }
-                .launchIn(viewModelScope)
+                .onEach {
+                    _ui.update { state ->
+                        state.copy(controllerPresent = controllerPresent(state.snapshot)).withCapabilities()
+                    }
+                }.launchIn(viewModelScope)
+        }
+
+        private fun observeHostCompat() {
             hostFeaturesStore.state
                 .onEach { features ->
                     _ui.update { it.copy(hostCompat = features.mapValues { (_, f) -> f.compat }) }
                 }.launchIn(viewModelScope)
-            observeMoonlightEvents()
         }
 
         fun setHost(hostId: String) {
