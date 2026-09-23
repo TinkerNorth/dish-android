@@ -167,50 +167,66 @@ class UsbGamepadManager
 
         private fun onUsbPresent(device: UsbDevice) {
             if (!isGamepadShaped(device)) return
-            val vid = device.vendorId
-            val pid = device.productId
-            val key = vpk(vid, pid)
+            val key = vpk(device.vendorId, device.productId)
             usbDevices[key] = device
-            findInterruptInPair(device)?.let { (intf, epIn, epOut) ->
-                descriptors.note(
-                    vid,
-                    pid,
-                    UsbEndpointFacts(
-                        intervalRaw = epIn.interval,
-                        maxPacketSize = epIn.maxPacketSize,
-                        pollRateHz = computeUsbPollRateHz(epIn.interval, epIn.maxPacketSize),
-                        highSpeed = epIn.maxPacketSize > FULL_SPEED_MAX_PACKET,
-                        interfaceClass = intf.interfaceClass,
-                        hasOutEndpoint = epOut != null,
-                    ),
-                )
-            }
+            noteEndpointFacts(device)
+
             val existing = _controllers.value[key]
             if (existing == null) {
-                val fwId = liveFrameworkFor(registry.devices.value, vid, pid)
-                _controllers.update {
-                    it +
-                        (
-                            key to
-                                UsbController(
-                                    vendorId = vid,
-                                    productId = pid,
-                                    name = friendlyName(device),
-                                    phase = UsbPhase.Routed,
-                                    usbPresent = true,
-                                    frameworkId = fwId,
-                                    hasPermission = usbManager?.hasPermission(device) == true,
-                                    desired = resolvePath(vid, pid),
-                                    frameworkExpected = native.modelExpectsFrameworkGamepad(vid, pid),
-                                ).withCapturedBinding(fwId)
-                        )
-                }
-                lastFrameworkId[key] = fwId
-                // Drive toward the resolved path automatically (not user-initiated).
-                applyEvent(key, UsbEvent.Choose(resolvePath(vid, pid), userInitiated = false))
-            } else if (usbManager?.hasPermission(device) == true && !existing.hasPermission) {
-                applyEvent(key, UsbEvent.PermissionGranted)
+                trackNewController(key, device)
+                return
             }
+            val permissionJustArrived = usbManager?.hasPermission(device) == true && !existing.hasPermission
+            if (permissionJustArrived) applyEvent(key, UsbEvent.PermissionGranted)
+        }
+
+        private fun noteEndpointFacts(device: UsbDevice) {
+            val pair = findInterruptInPair(device) ?: return
+            val (intf, epIn, epOut) = pair
+            descriptors.note(
+                device.vendorId,
+                device.productId,
+                UsbEndpointFacts(
+                    intervalRaw = epIn.interval,
+                    maxPacketSize = epIn.maxPacketSize,
+                    pollRateHz = computeUsbPollRateHz(epIn.interval, epIn.maxPacketSize),
+                    highSpeed = epIn.maxPacketSize > FULL_SPEED_MAX_PACKET,
+                    interfaceClass = intf.interfaceClass,
+                    hasOutEndpoint = epOut != null,
+                ),
+            )
+        }
+
+        private fun trackNewController(
+            key: Int,
+            device: UsbDevice,
+        ) {
+            val vid = device.vendorId
+            val pid = device.productId
+            val fwId = liveFrameworkFor(registry.devices.value, vid, pid)
+            _controllers.update { it + (key to newUsbController(device, fwId)) }
+            lastFrameworkId[key] = fwId
+            // Drive toward the resolved path automatically (not user-initiated).
+            applyEvent(key, UsbEvent.Choose(resolvePath(vid, pid), userInitiated = false))
+        }
+
+        private fun newUsbController(
+            device: UsbDevice,
+            frameworkId: Int?,
+        ): UsbController {
+            val vid = device.vendorId
+            val pid = device.productId
+            return UsbController(
+                vendorId = vid,
+                productId = pid,
+                name = friendlyName(device),
+                phase = UsbPhase.Routed,
+                usbPresent = true,
+                frameworkId = frameworkId,
+                hasPermission = usbManager?.hasPermission(device) == true,
+                desired = resolvePath(vid, pid),
+                frameworkExpected = native.modelExpectsFrameworkGamepad(vid, pid),
+            ).withCapturedBinding(frameworkId)
         }
 
         private fun onUsbGone(device: UsbDevice) {
