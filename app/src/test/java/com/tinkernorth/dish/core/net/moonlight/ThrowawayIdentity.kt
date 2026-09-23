@@ -23,12 +23,17 @@ object ThrowawayIdentity {
             .rsa2048()
             .build()
 
-    fun of(held: HeldCertificate): MoonlightIdentity =
-        object : MoonlightIdentity {
-            override val certificatePem: String = held.certificatePem()
-            override val certificateSignature: ByteArray = held.certificate.signature
-            override val privateKey: PrivateKey = held.keyPair.private
-        }
+    // A real RSA identity, generated per test rather than pinned: pinning a key in the repo
+    // would make a leaked test fixture look like a leaked client certificate.
+    private class HeldIdentity(
+        held: HeldCertificate,
+    ) : MoonlightIdentity {
+        override val certificatePem: String = held.certificatePem()
+        override val certificateSignature: ByteArray = held.certificate.signature
+        override val privateKey: PrivateKey = held.keyPair.private
+    }
+
+    fun of(held: HeldCertificate): MoonlightIdentity = HeldIdentity(held)
 
     fun named(commonName: String): MoonlightIdentity = of(heldCertificate(commonName))
 }
