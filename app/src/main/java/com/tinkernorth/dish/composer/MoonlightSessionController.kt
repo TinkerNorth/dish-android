@@ -169,7 +169,7 @@ class MoonlightSessionController
                     candidateHostKind = ConnectionKind.MOONLIGHT,
                     candidateHostId = hostId,
                 )
-            return MoonlightEmulatedType.resolve(picked, source.inputOk(Feature.MOTION))
+            return MoonlightEmulatedType.resolveMoonlightEmulatedType(picked, source.inputOk(Feature.MOTION))
         }
 
         private fun startService() {

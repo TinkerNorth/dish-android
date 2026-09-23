@@ -248,7 +248,7 @@ class MoonlightControlSession(
         while (enet.received.isNotEmpty()) {
             val payload = enet.received.removeFirst()
             val plaintext = runCatching { opener.open(payload) }.getOrNull() ?: continue
-            MoonlightEventDecoder.decode(plaintext)?.let(into::add)
+            MoonlightEventDecoder.decodeMoonlightEvent(plaintext)?.let(into::add)
         }
     }
 

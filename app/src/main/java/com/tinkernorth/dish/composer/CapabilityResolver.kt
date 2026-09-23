@@ -59,7 +59,7 @@ object CapabilityResolver {
     private fun typeOffersFeature(
         feature: Feature,
         dto: CatalogFeatureDto,
-    ): Boolean = feature != Feature.TOUCHPAD || dto.modes.isEmpty() || TouchpadModeValue.DS4 in dto.modes
+    ): Boolean = feature != Feature.TOUCHPAD || dto.modes.isEmpty() || TouchpadModeValue.TOUCHPAD_MODE_DS4 in dto.modes
 
     // The wire describes the EMULATED pad the satellite must plug: a type-driven base
     // (analog triggers + rumble, always) plus motion gated on the phone/controller gyro

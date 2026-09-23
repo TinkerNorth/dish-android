@@ -36,21 +36,21 @@ class PhysicalMotionProbeTest {
         // The JVM stub reports SDK_INT 0, so the gate in hasGyro is what answers here: it must
         // never reach the per-device sensor read.
         assertTrue(Build.VERSION.SDK_INT < Build.VERSION_CODES.S)
-        assertFalse(PhysicalMotionProbe.hasGyro(deviceId = 7))
+        assertFalse(hasGyro(deviceId = 7))
     }
 
     @Test
     fun `returns false when the InputDevice is null`() {
-        assertFalse(PhysicalMotionProbe.probeGyro(device = null))
+        assertFalse(probeGyro(device = null))
     }
 
     @Test
     fun `returns false when the pad has no gyroscope sensor`() {
-        assertFalse(PhysicalMotionProbe.probeGyro(device = deviceWithoutGyro()))
+        assertFalse(probeGyro(device = deviceWithoutGyro()))
     }
 
     @Test
     fun `returns true when the pad reports a gyroscope`() {
-        assertTrue(PhysicalMotionProbe.probeGyro(device = deviceWithGyro()))
+        assertTrue(probeGyro(device = deviceWithGyro()))
     }
 }

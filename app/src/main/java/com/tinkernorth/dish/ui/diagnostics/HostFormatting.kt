@@ -71,12 +71,12 @@ internal fun Context.satelliteHostLines(host: HostDiag): List<String> {
 private fun Context.protocolValue(version: Int): String {
     val base = getString(R.string.diagnostics_protocol_value, version)
     val compat =
-        when (DishProtocol.compatFor(version)) {
-            DishProtocol.Compat.CURRENT -> getString(R.string.diagnostics_protocol_current)
-            DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE -> getString(R.string.chip_satellite_update_available)
-            DishProtocol.Compat.SATELLITE_UPDATE_REQUIRED -> getString(R.string.chip_satellite_update_required)
-            DishProtocol.Compat.APP_UPDATE_REQUIRED -> getString(R.string.chip_app_update_required)
-            DishProtocol.Compat.UNKNOWN -> null
+        when (DishProtocol.dishProtocolCompatFor(version)) {
+            DishProtocol.DishProtocolCompat.CURRENT -> getString(R.string.diagnostics_protocol_current)
+            DishProtocol.DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE -> getString(R.string.chip_satellite_update_available)
+            DishProtocol.DishProtocolCompat.SATELLITE_UPDATE_REQUIRED -> getString(R.string.chip_satellite_update_required)
+            DishProtocol.DishProtocolCompat.APP_UPDATE_REQUIRED -> getString(R.string.chip_app_update_required)
+            DishProtocol.DishProtocolCompat.UNKNOWN -> null
         }
     return compat?.let { getString(R.string.diagnostics_joined, base, it) } ?: base
 }

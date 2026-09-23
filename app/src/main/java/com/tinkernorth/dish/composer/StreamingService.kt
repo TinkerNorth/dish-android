@@ -87,7 +87,7 @@ class StreamingService : Service() {
                 usbGamepadManager.controllers,
                 micCapture.state,
             ) { count, conns, controllers, plan ->
-                ServiceSnapshot(count, conns, controllers.directClaimCount(), plan.arming, MicIndicatorPolicy.of(plan))
+                ServiceSnapshot(count, conns, controllers.directClaimCount(), plan.arming, MicIndicatorPolicy.micIndicatorStateOf(plan))
             }.onEach(::refresh)
                 .launchIn(wakeStateScope())
     }
@@ -134,7 +134,7 @@ class StreamingService : Service() {
             build(
                 count = wakeState.streamingSlotCount.value,
                 primaryLabel = null,
-                micState = MicIndicatorPolicy.of(plan),
+                micState = MicIndicatorPolicy.micIndicatorStateOf(plan),
             )
         return startInForeground(notification, plan.arming)
     }

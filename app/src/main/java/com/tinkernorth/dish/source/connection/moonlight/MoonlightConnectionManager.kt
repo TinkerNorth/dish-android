@@ -517,9 +517,9 @@ class MoonlightConnectionManager
             }
 
         /** Fetch the host's app list (empty when unreachable/unpaired). */
-        suspend fun fetchApps(host: MoonlightHost): List<MoonlightXml.App> = withContext(ioDispatcher) { fetchAppList(host) }
+        suspend fun fetchApps(host: MoonlightHost): List<MoonlightXml.MoonlightApp> = withContext(ioDispatcher) { fetchAppList(host) }
 
-        private fun fetchAppList(host: MoonlightHost): List<MoonlightXml.App> {
+        private fun fetchAppList(host: MoonlightHost): List<MoonlightXml.MoonlightApp> {
             val reply = gateway.getHttps(MoonlightUrls.appList(host.address, host.httpsPort, deviceId), host.id)
             if (!reply.ok) throw java.io.IOException("applist refused by ${host.address}: HTTP ${reply.status}")
             return MoonlightXml.parseAppList(reply.body)

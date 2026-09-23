@@ -142,7 +142,7 @@ class ControllerAdapter(
         val pathCard: PathCard? = null,
         val inputRates: SlotInputRates? = null,
         val screenPeakHz: Int = 0,
-        val hostCompat: DishProtocol.Compat = DishProtocol.Compat.UNKNOWN,
+        val hostCompat: DishProtocol.DishProtocolCompat = DishProtocol.DishProtocolCompat.UNKNOWN,
     )
 
     fun submitSlots(
@@ -153,7 +153,7 @@ class ControllerAdapter(
         pathCards: Map<String, PathCard> = emptyMap(),
         inputRates: Map<String, SlotInputRates> = emptyMap(),
         screenPeakHz: Int = 0,
-        hostCompat: Map<String, DishProtocol.Compat> = emptyMap(),
+        hostCompat: Map<String, DishProtocol.DishProtocolCompat> = emptyMap(),
     ) {
         submitList(
             slots.map { slot ->
@@ -165,7 +165,7 @@ class ControllerAdapter(
                     pathCard = pathCards[slot.id],
                     inputRates = inputRates[slot.id],
                     screenPeakHz = screenPeakHz,
-                    hostCompat = slot.boundConnectionId?.let { hostCompat[it] } ?: DishProtocol.Compat.UNKNOWN,
+                    hostCompat = slot.boundConnectionId?.let { hostCompat[it] } ?: DishProtocol.DishProtocolCompat.UNKNOWN,
                 )
             },
         )
@@ -750,7 +750,7 @@ internal fun pointerFuncFacts(row: ControllerAdapter.Row): List<PointerPillFact>
     buildList {
         when {
             row.pathCard?.suggestDirectForTouch == true -> add(PointerPillFact.PAD_NEEDS_DIRECT)
-            row.pointer?.mode == TouchpadModeValue.DS4 -> add(PointerPillFact.PAD_ON)
+            row.pointer?.mode == TouchpadModeValue.TOUCHPAD_MODE_DS4 -> add(PointerPillFact.PAD_ON)
             row.motionCap.typeOk(Feature.TOUCHPAD) -> add(PointerPillFact.PAD_OFF)
         }
         if (row.pointer?.mouseOpenable == true) add(PointerPillFact.MOUSE_READY)

@@ -50,10 +50,10 @@ object TouchpadRouting {
         val padRoute = Feature.TOUCHPAD in controller && Feature.TOUCHPAD in type
         val mouseRoute = Feature.MOUSE in controller && Feature.MOUSE in host
         return when {
-            mouseSurfaceOpen && mouseRoute -> TouchpadModeValue.MOUSE
-            padRoute -> TouchpadModeValue.DS4
-            mouseRoute -> TouchpadModeValue.MOUSE
-            else -> TouchpadModeValue.OFF
+            mouseSurfaceOpen && mouseRoute -> TouchpadModeValue.TOUCHPAD_MODE_MOUSE
+            padRoute -> TouchpadModeValue.TOUCHPAD_MODE_DS4
+            mouseRoute -> TouchpadModeValue.TOUCHPAD_MODE_MOUSE
+            else -> TouchpadModeValue.TOUCHPAD_MODE_OFF
         }
     }
 }

@@ -23,7 +23,7 @@ import com.tinkernorth.dish.ui.common.statusChipText
 sealed interface SatelliteRow {
     data class Known(
         val summary: ConnectionSummary,
-        val compat: DishProtocol.Compat = DishProtocol.Compat.UNKNOWN,
+        val compat: DishProtocol.DishProtocolCompat = DishProtocol.DishProtocolCompat.UNKNOWN,
     ) : SatelliteRow
 
     data class Discovered(
@@ -125,16 +125,16 @@ class SatelliteListAdapter(
             paintCompat(row.compat)
         }
 
-        private fun paintCompat(compat: DishProtocol.Compat) {
+        private fun paintCompat(compat: DishProtocol.DishProtocolCompat) {
             val spec =
                 when (compat) {
-                    DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE ->
+                    DishProtocol.DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE ->
                         Triple(R.string.chip_satellite_update_available, R.drawable.bg_binding_pill_warn, R.color.colorTertiary)
-                    DishProtocol.Compat.SATELLITE_UPDATE_REQUIRED ->
+                    DishProtocol.DishProtocolCompat.SATELLITE_UPDATE_REQUIRED ->
                         Triple(R.string.chip_satellite_update_required, R.drawable.bg_binding_pill_error, R.color.colorError)
-                    DishProtocol.Compat.APP_UPDATE_REQUIRED ->
+                    DishProtocol.DishProtocolCompat.APP_UPDATE_REQUIRED ->
                         Triple(R.string.chip_app_update_required, R.drawable.bg_binding_pill_error, R.color.colorError)
-                    DishProtocol.Compat.UNKNOWN, DishProtocol.Compat.CURRENT -> null
+                    DishProtocol.DishProtocolCompat.UNKNOWN, DishProtocol.DishProtocolCompat.CURRENT -> null
                 }
             if (spec == null) {
                 b.tvRowUpdate.visibility = View.GONE

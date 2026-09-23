@@ -27,7 +27,7 @@ enum class MicIndicatorState {
  * engine is actually doing. The plan is the one truth both consumers follow.
  */
 object MicIndicatorPolicy {
-    fun of(plan: MicCapturePlan): MicIndicatorState =
+    fun micIndicatorStateOf(plan: MicCapturePlan): MicIndicatorState =
         when {
             !plan.arming -> MicIndicatorState.HIDDEN
             plan.capturing -> MicIndicatorState.LIVE

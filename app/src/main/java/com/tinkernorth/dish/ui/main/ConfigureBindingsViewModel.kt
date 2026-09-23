@@ -165,7 +165,7 @@ data class ConfigUiState(
     // What the chosen Moonlight host last told us. Null for every other kind of destination.
     val moonlight: MoonlightSessionInput? = null,
     // Per-connection protocol verdict (satellite hosts only), for the update chips.
-    val hostCompat: Map<String, DishProtocol.Compat> = emptyMap(),
+    val hostCompat: Map<String, DishProtocol.DishProtocolCompat> = emptyMap(),
     // RECORD_AUDIO, re-read on every resume: the OS says nothing when a grant is revoked.
     val micPermissionGranted: Boolean = false,
 ) {
@@ -412,7 +412,7 @@ class ConfigureBindingsViewModel
                     candidateHostId = _ui.value.draft?.hostId,
                     candidateDirect = _ui.value.candidateDirect,
                 )
-            return MoonlightEmulatedType.resolve(picked, caps.inputOk(Feature.MOTION))
+            return MoonlightEmulatedType.resolveMoonlightEmulatedType(picked, caps.inputOk(Feature.MOTION))
         }
 
         /** Re-verify the chosen Moonlight host: on entering the screen, and before a session. */

@@ -146,9 +146,9 @@ data class HostFeatureSet(
     // extended-mouse gate: only a version that decodes the v2 pointer frame reports 2+.
     val protocolVersion: Int = 0,
 ) {
-    val extendedMouse: Boolean get() = mouseControl && protocolVersion >= DishProtocol.EXTENDED_MOUSE
+    val extendedMouse: Boolean get() = mouseControl && protocolVersion >= DishProtocol.DISH_PROTOCOL_EXTENDED_MOUSE
 
-    val compat: DishProtocol.Compat get() = DishProtocol.compatFor(protocolVersion.takeIf { it > 0 })
+    val compat: DishProtocol.DishProtocolCompat get() = DishProtocol.dishProtocolCompatFor(protocolVersion.takeIf { it > 0 })
 
     fun toCapabilitySet(): CapabilitySet {
         // The per-type surfaces (lightbar/triggerEffects/playerLeds) are the type

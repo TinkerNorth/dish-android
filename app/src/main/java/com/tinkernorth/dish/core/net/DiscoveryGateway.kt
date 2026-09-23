@@ -64,7 +64,7 @@ class DiscoveryGateway
             pin: String,
             clientPin: String = "",
             satelliteId: String = "",
-            protocolVersion: Int = DishProtocol.CURRENT,
+            protocolVersion: Int = DishProtocol.DISH_PROTOCOL_CURRENT,
         ): HttpReply =
             withContext(ioDispatcher) {
                 http.pair(
@@ -97,7 +97,7 @@ class DiscoveryGateway
             hmacProof: String,
             descriptorsJson: String,
             requestMouseControl: Boolean,
-            protocolVersion: Int = DishProtocol.CURRENT,
+            protocolVersion: Int = DishProtocol.DISH_PROTOCOL_CURRENT,
             satelliteId: String = "",
         ): HttpReply =
             withContext(ioDispatcher) {

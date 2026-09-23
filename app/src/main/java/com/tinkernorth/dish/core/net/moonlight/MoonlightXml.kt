@@ -31,7 +31,7 @@ object MoonlightXml {
         val busy: Boolean get() = currentGame != 0 || state.endsWith("SERVER_BUSY")
     }
 
-    data class App(
+    data class MoonlightApp(
         val id: String,
         val title: String,
         val hdrSupported: Boolean,
@@ -113,14 +113,14 @@ object MoonlightXml {
         )
     }
 
-    fun parseAppList(xml: String): List<App> {
+    fun parseAppList(xml: String): List<MoonlightApp> {
         val root = rootOf(xml) ?: return emptyList()
-        val apps = mutableListOf<App>()
+        val apps = mutableListOf<MoonlightApp>()
         val nodes = root.getElementsByTagName("App")
         for (i in 0 until nodes.length) {
             val el = nodes.item(i) as? Element ?: continue
             val id = childText(el, "ID") ?: continue
-            apps += App(id = id, title = childText(el, "AppTitle").orEmpty(), hdrSupported = (childInt(el, "IsHdrSupported") ?: 0) == 1)
+            apps += MoonlightApp(id = id, title = childText(el, "AppTitle").orEmpty(), hdrSupported = (childInt(el, "IsHdrSupported") ?: 0) == 1)
         }
         return apps
     }

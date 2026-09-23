@@ -58,7 +58,7 @@ class SetupConnectionViewModel
             val name: String,
             val link: LinkState,
             val server: DiscoveredServer,
-            val compat: DishProtocol.Compat = DishProtocol.Compat.UNKNOWN,
+            val compat: DishProtocol.DishProtocolCompat = DishProtocol.DishProtocolCompat.UNKNOWN,
         )
 
         // A Moonlight host is picked, never connected: pairing is remembered trust and the
@@ -261,7 +261,7 @@ class SetupConnectionViewModel
                             isDiscovered = id in discoveredById,
                         ),
                     server = server,
-                    compat = features[id]?.compat ?: DishProtocol.Compat.UNKNOWN,
+                    compat = features[id]?.compat ?: DishProtocol.DishProtocolCompat.UNKNOWN,
                 )
             }
         }

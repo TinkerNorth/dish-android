@@ -45,7 +45,7 @@ fun satelliteRows(
     return buildList {
         satConns.forEach {
             val version = features[it.id]?.protocolVersion?.takeIf { v -> v > 0 }
-            add(SatelliteRow.Known(it, DishProtocol.compatFor(version)))
+            add(SatelliteRow.Known(it, DishProtocol.dishProtocolCompatFor(version)))
         }
         discovered.forEach { server ->
             if (SatelliteConnection.idFor(server) !in knownIds) add(SatelliteRow.Discovered(server))

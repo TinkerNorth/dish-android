@@ -72,7 +72,7 @@ class PadAudioRouteResolver
 
         /** Re-read both lists and republish. Cheap, and the only writer of the table. */
         fun resolve() {
-            routes.publishRoutes(PadAudioMatcher.resolve(attachedPads(), usbEndpoints()))
+            routes.publishRoutes(PadAudioMatcher.resolvePadAudioRoutes(attachedPads(), usbEndpoints()))
         }
 
         private fun attachedPads(): List<UsbAudioPad> {

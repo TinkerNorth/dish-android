@@ -255,12 +255,12 @@ class MainViewModelTest {
     fun `host compat projects each satellite's protocol verdict for the update chips`() =
         runTest(dispatcher) {
             hostFeaturesStore.noteProtocolVersion("satellite:old", 1)
-            hostFeaturesStore.noteProtocolVersion("satellite:current", DishProtocol.CURRENT)
+            hostFeaturesStore.noteProtocolVersion("satellite:current", DishProtocol.DISH_PROTOCOL_CURRENT)
             dispatcher.scheduler.runCurrent()
 
             val compat = vm.uiState.value.hostCompat
-            assertEquals(DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE, compat["satellite:old"])
-            assertEquals(DishProtocol.Compat.CURRENT, compat["satellite:current"])
+            assertEquals(DishProtocol.DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE, compat["satellite:old"])
+            assertEquals(DishProtocol.DishProtocolCompat.CURRENT, compat["satellite:current"])
         }
 
     @Test

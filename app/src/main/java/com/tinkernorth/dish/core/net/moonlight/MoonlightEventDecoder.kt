@@ -69,7 +69,7 @@ object MoonlightEventDecoder {
      * even hold the header, or when a recognized type is present but its body is
      * truncated (a tampered length must not be trusted to index past the end).
      */
-    fun decode(plaintext: ByteArray): MoonlightEvent? {
+    fun decodeMoonlightEvent(plaintext: ByteArray): MoonlightEvent? {
         if (plaintext.size < HEADER_LEN) return null
         val buf = ByteBuffer.wrap(plaintext).order(ByteOrder.LITTLE_ENDIAN)
         val type = buf.short.toInt() and 0xFFFF

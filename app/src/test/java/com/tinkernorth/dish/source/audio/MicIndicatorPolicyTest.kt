@@ -22,21 +22,21 @@ class MicIndicatorPolicyTest {
 
     @Test
     fun `nothing armed is hidden, whatever else the plan says`() {
-        assertEquals(MicIndicatorState.HIDDEN, MicIndicatorPolicy.of(MicCapturePlan.IDLE))
+        assertEquals(MicIndicatorState.HIDDEN, MicIndicatorPolicy.micIndicatorStateOf(MicCapturePlan.IDLE))
     }
 
     @Test
     fun `any delivering slot makes the microphone live`() {
-        assertEquals(MicIndicatorState.LIVE, MicIndicatorPolicy.of(plan(setOf(a), setOf(a))))
+        assertEquals(MicIndicatorState.LIVE, MicIndicatorPolicy.micIndicatorStateOf(plan(setOf(a), setOf(a))))
         // Mixed: one slot muted, one delivering. The device still has a hot microphone, and
         // "some of it is muted" must never read as safe.
-        assertEquals(MicIndicatorState.LIVE, MicIndicatorPolicy.of(plan(setOf(a, b), setOf(b))))
+        assertEquals(MicIndicatorState.LIVE, MicIndicatorPolicy.micIndicatorStateOf(plan(setOf(a, b), setOf(b))))
     }
 
     @Test
     fun `armed with nothing delivering is muted`() {
-        assertEquals(MicIndicatorState.MUTED, MicIndicatorPolicy.of(plan(setOf(a), emptySet())))
-        assertEquals(MicIndicatorState.MUTED, MicIndicatorPolicy.of(plan(setOf(a, b), emptySet())))
+        assertEquals(MicIndicatorState.MUTED, MicIndicatorPolicy.micIndicatorStateOf(plan(setOf(a), emptySet())))
+        assertEquals(MicIndicatorState.MUTED, MicIndicatorPolicy.micIndicatorStateOf(plan(setOf(a, b), emptySet())))
     }
 
     @Test
@@ -69,7 +69,7 @@ class MicIndicatorPolicyTest {
         assertEquals(true, first.muted)
         // Apply the first order: everything armed, nothing delivering.
         val muted = plan(setOf(a, b), emptySet())
-        assertEquals(MicIndicatorState.MUTED, MicIndicatorPolicy.of(muted))
+        assertEquals(MicIndicatorState.MUTED, MicIndicatorPolicy.micIndicatorStateOf(muted))
         val second = MicIndicatorPolicy.toggleAll(muted)!!
         assertEquals(false, second.muted)
         assertEquals(first.slotIds, second.slotIds)

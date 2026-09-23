@@ -38,13 +38,13 @@ interface MoonlightIdentity {
  */
 object MoonlightCert {
     /** X.509 signature bytes of the certificate encoded in [pem]. */
-    fun signatureOf(pem: String): ByteArray = parse(pem).signature
+    fun signatureOf(pem: String): ByteArray = parseMoonlightCert(pem).signature
 
-    fun publicKeyOf(pem: String): PublicKey = parse(pem).publicKey
+    fun publicKeyOf(pem: String): PublicKey = parseMoonlightCert(pem).publicKey
 
-    fun sha256FingerprintHex(pem: String): String = bytesHex(MoonlightCrypto.sha256(parse(pem).encoded))
+    fun sha256FingerprintHex(pem: String): String = bytesHex(MoonlightCrypto.sha256(parseMoonlightCert(pem).encoded))
 
-    fun parse(pem: String): X509Certificate {
+    fun parseMoonlightCert(pem: String): X509Certificate {
         val factory = CertificateFactory.getInstance("X.509")
         return ByteArrayInputStream(pem.toByteArray(Charsets.US_ASCII)).use {
             factory.generateCertificate(it) as X509Certificate

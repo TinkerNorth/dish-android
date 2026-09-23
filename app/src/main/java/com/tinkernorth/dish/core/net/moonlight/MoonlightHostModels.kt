@@ -86,7 +86,7 @@ object MoonlightEmulatedType {
 
     fun fromStored(stored: Int): Int = if (stored == MoonlightControlProtocol.CONTROLLER_TYPE_UNKNOWN) AUTO else stored
 
-    fun resolve(
+    fun resolveMoonlightEmulatedType(
         picked: Int,
         sourceHasMotion: Boolean,
     ): Int =

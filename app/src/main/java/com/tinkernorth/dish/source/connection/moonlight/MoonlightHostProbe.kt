@@ -15,7 +15,7 @@ enum class MoonlightTrustState { CHECKING, PAIRED, NOT_PAIRED, UNREACHABLE, REME
 
 data class MoonlightProbe(
     val trust: MoonlightTrustState = MoonlightTrustState.CHECKING,
-    val apps: List<MoonlightXml.App> = emptyList(),
+    val apps: List<MoonlightXml.MoonlightApp> = emptyList(),
     val appsFetched: Boolean = false,
     val appsFailed: Boolean = false,
     val ownSession: Boolean = false,

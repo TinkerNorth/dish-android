@@ -170,7 +170,7 @@ class CapabilityComposer
          * so going through [state] would declare a stale "off" and need a second PUT to heal.
          */
         fun touchpadWireMode(slotId: String): String {
-            val connId = hub.bindings.value[slotId] ?: return TouchpadModeValue.OFF
+            val connId = hub.bindings.value[slotId] ?: return TouchpadModeValue.TOUCHPAD_MODE_OFF
             return TouchpadRouting.wireMode(
                 mouseSurfaceOpen = mouseSurface.isOpen(slotId),
                 controller = liveControllerLayer(slotId),
@@ -418,7 +418,7 @@ class CapabilityComposer
         ): CapabilitySet {
             if (kind == ConnectionKind.MOONLIGHT) {
                 return MoonlightCatalog.typeCapabilities(
-                    MoonlightEmulatedType.resolve(
+                    MoonlightEmulatedType.resolveMoonlightEmulatedType(
                         MoonlightEmulatedType.fromStored(typeId),
                         sourceHasMotion = false,
                     ),
