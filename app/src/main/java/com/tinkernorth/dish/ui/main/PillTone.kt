@@ -56,24 +56,24 @@ internal fun ViewGroup.inflateBindingPill(
 // Protocol-compat chip, shared by every surface that names a host: soft amber for a
 // host that still works at an older protocol, error red when one side must update.
 // Null when there is nothing to say (current, or never probed).
-internal fun compatPillParts(compat: DishProtocol.Compat): Pair<Int, PillTone>? =
+internal fun compatPillParts(compat: DishProtocol.DishProtocolCompat): Pair<Int, PillTone>? =
     when (compat) {
-        DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE ->
+        DishProtocol.DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE ->
             R.string.chip_satellite_update_available to PillTone.WARN
-        DishProtocol.Compat.SATELLITE_UPDATE_REQUIRED ->
+        DishProtocol.DishProtocolCompat.SATELLITE_UPDATE_REQUIRED ->
             R.string.chip_satellite_update_required to PillTone.ERROR
-        DishProtocol.Compat.APP_UPDATE_REQUIRED ->
+        DishProtocol.DishProtocolCompat.APP_UPDATE_REQUIRED ->
             R.string.chip_app_update_required to PillTone.ERROR
-        DishProtocol.Compat.UNKNOWN, DishProtocol.Compat.CURRENT -> null
+        DishProtocol.DishProtocolCompat.UNKNOWN, DishProtocol.DishProtocolCompat.CURRENT -> null
     }
 
 internal fun compatPillSpec(
     context: Context,
-    compat: DishProtocol.Compat,
+    compat: DishProtocol.DishProtocolCompat,
 ): PillSpec? = compatPillParts(compat)?.let { (text, tone) -> PillSpec(context.getString(text), null, tone) }
 
 // Paints one binding_pill include as the compat chip, or hides it when current/unknown.
-internal fun BindingPillBinding.bindCompat(compat: DishProtocol.Compat) {
+internal fun BindingPillBinding.bindCompat(compat: DishProtocol.DishProtocolCompat) {
     val spec = compatPillSpec(root.context, compat)
     if (spec == null) {
         root.visibility = View.GONE

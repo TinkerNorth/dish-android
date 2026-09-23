@@ -108,7 +108,7 @@ class MdnsDiscovery
         private suspend fun resolveOne(
             nsd: NsdManager,
             info: NsdServiceInfo,
-        ): DiscoveredServer? = NsdServiceResolver.resolve(nsd, info)?.let(::toServer)
+        ): DiscoveredServer? = NsdServiceResolver.resolveNsdService(nsd, info)?.let(::toServer)
 
         private fun toServer(info: NsdServiceInfo): DiscoveredServer? =
             mdnsServiceToServer(

@@ -210,18 +210,18 @@ class CapabilityTest {
 
     @Test
     fun `compat mirrors the advertised version, with zero reading as unknown`() {
-        assertEquals(DishProtocol.Compat.UNKNOWN, HostFeatureSet.SATELLITE_DEFAULT.compat)
+        assertEquals(DishProtocol.DishProtocolCompat.UNKNOWN, HostFeatureSet.SATELLITE_DEFAULT.compat)
         assertEquals(
-            DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE,
-            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.CURRENT - 1).compat,
+            DishProtocol.DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE,
+            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.DISH_PROTOCOL_CURRENT - 1).compat,
         )
         assertEquals(
-            DishProtocol.Compat.CURRENT,
-            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.CURRENT).compat,
+            DishProtocol.DishProtocolCompat.CURRENT,
+            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.DISH_PROTOCOL_CURRENT).compat,
         )
         assertEquals(
-            DishProtocol.Compat.APP_UPDATE_REQUIRED,
-            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.CURRENT + 1).compat,
+            DishProtocol.DishProtocolCompat.APP_UPDATE_REQUIRED,
+            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.DISH_PROTOCOL_CURRENT + 1).compat,
         )
     }
 

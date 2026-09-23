@@ -251,7 +251,7 @@ class MainViewModel
                     candidateHostKind = ConnectionKind.MOONLIGHT,
                     candidateHostId = summary.id,
                 )
-            return MoonlightEmulatedType.resolve(picked, source.inputOk(Feature.MOTION))
+            return MoonlightEmulatedType.resolveMoonlightEmulatedType(picked, source.inputOk(Feature.MOTION))
         }
 
         private fun pathCardFor(
@@ -274,7 +274,7 @@ class MainViewModel
                 } else {
                     PathCapabilities(rumble = device.hasRumble, motion = device.hasGyro)
                 }
-            return PathCardMapper.map(
+            return PathCardMapper.mapPathCard(
                 transport = device.transport,
                 claim =
                     ClaimState(

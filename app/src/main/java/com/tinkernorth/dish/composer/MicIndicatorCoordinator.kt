@@ -29,7 +29,7 @@ class MicIndicatorCoordinator
         private val micMute: MicMuteStore,
     ) {
         val state: Flow<MicIndicatorState> =
-            micCapture.state.map(MicIndicatorPolicy::of).distinctUntilChanged()
+            micCapture.state.map(MicIndicatorPolicy::micIndicatorStateOf).distinctUntilChanged()
 
         /**
          * Mute every armed slot, or unmute every armed slot — whichever the current plan says

@@ -105,7 +105,7 @@ class MdnsMoonlightDiscovery
         private suspend fun resolveOne(
             nsd: NsdManager,
             info: NsdServiceInfo,
-        ): MoonlightHost? = NsdServiceResolver.resolve(nsd, info)?.let(::toHost)
+        ): MoonlightHost? = NsdServiceResolver.resolveNsdService(nsd, info)?.let(::toHost)
 
         private fun toHost(info: NsdServiceInfo): MoonlightHost? =
             mdnsServiceToHost(info.serviceName.orEmpty(), NsdServiceResolver.hostAddress(info), info.attributes.orEmpty())

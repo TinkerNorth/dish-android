@@ -32,11 +32,11 @@ class MoonlightEmulatedTypeTest {
     fun `Auto resolves to PlayStation with motion and Xbox without`() {
         assertEquals(
             MoonlightEmulatedType.PLAYSTATION,
-            MoonlightEmulatedType.resolve(MoonlightEmulatedType.AUTO, sourceHasMotion = true),
+            MoonlightEmulatedType.resolveMoonlightEmulatedType(MoonlightEmulatedType.AUTO, sourceHasMotion = true),
         )
         assertEquals(
             MoonlightEmulatedType.XBOX,
-            MoonlightEmulatedType.resolve(MoonlightEmulatedType.AUTO, sourceHasMotion = false),
+            MoonlightEmulatedType.resolveMoonlightEmulatedType(MoonlightEmulatedType.AUTO, sourceHasMotion = false),
         )
     }
 
@@ -44,8 +44,8 @@ class MoonlightEmulatedTypeTest {
     fun `an explicit pick is never re-resolved, motion or not`() {
         listOf(MoonlightEmulatedType.XBOX, MoonlightEmulatedType.PLAYSTATION, MoonlightEmulatedType.NINTENDO)
             .forEach { picked ->
-                assertEquals(picked, MoonlightEmulatedType.resolve(picked, sourceHasMotion = true))
-                assertEquals(picked, MoonlightEmulatedType.resolve(picked, sourceHasMotion = false))
+                assertEquals(picked, MoonlightEmulatedType.resolveMoonlightEmulatedType(picked, sourceHasMotion = true))
+                assertEquals(picked, MoonlightEmulatedType.resolveMoonlightEmulatedType(picked, sourceHasMotion = false))
             }
     }
 

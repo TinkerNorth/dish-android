@@ -299,7 +299,7 @@ class GamepadOverlayActivity :
         when {
             !capability.typeOk(Feature.TOUCHPAD) -> GamepadTouchView.TrackpadMode.NONE
             summary?.kind == ConnectionKind.SATELLITE &&
-                capabilityComposer.touchpadWireMode(VIRTUAL_SLOT_ID) != TouchpadModeValue.OFF ->
+                capabilityComposer.touchpadWireMode(VIRTUAL_SLOT_ID) != TouchpadModeValue.TOUCHPAD_MODE_OFF ->
                 GamepadTouchView.TrackpadMode.TOUCH
             summary?.kind == ConnectionKind.MOONLIGHT -> GamepadTouchView.TrackpadMode.TOUCH
             else -> GamepadTouchView.TrackpadMode.NONE

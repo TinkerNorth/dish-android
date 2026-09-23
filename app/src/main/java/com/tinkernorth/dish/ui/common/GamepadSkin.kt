@@ -39,7 +39,7 @@ enum class GamepadSkin(
 
         // Moonlight emulated type → skin, in the Moonlight id table (its ids overlap the
         // catalog's, so the two mappers never share a caller). AUTO must be resolved to a
-        // concrete type first (MoonlightEmulatedType.resolve); an unresolved value lands
+        // concrete type first (MoonlightEmulatedType.resolveMoonlightEmulatedType); an unresolved value lands
         // on the generic Xbox skin, matching the wire's own fallback.
         fun forMoonlightType(type: Int): GamepadSkin =
             when (type) {

@@ -172,7 +172,7 @@ class MoonlightHttpGateway
                         CharArray(0),
                         arrayOf(
                             com.tinkernorth.dish.core.net.moonlight.MoonlightCert
-                                .parse(identity.certificatePem),
+                                .parseMoonlightCert(identity.certificatePem),
                         ),
                     )
                 }

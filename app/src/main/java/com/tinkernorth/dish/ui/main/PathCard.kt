@@ -62,7 +62,7 @@ data class PathFacts(
 )
 
 object PathCardMapper {
-    fun map(
+    fun mapPathCard(
         transport: Transport,
         claim: ClaimState,
         facts: PathFacts,

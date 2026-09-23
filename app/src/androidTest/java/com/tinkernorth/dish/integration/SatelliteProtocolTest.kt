@@ -66,7 +66,7 @@ class SatelliteProtocolTest {
         assertEquals("satellite mints one pairing key", satellite.pairingKeyHex != null, true)
         assertTrue("exactly the paired satellite is remembered", manager.remembered().any { it.id == id })
         val put = satellite.sessionPuts.last()
-        assertEquals(com.tinkernorth.dish.core.net.DishProtocol.CURRENT, put.getInt("protocolVersion"))
+        assertEquals(com.tinkernorth.dish.core.net.DishProtocol.DISH_PROTOCOL_CURRENT, put.getInt("protocolVersion"))
         assertTrue("session PUT carries deviceId", put.getString("deviceId").isNotEmpty())
         assertTrue("declarative controllers array is present", put.has("controllers"))
     }

@@ -17,7 +17,7 @@ data class FrameworkTimingSummary(
 
 object Percentiles {
     // Nearest-rank on a sorted copy, the same rule the native bench uses.
-    fun of(
+    fun percentileOf(
         values: FloatArray,
         p: Double,
     ): Float {
@@ -60,10 +60,10 @@ class FrameworkTimingWindow(
         val d = delays.copyOf(count)
         return FrameworkTimingSummary(
             samples = count,
-            gapP50Ms = Percentiles.of(g, P50),
-            gapP99Ms = Percentiles.of(g, P99),
-            delayP50Ms = Percentiles.of(d, P50),
-            delayP99Ms = Percentiles.of(d, P99),
+            gapP50Ms = Percentiles.percentileOf(g, P50),
+            gapP99Ms = Percentiles.percentileOf(g, P99),
+            delayP50Ms = Percentiles.percentileOf(d, P50),
+            delayP99Ms = Percentiles.percentileOf(d, P99),
         )
     }
 

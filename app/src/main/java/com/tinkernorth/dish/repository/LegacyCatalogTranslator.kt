@@ -51,7 +51,7 @@ class LegacyCatalogTranslator
                     // for a current host. v1 is a fixed historical shape, not a floor.
                     if (feature in AUDIO_FEATURES) continue
                     // Touchpad is the DS4 pad mode: the resolver gates it on the "ds4" mode slug.
-                    val modes = if (feature == Feature.TOUCHPAD) listOf(TouchpadModeValue.DS4) else emptyList()
+                    val modes = if (feature == Feature.TOUCHPAD) listOf(TouchpadModeValue.TOUCHPAD_MODE_DS4) else emptyList()
                     put(featureSlug, CatalogFeatureDto(supported = true, modes = modes))
                 }
             }

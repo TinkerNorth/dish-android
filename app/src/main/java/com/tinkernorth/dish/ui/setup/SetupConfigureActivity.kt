@@ -465,7 +465,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                 sublabel = getString(R.string.setup_cfg_dest_satellite),
                 sends = emptyList(),
                 gets = if (model.mouseMode) listOf(mouse) else emptyList(),
-                compat = state.draft?.hostId?.let { state.hostCompat[it] } ?: DishProtocol.Compat.UNKNOWN,
+                compat = state.draft?.hostId?.let { state.hostCompat[it] } ?: DishProtocol.DishProtocolCompat.UNKNOWN,
             ),
             ReviewNode(
                 kind = R.string.binding_label_destination,
@@ -545,7 +545,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         val sublabel: String,
         val sends: List<ReviewFlow>,
         val gets: List<ReviewFlow>,
-        val compat: DishProtocol.Compat = DishProtocol.Compat.UNKNOWN,
+        val compat: DishProtocol.DishProtocolCompat = DishProtocol.DishProtocolCompat.UNKNOWN,
     )
 
     private fun renderApplyState(state: ApplyState) {

@@ -61,43 +61,43 @@ class TouchpadRoutingTest {
 
     @Test
     fun `the pad surface wins whenever the type carries one`() {
-        assertEquals(TouchpadModeValue.DS4, TouchpadRouting.wireMode(false, touch, touch, none))
-        assertEquals(TouchpadModeValue.DS4, TouchpadRouting.wireMode(false, both, both, both))
+        assertEquals(TouchpadModeValue.TOUCHPAD_MODE_DS4, TouchpadRouting.wireMode(false, touch, touch, none))
+        assertEquals(TouchpadModeValue.TOUCHPAD_MODE_DS4, TouchpadRouting.wireMode(false, both, both, both))
     }
 
     @Test
     fun `a pad-less route falls through to the host mouse`() {
-        assertEquals(TouchpadModeValue.MOUSE, TouchpadRouting.wireMode(false, mouse, none, mouse))
-        assertEquals(TouchpadModeValue.MOUSE, TouchpadRouting.wireMode(false, both, none, both))
+        assertEquals(TouchpadModeValue.TOUCHPAD_MODE_MOUSE, TouchpadRouting.wireMode(false, mouse, none, mouse))
+        assertEquals(TouchpadModeValue.TOUCHPAD_MODE_MOUSE, TouchpadRouting.wireMode(false, both, none, both))
     }
 
     @Test
     fun `ds4 needs a touch source and a type that advertises the mode`() {
-        assertEquals(TouchpadModeValue.OFF, TouchpadRouting.wireMode(false, none, touch, none))
-        assertEquals(TouchpadModeValue.OFF, TouchpadRouting.wireMode(false, touch, none, none))
+        assertEquals(TouchpadModeValue.TOUCHPAD_MODE_OFF, TouchpadRouting.wireMode(false, none, touch, none))
+        assertEquals(TouchpadModeValue.TOUCHPAD_MODE_OFF, TouchpadRouting.wireMode(false, touch, none, none))
     }
 
     @Test
     fun `mouse needs a touch source and a host that grants mouse control`() {
-        assertEquals(TouchpadModeValue.OFF, TouchpadRouting.wireMode(false, none, none, mouse))
-        assertEquals(TouchpadModeValue.OFF, TouchpadRouting.wireMode(false, mouse, none, none))
+        assertEquals(TouchpadModeValue.TOUCHPAD_MODE_OFF, TouchpadRouting.wireMode(false, none, none, mouse))
+        assertEquals(TouchpadModeValue.TOUCHPAD_MODE_OFF, TouchpadRouting.wireMode(false, mouse, none, none))
     }
 
     @Test
     fun `a route that can carry neither declares off`() {
-        assertEquals(TouchpadModeValue.OFF, TouchpadRouting.wireMode(false, none, none, none))
-        assertEquals(TouchpadModeValue.OFF, TouchpadRouting.wireMode(true, none, none, none))
+        assertEquals(TouchpadModeValue.TOUCHPAD_MODE_OFF, TouchpadRouting.wireMode(false, none, none, none))
+        assertEquals(TouchpadModeValue.TOUCHPAD_MODE_OFF, TouchpadRouting.wireMode(true, none, none, none))
     }
 
     @Test
     fun `an open mouse surface flips a pad-routable slot to mouse`() {
-        assertEquals(TouchpadModeValue.MOUSE, TouchpadRouting.wireMode(true, both, both, both))
-        assertEquals(TouchpadModeValue.MOUSE, TouchpadRouting.wireMode(true, both, none, both))
+        assertEquals(TouchpadModeValue.TOUCHPAD_MODE_MOUSE, TouchpadRouting.wireMode(true, both, both, both))
+        assertEquals(TouchpadModeValue.TOUCHPAD_MODE_MOUSE, TouchpadRouting.wireMode(true, both, none, both))
     }
 
     @Test
     fun `an open mouse surface without a mouse route keeps the pad routing`() {
-        assertEquals(TouchpadModeValue.DS4, TouchpadRouting.wireMode(true, touch, touch, none))
-        assertEquals(TouchpadModeValue.DS4, TouchpadRouting.wireMode(true, both, both, none))
+        assertEquals(TouchpadModeValue.TOUCHPAD_MODE_DS4, TouchpadRouting.wireMode(true, touch, touch, none))
+        assertEquals(TouchpadModeValue.TOUCHPAD_MODE_DS4, TouchpadRouting.wireMode(true, both, both, none))
     }
 }

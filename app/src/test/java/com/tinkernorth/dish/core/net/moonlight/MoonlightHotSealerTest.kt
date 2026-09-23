@@ -31,7 +31,7 @@ class MoonlightHotSealerTest {
         val first = sealer.sealControllerMulti(0, 1, MoonlightControlProtocol.BTN_X, 10, 20, 0, 0, 0, 0)
         assertEquals(1, sealer.nextSeq)
         val decoded = receiver.open(first)!!
-        val event = MoonlightEventDecoder.decode(decoded)
+        val event = MoonlightEventDecoder.decodeMoonlightEvent(decoded)
         // CONTROLLER_MULTI is an INPUT_DATA type the decoder classifies as Unknown (host does not send it back);
         // the point is the seal decrypts cleanly and the plaintext matches the encoder.
         assertEquals(MoonlightEvent.Unknown(MoonlightControlProtocol.CTRL_INPUT_DATA), event)

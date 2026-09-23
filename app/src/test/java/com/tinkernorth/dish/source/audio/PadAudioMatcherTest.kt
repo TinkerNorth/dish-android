@@ -41,7 +41,7 @@ class PadAudioMatcherTest {
 
     @Test
     fun `a pad with both endpoints claims both and names them`() {
-        val routes = PadAudioMatcher.resolve(listOf(pad()), listOf(sink(11), source(12)))
+        val routes = PadAudioMatcher.resolvePadAudioRoutes(listOf(pad()), listOf(sink(11), source(12)))
         val route = routes[ds5]!!
         assertTrue(route.microphone)
         assertTrue(route.speaker)
@@ -51,7 +51,7 @@ class PadAudioMatcherTest {
 
     @Test
     fun `a pad with only an output claims only the speaker`() {
-        val route = PadAudioMatcher.resolve(listOf(pad()), listOf(sink(11)))[ds5]!!
+        val route = PadAudioMatcher.resolvePadAudioRoutes(listOf(pad()), listOf(sink(11)))[ds5]!!
         assertFalse(route.microphone)
         assertTrue(route.speaker)
         assertEquals(NO_AUDIO_DEVICE, route.captureDeviceId)
@@ -60,7 +60,7 @@ class PadAudioMatcherTest {
 
     @Test
     fun `a pad with only an input claims only the microphone`() {
-        val route = PadAudioMatcher.resolve(listOf(pad()), listOf(source(12)))[ds5]!!
+        val route = PadAudioMatcher.resolvePadAudioRoutes(listOf(pad()), listOf(source(12)))[ds5]!!
         assertTrue(route.microphone)
         assertFalse(route.speaker)
         assertEquals(12, route.captureDeviceId)
@@ -71,21 +71,21 @@ class PadAudioMatcherTest {
     fun `an endpoint one device combines both ways is matched in both directions`() {
         // A USB headset is enumerated as one AudioDeviceInfo that is both a sink and a source.
         val both = UsbAudioEndpoint(9, SONY_PAD_NAME, sink = true, source = true)
-        val route = PadAudioMatcher.resolve(listOf(pad()), listOf(both))[ds5]!!
+        val route = PadAudioMatcher.resolvePadAudioRoutes(listOf(pad()), listOf(both))[ds5]!!
         assertEquals(9, route.captureDeviceId)
         assertEquals(9, route.playbackDeviceId)
     }
 
     @Test
     fun `a pad with no endpoints at all publishes nothing`() {
-        assertEquals(emptyMap<Int, PadAudioRoute>(), PadAudioMatcher.resolve(listOf(pad()), emptyList()))
+        assertEquals(emptyMap<Int, PadAudioRoute>(), PadAudioMatcher.resolvePadAudioRoutes(listOf(pad()), emptyList()))
     }
 
     @Test
     fun `a pad with no USB audio interface never borrows another device's endpoints`() {
         // An unrelated USB audio dongle can share a product string; the audio-class interface is
         // what says this pad has a function of its own.
-        val routes = PadAudioMatcher.resolve(listOf(pad(audio = false)), listOf(sink(11), source(12)))
+        val routes = PadAudioMatcher.resolvePadAudioRoutes(listOf(pad(audio = false)), listOf(sink(11), source(12)))
         assertEquals(emptyMap<Int, PadAudioRoute>(), routes)
     }
 
@@ -95,7 +95,7 @@ class PadAudioMatcherTest {
         // "Wireless Controller", and routing a slot to the wrong pad's speaker is worse than
         // routing it nowhere.
         val routes =
-            PadAudioMatcher.resolve(
+            PadAudioMatcher.resolvePadAudioRoutes(
                 listOf(pad(), pad(productId = DS4V2_PID)),
                 listOf(sink(11), source(12), sink(13), source(14)),
             )
@@ -106,7 +106,7 @@ class PadAudioMatcherTest {
 
     @Test
     fun `two endpoints under one name in the same direction are unmatchable`() {
-        val routes = PadAudioMatcher.resolve(listOf(pad()), listOf(sink(11), sink(13), source(12)))
+        val routes = PadAudioMatcher.resolvePadAudioRoutes(listOf(pad()), listOf(sink(11), sink(13), source(12)))
         // The microphone still resolves: only the output direction is ambiguous.
         val route = routes[ds5]!!
         assertTrue(route.microphone)
@@ -117,27 +117,27 @@ class PadAudioMatcherTest {
 
     @Test
     fun `the same endpoint listed twice is one endpoint, not an ambiguity`() {
-        val routes = PadAudioMatcher.resolve(listOf(pad()), listOf(sink(11), sink(11)))
+        val routes = PadAudioMatcher.resolvePadAudioRoutes(listOf(pad()), listOf(sink(11), sink(11)))
         assertEquals(11, routes[ds5]!!.playbackDeviceId)
     }
 
     @Test
     fun `a nameless pad or a nameless endpoint publishes nothing`() {
-        assertTrue(PadAudioMatcher.resolve(listOf(pad(productName = null)), listOf(sink(11))).isEmpty())
-        assertTrue(PadAudioMatcher.resolve(listOf(pad(productName = "  ")), listOf(sink(11))).isEmpty())
-        assertTrue(PadAudioMatcher.resolve(listOf(pad()), listOf(sink(11, name = null))).isEmpty())
-        assertTrue(PadAudioMatcher.resolve(listOf(pad()), listOf(sink(11, name = ""))).isEmpty())
+        assertTrue(PadAudioMatcher.resolvePadAudioRoutes(listOf(pad(productName = null)), listOf(sink(11))).isEmpty())
+        assertTrue(PadAudioMatcher.resolvePadAudioRoutes(listOf(pad(productName = "  ")), listOf(sink(11))).isEmpty())
+        assertTrue(PadAudioMatcher.resolvePadAudioRoutes(listOf(pad()), listOf(sink(11, name = null))).isEmpty())
+        assertTrue(PadAudioMatcher.resolvePadAudioRoutes(listOf(pad()), listOf(sink(11, name = ""))).isEmpty())
     }
 
     @Test
     fun `names are compared trimmed, since the descriptor string carries whatever padding it carries`() {
-        val routes = PadAudioMatcher.resolve(listOf(pad(productName = " $SONY_PAD_NAME ")), listOf(sink(11)))
+        val routes = PadAudioMatcher.resolvePadAudioRoutes(listOf(pad(productName = " $SONY_PAD_NAME ")), listOf(sink(11)))
         assertEquals(11, routes[ds5]!!.playbackDeviceId)
     }
 
     @Test
     fun `an endpoint whose name matches no attached pad is ignored`() {
-        val routes = PadAudioMatcher.resolve(listOf(pad()), listOf(sink(11, name = "USB Audio Interface")))
+        val routes = PadAudioMatcher.resolvePadAudioRoutes(listOf(pad()), listOf(sink(11, name = "USB Audio Interface")))
         assertTrue(routes.isEmpty())
     }
 
@@ -145,7 +145,7 @@ class PadAudioMatcherTest {
     fun `two pads with different names each get their own endpoints`() {
         val other = pad(vendorId = OTHER_VID, productId = OTHER_PID, productName = "Pro Controller")
         val routes =
-            PadAudioMatcher.resolve(
+            PadAudioMatcher.resolvePadAudioRoutes(
                 listOf(pad(), other),
                 listOf(sink(11), source(12), sink(21, name = "Pro Controller")),
             )
@@ -158,8 +158,8 @@ class PadAudioMatcherTest {
 
     @Test
     fun `an empty world publishes an empty table rather than stale routes`() {
-        assertEquals(emptyMap<Int, PadAudioRoute>(), PadAudioMatcher.resolve(emptyList(), emptyList()))
-        assertEquals(emptyMap<Int, PadAudioRoute>(), PadAudioMatcher.resolve(emptyList(), listOf(sink(11))))
+        assertEquals(emptyMap<Int, PadAudioRoute>(), PadAudioMatcher.resolvePadAudioRoutes(emptyList(), emptyList()))
+        assertEquals(emptyMap<Int, PadAudioRoute>(), PadAudioMatcher.resolvePadAudioRoutes(emptyList(), listOf(sink(11))))
     }
 
     private companion object {
@@ -178,25 +178,25 @@ class PadAudioMatcherTest {
     @Test
     fun `the haptic route needs the family's lanes AND an endpoint that opens at four channels`() {
         // A DualSense whose endpoint the platform will open at 4: the lanes are there.
-        val quad = PadAudioMatcher.resolve(listOf(pad()), listOf(sink(11, channelCounts = listOf(2, 4))))
+        val quad = PadAudioMatcher.resolvePadAudioRoutes(listOf(pad()), listOf(sink(11, channelCounts = listOf(2, 4))))
         assertTrue(quad.getValue(ds5).speaker)
         assertTrue(quad.getValue(ds5).haptics)
         assertEquals(4, quad.getValue(ds5).playbackChannels)
 
         // Stereo only, or a platform that would not say: speaker only, and the width the
         // track opens at rides the route either way.
-        val stereo = PadAudioMatcher.resolve(listOf(pad()), listOf(sink(11, channelCounts = listOf(2))))
+        val stereo = PadAudioMatcher.resolvePadAudioRoutes(listOf(pad()), listOf(sink(11, channelCounts = listOf(2))))
         assertTrue(stereo.getValue(ds5).speaker)
         assertFalse(stereo.getValue(ds5).haptics)
         assertEquals(2, stereo.getValue(ds5).playbackChannels)
-        val unknown = PadAudioMatcher.resolve(listOf(pad()), listOf(sink(11)))
+        val unknown = PadAudioMatcher.resolvePadAudioRoutes(listOf(pad()), listOf(sink(11)))
         assertFalse(unknown.getValue(ds5).haptics)
         assertEquals(0, unknown.getValue(ds5).playbackChannels)
 
         // A DualShock 4 v2 in front of a 4-channel endpoint is still no actuator: the
         // family gate holds whatever the platform reports.
         val ds4 =
-            PadAudioMatcher.resolve(
+            PadAudioMatcher.resolvePadAudioRoutes(
                 listOf(pad(productId = DS4V2_PID)),
                 listOf(sink(11, channelCounts = listOf(4))),
             )

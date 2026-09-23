@@ -158,7 +158,7 @@ class SatelliteConnectionManager
                     .featuresFor(id)
                     ?.protocolVersion
                     ?.takeIf { it > 0 }
-            return DishProtocol.speakFor(advertised)
+            return DishProtocol.dishProtocolSpeakFor(advertised)
         }
 
         private fun noteNegotiated(
@@ -173,12 +173,12 @@ class SatelliteConnectionManager
         // means no shared version exists and protocolRejectMessage says which side to update.
         private fun protocolRetryVersion(body: String): Int? {
             val supported = supportedVersionFrom(body) ?: return null
-            return supported.takeIf { it in DishProtocol.MIN..DishProtocol.CURRENT }
+            return supported.takeIf { it in DishProtocol.DISH_PROTOCOL_MIN..DishProtocol.DISH_PROTOCOL_CURRENT }
         }
 
         private fun protocolRejectMessage(body: String): String =
             when {
-                (supportedVersionFrom(body) ?: 0) > DishProtocol.CURRENT -> APP_UPDATE_REQUIRED_MSG
+                (supportedVersionFrom(body) ?: 0) > DishProtocol.DISH_PROTOCOL_CURRENT -> APP_UPDATE_REQUIRED_MSG
                 else -> SATELLITE_UPDATE_REQUIRED_MSG
             }
 
@@ -259,7 +259,7 @@ class SatelliteConnectionManager
             pin: String,
             clientPin: String = "",
         ): HttpReply? {
-            val speak = versionToSpeak(id) ?: DishProtocol.MIN
+            val speak = versionToSpeak(id) ?: DishProtocol.DISH_PROTOCOL_MIN
             val first =
                 runCatching {
                     discoveryRepo.pair(

@@ -13,7 +13,7 @@ import com.tinkernorth.dish.core.input.resolveGamepadQuirk
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.bluetooth.BluetoothConnections
 import com.tinkernorth.dish.source.lights.FrameworkLightProbe
-import com.tinkernorth.dish.source.sensor.PhysicalMotionProbe
+import com.tinkernorth.dish.source.sensor.hasGyro
 import com.tinkernorth.dish.source.usb.DirectClaimFailure
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -174,7 +174,7 @@ class PhysicalGamepadRegistry
         ): Device {
             val vid = runCatching { dev.vendorId }.getOrDefault(0)
             val pid = runCatching { dev.productId }.getOrDefault(0)
-            val hasGyro = PhysicalMotionProbe.hasGyro(deviceId)
+            val hasGyro = hasGyro(deviceId)
             val hasRumble = probeRumble(dev)
             val hasLightbar = FrameworkLightProbe.hasLightbar(dev)
             val touchpadDeviceId = touchpadSurfaceFor(deviceId, dev, vid, pid)
@@ -452,7 +452,7 @@ class PhysicalGamepadRegistry
             cancelDisconnect(deviceId)
             // Sensors and lights can enumerate after onInputDeviceAdded (Bluetooth Switch Pro gyro; a
             // pad's light bar as its merged device gains a sub-device); re-probe to catch a late one.
-            val nextHasGyro = PhysicalMotionProbe.hasGyro(deviceId)
+            val nextHasGyro = hasGyro(deviceId)
             val nextHasRumble = probeRumble(dev)
             val nextHasLightbar = FrameworkLightProbe.hasLightbar(dev)
             val current = _devices.value[deviceId]

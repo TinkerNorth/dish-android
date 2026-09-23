@@ -21,7 +21,7 @@ import kotlin.coroutines.resume
 internal object NsdServiceResolver {
     private const val TAG = "NsdServiceResolver"
 
-    suspend fun resolve(
+    suspend fun resolveNsdService(
         nsd: NsdManager,
         info: NsdServiceInfo,
     ): NsdServiceInfo? =
@@ -76,7 +76,7 @@ internal object NsdServiceResolver {
             try {
                 nsd.registerServiceInfoCallback(info, INLINE_EXECUTOR, callback)
             } catch (e: IllegalArgumentException) {
-                // The OS already holds a registration for this service (a resolve racing past
+                // The OS already holds a registration for this service (a resolveNsdService racing past
                 // the caller's serialisation); this one yields rather than doubling it.
                 Log.w(TAG, "resolve of ${info.serviceName} rejected: ${e.message}")
                 if (cont.isActive) cont.resume(null)
@@ -98,7 +98,7 @@ internal object NsdServiceResolver {
         }
     }
 
-    // Marker: NsdManager.resolveService is the only resolve API before 34, where
+    // Marker: NsdManager.resolveService is the only resolveNsdService API before 34, where
     // registerServiceInfoCallback (used above) replaces it. Deprecated in the SDK the app
     // compiles against, current on every device that reaches this branch. The right fix is
     // a minSdk of 34, which would drop Android 7 to 13 devices.
@@ -136,6 +136,6 @@ internal object NsdServiceResolver {
     @Suppress("DEPRECATION")
     private fun legacyHostAddress(info: NsdServiceInfo): String? = info.host?.hostAddress
 
-    // The callback runs on the binder thread that delivers it, like the resolve listener did.
+    // The callback runs on the binder thread that delivers it, like the resolveNsdService listener did.
     private val INLINE_EXECUTOR = Executor { it.run() }
 }

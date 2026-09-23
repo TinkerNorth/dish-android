@@ -46,7 +46,7 @@ class CardActionsTest {
     private fun pointer(
         touchpad: Boolean = false,
         mouse: Boolean = false,
-    ) = PointerSlotUi(mode = TouchpadModeValue.DS4, touchpadOpenable = touchpad, mouseOpenable = mouse)
+    ) = PointerSlotUi(mode = TouchpadModeValue.TOUCHPAD_MODE_DS4, touchpadOpenable = touchpad, mouseOpenable = mouse)
 
     private fun pathCard(
         wiredSwitchAvailable: Boolean = false,
@@ -230,7 +230,7 @@ class CardActionsTest {
         val mouseRow =
             row(
                 slot(SlotInputType.VIRTUAL),
-                pointer = PointerSlotUi(mode = TouchpadModeValue.MOUSE, touchpadOpenable = false, mouseOpenable = true),
+                pointer = PointerSlotUi(mode = TouchpadModeValue.TOUCHPAD_MODE_MOUSE, touchpadOpenable = false, mouseOpenable = true),
             )
         assertEquals(listOf(PointerPillFact.MOUSE_READY), pointerFuncFacts(mouseRow))
     }
@@ -240,7 +240,7 @@ class CardActionsTest {
         val offRow =
             row(
                 slot(SlotInputType.PHYSICAL),
-                pointer = PointerSlotUi(mode = TouchpadModeValue.OFF, touchpadOpenable = false, mouseOpenable = false),
+                pointer = PointerSlotUi(mode = TouchpadModeValue.TOUCHPAD_MODE_OFF, touchpadOpenable = false, mouseOpenable = false),
             ).copy(motionCap = padTypeCaps())
         assertEquals(listOf(PointerPillFact.PAD_OFF), pointerFuncFacts(offRow))
     }

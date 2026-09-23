@@ -37,11 +37,11 @@ class MoonlightHostModelsTest {
     fun `emulated Auto resolves to a concrete arrival type, explicit passes through`() {
         assertEquals(
             MoonlightControlProtocol.CONTROLLER_TYPE_XBOX,
-            MoonlightEmulatedType.resolve(MoonlightEmulatedType.AUTO, sourceHasMotion = false),
+            MoonlightEmulatedType.resolveMoonlightEmulatedType(MoonlightEmulatedType.AUTO, sourceHasMotion = false),
         )
         assertEquals(
             MoonlightControlProtocol.CONTROLLER_TYPE_PS,
-            MoonlightEmulatedType.resolve(MoonlightEmulatedType.PLAYSTATION, sourceHasMotion = false),
+            MoonlightEmulatedType.resolveMoonlightEmulatedType(MoonlightEmulatedType.PLAYSTATION, sourceHasMotion = false),
         )
         assertTrue(MoonlightEmulatedType.AUTO == 0xFF)
     }

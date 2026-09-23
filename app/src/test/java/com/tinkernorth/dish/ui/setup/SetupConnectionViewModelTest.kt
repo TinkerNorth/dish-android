@@ -90,7 +90,7 @@ class SetupConnectionViewModelTest {
             val host =
                 vm.state.value.hosts
                     .first { it.id == id }
-            assertEquals(DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE, host.compat)
+            assertEquals(DishProtocol.DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE, host.compat)
         }
 
     @Test
@@ -102,7 +102,7 @@ class SetupConnectionViewModelTest {
             val host =
                 vm.state.value.hosts
                     .first { it.id == id }
-            assertEquals(DishProtocol.Compat.UNKNOWN, host.compat)
+            assertEquals(DishProtocol.DishProtocolCompat.UNKNOWN, host.compat)
         }
 
     @Test

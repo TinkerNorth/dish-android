@@ -74,7 +74,7 @@ data class MainUiState(
     val inputRates: Map<String, SlotInputRates> = emptyMap(),
     val screenPeakHz: Int = 0,
     // Per-connection protocol verdict (satellite hosts only), for the update chips.
-    val hostCompat: Map<String, DishProtocol.Compat> = emptyMap(),
+    val hostCompat: Map<String, DishProtocol.DishProtocolCompat> = emptyMap(),
 ) {
     val virtualSlot get() = slots.first { it.id == VIRTUAL_SLOT_ID }
     val physicalSlots get() = slots.filter { it.inputType == SlotInputType.PHYSICAL }

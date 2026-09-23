@@ -289,7 +289,7 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
         val selectedCompat =
             state.selectedHost
                 ?.takeIf { !noHosts }
-                ?.let { state.hostCompat[it.id] } ?: DishProtocol.Compat.UNKNOWN
+                ?.let { state.hostCompat[it.id] } ?: DishProtocol.DishProtocolCompat.UNKNOWN
         d.destCompatPill.bindCompat(selectedCompat)
         val plainSatellite = state.hostChosen && !state.isBluetoothHost && !state.isMoonlightHost
         d.legendSatellite.visibility = if (plainSatellite) View.VISIBLE else View.GONE
@@ -536,7 +536,7 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
             card.reviewSublabel.text = destinationSublabel(host)
             card.reviewTierPill.bindPill(tierPillSpec(host.kind))
             card.reviewTierPill.root.visibility = View.VISIBLE
-            card.reviewCompatPill.bindCompat(state.hostCompat[host.id] ?: DishProtocol.Compat.UNKNOWN)
+            card.reviewCompatPill.bindCompat(state.hostCompat[host.id] ?: DishProtocol.DishProtocolCompat.UNKNOWN)
             bindReviewFlows(card.reviewSendsRow, card.reviewSendsChips, destinationSends(potential))
             bindReviewFlows(card.reviewGetsRow, card.reviewGetsChips, destinationGets(potential))
             card.reviewCard.isClickable = true

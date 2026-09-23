@@ -897,7 +897,7 @@ class SatelliteConnectionManagerTest {
     fun `pair 409 with a speakable version retries once at that version`() =
         runMgrTest { mgr, events ->
             coEvery {
-                discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.CURRENT))
+                discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.DISH_PROTOCOL_CURRENT))
             } returns reply(409, """{"error":"protocol version unsupported","supported":1}""")
             coEvery {
                 discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), eq(1))
@@ -936,7 +936,7 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, _ ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.CURRENT))
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.DISH_PROTOCOL_CURRENT))
             } returns reply(409, """{"error":"protocol version unsupported","supported":1}""")
             coEvery {
                 discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(1))
@@ -962,7 +962,7 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, _ ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.CURRENT))
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.DISH_PROTOCOL_CURRENT))
             } returns reply(409, """{"error":"protocol version unsupported","supported":1}""")
             coEvery {
                 discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(1))
@@ -982,7 +982,7 @@ class SatelliteConnectionManagerTest {
             scope.testScheduler.runCurrent()
 
             coVerify(exactly = 1) {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.CURRENT))
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.DISH_PROTOCOL_CURRENT))
             }
             coVerify(exactly = 2) {
                 discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(1))
@@ -1009,7 +1009,7 @@ class SatelliteConnectionManagerTest {
 
             assertEquals(SatelliteSessionState.Live, mgr.get(serverId)?.state?.value)
             coVerify(exactly = 0) {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.CURRENT))
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.DISH_PROTOCOL_CURRENT))
             }
         }
 

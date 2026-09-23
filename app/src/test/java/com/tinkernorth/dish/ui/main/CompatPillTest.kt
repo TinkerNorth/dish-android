@@ -13,7 +13,7 @@ class CompatPillTest {
     fun `a still-working older satellite gets the soft amber chip`() {
         assertEquals(
             R.string.chip_satellite_update_available to PillTone.WARN,
-            compatPillParts(DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE),
+            compatPillParts(DishProtocol.DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE),
         )
     }
 
@@ -21,17 +21,17 @@ class CompatPillTest {
     fun `hard blocks get the error chip naming the side that must update`() {
         assertEquals(
             R.string.chip_satellite_update_required to PillTone.ERROR,
-            compatPillParts(DishProtocol.Compat.SATELLITE_UPDATE_REQUIRED),
+            compatPillParts(DishProtocol.DishProtocolCompat.SATELLITE_UPDATE_REQUIRED),
         )
         assertEquals(
             R.string.chip_app_update_required to PillTone.ERROR,
-            compatPillParts(DishProtocol.Compat.APP_UPDATE_REQUIRED),
+            compatPillParts(DishProtocol.DishProtocolCompat.APP_UPDATE_REQUIRED),
         )
     }
 
     @Test
     fun `current and unknown render nothing`() {
-        assertNull(compatPillParts(DishProtocol.Compat.CURRENT))
-        assertNull(compatPillParts(DishProtocol.Compat.UNKNOWN))
+        assertNull(compatPillParts(DishProtocol.DishProtocolCompat.CURRENT))
+        assertNull(compatPillParts(DishProtocol.DishProtocolCompat.UNKNOWN))
     }
 }

@@ -64,7 +64,7 @@ object PadAudioMatcher {
     /** The DualSense's own render endpoint: speaker pair then haptic pair. */
     const val HAPTIC_ENDPOINT_CHANNELS = 4
 
-    fun resolve(
+    fun resolvePadAudioRoutes(
         pads: List<UsbAudioPad>,
         endpoints: List<UsbAudioEndpoint>,
     ): Map<Int, PadAudioRoute> {
