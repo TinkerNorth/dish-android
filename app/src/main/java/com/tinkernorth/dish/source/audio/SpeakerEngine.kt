@@ -137,20 +137,45 @@ class SpeakerEngine
          * own lock, because a frame may already be inside a write.
          */
         private fun reconcile(desired: Map<Long, SpeakerTarget>) {
-            val current = voices
-            // A route change (the pad's endpoint appeared, moved or went away) is a reopen: an
-            // AudioTrack's preferred device and its width are settled when it is built.
-            val kept =
-                current.filterKeys { key ->
-                    desired[key]?.playbackDeviceId == current[key]?.target?.playbackDeviceId &&
-                        desired[key]?.deviceChannels == current[key]?.target?.deviceChannels
-                }
-            val gone = current.filterKeys { it !in kept.keys }
-            if (gone.isNotEmpty()) {
-                voices = kept
-                gone.values.forEach { it.session.close() }
-            }
+            val kept = closeVoicesWhoseEndpointMoved(desired)
+            val opened = openVoicesFor(desired, kept)
 
+            voices = opened.voices
+            if (opened.voices.isNotEmpty()) installSink() else uninstallSink()
+            _state.value = playoutStateFor(opened)
+            if (opened.refused > 0) {
+                Log.w(TAG, "${opened.refused} speaker slot(s) got no output from this device")
+            }
+        }
+
+        // A route change (the pad's endpoint appeared, moved or went away) is a reopen: an
+        // AudioTrack's preferred device and its width are settled when it is built.
+        private fun closeVoicesWhoseEndpointMoved(desired: Map<Long, SpeakerTarget>): Map<Long, Voice> {
+            val current = voices
+            val kept = current.filterKeys { key -> endpointIsUnchanged(desired[key], current[key]) }
+            val gone = current.filterKeys { it !in kept.keys }
+            if (gone.isEmpty()) return kept
+            voices = kept
+            gone.values.forEach { it.session.close() }
+            return kept
+        }
+
+        private fun endpointIsUnchanged(
+            target: SpeakerTarget?,
+            voice: Voice?,
+        ): Boolean =
+            target?.playbackDeviceId == voice?.target?.playbackDeviceId &&
+                target?.deviceChannels == voice?.target?.deviceChannels
+
+        private data class OpenedVoices(
+            val voices: Map<Long, Voice>,
+            val refused: Int,
+        )
+
+        private fun openVoicesFor(
+            desired: Map<Long, SpeakerTarget>,
+            kept: Map<Long, Voice>,
+        ): OpenedVoices {
             val open = HashMap<Long, Voice>(desired.size)
             var refused = 0
             for ((key, target) in desired) {
@@ -167,16 +192,15 @@ class SpeakerEngine
                 }
                 open[key] = Voice(target, session)
             }
-            voices = open
-            if (open.isNotEmpty()) installSink() else uninstallSink()
-            _state.value =
-                when {
-                    open.isNotEmpty() -> SpeakerPlayoutState.Playing
-                    refused > 0 -> SpeakerPlayoutState.Unavailable
-                    else -> SpeakerPlayoutState.Idle
-                }
-            if (refused > 0) Log.w(TAG, "$refused speaker slot(s) got no output from this device")
+            return OpenedVoices(open, refused)
         }
+
+        private fun playoutStateFor(opened: OpenedVoices): SpeakerPlayoutState =
+            when {
+                opened.voices.isNotEmpty() -> SpeakerPlayoutState.Playing
+                opened.refused > 0 -> SpeakerPlayoutState.Unavailable
+                else -> SpeakerPlayoutState.Idle
+            }
 
         private fun installSink() {
             if (installed) return
