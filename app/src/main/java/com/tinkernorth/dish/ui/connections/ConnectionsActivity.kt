@@ -170,8 +170,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     private var localNetworkPrompted = false
 
-    private var btPermissionSnackbar: Snackbar? = null
-    private var btPermissionShownVariant: BluetoothPermissionBannerVariant? = null
+    private val btPermissionBanner = BtPermissionBanner()
 
     private val btStaleBannerIds = HashMap<String, Long>()
 
@@ -395,7 +394,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                     ) { permission, dismissed ->
                         evaluate(permission, dismissed)
                     }
-                bannerFlow.collect { variant -> applyBtPermissionBanner(variant) }
+                bannerFlow.collect { variant -> btPermissionBanner.apply(variant) }
             }
         }
         lifecycleScope.launch {
@@ -835,17 +834,23 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         val autoConnectMac: String? = null,
     )
 
+    private class AddSatelliteFields(
+        view: View,
+    ) {
+        val hostLayout: TextInputLayout = view.findViewById(R.id.tilSatelliteHost)
+        val httpsLayout: TextInputLayout = view.findViewById(R.id.tilSatelliteHttpsPort)
+        val udpLayout: TextInputLayout = view.findViewById(R.id.tilSatelliteUdpPort)
+        val hostField: TextInputEditText = view.findViewById(R.id.etSatelliteHost)
+        val httpsField: TextInputEditText = view.findViewById(R.id.etSatelliteHttpsPort)
+        val udpField: TextInputEditText = view.findViewById(R.id.etSatelliteUdpPort)
+    }
+
     private fun showAddSatelliteDialog() {
         val view = layoutInflater.inflate(R.layout.dialog_add_satellite, null)
-        val hostLayout = view.findViewById<TextInputLayout>(R.id.tilSatelliteHost)
-        val httpsLayout = view.findViewById<TextInputLayout>(R.id.tilSatelliteHttpsPort)
-        val udpLayout = view.findViewById<TextInputLayout>(R.id.tilSatelliteUdpPort)
-        val hostField = view.findViewById<TextInputEditText>(R.id.etSatelliteHost)
-        val httpsField = view.findViewById<TextInputEditText>(R.id.etSatelliteHttpsPort)
-        val udpField = view.findViewById<TextInputEditText>(R.id.etSatelliteUdpPort)
+        val fields = AddSatelliteFields(view)
         // Port fields parse back through toIntOrNull, so the defaults are written in ASCII digits.
-        httpsField.setText(String.format(Locale.ROOT, "%d", DEFAULT_HTTPS_PORT))
-        udpField.setText(String.format(Locale.ROOT, "%d", DEFAULT_UDP_PORT))
+        fields.httpsField.setText(String.format(Locale.ROOT, "%d", DEFAULT_HTTPS_PORT))
+        fields.udpField.setText(String.format(Locale.ROOT, "%d", DEFAULT_UDP_PORT))
 
         val dialog =
             MaterialAlertDialogBuilder(this)
@@ -854,34 +859,43 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 .setPositiveButton(R.string.action_connect, null)
                 .setNegativeButton(R.string.action_cancel, null)
                 .create()
+        // The positive button is wired after show() so a failed validation keeps the dialog open.
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val host =
-                    hostField.text
-                        ?.toString()
-                        ?.trim()
-                        .orEmpty()
-                val httpsPort = parsePort(httpsField)
-                val udpPort = parsePort(udpField)
-                hostLayout.error = if (host.isEmpty()) getString(R.string.add_satellite_error_host) else null
-                httpsLayout.error = if (httpsPort == null) getString(R.string.add_satellite_error_port) else null
-                udpLayout.error = if (udpPort == null) getString(R.string.add_satellite_error_port) else null
-                if (host.isNotEmpty() && httpsPort != null && udpPort != null) {
-                    satellite.connect(
-                        DiscoveredServer(
-                            name = host,
-                            ip = host,
-                            udpPort = udpPort,
-                            pairPort = httpsPort,
-                            httpPort = httpsPort,
-                            source = DiscoverySource.MANUAL,
-                        ),
-                    )
-                    dialog.dismiss()
-                }
+                if (connectToTypedSatellite(fields)) dialog.dismiss()
             }
         }
         dialog.show()
+    }
+
+    /** Answers whether the typed host was accepted; paints the field errors when it was not. */
+    private fun connectToTypedSatellite(fields: AddSatelliteFields): Boolean {
+        val host =
+            fields.hostField.text
+                ?.toString()
+                ?.trim()
+                .orEmpty()
+        val httpsPort = parsePort(fields.httpsField)
+        val udpPort = parsePort(fields.udpField)
+
+        fields.hostLayout.error = if (host.isEmpty()) getString(R.string.add_satellite_error_host) else null
+        fields.httpsLayout.error = if (httpsPort == null) getString(R.string.add_satellite_error_port) else null
+        fields.udpLayout.error = if (udpPort == null) getString(R.string.add_satellite_error_port) else null
+
+        val isComplete = host.isNotEmpty() && httpsPort != null && udpPort != null
+        if (!isComplete) return false
+
+        satellite.connect(
+            DiscoveredServer(
+                name = host,
+                ip = host,
+                udpPort = udpPort,
+                pairPort = httpsPort,
+                httpPort = httpsPort,
+                source = DiscoverySource.MANUAL,
+            ),
+        )
+        return true
     }
 
     // ── Moonlight host flow ─────────────────────────────────────────────────
@@ -1094,76 +1108,83 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             }
     }
 
+    // One snackbar with its own state, kept together so ConnectionsActivity does not carry the
+    // banner's fields and lifecycle alongside everything else.
+    private inner class BtPermissionBanner {
+        private var snackbar: Snackbar? = null
+        private var shownVariant: BluetoothPermissionBannerVariant? = null
+
+        private inner class DismissCallback : Snackbar.Callback() {
+            override fun onDismissed(
+                transientBottomBar: Snackbar?,
+                event: Int,
+            ) {
+                val isTheOneShowing = snackbar === transientBottomBar
+                if (isTheOneShowing) {
+                    snackbar = null
+                    shownVariant = null
+                }
+                val swipedAway = event == DISMISS_EVENT_SWIPE
+                if (swipedAway) btPermissionBannerStore.markDismissed()
+            }
+        }
+
+        fun apply(variant: BluetoothPermissionBannerVariant?) {
+            if (variant == null) {
+                hide()
+                return
+            }
+            val alreadyShowingIt = variant == shownVariant && snackbar?.isShownOrQueued == true
+            if (alreadyShowingIt) return
+            snackbar?.dismiss()
+            show(variant)
+        }
+
+        private fun hide() {
+            shownVariant = null
+            snackbar?.dismiss()
+            snackbar = null
+        }
+
+        private fun show(variant: BluetoothPermissionBannerVariant) {
+            val copy = copyFor(variant)
+            val bar =
+                dishSnackbar(
+                    binding.root,
+                    copy.severity,
+                    getString(copy.titleRes),
+                    getString(copy.bodyRes),
+                    DishNotification.DURATION_PERSISTENT,
+                )
+            bar.setAction(getString(R.string.action_grant)) { requestBtPermissions(continueToAdd = false) }
+            bar.addCallback(DismissCallback())
+            shownVariant = variant
+            snackbar = bar
+            bar.show()
+        }
+
+        private fun copyFor(variant: BluetoothPermissionBannerVariant): BtPermissionBannerCopy =
+            when (variant) {
+                BluetoothPermissionBannerVariant.CONNECT ->
+                    BtPermissionBannerCopy(
+                        DishNotification.Severity.WARN,
+                        R.string.notif_bt_permission_title,
+                        R.string.notif_bt_permission_body,
+                    )
+                BluetoothPermissionBannerVariant.SCAN ->
+                    BtPermissionBannerCopy(
+                        DishNotification.Severity.INFO,
+                        R.string.notif_bt_scan_permission_title,
+                        R.string.notif_bt_scan_permission_body,
+                    )
+            }
+    }
+
     private data class BtPermissionBannerCopy(
         val severity: DishNotification.Severity,
         val titleRes: Int,
         val bodyRes: Int,
     )
-
-    private inner class BtPermissionSnackbarCallback : Snackbar.Callback() {
-        override fun onDismissed(
-            transientBottomBar: Snackbar?,
-            event: Int,
-        ) {
-            val isTheOneShowing = btPermissionSnackbar === transientBottomBar
-            if (isTheOneShowing) {
-                btPermissionSnackbar = null
-                btPermissionShownVariant = null
-            }
-            val swipedAway = event == DISMISS_EVENT_SWIPE
-            if (swipedAway) btPermissionBannerStore.markDismissed()
-        }
-    }
-
-    private fun btPermissionBannerCopy(variant: BluetoothPermissionBannerVariant): BtPermissionBannerCopy =
-        when (variant) {
-            BluetoothPermissionBannerVariant.CONNECT ->
-                BtPermissionBannerCopy(
-                    DishNotification.Severity.WARN,
-                    R.string.notif_bt_permission_title,
-                    R.string.notif_bt_permission_body,
-                )
-            BluetoothPermissionBannerVariant.SCAN ->
-                BtPermissionBannerCopy(
-                    DishNotification.Severity.INFO,
-                    R.string.notif_bt_scan_permission_title,
-                    R.string.notif_bt_scan_permission_body,
-                )
-        }
-
-    private fun hideBtPermissionBanner() {
-        btPermissionShownVariant = null
-        btPermissionSnackbar?.dismiss()
-        btPermissionSnackbar = null
-    }
-
-    private fun showBtPermissionBanner(variant: BluetoothPermissionBannerVariant) {
-        val copy = btPermissionBannerCopy(variant)
-        val snackbar =
-            dishSnackbar(
-                binding.root,
-                copy.severity,
-                getString(copy.titleRes),
-                getString(copy.bodyRes),
-                DishNotification.DURATION_PERSISTENT,
-            )
-        snackbar.setAction(getString(R.string.action_grant)) { requestBtPermissions(continueToAdd = false) }
-        snackbar.addCallback(BtPermissionSnackbarCallback())
-        btPermissionShownVariant = variant
-        btPermissionSnackbar = snackbar
-        snackbar.show()
-    }
-
-    private fun applyBtPermissionBanner(variant: BluetoothPermissionBannerVariant?) {
-        if (variant == null) {
-            hideBtPermissionBanner()
-            return
-        }
-        val alreadyShowingIt = variant == btPermissionShownVariant && btPermissionSnackbar?.isShownOrQueued == true
-        if (alreadyShowingIt) return
-        btPermissionSnackbar?.dismiss()
-        showBtPermissionBanner(variant)
-    }
 
     private fun applyBtStaleBanners(stale: Map<String, com.tinkernorth.dish.source.bluetooth.BtStaleReason>) {
         val gone = btStaleBannerIds.keys - stale.keys
