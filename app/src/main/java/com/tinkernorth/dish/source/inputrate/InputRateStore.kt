@@ -92,39 +92,70 @@ class InputRateStore
         }
 
         internal fun sampleAll(nowMs: Long) {
+            // Low power stops the sampling entirely; the next live sample must not read the gap
+            // as a rate, so the trackers rebaseline when it comes back.
             if (lowPowerSignal.state.value) {
                 rebaselineNeeded = true
                 return
             }
+            rebaselineIfResuming()
+
             val devices = registry.devices.value
-            if (rebaselineNeeded) {
-                rebaselineNeeded = false
-                trackers.values.forEach { it.rebaseline() }
-                screenTracker.rebaseline()
-            }
             val slotIds = HashSet<String>(devices.size * 2 + 2)
             slotIds.add(VIRTUAL_SLOT_ID)
             val slots = HashMap<String, SlotInputRates>(devices.size * 2 + 2)
+
             for ((id, device) in devices) {
                 val slotId = id.toString()
                 slotIds.add(slotId)
-                val t = trackers.getOrPut(slotId) { SlotTrackers() }
-                val count = if (device.isUsbSynthetic) native.getDeviceUrbCount(id) else native.getDeviceInputEventCount(id)
-                t.controller.update(count, nowMs)
-                t.noteCount(count, nowMs)
-                val gyroCount = if (device.isUsbSynthetic) native.getDeviceMotionCount(id) else motionCounts[slotId]?.get() ?: 0L
-                t.gyro.update(gyroCount, nowMs)
-                val rates = t.rates()
-                if (rates.hasAny) slots[slotId] = rates
+                samplePhysicalSlot(slotId, id, device, nowMs)?.let { slots[slotId] = it }
             }
-            val virtual = trackers.getOrPut(VIRTUAL_SLOT_ID) { SlotTrackers() }
-            virtual.gyro.update(motionCounts[VIRTUAL_SLOT_ID]?.get() ?: 0L, nowMs)
-            val virtualRates = virtual.rates()
-            if (virtualRates.hasAny) slots[VIRTUAL_SLOT_ID] = virtualRates
+            sampleVirtualSlot(nowMs)?.let { slots[VIRTUAL_SLOT_ID] = it }
+
             screenTracker.update(screenCount.get(), nowMs)
             trackers.keys.retainAll(slotIds)
             motionCounts.keys.retainAll(slotIds)
             setState(InputRates(screenPeakHz = screenTracker.peakHz, slots = slots))
+        }
+
+        private fun rebaselineIfResuming() {
+            if (!rebaselineNeeded) return
+            rebaselineNeeded = false
+            trackers.values.forEach { it.rebaseline() }
+            screenTracker.rebaseline()
+        }
+
+        // A Direct pad's counts come from the native URB and motion counters; a framework pad's
+        // from the input-event counter and the per-slot motion tally.
+        private fun samplePhysicalSlot(
+            slotId: String,
+            deviceId: Int,
+            device: PhysicalGamepadRegistry.Device,
+            nowMs: Long,
+        ): SlotInputRates? {
+            val t = trackers.getOrPut(slotId) { SlotTrackers() }
+            val count =
+                if (device.isUsbSynthetic) {
+                    native.getDeviceUrbCount(deviceId)
+                } else {
+                    native.getDeviceInputEventCount(deviceId)
+                }
+            t.controller.update(count, nowMs)
+            t.noteCount(count, nowMs)
+            val gyroCount =
+                if (device.isUsbSynthetic) {
+                    native.getDeviceMotionCount(deviceId)
+                } else {
+                    motionCounts[slotId]?.get() ?: 0L
+                }
+            t.gyro.update(gyroCount, nowMs)
+            return t.rates().takeIf { it.hasAny }
+        }
+
+        private fun sampleVirtualSlot(nowMs: Long): SlotInputRates? {
+            val virtual = trackers.getOrPut(VIRTUAL_SLOT_ID) { SlotTrackers() }
+            virtual.gyro.update(motionCounts[VIRTUAL_SLOT_ID]?.get() ?: 0L, nowMs)
+            return virtual.rates().takeIf { it.hasAny }
         }
 
         private companion object {

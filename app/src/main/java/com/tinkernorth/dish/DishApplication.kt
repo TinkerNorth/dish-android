@@ -129,13 +129,18 @@ class DishApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         installStrictModeIfDebuggable()
+        installProcessWideDefaults()
+        installNativeBacked()
+    }
+
+    private fun installProcessWideDefaults() {
         // AppCompatDelegate default night mode is process-wide; apply here before any Activity
         // inflates so the first frame already matches the user's pick.
         themePreferenceStore.applyPersistedMode()
-        // Must install before native-load try so the opt-in applies even when load fails.
+        // Must install before the native-load try so the opt-in applies even when load fails.
         ProcessLifecycleOwner.get().lifecycle.addObserver(crashReportingController)
-        // The GitHub build's release check runs only while the app is on screen;
-        // the Play build binds a no-op here.
+        // The GitHub build's release check runs only while the app is on screen; the Play build
+        // binds a no-op here.
         ProcessLifecycleOwner.get().lifecycle.addObserver(updateNotices)
         // Warm each satellite's catalog once its link is Live; independent of the native load.
         catalogPrewarmer.start()
@@ -143,15 +148,19 @@ class DishApplication : Application() {
         // only in that document, so a session restored without anyone opening the binding screen
         // would otherwise stream with the microphone and the controller speaker switched off.
         hostCapabilitiesProbe.start()
-        // Missing ABI on sideloaded builds throws UnsatisfiedLinkError on first
-        // native ref; route to NativeUnavailableActivity instead of crashing.
+    }
+
+    // Missing ABI on sideloaded builds throws UnsatisfiedLinkError on the first native ref; route
+    // to NativeUnavailableActivity instead of crashing.
+    private fun installNativeBacked() {
         try {
             installNativeBackedObservers()
             HotPathBenchController.install(this, processScope)
             diagnosticsLogRecorder.install()
             linkHistoryRecorder.install()
             // Re-arm latency profiling only if the user previously left it on (they accepted the
-            // warning then). Default is false, so a fresh install keeps the hot path measurement-free.
+            // warning then). Default is false, so a fresh install keeps the hot path
+            // measurement-free.
             physicalInputNative.setHotPathBench(latencyProfilingStore.state.value)
         } catch (t: UnsatisfiedLinkError) {
             nativeLoadFailed = true
