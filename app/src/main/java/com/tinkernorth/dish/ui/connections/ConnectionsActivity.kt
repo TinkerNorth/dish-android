@@ -18,6 +18,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.annotation.StringRes
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -1186,42 +1187,49 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         val bodyRes: Int,
     )
 
-    private fun applyBtStaleBanners(stale: Map<String, com.tinkernorth.dish.source.bluetooth.BtStaleReason>) {
+    private fun applyBtStaleBanners(stale: Map<String, BtStaleReason>) {
         val gone = btStaleBannerIds.keys - stale.keys
         for (id in gone) {
             btStaleBannerIds.remove(id)?.let(notifications::dismiss)
         }
         for ((id, reason) in stale) {
-            if (id in btStaleBannerIds) continue
+            val alreadyShowing = id in btStaleBannerIds
+            if (alreadyShowing) continue
             val entry = store.rememberedBt().firstOrNull { it.id == id } ?: continue
-            val titleRes =
-                when (reason) {
-                    com.tinkernorth.dish.source.bluetooth.BtStaleReason.KEY_MISSING ->
-                        R.string.notif_bt_key_missing_title
-                    com.tinkernorth.dish.source.bluetooth.BtStaleReason.BOND_REMOVED ->
-                        R.string.notif_bt_bond_removed_title
-                }
-            val bodyRes =
-                when (reason) {
-                    com.tinkernorth.dish.source.bluetooth.BtStaleReason.KEY_MISSING ->
-                        R.string.notif_bt_key_missing_body
-                    com.tinkernorth.dish.source.bluetooth.BtStaleReason.BOND_REMOVED ->
-                        R.string.notif_bt_bond_removed_body
-                }
-            btStaleBannerIds[id] =
-                notifications.warn(
-                    glyph = R.drawable.ic_bluetooth_off,
-                    title = getString(titleRes, entry.name),
-                    body = getString(bodyRes),
-                    action =
-                        DishNotification.Action(
-                            label = getString(R.string.action_open_settings),
-                        ) { openBluetoothDeviceDetails(entry.mac) },
-                    key = "bt-stale:$id",
-                    durationMs = DishNotification.DURATION_PERSISTENT,
-                )
+            btStaleBannerIds[id] = showBtStaleBanner(id, reason, entry)
         }
     }
+
+    @StringRes
+    private fun btStaleTitleRes(reason: BtStaleReason): Int =
+        when (reason) {
+            BtStaleReason.KEY_MISSING -> R.string.notif_bt_key_missing_title
+            BtStaleReason.BOND_REMOVED -> R.string.notif_bt_bond_removed_title
+        }
+
+    @StringRes
+    private fun btStaleBodyRes(reason: BtStaleReason): Int =
+        when (reason) {
+            BtStaleReason.KEY_MISSING -> R.string.notif_bt_key_missing_body
+            BtStaleReason.BOND_REMOVED -> R.string.notif_bt_bond_removed_body
+        }
+
+    private fun showBtStaleBanner(
+        id: String,
+        reason: BtStaleReason,
+        entry: RememberedBt,
+    ): Long =
+        notifications.warn(
+            glyph = R.drawable.ic_bluetooth_off,
+            title = getString(btStaleTitleRes(reason), entry.name),
+            body = getString(btStaleBodyRes(reason)),
+            action =
+                DishNotification.Action(
+                    label = getString(R.string.action_open_settings),
+                ) { openBluetoothDeviceDetails(entry.mac) },
+            key = "bt-stale:$id",
+            durationMs = DishNotification.DURATION_PERSISTENT,
+        )
 
     private fun applyNetworkBanner(state: com.tinkernorth.dish.source.system.NetworkState) {
         networkBannerId?.let { notifications.dismiss(it) }

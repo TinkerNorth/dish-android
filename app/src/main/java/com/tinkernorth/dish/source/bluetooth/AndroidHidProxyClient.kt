@@ -143,42 +143,53 @@ class AndroidHidProxyClient(
     // reached from the profile callbacks on a binder thread, so it must not throw and must not
     // stop half way: the three steps are independent, and a stack that has already gone away
     // must not keep the ones after it from running.
+    // Every step is best-effort and independent: a stack that has already gone away, or a grant
+    // the user revoked, must not stop the rest of the release.
     override fun unregisterAndRelease() {
-        val hid = hidDevice
-        val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-        if (hid != null) {
-            val device = connectedDevice
-            if (device != null) {
-                try {
-                    hid.disconnect(device)
-                } catch (e: SecurityException) {
-                    // Without the grant the link is the OS's to drop; the rest of the release stands.
-                    Log.w(TAG, "disconnect without BLUETOOTH_CONNECT: ${e.message}")
-                } catch (e: IllegalStateException) {
-                    Log.w(TAG, "disconnect after the stack went away: ${e.message}")
-                }
-            }
-            try {
-                hid.unregisterApp()
-            } catch (e: SecurityException) {
-                // The proxy is still closed below; the OS tears the registration down with it.
-                Log.w(TAG, "unregisterApp without BLUETOOTH_CONNECT: ${e.message}")
-            } catch (e: IllegalStateException) {
-                Log.w(TAG, "unregisterApp after the stack went away: ${e.message}")
-            }
-            try {
-                manager?.adapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, hid)
-            } catch (e: IllegalArgumentException) {
-                // Closing a proxy whose service binding is already gone.
-                Log.w(TAG, "the HID proxy was already released: ${e.message}")
-            } catch (e: IllegalStateException) {
-                Log.w(TAG, "closeProfileProxy after the stack went away: ${e.message}")
-            }
+        hidDevice?.let { hid ->
+            disconnectQuietly(hid)
+            unregisterAppQuietly(hid)
+            closeProxyQuietly(hid)
         }
         hidDevice = null
         connectedDevice = null
         currentProfile = null
         events = null
+    }
+
+    private fun disconnectQuietly(hid: BluetoothHidDevice) {
+        val device = connectedDevice ?: return
+        try {
+            hid.disconnect(device)
+        } catch (e: SecurityException) {
+            // Without the grant the link is the OS's to drop.
+            Log.w(TAG, "disconnect without BLUETOOTH_CONNECT: ${e.message}")
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "disconnect after the stack went away: ${e.message}")
+        }
+    }
+
+    private fun unregisterAppQuietly(hid: BluetoothHidDevice) {
+        try {
+            hid.unregisterApp()
+        } catch (e: SecurityException) {
+            // The proxy is still closed below; the OS tears the registration down with it.
+            Log.w(TAG, "unregisterApp without BLUETOOTH_CONNECT: ${e.message}")
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "unregisterApp after the stack went away: ${e.message}")
+        }
+    }
+
+    private fun closeProxyQuietly(hid: BluetoothHidDevice) {
+        val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        try {
+            manager?.adapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, hid)
+        } catch (e: IllegalArgumentException) {
+            // Closing a proxy whose service binding is already gone.
+            Log.w(TAG, "the HID proxy was already released: ${e.message}")
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "closeProfileProxy after the stack went away: ${e.message}")
+        }
     }
 
     private val profileListener =
