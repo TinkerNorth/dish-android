@@ -345,31 +345,44 @@ static JNIEnv* attachDispatchThread(const char* what) {
     return nullptr;
 }
 
+// What one wait on the bridge queue produced. Nothing means a spurious wake with both queues
+// empty, which is not a reason to stop.
+enum class BridgeWork { Report, Mute, Nothing, Stop };
+
+// Both queues are drained under one lock, and the lock is gone by the time the caller makes its
+// JVM upcall. Mute edges come first: they are rarer and they gate capture, so they must not wait
+// behind a queue of input reports.
+static BridgeWork takeNextBridgeWork(BridgeReport& report, std::pair<int32_t, bool>& mute) {
+    std::unique_lock<std::mutex> lock(g_bridgeQueueMtx);
+    g_bridgeQueueCv.wait(lock, bridgeHasWork);
+    if (bridgeIsDrainedAndStopping()) return BridgeWork::Stop;
+    if (!g_micMuteQueue.empty()) {
+        mute = g_micMuteQueue.front();
+        g_micMuteQueue.pop_front();
+        return BridgeWork::Mute;
+    }
+    if (g_bridgeQueue.empty()) return BridgeWork::Nothing;
+    report = std::move(g_bridgeQueue.front());
+    g_bridgeQueue.pop_front();
+    return BridgeWork::Report;
+}
+
 static void bridgeDispatchLoop() {
     JNIEnv* env = attachDispatchThread("bridgeDispatchLoop");
     if (env == nullptr) return;
     dish::elevateCurrentThreadToInputPriority();
     LOGI("Bridge dispatch thread started");
     while (g_bridgeDispatchRunning.load(std::memory_order_relaxed)) {
-        BridgeReport r;
-        {
-            std::unique_lock<std::mutex> lock(g_bridgeQueueMtx);
-            g_bridgeQueueCv.wait(lock, bridgeHasWork);
-            if (bridgeIsDrainedAndStopping()) break;
-            // Mute edges first: they are rarer and they gate capture, so they must not wait
-            // behind a queue of input reports.
-            if (!g_micMuteQueue.empty()) {
-                const auto ev = g_micMuteQueue.front();
-                g_micMuteQueue.pop_front();
-                lock.unlock();
-                callMicMuteUpcall(env, ev.first, ev.second);
-                continue;
-            }
-            if (g_bridgeQueue.empty()) continue;
-            r = std::move(g_bridgeQueue.front());
-            g_bridgeQueue.pop_front();
+        BridgeReport report;
+        std::pair<int32_t, bool> mute{};
+        const BridgeWork work = takeNextBridgeWork(report, mute);
+        if (work == BridgeWork::Stop) break;
+        if (work == BridgeWork::Nothing) continue;
+        if (work == BridgeWork::Mute) {
+            callMicMuteUpcall(env, mute.first, mute.second);
+            continue;
         }
-        dispatchBridgeReport(env, r);
+        dispatchBridgeReport(env, report);
     }
     g_jvm->DetachCurrentThread();
     LOGI("Bridge dispatch thread stopped");
@@ -817,29 +830,43 @@ void applyUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_
 } // namespace dispatch
 
 // Returning true consumes the event so it can't trigger incidental View focus navigation.
-static bool gamepadKeyFilter(const GameActivityKeyEvent* ev) {
-    int32_t source = ev->source;
-    bool isGame = (source & AINPUT_SOURCE_GAMEPAD) == AINPUT_SOURCE_GAMEPAD ||
-                  (source & AINPUT_SOURCE_JOYSTICK) == AINPUT_SOURCE_JOYSTICK;
-    if (!isGame) return false;
-    int32_t kc = ev->keyCode;
-    int32_t deviceId = ev->deviceId;
-    std::lock_guard<std::mutex> lock(g_devicesMtx);
-    auto it = g_devices.find(deviceId);
-    uint8_t quirk = it != g_devices.end() ? it->second.quirk : 0;
-    bool isMappedKey = (quirk & gamepad::QUIRK_SWITCH_LAYOUT)
-                           ? gamepad::switchLayoutConsumesKey(kc)
-                           : (kc == AKEYCODE_BUTTON_L2 || kc == AKEYCODE_BUTTON_R2) ||
-                                 gamepad::keycodeToXusb(kc) != 0;
-    if (!isMappedKey) return false;
+static bool isGamepadSource(const int32_t source) {
+    return (source & AINPUT_SOURCE_GAMEPAD) == AINPUT_SOURCE_GAMEPAD ||
+           (source & AINPUT_SOURCE_JOYSTICK) == AINPUT_SOURCE_JOYSTICK;
+}
 
-    int32_t action = ev->action;
-    if (action == AKEY_EVENT_ACTION_DOWN || action == AKEY_EVENT_ACTION_UP) {
-        g_frameworkEventCounts[deviceId]++;
-        auto& state = g_devices[deviceId];
-        if (gamepad::applyKey(state, kc, action == AKEY_EVENT_ACTION_DOWN)) {
-            publishIfChanged(deviceId, state);
-        }
+// Caller holds g_devicesMtx. An unknown device has no quirks yet, which is the standard layout.
+static uint8_t quirkFor(const int32_t deviceId) {
+    auto it = g_devices.find(deviceId);
+    if (it == g_devices.end()) return 0;
+    return it->second.quirk;
+}
+
+// A pad on the Switch layout answers for its own key set. Every other pad takes the standard map
+// plus the two trigger keycodes, which applyKey turns into analogue values rather than bits.
+static bool isMappedGamepadKey(const int32_t keyCode, const uint8_t quirk) {
+    const bool isSwitchLayout = (quirk & gamepad::QUIRK_SWITCH_LAYOUT) != 0;
+    if (isSwitchLayout) return gamepad::switchLayoutConsumesKey(keyCode);
+    const bool isTriggerKey = keyCode == AKEYCODE_BUTTON_L2 || keyCode == AKEYCODE_BUTTON_R2;
+    return isTriggerKey || gamepad::keycodeToXusb(keyCode) != 0;
+}
+
+static bool gamepadKeyFilter(const GameActivityKeyEvent* ev) {
+    if (!isGamepadSource(ev->source)) return false;
+    const int32_t kc = ev->keyCode;
+    const int32_t deviceId = ev->deviceId;
+
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    if (!isMappedGamepadKey(kc, quirkFor(deviceId))) return false;
+
+    const int32_t action = ev->action;
+    const bool isEdge = action == AKEY_EVENT_ACTION_DOWN || action == AKEY_EVENT_ACTION_UP;
+    if (!isEdge) return true;
+
+    g_frameworkEventCounts[deviceId]++;
+    auto& state = g_devices[deviceId];
+    if (gamepad::applyKey(state, kc, action == AKEY_EVENT_ACTION_DOWN)) {
+        publishIfChanged(deviceId, state);
     }
     return true;
 }
@@ -951,30 +978,43 @@ static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
     return sent == (ssize_t)totalLen;
 }
 
+// stage-2: the round-trip clock starts here, on this session's own clock.
+static void armLatencyPing(Session& s) {
+    if (!hotpath::enabled()) return;
+    const int64_t now = hotpath::nowMonotonicNs();
+    if (!hotpath::shouldArmPing(s.lastPingNs.load(std::memory_order_relaxed), now)) return;
+    s.lastPingNs.store(now, std::memory_order_relaxed);
+}
+
+// Every ping counts as missed until its ACK clears the counter; enough in a row is a dead link.
+static void countMissedAck(Session& s, const int intervalMs) {
+    const int missMax = HEARTBEAT_DEATH_TIMEOUT_MS / intervalMs;
+    const bool isDead = s.missedAcks.fetch_add(1, std::memory_order_relaxed) + 1 >= missMax;
+    if (!isDead) return;
+    LOGE("Missed %d heartbeat ACKs, connection dead", missMax);
+    s.connectionAlive.store(false, std::memory_order_relaxed);
+}
+
+// Slept in slices so a stop is observed well before the next interval is up.
+static constexpr int kHeartbeatSliceMs = 50;
+
+static void sleepUntilNextHeartbeat(Session& s, const int intervalMs) {
+    for (int i = 0; i < intervalMs / kHeartbeatSliceMs; i++) {
+        if (!s.heartbeat.running()) break;
+        usleep(kHeartbeatSliceMs * 1000);
+    }
+}
+
 static void heartbeatLoop(std::shared_ptr<Session> s) {
     LOGI("Heartbeat thread started (sock=%d)", s->udpSock);
     while (s->heartbeat.running()) {
         sendEncrypted(s.get(), MSG_HEARTBEAT_PING, nullptr, 0);
         s->rtt.pings.fetch_add(1, std::memory_order_relaxed);
-        if (hotpath::enabled()) {
-            // stage-2: round-trip clock starts here, on this session's own clock.
-            const int64_t now = hotpath::nowMonotonicNs();
-            if (hotpath::shouldArmPing(s->lastPingNs.load(std::memory_order_relaxed), now)) {
-                s->lastPingNs.store(now, std::memory_order_relaxed);
-            }
-        }
+        armLatencyPing(*s);
 
         const int intervalMs = g_heartbeatIntervalMs.load(std::memory_order_relaxed);
-        const int missMax = HEARTBEAT_DEATH_TIMEOUT_MS / intervalMs;
-        if (s->missedAcks.fetch_add(1, std::memory_order_relaxed) + 1 >= missMax) {
-            LOGE("Missed %d heartbeat ACKs, connection dead", missMax);
-            s->connectionAlive.store(false, std::memory_order_relaxed);
-        }
-
-        for (int i = 0; i < intervalMs / 50; i++) {
-            if (!s->heartbeat.running()) break;
-            usleep(50000);
-        }
+        countMissedAck(*s, intervalMs);
+        sleepUntilNextHeartbeat(*s, intervalMs);
     }
     LOGI("Heartbeat thread stopped");
 }

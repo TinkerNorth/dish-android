@@ -88,6 +88,25 @@ DeviceRings& ringsFor(int32_t deviceId) {
 // would drown the tail the metric exists to expose.
 constexpr double kUrbGapMaxUs = 100000.0;
 
+// How many raw samples the diagnostics sparkline plots.
+constexpr size_t kRecentSamples = 32;
+
+// Appends the newest samples as a JSON array, oldest first. The sparkline wants recent shape
+// rather than an aggregate, so these go out raw.
+void appendRecentSamples(std::string& out, const char* name, const double* us, const size_t n) {
+    const size_t take = n < kRecentSamples ? n : kRecentSamples;
+    out += "\"";
+    out += name;
+    out += "\":[";
+    char num[32];
+    for (size_t i = n - take; i < n; i++) {
+        snprintf(num, sizeof(num), "%.0f", us[i]);
+        if (i != n - take) out += ",";
+        out += num;
+    }
+    out += "]";
+}
+
 void appendPctlValues(std::string& out, const char* name, std::vector<double> v) {
     char buf[256];
     if (v.empty()) {
@@ -161,21 +180,26 @@ void markGamepadSent() {
     }
 }
 
+// Both rings are copied under g_devMtx so the JSON below is built with no lock held at all.
+// An unknown device leaves both empty, which reads as a device with no samples yet.
+static void copyDeviceRings(const int32_t deviceId, std::vector<double>& stage1,
+                            std::vector<double>& gap) {
+    std::lock_guard<std::mutex> lk(g_devMtx);
+    auto it = g_dev.find(deviceId);
+    if (it == g_dev.end()) return;
+    {
+        std::lock_guard<std::mutex> rl(it->second->stage1.mtx);
+        stage1 = it->second->stage1.us;
+    }
+    std::lock_guard<std::mutex> rl(it->second->urbGap.mtx);
+    gap = it->second->urbGap.us;
+}
+
 std::string deviceLatencyJson(int32_t deviceId) {
     std::vector<double> stage1;
     std::vector<double> gap;
-    {
-        std::lock_guard<std::mutex> lk(g_devMtx);
-        auto it = g_dev.find(deviceId);
-        if (it != g_dev.end()) {
-            {
-                std::lock_guard<std::mutex> rl(it->second->stage1.mtx);
-                stage1 = it->second->stage1.us;
-            }
-            std::lock_guard<std::mutex> rl(it->second->urbGap.mtx);
-            gap = it->second->urbGap.us;
-        }
-    }
+    copyDeviceRings(deviceId, stage1, gap);
+
     std::string out = "{";
     appendPctlValues(out, "stage1_hotpath_us", std::move(stage1));
     out += ",";
@@ -215,26 +239,26 @@ void clearRtt(RttStats& session) {
     session.next = 0;
 }
 
-std::string sessionStatsJson(RttStats& session, int missedAcks) {
+// The ring unrolled oldest-first. Until it has wrapped, index 0 is the oldest; after that the
+// write cursor is.
+static std::vector<double> rttWindowInOrder(RttStats& session) {
+    std::lock_guard<std::mutex> lk(session.mtx);
     std::vector<double> ordered;
-    {
-        std::lock_guard<std::mutex> lk(session.mtx);
-        ordered.reserve(session.count);
-        const size_t start = session.count < RttStats::kWindow ? 0 : session.next;
-        for (size_t i = 0; i < session.count; i++) {
-            ordered.push_back(session.us[(start + i) % RttStats::kWindow]);
-        }
+    ordered.reserve(session.count);
+    const size_t start = session.count < RttStats::kWindow ? 0 : session.next;
+    for (size_t i = 0; i < session.count; i++) {
+        ordered.push_back(session.us[(start + i) % RttStats::kWindow]);
     }
-    std::string out = "{\"rtt_recent_us\":[";
-    const size_t take = ordered.size() < 32 ? ordered.size() : 32;
-    char num[32];
-    for (size_t i = ordered.size() - take; i < ordered.size(); i++) {
-        snprintf(num, sizeof(num), "%.0f", ordered[i]);
-        if (i != ordered.size() - take) out += ",";
-        out += num;
-    }
-    out += "],";
+    return ordered;
+}
+
+std::string sessionStatsJson(RttStats& session, int missedAcks) {
+    std::vector<double> ordered = rttWindowInOrder(session);
+    std::string out = "{";
+    appendRecentSamples(out, "rtt_recent_us", ordered.data(), ordered.size());
+    out += ",";
     appendPctlValues(out, "rtt_us", std::move(ordered));
+    char num[64];
     snprintf(num, sizeof(num), ",\"pings\":%u,\"acks\":%u,\"missed\":%d}",
              session.pings.load(std::memory_order_relaxed),
              session.acks.load(std::memory_order_relaxed), missedAcks);
@@ -252,21 +276,12 @@ std::string statsJson(bool reset) {
     out += ",";
     appendPctl(out, "urb_gap_us", g_urbGap, reset);
     out += ",";
-    // Raw tail of the RTT window BEFORE the pctl block can reset it: feeds the
-    // diagnostics sparkline, which wants recent shape rather than an aggregate.
+    // Taken BEFORE the pctl block below, which is allowed to reset the window.
     {
         std::lock_guard<std::mutex> lk(g_rtt.mtx);
-        const size_t n = g_rtt.us.size();
-        const size_t take = n < 32 ? n : 32;
-        out += "\"rtt_recent_us\":[";
-        char num[32];
-        for (size_t i = n - take; i < n; i++) {
-            snprintf(num, sizeof(num), "%.0f", g_rtt.us[i]);
-            if (i != n - take) out += ",";
-            out += num;
-        }
-        out += "],";
+        appendRecentSamples(out, "rtt_recent_us", g_rtt.us.data(), g_rtt.us.size());
     }
+    out += ",";
     appendPctl(out, "rtt_us", g_rtt, reset);
     out += "}";
     return out;
