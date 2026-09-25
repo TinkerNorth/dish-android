@@ -47,12 +47,13 @@ class PadAudioRouteResolver
 
         @Volatile private var installed = false
 
-        private val callback =
-            object : AudioDeviceCallback() {
-                override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = resolve()
+        private inner class AudioDeviceWatcher : AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = resolve()
 
-                override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = resolve()
-            }
+            override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = resolve()
+        }
+
+        private val callback = AudioDeviceWatcher()
 
         /**
          * Process-scoped, like the USB manager's own install: the capability model is composed
@@ -72,7 +73,7 @@ class PadAudioRouteResolver
 
         /** Re-read both lists and republish. Cheap, and the only writer of the table. */
         fun resolve() {
-            routes.publishRoutes(PadAudioMatcher.resolve(attachedPads(), usbEndpoints()))
+            routes.publishRoutes(resolvePadAudioRoutes(attachedPads(), usbEndpoints()))
         }
 
         private fun attachedPads(): List<UsbAudioPad> {

@@ -14,11 +14,9 @@ import androidx.activity.viewModels
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.appcompat.app.AlertDialog
 import androidx.core.net.toUri
 import androidx.core.view.isEmpty
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
@@ -26,8 +24,8 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.core.model.Feature
-import com.tinkernorth.dish.core.net.DishProtocol
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.DishProtocolCompat
+import com.tinkernorth.dish.core.net.moonlight.AUTO
 import com.tinkernorth.dish.databinding.ActivityConfigureBindingsBinding
 import com.tinkernorth.dish.databinding.BindingApplyStepBinding
 import com.tinkernorth.dish.databinding.BindingValueNoneBinding
@@ -39,6 +37,7 @@ import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setLeadingIcon
 import com.tinkernorth.dish.ui.common.tierPillSpec
 import com.tinkernorth.dish.ui.donate.wireDonateButton
@@ -72,6 +71,13 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
             return
         }
 
+        bindFooterButtons()
+        viewModel.load(slotId)
+        observe()
+    }
+
+    // Unbind closes the screen itself: there is nothing left to configure once the slot is free.
+    private fun bindFooterButtons() {
         binding.btnBack.setOnClickListener { finish() }
         binding.btnCancel.setOnClickListener { finish() }
         binding.btnUnbind.setOnClickListener {
@@ -79,9 +85,6 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
             finish()
         }
         binding.btnApply.setOnClickListener { viewModel.apply() }
-
-        viewModel.load(slotId)
-        observe()
     }
 
     // Re-verify on entering the screen: a Moonlight pairing is remembered trust, and the
@@ -95,24 +98,12 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
     }
 
     private fun observe() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.ui.collect { state ->
-                    if (state.loaded) renderContent(state)
-                    renderBlocker(state)
-                }
-            }
+        observeWhileStarted(viewModel.ui) { state ->
+            if (state.loaded) renderContent(state)
+            renderBlocker(state)
         }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.applyState.collect { renderApplyState(it) }
-            }
-        }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.micPermissionRequests.collect { requestMicPermission() }
-            }
-        }
+        observeWhileStarted(viewModel.applyState) { renderApplyState(it) }
+        observeWhileStarted(viewModel.micPermissionRequests) { requestMicPermission() }
     }
 
     private val micPermissionLauncher =
@@ -289,7 +280,7 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
         val selectedCompat =
             state.selectedHost
                 ?.takeIf { !noHosts }
-                ?.let { state.hostCompat[it.id] } ?: DishProtocol.Compat.UNKNOWN
+                ?.let { state.hostCompat[it.id] } ?: DishProtocolCompat.UNKNOWN
         d.destCompatPill.bindCompat(selectedCompat)
         val plainSatellite = state.hostChosen && !state.isBluetoothHost && !state.isMoonlightHost
         d.legendSatellite.visibility = if (plainSatellite) View.VISIBLE else View.GONE
@@ -302,30 +293,36 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
     }
 
     private fun bindBindingSection(state: ConfigUiState) {
-        val bz = binding.sectionBinding
         bindEmulateRow(state)
-
-        val motionVisible = state.motionAvailable
-        bz.motionDivider.visibility = if (motionVisible) View.VISIBLE else View.GONE
-        bz.motionRow.visibility = if (motionVisible) View.VISIBLE else View.GONE
-        if (motionVisible) {
-            bz.swMotion.setOnCheckedChangeListener(null)
-            bz.swMotion.isChecked = state.draft?.motionOn == true
-            bz.swMotion.setOnCheckedChangeListener { _, isChecked -> viewModel.setMotion(isChecked) }
-        }
-
-        // Rumble shows when the path can carry it: the phone vibrates as a fallback for the
-        // on-screen pad, a physical pad needs its own motor, and a Bluetooth host has no return path.
-        val rumbleVisible = state.capabilities.isAvailable(Feature.RUMBLE)
-        bz.rumbleDivider.visibility = if (rumbleVisible) View.VISIBLE else View.GONE
-        bz.rumbleRow.visibility = if (rumbleVisible) View.VISIBLE else View.GONE
-        if (rumbleVisible) {
-            bz.swRumble.setOnCheckedChangeListener(null)
-            bz.swRumble.isChecked = state.draft?.rumbleOn == true
-            bz.swRumble.setOnCheckedChangeListener { _, isChecked -> viewModel.setRumble(isChecked) }
-        }
-
+        bindMotionRow(state)
+        bindRumbleRow(state)
         bindAudioRows(state)
+    }
+
+    // The listener is cleared before the checked state is set: setChecked fires it, and a render
+    // must not read as the user having flipped the switch.
+    private fun bindMotionRow(state: ConfigUiState) {
+        val bz = binding.sectionBinding
+        val visible = state.motionAvailable
+        bz.motionDivider.visibility = if (visible) View.VISIBLE else View.GONE
+        bz.motionRow.visibility = if (visible) View.VISIBLE else View.GONE
+        if (!visible) return
+        bz.swMotion.setOnCheckedChangeListener(null)
+        bz.swMotion.isChecked = state.draft?.motionOn == true
+        bz.swMotion.setOnCheckedChangeListener { _, isChecked -> viewModel.setMotion(isChecked) }
+    }
+
+    // Rumble shows when the path can carry it: the phone vibrates as a fallback for the on-screen
+    // pad, a physical pad needs its own motor, and a Bluetooth host has no return path at all.
+    private fun bindRumbleRow(state: ConfigUiState) {
+        val bz = binding.sectionBinding
+        val visible = state.capabilities.isAvailable(Feature.RUMBLE)
+        bz.rumbleDivider.visibility = if (visible) View.VISIBLE else View.GONE
+        bz.rumbleRow.visibility = if (visible) View.VISIBLE else View.GONE
+        if (!visible) return
+        bz.swRumble.setOnCheckedChangeListener(null)
+        bz.swRumble.isChecked = state.draft?.rumbleOn == true
+        bz.swRumble.setOnCheckedChangeListener { _, isChecked -> viewModel.setRumble(isChecked) }
     }
 
     // The emulated pad's own audio endpoints, shown only where the whole path carries
@@ -359,17 +356,30 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
     // A satellite host shows a loader until its catalog resolves the type, the dropdown once Ready, or a
     // tap-to-retry affordance if the fetch failed with nothing cached — never a guessed default.
     private fun bindEmulateRow(state: ConfigUiState) {
-        val bz = binding.sectionBinding
         if (state.isBluetoothHost) {
-            bz.tvEmulateText.text = viewModel.typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX)
-            bz.emulatePill.visibility = View.VISIBLE
-            bz.emulateLoading.visibility = View.GONE
-            bz.emulateDropdown.visibility = View.GONE
+            bindLockedEmulateRow(state)
             return
         }
+        bindEmulateDropdown(state)
+    }
+
+    // A Bluetooth host's persona is fixed by the pairing, so the row states it rather than
+    // offering a choice that would be refused.
+    private fun bindLockedEmulateRow(state: ConfigUiState) {
+        val bz = binding.sectionBinding
+        bz.tvEmulateText.text = viewModel.typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX)
+        bz.emulatePill.visibility = View.VISIBLE
+        bz.emulateLoading.visibility = View.GONE
+        bz.emulateDropdown.visibility = View.GONE
+    }
+
+    // The error state keeps the dropdown, so the retry sits where the choice will be.
+    private fun bindEmulateDropdown(state: ConfigUiState) {
+        val bz = binding.sectionBinding
+        val loading = state.typeLoad == TypeLoad.Loading
         bz.emulatePill.visibility = View.GONE
-        bz.emulateLoading.visibility = if (state.typeLoad == TypeLoad.Loading) View.VISIBLE else View.GONE
-        bz.emulateDropdown.visibility = if (state.typeLoad == TypeLoad.Loading) View.GONE else View.VISIBLE
+        bz.emulateLoading.visibility = if (loading) View.VISIBLE else View.GONE
+        bz.emulateDropdown.visibility = if (loading) View.GONE else View.VISIBLE
         when (state.typeLoad) {
             TypeLoad.Loading -> Unit
             TypeLoad.Ready -> {
@@ -444,36 +454,43 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
         if (blocker == null) return
         binding.btnBlockerCancel.setOnClickListener { finish() }
         when (blocker) {
-            is BindingBlocker.InputLost -> {
-                val icon = if (state.snapshot?.link == BindingLink.BLUETOOTH) R.drawable.ic_bluetooth else R.drawable.ic_usb
-                bindBlockerMessage(
-                    icon,
-                    R.color.colorWarning,
-                    R.string.binding_edge_input_lost_title,
-                    getString(R.string.binding_blocker_input_lost_body),
-                )
-                bindBlockerPrimary(null, busy = false) {}
-            }
-            is BindingBlocker.HostLost -> {
-                val label = blocker.hostLabel.ifBlank { getString(R.string.satellite_fallback_name) }
-                bindBlockerMessage(
-                    R.drawable.ic_error,
-                    R.color.colorError,
-                    R.string.binding_edge_host_lost_title,
-                    getString(R.string.binding_edge_host_lost_detail, label),
-                )
-                bindBlockerPrimary(R.string.binding_edge_action_reconnect, blocker.reconnecting) { viewModel.reconnectHosts() }
-            }
-            is BindingBlocker.HostUnsteady -> {
-                bindBlockerMessage(
-                    R.drawable.ic_warning,
-                    R.color.colorWarning,
-                    R.string.binding_edge_unsteady_title,
-                    getString(R.string.binding_edge_unsteady_detail),
-                )
-                bindBlockerPrimary(R.string.binding_edge_action_dismiss, busy = false) { viewModel.dismissUnsteady() }
-            }
+            is BindingBlocker.InputLost -> renderInputLostBlocker(state)
+            is BindingBlocker.HostLost -> renderHostLostBlocker(blocker)
+            is BindingBlocker.HostUnsteady -> renderUnsteadyBlocker()
         }
+    }
+
+    // Nothing to offer: the pad has to come back on its own, so the blocker has no primary action.
+    private fun renderInputLostBlocker(state: ConfigUiState) {
+        val overBluetooth = state.snapshot?.link == BindingLink.BLUETOOTH
+        bindBlockerMessage(
+            if (overBluetooth) R.drawable.ic_bluetooth else R.drawable.ic_usb,
+            R.color.colorWarning,
+            R.string.binding_edge_input_lost_title,
+            getString(R.string.binding_blocker_input_lost_body),
+        )
+        bindBlockerPrimary(null, busy = false) {}
+    }
+
+    private fun renderHostLostBlocker(blocker: BindingBlocker.HostLost) {
+        val label = blocker.hostLabel.ifBlank { getString(R.string.satellite_fallback_name) }
+        bindBlockerMessage(
+            R.drawable.ic_error,
+            R.color.colorError,
+            R.string.binding_edge_host_lost_title,
+            getString(R.string.binding_edge_host_lost_detail, label),
+        )
+        bindBlockerPrimary(R.string.binding_edge_action_reconnect, blocker.reconnecting) { viewModel.reconnectHosts() }
+    }
+
+    private fun renderUnsteadyBlocker() {
+        bindBlockerMessage(
+            R.drawable.ic_warning,
+            R.color.colorWarning,
+            R.string.binding_edge_unsteady_title,
+            getString(R.string.binding_edge_unsteady_detail),
+        )
+        bindBlockerPrimary(R.string.binding_edge_action_dismiss, busy = false) { viewModel.dismissUnsteady() }
     }
 
     private fun bindBlockerMessage(
@@ -528,25 +545,35 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
                 .setNegativeButton(android.R.string.cancel, null)
                 .create()
         state.hosts.forEach { host ->
-            val potential = viewModel.destinationPotential(snapshot.slotId, host.kind, host.id)
-            val card = SetupReviewCardBinding.inflate(layoutInflater, container, false)
-            card.reviewIcon.setImageResource(destinationGlyph(host.kind))
-            card.reviewKind.setText(R.string.binding_label_destination)
-            card.reviewName.text = host.label
-            card.reviewSublabel.text = destinationSublabel(host)
-            card.reviewTierPill.bindPill(tierPillSpec(host.kind))
-            card.reviewTierPill.root.visibility = View.VISIBLE
-            card.reviewCompatPill.bindCompat(state.hostCompat[host.id] ?: DishProtocol.Compat.UNKNOWN)
-            bindReviewFlows(card.reviewSendsRow, card.reviewSendsChips, destinationSends(potential))
-            bindReviewFlows(card.reviewGetsRow, card.reviewGetsChips, destinationGets(potential))
-            card.reviewCard.isClickable = true
-            card.reviewCard.setOnClickListener {
-                viewModel.setHost(host.id)
-                dialog.dismiss()
-            }
-            container.addView(card.root)
+            container.addView(hostCardFor(host, state, snapshot, container, dialog))
         }
         dialog.show()
+    }
+
+    private fun hostCardFor(
+        host: BindingHost,
+        state: ConfigUiState,
+        snapshot: BindingSnapshot,
+        container: ViewGroup,
+        dialog: AlertDialog,
+    ): View {
+        val potential = viewModel.destinationPotential(snapshot.slotId, host.kind, host.id)
+        val card = SetupReviewCardBinding.inflate(layoutInflater, container, false)
+        card.reviewIcon.setImageResource(destinationGlyph(host.kind))
+        card.reviewKind.setText(R.string.binding_label_destination)
+        card.reviewName.text = host.label
+        card.reviewSublabel.text = destinationSublabel(host)
+        card.reviewTierPill.bindPill(tierPillSpec(host.kind))
+        card.reviewTierPill.root.visibility = View.VISIBLE
+        card.reviewCompatPill.bindCompat(state.hostCompat[host.id] ?: DishProtocolCompat.UNKNOWN)
+        bindReviewFlows(card.reviewSendsRow, card.reviewSendsChips, destinationSends(potential))
+        bindReviewFlows(card.reviewGetsRow, card.reviewGetsChips, destinationGets(potential))
+        card.reviewCard.isClickable = true
+        card.reviewCard.setOnClickListener {
+            viewModel.setHost(host.id)
+            dialog.dismiss()
+        }
+        return card.root
     }
 
     // One silhouette per destination kind, everywhere the destination is drawn.
@@ -586,36 +613,54 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
                 .setView(list.root)
                 .setNegativeButton(android.R.string.cancel, null)
                 .create()
-        val moonlight = host.kind == ConnectionKind.MOONLIGHT
         state.typeOptions.forEach { option ->
-            val card = SetupTypeCardBinding.inflate(layoutInflater, container, false)
-            val candidate = if (moonlight) viewModel.moonlightResolvedType(option.id) else option.id
-            card.typeTitle.text = option.label
-            card.typeChevron.visibility = View.GONE
-            card.typeCard.isChecked = option.id == state.draft?.type
-            // Auto is resolved here, on the client: the card shows the rows of the type it
-            // will actually send, and says which one that is rather than implying a fifth type.
-            val isAuto = moonlight && option.id == MoonlightEmulatedType.AUTO
-            card.typeBadge.visibility = if (isAuto) View.VISIBLE else View.GONE
-            if (isAuto) card.typeBadge.setText(R.string.ml_type_auto_badge)
-            card.typeCaption.visibility = if (isAuto) View.VISIBLE else View.GONE
-            if (isAuto) {
-                card.typeCaption.text =
-                    getString(R.string.ml_type_auto_resolved, getString(moonlightTypeLabelRes(candidate)))
-            }
-            card.capabilityContainer.bindCapabilityRows(
-                capabilityRows(
-                    viewModel.capabilityForCandidate(snapshot.slotId, candidate, host.kind, host.id),
-                    inputUnknown = state.inputUnknown,
-                ),
-            )
-            card.typeCard.setOnClickListener {
-                viewModel.setType(option.id)
-                dialog.dismiss()
-            }
-            container.addView(card.root)
+            container.addView(typeCardFor(option, state, snapshot, host, container, dialog))
         }
         dialog.show()
+    }
+
+    private fun typeCardFor(
+        option: TypeOption,
+        state: ConfigUiState,
+        snapshot: BindingSnapshot,
+        host: BindingHost,
+        container: ViewGroup,
+        dialog: AlertDialog,
+    ): View {
+        val card = SetupTypeCardBinding.inflate(layoutInflater, container, false)
+        val isMoonlight = host.kind == ConnectionKind.MOONLIGHT
+        val candidate = if (isMoonlight) viewModel.moonlightResolvedType(option.id) else option.id
+
+        card.typeTitle.text = option.label
+        card.typeChevron.visibility = View.GONE
+        card.typeCard.isChecked = option.id == state.draft?.type
+        bindAutoBadge(card, isMoonlight && option.id == AUTO, candidate)
+        card.capabilityContainer.bindCapabilityRows(
+            capabilityRows(
+                viewModel.capabilityForCandidate(snapshot.slotId, candidate, host.kind, host.id),
+                inputUnknown = state.inputUnknown,
+            ),
+        )
+        card.typeCard.setOnClickListener {
+            viewModel.setType(option.id)
+            dialog.dismiss()
+        }
+        return card.root
+    }
+
+    // Auto is resolved here, on the client: the card shows the rows of the type it will actually
+    // send, and says which one that is rather than implying a fifth type.
+    private fun bindAutoBadge(
+        card: SetupTypeCardBinding,
+        isAuto: Boolean,
+        candidate: Int,
+    ) {
+        card.typeBadge.visibility = if (isAuto) View.VISIBLE else View.GONE
+        card.typeCaption.visibility = if (isAuto) View.VISIBLE else View.GONE
+        if (!isAuto) return
+        card.typeBadge.setText(R.string.ml_type_auto_badge)
+        card.typeCaption.text =
+            getString(R.string.ml_type_auto_resolved, getString(moonlightTypeLabelRes(candidate)))
     }
 
     companion object {

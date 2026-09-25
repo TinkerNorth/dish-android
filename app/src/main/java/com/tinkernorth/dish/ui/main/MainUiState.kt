@@ -5,7 +5,7 @@ package com.tinkernorth.dish.ui.main
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.core.net.DishProtocol
+import com.tinkernorth.dish.core.net.DishProtocolCompat
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 
@@ -74,7 +74,7 @@ data class MainUiState(
     val inputRates: Map<String, SlotInputRates> = emptyMap(),
     val screenPeakHz: Int = 0,
     // Per-connection protocol verdict (satellite hosts only), for the update chips.
-    val hostCompat: Map<String, DishProtocol.Compat> = emptyMap(),
+    val hostCompat: Map<String, DishProtocolCompat> = emptyMap(),
 ) {
     val virtualSlot get() = slots.first { it.id == VIRTUAL_SLOT_ID }
     val physicalSlots get() = slots.filter { it.inputType == SlotInputType.PHYSICAL }

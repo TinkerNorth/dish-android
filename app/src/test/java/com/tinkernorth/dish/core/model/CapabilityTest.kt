@@ -2,7 +2,8 @@
 
 package com.tinkernorth.dish.core.model
 
-import com.tinkernorth.dish.core.net.DishProtocol
+import com.tinkernorth.dish.core.net.DISH_PROTOCOL_CURRENT
+import com.tinkernorth.dish.core.net.DishProtocolCompat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -210,18 +211,18 @@ class CapabilityTest {
 
     @Test
     fun `compat mirrors the advertised version, with zero reading as unknown`() {
-        assertEquals(DishProtocol.Compat.UNKNOWN, HostFeatureSet.SATELLITE_DEFAULT.compat)
+        assertEquals(DishProtocolCompat.UNKNOWN, HostFeatureSet.SATELLITE_DEFAULT.compat)
         assertEquals(
-            DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE,
-            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.CURRENT - 1).compat,
+            DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE,
+            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DISH_PROTOCOL_CURRENT - 1).compat,
         )
         assertEquals(
-            DishProtocol.Compat.CURRENT,
-            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.CURRENT).compat,
+            DishProtocolCompat.CURRENT,
+            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DISH_PROTOCOL_CURRENT).compat,
         )
         assertEquals(
-            DishProtocol.Compat.APP_UPDATE_REQUIRED,
-            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.CURRENT + 1).compat,
+            DishProtocolCompat.APP_UPDATE_REQUIRED,
+            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DISH_PROTOCOL_CURRENT + 1).compat,
         )
     }
 

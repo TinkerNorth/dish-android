@@ -8,18 +8,16 @@ import android.view.InputDevice
 import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.annotation.RequiresApi
 
-object PhysicalMotionProbe {
-    // The per-device sensor API exists from 31; the annotation is the contract lint checks
-    // callers of probeGyro against.
-    @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.S)
-    private fun perDeviceSensorsAvailable(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+// The per-device sensor API exists from 31; the annotation is the contract lint checks
+// callers of probeGyro against.
+@ChecksSdkIntAtLeast(api = Build.VERSION_CODES.S)
+private fun perDeviceSensorsAvailable(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
-    fun hasGyro(deviceId: Int): Boolean = perDeviceSensorsAvailable() && probeGyro(InputDevice.getDevice(deviceId))
+internal fun hasGyro(deviceId: Int): Boolean = perDeviceSensorsAvailable() && probeGyro(InputDevice.getDevice(deviceId))
 
-    // Split from hasGyro so the read itself is unit-testable against a mocked InputDevice.
-    @RequiresApi(Build.VERSION_CODES.S)
-    fun probeGyro(device: InputDevice?): Boolean {
-        if (device == null) return false
-        return device.sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE) != null
-    }
+// Split from hasGyro so the read itself is unit-testable against a mocked InputDevice.
+@RequiresApi(Build.VERSION_CODES.S)
+internal fun probeGyro(device: InputDevice?): Boolean {
+    if (device == null) return false
+    return device.sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE) != null
 }

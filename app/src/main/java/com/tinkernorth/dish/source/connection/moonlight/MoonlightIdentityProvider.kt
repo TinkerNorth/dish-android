@@ -8,6 +8,7 @@ import android.security.keystore.KeyInfo
 import android.security.keystore.KeyProperties
 import android.util.Log
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
+import com.tinkernorth.dish.core.net.moonlight.signRsaSha256
 import java.math.BigInteger
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
@@ -25,7 +26,7 @@ import javax.security.auth.x500.X500Principal
  * reused for every host). AndroidKeyStore auto-generates the self-signed
  * certificate for us, keeping the platform-APIs-only, BouncyCastle-free rule and
  * keeping the private key non-exportable. Pairing signs with it via
- * [com.tinkernorth.dish.core.net.moonlight.MoonlightCrypto.signRsaSha256], and
+ * [com.tinkernorth.dish.core.net.moonlight.signRsaSha256], and
  * the same key authenticates the dish on every mutual-TLS call afterwards, so
  * it is generated with the authorizations both of those need.
  *
@@ -102,30 +103,32 @@ class MoonlightIdentityProvider
          * who can extract it.
          */
         private fun generateKeyPair() {
-            val notBefore = Calendar.getInstance()
-            val notAfter = (notBefore.clone() as Calendar).apply { add(Calendar.YEAR, CERT_VALIDITY_YEARS) }
-            val spec =
-                KeyGenParameterSpec
-                    .Builder(ALIAS, KeyProperties.PURPOSE_SIGN)
-                    .setKeySize(RSA_KEY_SIZE)
-                    // DIGEST_NONE: raw-RSA TLS signing hands over an already-digested
-                    // (and, for PSS, already-encoded) block. SHA-256: the pairing signature.
-                    .setDigests(KeyProperties.DIGEST_NONE, KeyProperties.DIGEST_SHA256)
-                    .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PKCS1)
-                    // Spells KM_PAD_NONE, the padding a raw private-key operation runs
-                    // under. Both padding setters feed one KM_TAG_PADDING list, and the
-                    // purpose stays SIGN-only, so this authorizes raw signing, not
-                    // decryption.
-                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                    .setCertificateSubject(X500Principal(CERT_SUBJECT))
-                    .setCertificateSerialNumber(BigInteger.ONE)
-                    .setCertificateNotBefore(notBefore.time)
-                    .setCertificateNotAfter(notAfter.time)
-                    .build()
             KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_RSA, ANDROID_KEYSTORE).apply {
-                initialize(spec)
+                initialize(pairingKeySpec())
                 generateKeyPair()
             }
+        }
+
+        private fun pairingKeySpec(): KeyGenParameterSpec {
+            val notBefore = Calendar.getInstance()
+            val notAfter = (notBefore.clone() as Calendar).apply { add(Calendar.YEAR, CERT_VALIDITY_YEARS) }
+            return KeyGenParameterSpec
+                .Builder(ALIAS, KeyProperties.PURPOSE_SIGN)
+                .setKeySize(RSA_KEY_SIZE)
+                // DIGEST_NONE: raw-RSA TLS signing hands over an already-digested
+                // (and, for PSS, already-encoded) block. SHA-256: the pairing signature.
+                .setDigests(KeyProperties.DIGEST_NONE, KeyProperties.DIGEST_SHA256)
+                .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PKCS1)
+                // Spells KM_PAD_NONE, the padding a raw private-key operation runs
+                // under. Both padding setters feed one KM_TAG_PADDING list, and the
+                // purpose stays SIGN-only, so this authorizes raw signing, not
+                // decryption.
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setCertificateSubject(X500Principal(CERT_SUBJECT))
+                .setCertificateSerialNumber(BigInteger.ONE)
+                .setCertificateNotBefore(notBefore.time)
+                .setCertificateNotAfter(notAfter.time)
+                .build()
         }
 
         private fun toPem(certificate: X509Certificate): String {

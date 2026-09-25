@@ -4,13 +4,19 @@ package com.tinkernorth.dish.source.update
 
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.BuildConfig
+import com.tinkernorth.dish.core.update.FUTURE_SKEW_ESCAPE_MS
+import com.tinkernorth.dish.core.update.MANUAL_MIN_GAP_MS
+import com.tinkernorth.dish.core.update.MIN_CHECK_GAP_MS
+import com.tinkernorth.dish.core.update.PERIODIC_INTERVAL_MS
+import com.tinkernorth.dish.core.update.STARTUP_DELAY_MS
 import com.tinkernorth.dish.core.update.UpdateEffect
 import com.tinkernorth.dish.core.update.UpdateEvent
-import com.tinkernorth.dish.core.update.UpdateMachine
 import com.tinkernorth.dish.core.update.UpdatePhase
 import com.tinkernorth.dish.core.update.UpdateStatus
 import com.tinkernorth.dish.core.update.UpdateTrigger
 import com.tinkernorth.dish.core.update.UpdateVersion
+import com.tinkernorth.dish.core.update.jitteredDelayMs
+import com.tinkernorth.dish.core.update.reduce
 import com.tinkernorth.dish.source.system.NetworkState
 import com.tinkernorth.dish.source.system.NetworkStateObserver
 import kotlinx.coroutines.CoroutineScope
@@ -110,7 +116,7 @@ class UpdateCoordinator internal constructor(
 
     override fun checkNow() {
         val now = nowMs()
-        if (lastManualCheckMs != 0L && now - lastManualCheckMs < UpdateMachine.MANUAL_MIN_GAP_MS) return
+        if (lastManualCheckMs != 0L && now - lastManualCheckMs < MANUAL_MIN_GAP_MS) return
         lastManualCheckMs = now
         dispatch(UpdateEvent.CheckRequested(UpdateTrigger.Manual))
     }
@@ -131,16 +137,16 @@ class UpdateCoordinator internal constructor(
                 // A recorded time far in the FUTURE means the clock moved, not
                 // that a check just happened; check anyway rather than going
                 // quiet for a day.
-                val clockJumped = last > now + UpdateMachine.FUTURE_SKEW_ESCAPE_MS
-                val withinGap = last > 0 && !clockJumped && now - last < UpdateMachine.MIN_CHECK_GAP_MS
-                val delayMs = if (withinGap) UpdateMachine.PERIODIC_INTERVAL_MS else UpdateMachine.STARTUP_DELAY_MS
+                val clockJumped = last > now + FUTURE_SKEW_ESCAPE_MS
+                val withinGap = last > 0 && !clockJumped && now - last < MIN_CHECK_GAP_MS
+                val delayMs = if (withinGap) PERIODIC_INTERVAL_MS else STARTUP_DELAY_MS
                 armTimer(delayMs, if (withinGap) UpdateTrigger.Periodic else UpdateTrigger.Startup)
             }
         }
 
     private fun dispatch(event: UpdateEvent) =
         synchronized(lock) {
-            val reduction = UpdateMachine.reduce(machine.value, event)
+            val reduction = reduce(machine.value, event)
             machine.value = reduction.next
             reduction.effects.forEach { apply(it, reduction.next) }
         }
@@ -155,7 +161,7 @@ class UpdateCoordinator internal constructor(
                 // Only failures are jittered (spreading a fleet's retries); the
                 // startup delay and the periodic interval are exact.
                 val failed = next.phase == UpdatePhase.Failed
-                val delayMs = if (failed) UpdateMachine.jitteredDelayMs(effect.delayMs, jitterUnit()) else effect.delayMs
+                val delayMs = if (failed) jitteredDelayMs(effect.delayMs, jitterUnit()) else effect.delayMs
                 armTimer(delayMs, if (failed) UpdateTrigger.Retry else UpdateTrigger.Periodic)
             }
             UpdateEffect.PersistLastCheck -> store.recordLastCheck(nowMs())

@@ -22,12 +22,14 @@
 namespace usbparsers {
 
 using gamepad::DeviceState;
+using gamepad::hatDirectionBits;
 using gamepad::WBUTTON_MIC_MUTE;
 using gamepad::XUSB_A;
 using gamepad::XUSB_B;
 using gamepad::XUSB_BACK;
 using gamepad::XUSB_DPAD_DOWN;
 using gamepad::XUSB_DPAD_LEFT;
+using gamepad::XUSB_DPAD_MASK;
 using gamepad::XUSB_DPAD_RIGHT;
 using gamepad::XUSB_DPAD_UP;
 using gamepad::XUSB_GUIDE;
@@ -671,120 +673,107 @@ int16_t ds4AccelAxisToWire(int32_t raw, const PsImuCalib& c, int axis) {
 }
 
 uint16_t setDpadFromHat(uint16_t buttons, uint8_t hat) {
-    buttons =
-        (uint16_t)(buttons & ~(XUSB_DPAD_UP | XUSB_DPAD_DOWN | XUSB_DPAD_LEFT | XUSB_DPAD_RIGHT));
-    switch (hat & 0x0F) {
-    case 0:
-        buttons |= XUSB_DPAD_UP;
-        break;
-    case 1:
-        buttons |= (uint16_t)(XUSB_DPAD_UP | XUSB_DPAD_RIGHT);
-        break;
-    case 2:
-        buttons |= XUSB_DPAD_RIGHT;
-        break;
-    case 3:
-        buttons |= (uint16_t)(XUSB_DPAD_DOWN | XUSB_DPAD_RIGHT);
-        break;
-    case 4:
-        buttons |= XUSB_DPAD_DOWN;
-        break;
-    case 5:
-        buttons |= (uint16_t)(XUSB_DPAD_DOWN | XUSB_DPAD_LEFT);
-        break;
-    case 6:
-        buttons |= XUSB_DPAD_LEFT;
-        break;
-    case 7:
-        buttons |= (uint16_t)(XUSB_DPAD_UP | XUSB_DPAD_LEFT);
-        break;
-    default:
-        break;
-    }
+    const uint16_t withoutDpad = (uint16_t)(buttons & ~XUSB_DPAD_MASK);
+    const int direction = (int)(hat & 0x0F);
+    return (uint16_t)(withoutDpad | hatDirectionBits(direction));
+}
+
+// Both Xbox reports lay the four stick axes out as little-endian int16 in the order LX LY RX RY;
+// only the base offset moves.
+void readSticksLe16(const uint8_t* buf, const int base, DeviceState& s) {
+    s.sLX = rdLe16(buf, base);
+    s.sLY = rdLe16(buf, base + 2);
+    s.sRX = rdLe16(buf, base + 4);
+    s.sRY = rdLe16(buf, base + 6);
+}
+
+uint16_t decodeXInput360Buttons(const uint8_t dpadByte, const uint8_t faceByte) {
+    uint16_t buttons = 0;
+    if (dpadByte & 0x01) buttons |= XUSB_DPAD_UP;
+    if (dpadByte & 0x02) buttons |= XUSB_DPAD_DOWN;
+    if (dpadByte & 0x04) buttons |= XUSB_DPAD_LEFT;
+    if (dpadByte & 0x08) buttons |= XUSB_DPAD_RIGHT;
+    if (dpadByte & 0x10) buttons |= XUSB_START;
+    if (dpadByte & 0x20) buttons |= XUSB_BACK;
+    if (dpadByte & 0x40) buttons |= XUSB_THUMB_L;
+    if (dpadByte & 0x80) buttons |= XUSB_THUMB_R;
+    if (faceByte & 0x01) buttons |= XUSB_LB;
+    if (faceByte & 0x02) buttons |= XUSB_RB;
+    if (faceByte & 0x04) buttons |= XUSB_GUIDE;
+    if (faceByte & 0x10) buttons |= XUSB_A;
+    if (faceByte & 0x20) buttons |= XUSB_B;
+    if (faceByte & 0x40) buttons |= XUSB_X;
+    if (faceByte & 0x80) buttons |= XUSB_Y;
     return buttons;
 }
 
 // Xbox 360 wired interrupt-IN report. Fixed 20 bytes; byte 0 is report type (0x00 for input),
-// byte 1 is the length. Stick axes are little-endian int16, triggers are 8-bit unsigned.
+// byte 1 is the length. Triggers are 8-bit unsigned.
 bool decodeXInput360(const uint8_t* buf, size_t len, DeviceState& s) {
     if (len < 14) return false;
     if (buf[0] != 0x00) return false;
 
-    uint16_t b = 0;
-    if (buf[2] & 0x01) b |= XUSB_DPAD_UP;
-    if (buf[2] & 0x02) b |= XUSB_DPAD_DOWN;
-    if (buf[2] & 0x04) b |= XUSB_DPAD_LEFT;
-    if (buf[2] & 0x08) b |= XUSB_DPAD_RIGHT;
-    if (buf[2] & 0x10) b |= XUSB_START;
-    if (buf[2] & 0x20) b |= XUSB_BACK;
-    if (buf[2] & 0x40) b |= XUSB_THUMB_L;
-    if (buf[2] & 0x80) b |= XUSB_THUMB_R;
-    if (buf[3] & 0x01) b |= XUSB_LB;
-    if (buf[3] & 0x02) b |= XUSB_RB;
-    if (buf[3] & 0x04) b |= XUSB_GUIDE;
-    if (buf[3] & 0x10) b |= XUSB_A;
-    if (buf[3] & 0x20) b |= XUSB_B;
-    if (buf[3] & 0x40) b |= XUSB_X;
-    if (buf[3] & 0x80) b |= XUSB_Y;
-    s.wButtons = b;
-
+    s.wButtons = decodeXInput360Buttons(buf[2], buf[3]);
     s.bLT = buf[4];
     s.bRT = buf[5];
-
-    s.sLX = (int16_t)((uint16_t)buf[6] | ((uint16_t)buf[7] << 8));
-    s.sLY = (int16_t)((uint16_t)buf[8] | ((uint16_t)buf[9] << 8));
-    s.sRX = (int16_t)((uint16_t)buf[10] | ((uint16_t)buf[11] << 8));
-    s.sRY = (int16_t)((uint16_t)buf[12] | ((uint16_t)buf[13] << 8));
+    readSticksLe16(buf, 6, s);
     return true;
 }
 
-// Xbox One GIP input report 0x20. Triggers are 10-bit little-endian (0..1023); scaled to XUSB's
-// 0..255 below. Sticks are little-endian int16, same convention as XInput. The Guide button arrives
-// in a separate virtual-key report (0x07, state in byte 4); it is sticky and merged into the main
-// report via ParserState so a guide press survives the interleaved 0x20 frames.
-bool decodeXboxOneGip(const uint8_t* buf, size_t len, DeviceState& s, ParserState& st) {
-    if (len >= 5 && buf[0] == 0x07) {
-        st.xboxGuideHeld = (buf[4] & 0x03) != 0;
-        s = st.xboxLastMain;
-        if (st.xboxGuideHeld) {
-            s.wButtons |= XUSB_GUIDE;
-        } else {
-            s.wButtons = (uint16_t)(s.wButtons & ~XUSB_GUIDE);
-        }
-        return true;
+uint16_t decodeGipButtons(const uint8_t faceByte, const uint8_t dpadByte) {
+    uint16_t buttons = 0;
+    if (faceByte & 0x04) buttons |= XUSB_START;
+    if (faceByte & 0x08) buttons |= XUSB_BACK;
+    if (faceByte & 0x10) buttons |= XUSB_A;
+    if (faceByte & 0x20) buttons |= XUSB_B;
+    if (faceByte & 0x40) buttons |= XUSB_X;
+    if (faceByte & 0x80) buttons |= XUSB_Y;
+    if (dpadByte & 0x01) buttons |= XUSB_DPAD_UP;
+    if (dpadByte & 0x02) buttons |= XUSB_DPAD_DOWN;
+    if (dpadByte & 0x04) buttons |= XUSB_DPAD_LEFT;
+    if (dpadByte & 0x08) buttons |= XUSB_DPAD_RIGHT;
+    if (dpadByte & 0x10) buttons |= XUSB_LB;
+    if (dpadByte & 0x20) buttons |= XUSB_RB;
+    if (dpadByte & 0x40) buttons |= XUSB_THUMB_L;
+    if (dpadByte & 0x80) buttons |= XUSB_THUMB_R;
+    return buttons;
+}
+
+// GIP triggers are 10-bit little-endian (0..1023); XUSB carries them as 0..255.
+uint8_t gipTriggerToXusb(const uint8_t lo, const uint8_t hi) {
+    const uint16_t raw = (uint16_t)((uint16_t)lo | ((uint16_t)hi << 8));
+    const uint16_t clamped = raw > 1023 ? (uint16_t)1023 : raw;
+    return (uint8_t)((clamped * 255) / 1023);
+}
+
+// The Guide button arrives in its own virtual-key report (0x07, state in byte 4) rather than in a
+// main frame. It is sticky, so it is held in ParserState and replayed over the last main report,
+// which is all this frame can publish.
+bool applyXboxVirtualKey(const uint8_t* buf, DeviceState& s, ParserState& st) {
+    st.xboxGuideHeld = (buf[4] & 0x03) != 0;
+    s = st.xboxLastMain;
+    if (st.xboxGuideHeld) {
+        s.wButtons |= XUSB_GUIDE;
+    } else {
+        s.wButtons = (uint16_t)(s.wButtons & ~XUSB_GUIDE);
     }
+    return true;
+}
+
+// Xbox One GIP input report 0x20. Sticks are little-endian int16, same convention as XInput.
+bool decodeXboxOneGip(const uint8_t* buf, size_t len, DeviceState& s, ParserState& st) {
+    const bool isVirtualKey = len >= 5 && buf[0] == 0x07;
+    if (isVirtualKey) return applyXboxVirtualKey(buf, s, st);
     if (len < 18) return false;
     if (buf[0] != 0x20) return false;
 
-    uint16_t b = 0;
-    if (buf[4] & 0x04) b |= XUSB_START;
-    if (buf[4] & 0x08) b |= XUSB_BACK;
-    if (buf[4] & 0x10) b |= XUSB_A;
-    if (buf[4] & 0x20) b |= XUSB_B;
-    if (buf[4] & 0x40) b |= XUSB_X;
-    if (buf[4] & 0x80) b |= XUSB_Y;
-    if (buf[5] & 0x01) b |= XUSB_DPAD_UP;
-    if (buf[5] & 0x02) b |= XUSB_DPAD_DOWN;
-    if (buf[5] & 0x04) b |= XUSB_DPAD_LEFT;
-    if (buf[5] & 0x08) b |= XUSB_DPAD_RIGHT;
-    if (buf[5] & 0x10) b |= XUSB_LB;
-    if (buf[5] & 0x20) b |= XUSB_RB;
-    if (buf[5] & 0x40) b |= XUSB_THUMB_L;
-    if (buf[5] & 0x80) b |= XUSB_THUMB_R;
-    s.wButtons = b;
+    s.wButtons = decodeGipButtons(buf[4], buf[5]);
+    s.bLT = gipTriggerToXusb(buf[6], buf[7]);
+    s.bRT = gipTriggerToXusb(buf[8], buf[9]);
+    readSticksLe16(buf, 10, s);
 
-    uint16_t lt = (uint16_t)buf[6] | ((uint16_t)buf[7] << 8);
-    uint16_t rt = (uint16_t)buf[8] | ((uint16_t)buf[9] << 8);
-    if (lt > 1023) lt = 1023;
-    if (rt > 1023) rt = 1023;
-    s.bLT = (uint8_t)((lt * 255) / 1023);
-    s.bRT = (uint8_t)((rt * 255) / 1023);
-
-    s.sLX = (int16_t)((uint16_t)buf[10] | ((uint16_t)buf[11] << 8));
-    s.sLY = (int16_t)((uint16_t)buf[12] | ((uint16_t)buf[13] << 8));
-    s.sRX = (int16_t)((uint16_t)buf[14] | ((uint16_t)buf[15] << 8));
-    s.sRY = (int16_t)((uint16_t)buf[16] | ((uint16_t)buf[17] << 8));
-
+    // What is stored is the pad's own frame; the sticky Guide bit is merged only into what this
+    // call publishes, so a later virtual-key release has nothing to undo.
     st.xboxLastMain = s;
     if (st.xboxGuideHeld) s.wButtons |= XUSB_GUIDE;
     return true;
@@ -800,82 +789,140 @@ static uint8_t sonyTenthsToPercent(uint8_t tenths) {
     return (uint8_t)(pct > 100u ? 100u : pct);
 }
 
-bool decodeDualShock4(const uint8_t* buf, size_t len, DeviceState& s, const PsImuCalib* calib) {
-    if (len < 10) return false;
-    if (buf[0] != 0x01) return false;
+// The DS4 and the DualSense carry the same button bits; only the byte offsets move.
+uint16_t decodePsButtons(const uint8_t faceByte, const uint8_t shoulderByte) {
+    uint16_t buttons = 0;
+    if (faceByte & 0x10) buttons |= XUSB_X;
+    if (faceByte & 0x20) buttons |= XUSB_A;
+    if (faceByte & 0x40) buttons |= XUSB_B;
+    if (faceByte & 0x80) buttons |= XUSB_Y;
+    if (shoulderByte & 0x01) buttons |= XUSB_LB;
+    if (shoulderByte & 0x02) buttons |= XUSB_RB;
+    if (shoulderByte & 0x10) buttons |= XUSB_BACK;
+    if (shoulderByte & 0x20) buttons |= XUSB_START;
+    if (shoulderByte & 0x40) buttons |= XUSB_THUMB_L;
+    if (shoulderByte & 0x80) buttons |= XUSB_THUMB_R;
+    return setDpadFromHat(buttons, (uint8_t)(faceByte & 0x0F));
+}
 
+void decodePsSticks(const uint8_t* buf, DeviceState& s) {
     s.sLX = scaleU8Centered(buf[1], false);
     s.sLY = scaleU8Centered(buf[2], true);
     s.sRX = scaleU8Centered(buf[3], false);
     s.sRY = scaleU8Centered(buf[4], true);
+}
 
-    uint16_t b = 0;
-    if (buf[5] & 0x10) b |= XUSB_X;
-    if (buf[5] & 0x20) b |= XUSB_A;
-    if (buf[5] & 0x40) b |= XUSB_B;
-    if (buf[5] & 0x80) b |= XUSB_Y;
-    if (buf[6] & 0x01) b |= XUSB_LB;
-    if (buf[6] & 0x02) b |= XUSB_RB;
-    if (buf[6] & 0x10) b |= XUSB_BACK;
-    if (buf[6] & 0x20) b |= XUSB_START;
-    if (buf[6] & 0x40) b |= XUSB_THUMB_L;
-    if (buf[6] & 0x80) b |= XUSB_THUMB_R;
-    b = setDpadFromHat(b, buf[5] & 0x0F);
-    s.wButtons = b;
+// Both pads lay the IMU out as six int16 LE words, gyro then accel; only the base offsets move.
+void decodePsMotion(const uint8_t* buf, const int gyroBase, const int accelBase,
+                    const PsImuCalib& calib, DeviceState& s) {
+    s.gyroX = ds4GyroAxisToWire(rdLe16(buf, gyroBase), calib, 0);
+    s.gyroY = ds4GyroAxisToWire(rdLe16(buf, gyroBase + 2), calib, 1);
+    s.gyroZ = ds4GyroAxisToWire(rdLe16(buf, gyroBase + 4), calib, 2);
+    s.accelX = ds4AccelAxisToWire(rdLe16(buf, accelBase), calib, 0);
+    s.accelY = ds4AccelAxisToWire(rdLe16(buf, accelBase + 2), calib, 1);
+    s.accelZ = ds4AccelAxisToWire(rdLe16(buf, accelBase + 4), calib, 2);
+    s.motionValid = true;
+}
 
+void setBattery(DeviceState& s, const uint8_t level, const uint8_t status) {
+    s.batteryLevel = level;
+    s.batteryStatus = status;
+}
+
+void setBatteryUnknown(DeviceState& s) {
+    setBattery(s, PAD_BATTERY_LEVEL_UNKNOWN, PAD_BATTERY_STATUS_UNKNOWN);
+}
+
+// hid-playstation's status[0]: low nibble the charge in tenths, 0x10 the cable. With the cable in,
+// 10 is still charging, 11 is full, and 12..15 are the firmware's error states.
+void decodeDs4Battery(const uint8_t status, DeviceState& s) {
+    const uint8_t tenths = (uint8_t)(status & 0x0F);
+    const bool cableIn = (status & 0x10) != 0;
+    s.batteryValid = true;
+    if (!cableIn) return setBattery(s, sonyTenthsToPercent(tenths), PAD_BATTERY_STATUS_DISCHARGING);
+
+    const bool stillCharging = tenths <= 10;
+    if (stillCharging)
+        return setBattery(s, sonyTenthsToPercent(tenths), PAD_BATTERY_STATUS_CHARGING);
+
+    const bool full = tenths == 11;
+    if (full) return setBattery(s, 100, PAD_BATTERY_STATUS_FULL);
+    setBatteryUnknown(s);
+}
+
+// hid-playstation's status: low nibble the charge in tenths, high nibble the state. 0xA/0xB are a
+// temperature or voltage fault and 0xF a charging fault; a fault has no charge worth showing.
+void decodeDualSenseBattery(const uint8_t status, DeviceState& s) {
+    const uint8_t tenths = (uint8_t)(status & 0x0F);
+    const uint8_t state = (uint8_t)(status >> 4);
+    s.batteryValid = true;
+    switch (state) {
+    case 0x0:
+        return setBattery(s, sonyTenthsToPercent(tenths), PAD_BATTERY_STATUS_DISCHARGING);
+    case 0x1:
+        return setBattery(s, sonyTenthsToPercent(tenths), PAD_BATTERY_STATUS_CHARGING);
+    case 0x2:
+        return setBattery(s, 100, PAD_BATTERY_STATUS_FULL);
+    default:
+        return setBatteryUnknown(s);
+    }
+}
+
+// The press is an edge, the wire bit is a state: flip the latch on the way down only, so holding
+// the button does not chatter the mute on and off at report rate.
+void applyMicMuteLatch(const uint8_t buttonByte, ParserState& sticks, uint16_t& buttons) {
+    const bool muteDown = (buttonByte & 0x04) != 0;
+    const bool isAFreshPress = muteDown && !sticks.micMuteHeld;
+    if (isAFreshPress) sticks.micMuted = !sticks.micMuted;
+    sticks.micMuteHeld = muteDown;
+    if (sticks.micMuted) buttons |= WBUTTON_MIC_MUTE;
+}
+
+// [33] is the bundled 9-byte frame count (timestamp plus two points); only the newest frame
+// matters, since the wire stream supersedes per send. Zero frames means "no touch update", not
+// "all lifted", so touchValid stays false and the last sent state persists.
+void decodeDs4Touch(const uint8_t* buf, const size_t len, DeviceState& s) {
+    if (len < 43 || buf[33] == 0) return;
+    const uint8_t frames = buf[33] > 3 ? 3 : buf[33];
+    const size_t base = 34 + 9u * (size_t)(frames - 1);
+    if (len < base + 9) return;
+    decodePsTouchPoint(buf + base + 1, kDs4TouchMaxX, kDs4TouchMaxY, s.touch0Active, s.touch0Id,
+                       s.touch0X, s.touch0Y);
+    decodePsTouchPoint(buf + base + 5, kDs4TouchMaxX, kDs4TouchMaxY, s.touch1Active, s.touch1Id,
+                       s.touch1X, s.touch1Y);
+    s.touchClick = (buf[7] & 0x02) != 0;
+    s.touchValid = true;
+}
+
+bool decodeDualShock4(const uint8_t* buf, size_t len, DeviceState& s, const PsImuCalib* calib) {
+    if (len < 10) return false;
+    if (buf[0] != 0x01) return false;
+
+    decodePsSticks(buf, s);
+    s.wButtons = decodePsButtons(buf[5], buf[6]);
     s.bLT = buf[8];
     s.bRT = buf[9];
 
     // gyro pitch/yaw/roll at 13/15/17, accel x/y/z at 19/21/23 (int16 LE). Axis signs are an
     // unflipped straight map, still unverified on hardware like the Switch IMU.
-    if (calib != nullptr && calib->valid && len >= 25) {
-        s.gyroX = ds4GyroAxisToWire(rdLe16(buf, 13), *calib, 0);
-        s.gyroY = ds4GyroAxisToWire(rdLe16(buf, 15), *calib, 1);
-        s.gyroZ = ds4GyroAxisToWire(rdLe16(buf, 17), *calib, 2);
-        s.accelX = ds4AccelAxisToWire(rdLe16(buf, 19), *calib, 0);
-        s.accelY = ds4AccelAxisToWire(rdLe16(buf, 21), *calib, 1);
-        s.accelZ = ds4AccelAxisToWire(rdLe16(buf, 23), *calib, 2);
-        s.motionValid = true;
-    }
+    const bool hasMotion = calib != nullptr && calib->valid && len >= 25;
+    if (hasMotion) decodePsMotion(buf, 13, 19, *calib, s);
 
-    // Touch: [33] = bundled 9-byte frame count (timestamp + two points); only the newest frame
-    // matters since the wire stream supersedes per send. Zero frames means "no touch update",
-    // not "all lifted", so touchValid stays false and the last sent state persists.
-    if (len >= 43 && buf[33] > 0) {
-        uint8_t frames = buf[33] > 3 ? 3 : buf[33];
-        size_t base = 34 + 9u * (size_t)(frames - 1);
-        if (len >= base + 9) {
-            decodePsTouchPoint(buf + base + 1, kDs4TouchMaxX, kDs4TouchMaxY, s.touch0Active,
-                               s.touch0Id, s.touch0X, s.touch0Y);
-            decodePsTouchPoint(buf + base + 5, kDs4TouchMaxX, kDs4TouchMaxY, s.touch1Active,
-                               s.touch1Id, s.touch1X, s.touch1Y);
-            s.touchClick = (buf[7] & 0x02) != 0;
-            s.touchValid = true;
-        }
-    }
-
-    // Battery at buf[30] (hid-playstation's status[0]): the low nibble is the charge in tenths,
-    // bit 0x10 the cable. With the cable in, 10 is still charging, 11 is full, and 12..15 are the
-    // firmware's error states.
-    if (len >= 31) {
-        const uint8_t tenths = (uint8_t)(buf[30] & 0x0F);
-        const bool cable = (buf[30] & 0x10) != 0;
-        s.batteryValid = true;
-        if (!cable) {
-            s.batteryLevel = sonyTenthsToPercent(tenths);
-            s.batteryStatus = PAD_BATTERY_STATUS_DISCHARGING;
-        } else if (tenths <= 10) {
-            s.batteryLevel = sonyTenthsToPercent(tenths);
-            s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
-        } else if (tenths == 11) {
-            s.batteryLevel = 100;
-            s.batteryStatus = PAD_BATTERY_STATUS_FULL;
-        } else {
-            s.batteryLevel = PAD_BATTERY_LEVEL_UNKNOWN;
-            s.batteryStatus = PAD_BATTERY_STATUS_UNKNOWN;
-        }
-    }
+    decodeDs4Touch(buf, len, s);
+    if (len >= 31) decodeDs4Battery(buf[30], s);
     return true;
+}
+
+// Two 4-byte points at 33/37 in every report (no DS4-style frame bundling); the click rides
+// button byte 10 bit 1. A taller surface than the DS4, hence its own Y maximum.
+void decodeDualSenseTouch(const uint8_t* buf, const size_t len, DeviceState& s) {
+    if (len < 41) return;
+    decodePsTouchPoint(buf + 33, kDualSenseTouchMaxX, kDualSenseTouchMaxY, s.touch0Active,
+                       s.touch0Id, s.touch0X, s.touch0Y);
+    decodePsTouchPoint(buf + 37, kDualSenseTouchMaxX, kDualSenseTouchMaxY, s.touch1Active,
+                       s.touch1Id, s.touch1X, s.touch1Y);
+    s.touchClick = (buf[10] & 0x02) != 0;
+    s.touchValid = true;
 }
 
 // DualSense USB report 0x01. Same axis conventions as DS4 but the byte layout shifts: triggers
@@ -889,85 +936,21 @@ bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s, ParserState
     if (buf[0] != 0x01) return false;
     const PsImuCalib* calib = sticks != nullptr ? &sticks->psImu : nullptr;
 
-    s.sLX = scaleU8Centered(buf[1], false);
-    s.sLY = scaleU8Centered(buf[2], true);
-    s.sRX = scaleU8Centered(buf[3], false);
-    s.sRY = scaleU8Centered(buf[4], true);
-
+    decodePsSticks(buf, s);
     s.bLT = buf[5];
     s.bRT = buf[6];
 
-    uint16_t b = 0;
-    if (buf[8] & 0x10) b |= XUSB_X;
-    if (buf[8] & 0x20) b |= XUSB_A;
-    if (buf[8] & 0x40) b |= XUSB_B;
-    if (buf[8] & 0x80) b |= XUSB_Y;
-    if (buf[9] & 0x01) b |= XUSB_LB;
-    if (buf[9] & 0x02) b |= XUSB_RB;
-    if (buf[9] & 0x10) b |= XUSB_BACK;
-    if (buf[9] & 0x20) b |= XUSB_START;
-    if (buf[9] & 0x40) b |= XUSB_THUMB_L;
-    if (buf[9] & 0x80) b |= XUSB_THUMB_R;
-    b = setDpadFromHat(b, buf[8] & 0x0F);
-    // Mic-mute lives beside the touchpad click in button byte 10 (0x04 next to 0x02). The press
-    // is an edge, the wire bit is a state: flip the latch on the way down only, so holding the
-    // button does not chatter the mute on and off at report rate.
-    if (sticks != nullptr) {
-        const bool muteDown = (buf[10] & 0x04) != 0;
-        if (muteDown && !sticks->micMuteHeld) sticks->micMuted = !sticks->micMuted;
-        sticks->micMuteHeld = muteDown;
-        if (sticks->micMuted) b |= WBUTTON_MIC_MUTE;
-    }
-    s.wButtons = b;
+    uint16_t buttons = decodePsButtons(buf[8], buf[9]);
+    // Mic-mute lives beside the touchpad click in button byte 10 (0x04 next to 0x02).
+    if (sticks != nullptr) applyMicMuteLatch(buf[10], *sticks, buttons);
+    s.wButtons = buttons;
 
     // gyro at 16/18/20, accel at 22/24/26 (int16 LE); same calibration as DS4, signs unverified.
-    if (calib != nullptr && calib->valid && len >= 28) {
-        s.gyroX = ds4GyroAxisToWire(rdLe16(buf, 16), *calib, 0);
-        s.gyroY = ds4GyroAxisToWire(rdLe16(buf, 18), *calib, 1);
-        s.gyroZ = ds4GyroAxisToWire(rdLe16(buf, 20), *calib, 2);
-        s.accelX = ds4AccelAxisToWire(rdLe16(buf, 22), *calib, 0);
-        s.accelY = ds4AccelAxisToWire(rdLe16(buf, 24), *calib, 1);
-        s.accelZ = ds4AccelAxisToWire(rdLe16(buf, 26), *calib, 2);
-        s.motionValid = true;
-    }
+    const bool hasMotion = calib != nullptr && calib->valid && len >= 28;
+    if (hasMotion) decodePsMotion(buf, 16, 22, *calib, s);
 
-    // Touch: two 4-byte points at 33/37 in every report (no DS4-style frame bundling); the
-    // click rides button byte 10 bit 1. Taller surface than the DS4, hence its own Y max.
-    if (len >= 41) {
-        decodePsTouchPoint(buf + 33, kDualSenseTouchMaxX, kDualSenseTouchMaxY, s.touch0Active,
-                           s.touch0Id, s.touch0X, s.touch0Y);
-        decodePsTouchPoint(buf + 37, kDualSenseTouchMaxX, kDualSenseTouchMaxY, s.touch1Active,
-                           s.touch1Id, s.touch1X, s.touch1Y);
-        s.touchClick = (buf[10] & 0x02) != 0;
-        s.touchValid = true;
-    }
-
-    // Battery at buf[53] (hid-playstation's status): the low nibble is the charge in tenths, the
-    // high nibble the state: 0 discharging, 1 charging, 2 full, 0xA/0xB a temperature or voltage
-    // fault, 0xF a charging fault. A fault has no charge worth showing.
-    if (len >= 54) {
-        const uint8_t tenths = (uint8_t)(buf[53] & 0x0F);
-        const uint8_t state = (uint8_t)(buf[53] >> 4);
-        s.batteryValid = true;
-        switch (state) {
-        case 0x0:
-            s.batteryLevel = sonyTenthsToPercent(tenths);
-            s.batteryStatus = PAD_BATTERY_STATUS_DISCHARGING;
-            break;
-        case 0x1:
-            s.batteryLevel = sonyTenthsToPercent(tenths);
-            s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
-            break;
-        case 0x2:
-            s.batteryLevel = 100;
-            s.batteryStatus = PAD_BATTERY_STATUS_FULL;
-            break;
-        default:
-            s.batteryLevel = PAD_BATTERY_LEVEL_UNKNOWN;
-            s.batteryStatus = PAD_BATTERY_STATUS_UNKNOWN;
-            break;
-        }
-    }
+    decodeDualSenseTouch(buf, len, s);
+    if (len >= 54) decodeDualSenseBattery(buf[53], s);
     return true;
 }
 
@@ -976,96 +959,134 @@ bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s, ParserState
 // position rather than label, the same convention used for DualShock 4: Switch A (right face) →
 // XUSB_B (right face), Switch B (bottom) → XUSB_A (bottom), Switch X (top) → XUSB_Y, Switch Y
 // (left) → XUSB_X. This is what PC games and ViGEm expect.
-bool decodeSwitchProUsb(const uint8_t* buf, size_t len, DeviceState& s, ParserState& sticks) {
-    if (len < 12) return false;
-    if (buf[0] != 0x30) return false;
+uint16_t decodeSwitchProButtons(const uint8_t right, const uint8_t shared, const uint8_t left) {
+    uint16_t buttons = 0;
+    if (right & 0x01) buttons |= XUSB_X;
+    if (right & 0x02) buttons |= XUSB_Y;
+    if (right & 0x04) buttons |= XUSB_A;
+    if (right & 0x08) buttons |= XUSB_B;
+    if (right & 0x40) buttons |= XUSB_RB;
+    if (shared & 0x01) buttons |= XUSB_BACK;
+    if (shared & 0x02) buttons |= XUSB_START;
+    if (shared & 0x04) buttons |= XUSB_THUMB_R;
+    if (shared & 0x08) buttons |= XUSB_THUMB_L;
+    if (left & 0x01) buttons |= XUSB_DPAD_DOWN;
+    if (left & 0x02) buttons |= XUSB_DPAD_UP;
+    if (left & 0x04) buttons |= XUSB_DPAD_RIGHT;
+    if (left & 0x08) buttons |= XUSB_DPAD_LEFT;
+    if (left & 0x40) buttons |= XUSB_LB;
+    return buttons;
+}
 
-    const uint8_t br = buf[3];
-    const uint8_t bs = buf[4];
-    const uint8_t bl = buf[5];
-
-    uint16_t b = 0;
-    if (br & 0x01) b |= XUSB_X;
-    if (br & 0x02) b |= XUSB_Y;
-    if (br & 0x04) b |= XUSB_A;
-    if (br & 0x08) b |= XUSB_B;
-    if (br & 0x40) b |= XUSB_RB;
-    if (bs & 0x01) b |= XUSB_BACK;
-    if (bs & 0x02) b |= XUSB_START;
-    if (bs & 0x04) b |= XUSB_THUMB_R;
-    if (bs & 0x08) b |= XUSB_THUMB_L;
-    if (bl & 0x01) b |= XUSB_DPAD_DOWN;
-    if (bl & 0x02) b |= XUSB_DPAD_UP;
-    if (bl & 0x04) b |= XUSB_DPAD_RIGHT;
-    if (bl & 0x08) b |= XUSB_DPAD_LEFT;
-    if (bl & 0x40) b |= XUSB_LB;
-    s.wButtons = b;
-
-    // ZL/ZR are digital on the Pro, so triggers are either fully pressed or released.
-    s.bLT = (bl & 0x80) ? 255 : 0;
-    s.bRT = (br & 0x80) ? 255 : 0;
-
+// Sticks are packed 12-bit values, two per three bytes.
+void decodeSwitchProSticks(const uint8_t* buf, ParserState& sticks, DeviceState& s) {
     const uint16_t lx = (uint16_t)buf[6] | (((uint16_t)buf[7] & 0x0F) << 8);
     const uint16_t ly = ((uint16_t)buf[7] >> 4) | ((uint16_t)buf[8] << 4);
     const uint16_t rx = (uint16_t)buf[9] | (((uint16_t)buf[10] & 0x0F) << 8);
     const uint16_t ry = ((uint16_t)buf[10] >> 4) | ((uint16_t)buf[11] << 4);
-
     s.sLX = scaleSwitchStickAuto(lx, sticks.lx);
     s.sLY = scaleSwitchStickAuto(ly, sticks.ly);
     s.sRX = scaleSwitchStickAuto(rx, sticks.rx);
     s.sRY = scaleSwitchStickAuto(ry, sticks.ry);
+}
 
-    // Battery in buf[2] (hid-nintendo's bat_con): bits 7..5 the charge in five steps (empty,
-    // critical, low, medium, full), bit 4 charging, bit 0 host-powered. The percent is the step's
-    // midpoint, the same coarse number the framework shows for this pad.
-    {
-        static constexpr uint8_t kStepPercent[] = {5, 25, 50, 75, 100};
-        const uint8_t step = (uint8_t)(buf[2] >> 5);
-        const bool charging = (buf[2] & 0x10) != 0;
-        const bool hostPowered = (buf[2] & 0x01) != 0;
-        s.batteryValid = true;
-        s.batteryLevel = step <= 4 ? kStepPercent[step] : PAD_BATTERY_LEVEL_UNKNOWN;
-        if (charging) {
-            s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
-        } else if (hostPowered && step == 4) {
-            s.batteryStatus = PAD_BATTERY_STATUS_FULL;
-        } else {
-            s.batteryStatus = PAD_BATTERY_STATUS_DISCHARGING;
-        }
+// hid-nintendo's bat_con: bits 7..5 the charge in five steps (empty, critical, low, medium,
+// full), bit 4 charging, bit 0 host-powered. The percent is the step's midpoint, the same coarse
+// number the framework shows for this pad.
+void decodeSwitchProBattery(const uint8_t batCon, DeviceState& s) {
+    static constexpr uint8_t kStepPercent[] = {5, 25, 50, 75, 100};
+    const uint8_t step = (uint8_t)(batCon >> 5);
+    const bool charging = (batCon & 0x10) != 0;
+    const bool hostPowered = (batCon & 0x01) != 0;
+    const bool stepIsKnown = step <= 4;
+    s.batteryValid = true;
+    s.batteryLevel = stepIsKnown ? kStepPercent[step] : PAD_BATTERY_LEVEL_UNKNOWN;
+    if (charging) {
+        s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
+        return;
     }
+    const bool toppedOffOnTheCable = hostPowered && step == 4;
+    s.batteryStatus =
+        toppedOffOnTheCable ? PAD_BATTERY_STATUS_FULL : PAD_BATTERY_STATUS_DISCHARGING;
+}
 
-    // Average the bundled IMU subframes (the pad packs up to three ~5ms samples per report; one
-    // 12-byte frame = accel int16 LE x3 then gyro x3, first at byte 13), then rotate the Switch IMU
-    // frame onto the DS4 wire convention (wire gyro X=pitch, Y=yaw, Z=roll); the pad reports those
-    // on raw gyro Y/Z/X. Pitch and roll are negated to match the DS4 sign convention. Hardware
-    // testing confirmed pitch and yaw; roll's sign and the accel signs are unverified.
-    size_t imuFrames = len >= 13 ? (len - 13) / 12 : 0;
-    if (imuFrames > 3) imuFrames = 3;
-    if (imuFrames > 0) {
-        int32_t ax = 0, ay = 0, az = 0, gx = 0, gy = 0, gz = 0;
-        for (size_t f = 0; f < imuFrames; f++) {
-            int off = 13 + 12 * (int)f;
-            ax += rdLe16(buf, off);
-            ay += rdLe16(buf, off + 2);
-            az += rdLe16(buf, off + 4);
-            gx += rdLe16(buf, off + 6);
-            gy += rdLe16(buf, off + 8);
-            gz += rdLe16(buf, off + 10);
-        }
-        int32_t n = (int32_t)imuFrames;
-        int32_t pitchAvg = -(gy / n);
-        int32_t rollAvg = -(gx / n);
-        if (pitchAvg > 32767) pitchAvg = 32767;
-        if (rollAvg > 32767) rollAvg = 32767;
-        s.gyroX = switchGyroToWire((int16_t)pitchAvg);
-        s.gyroY = switchGyroToWire((int16_t)(gz / n));
-        s.gyroZ = switchGyroToWire((int16_t)rollAvg);
-        s.accelX = switchAccelToWire((int16_t)(ay / n));
-        s.accelY = switchAccelToWire((int16_t)(az / n));
-        s.accelZ = switchAccelToWire((int16_t)(ax / n));
-        s.motionValid = true;
+struct SwitchImuSum {
+    int32_t ax, ay, az, gx, gy, gz;
+    int32_t frames;
+};
+
+// The pad packs up to three ~5ms samples per report; one 12-byte frame is accel int16 LE x3 then
+// gyro x3, the first at byte 13.
+SwitchImuSum sumSwitchImuFrames(const uint8_t* buf, const size_t len) {
+    SwitchImuSum sum = {0, 0, 0, 0, 0, 0, 0};
+    const size_t available = len >= 13 ? (len - 13) / 12 : 0;
+    const size_t frames = available > 3 ? 3 : available;
+    for (size_t f = 0; f < frames; f++) {
+        const int off = 13 + 12 * (int)f;
+        sum.ax += rdLe16(buf, off);
+        sum.ay += rdLe16(buf, off + 2);
+        sum.az += rdLe16(buf, off + 4);
+        sum.gx += rdLe16(buf, off + 6);
+        sum.gy += rdLe16(buf, off + 8);
+        sum.gz += rdLe16(buf, off + 10);
     }
+    sum.frames = (int32_t)frames;
+    return sum;
+}
+
+int16_t clampToInt16(const int32_t v) { return v > 32767 ? (int16_t)32767 : (int16_t)v; }
+
+// Rotate the Switch IMU frame onto the DS4 wire convention (wire gyro X=pitch, Y=yaw, Z=roll); the
+// pad reports those on raw gyro Y/Z/X. Pitch and roll are negated to match the DS4 sign
+// convention. Hardware testing confirmed pitch and yaw; roll's sign and the accel signs are
+// unverified.
+void applySwitchProMotion(const SwitchImuSum& sum, DeviceState& s) {
+    const int32_t n = sum.frames;
+    s.gyroX = switchGyroToWire(clampToInt16(-(sum.gy / n)));
+    s.gyroY = switchGyroToWire((int16_t)(sum.gz / n));
+    s.gyroZ = switchGyroToWire(clampToInt16(-(sum.gx / n)));
+    s.accelX = switchAccelToWire((int16_t)(sum.ay / n));
+    s.accelY = switchAccelToWire((int16_t)(sum.az / n));
+    s.accelZ = switchAccelToWire((int16_t)(sum.ax / n));
+    s.motionValid = true;
+}
+
+bool decodeSwitchProUsb(const uint8_t* buf, size_t len, DeviceState& s, ParserState& sticks) {
+    if (len < 12) return false;
+    if (buf[0] != 0x30) return false;
+
+    const uint8_t rightByte = buf[3];
+    const uint8_t sharedByte = buf[4];
+    const uint8_t leftByte = buf[5];
+
+    s.wButtons = decodeSwitchProButtons(rightByte, sharedByte, leftByte);
+
+    // ZL/ZR are digital on the Pro, so triggers are either fully pressed or released.
+    s.bLT = (leftByte & 0x80) ? 255 : 0;
+    s.bRT = (rightByte & 0x80) ? 255 : 0;
+
+    decodeSwitchProSticks(buf, sticks, s);
+    decodeSwitchProBattery(buf[2], s);
+
+    const SwitchImuSum imu = sumSwitchImuFrames(buf, len);
+    const bool hasMotion = imu.frames > 0;
+    if (hasMotion) applySwitchProMotion(imu, s);
     return true;
+}
+
+uint16_t decodeStadiaButtons(const uint8_t faceByte, const uint8_t systemByte, const uint8_t hat) {
+    uint16_t buttons = 0;
+    if (faceByte & 0x40) buttons |= XUSB_A;
+    if (faceByte & 0x20) buttons |= XUSB_B;
+    if (faceByte & 0x10) buttons |= XUSB_X;
+    if (faceByte & 0x08) buttons |= XUSB_Y;
+    if (faceByte & 0x04) buttons |= XUSB_LB;
+    if (faceByte & 0x02) buttons |= XUSB_RB;
+    if (systemByte & 0x80) buttons |= XUSB_START;
+    if (systemByte & 0x40) buttons |= XUSB_BACK;
+    if (systemByte & 0x20) buttons |= XUSB_THUMB_L;
+    if (systemByte & 0x10) buttons |= XUSB_THUMB_R;
+    return setDpadFromHat(buttons, (uint8_t)(hat & 0x0F));
 }
 
 bool decodeStadia(const uint8_t* buf, size_t len, DeviceState& s) {
@@ -1077,19 +1098,7 @@ bool decodeStadia(const uint8_t* buf, size_t len, DeviceState& s) {
     s.sRY = scaleU8Centered(buf[4], true);
     s.bLT = buf[5];
     s.bRT = buf[6];
-    uint16_t b = 0;
-    if (buf[8] & 0x40) b |= XUSB_A;
-    if (buf[8] & 0x20) b |= XUSB_B;
-    if (buf[8] & 0x10) b |= XUSB_X;
-    if (buf[8] & 0x08) b |= XUSB_Y;
-    if (buf[8] & 0x04) b |= XUSB_LB;
-    if (buf[8] & 0x02) b |= XUSB_RB;
-    if (buf[9] & 0x80) b |= XUSB_START;
-    if (buf[9] & 0x40) b |= XUSB_BACK;
-    if (buf[9] & 0x20) b |= XUSB_THUMB_L;
-    if (buf[9] & 0x10) b |= XUSB_THUMB_R;
-    b = setDpadFromHat(b, buf[7] & 0x0F);
-    s.wButtons = b;
+    s.wButtons = decodeStadiaButtons(buf[8], buf[9], buf[7]);
     return true;
 }
 
@@ -1150,57 +1159,55 @@ int16_t steamGyroToWire(int32_t raw) { return steamClampI16((int64_t)raw * 32767
 
 int16_t steamAccelToWire(int32_t raw) { return steamClampI16((int64_t)raw * 32767 / 65536); }
 
-bool decodeSteamController(const uint8_t* buf, size_t len, DeviceState& s, ParserState& st) {
-    if (len < kSteamStateLen) return false;
-    if (buf[0] != 0x01 || buf[1] != 0x00) return false;
-    if (buf[2] != kSteamStateType) return false;
+uint16_t decodeSteamButtons(const uint32_t btn) {
+    uint16_t buttons = 0;
+    if (btn & kSteamSouth) buttons |= XUSB_A;
+    if (btn & kSteamEast) buttons |= XUSB_B;
+    if (btn & kSteamWest) buttons |= XUSB_X;
+    if (btn & kSteamNorth) buttons |= XUSB_Y;
+    if (btn & kSteamLeftBumper) buttons |= XUSB_LB;
+    if (btn & kSteamRightBumper) buttons |= XUSB_RB;
+    if (btn & kSteamMenu) buttons |= XUSB_BACK;
+    if (btn & kSteamEscape) buttons |= XUSB_START;
+    if (btn & kSteamGuide) buttons |= XUSB_GUIDE;
+    if (btn & kSteamDpadUp) buttons |= XUSB_DPAD_UP;
+    if (btn & kSteamDpadDown) buttons |= XUSB_DPAD_DOWN;
+    if (btn & kSteamDpadLeft) buttons |= XUSB_DPAD_LEFT;
+    if (btn & kSteamDpadRight) buttons |= XUSB_DPAD_RIGHT;
+    if (btn & kSteamRightPadClicked) buttons |= XUSB_THUMB_R;
+    return buttons;
+}
 
-    const uint32_t btn = (uint32_t)buf[8] | ((uint32_t)buf[9] << 8) | ((uint32_t)buf[10] << 16);
-
-    uint16_t b = 0;
-    if (btn & kSteamSouth) b |= XUSB_A;
-    if (btn & kSteamEast) b |= XUSB_B;
-    if (btn & kSteamWest) b |= XUSB_X;
-    if (btn & kSteamNorth) b |= XUSB_Y;
-    if (btn & kSteamLeftBumper) b |= XUSB_LB;
-    if (btn & kSteamRightBumper) b |= XUSB_RB;
-    if (btn & kSteamMenu) b |= XUSB_BACK;
-    if (btn & kSteamEscape) b |= XUSB_START;
-    if (btn & kSteamGuide) b |= XUSB_GUIDE;
-    if (btn & kSteamDpadUp) b |= XUSB_DPAD_UP;
-    if (btn & kSteamDpadDown) b |= XUSB_DPAD_DOWN;
-    if (btn & kSteamDpadLeft) b |= XUSB_DPAD_LEFT;
-    if (btn & kSteamDpadRight) b |= XUSB_DPAD_RIGHT;
-    if (btn & kSteamRightPadClicked) b |= XUSB_THUMB_R;
-
-    s.bLT = steamTriggerToWire(buf[11]);
-    s.bRT = steamTriggerToWire(buf[12]);
-
-    // One pair of axes carries either the stick or the left pad. The finger-down bit says which;
-    // the interleave bit means pad frames alternate with stick frames worth holding on to.
+// One pair of axes carries either the stick or the left pad. The finger-down bit says which; the
+// interleave bit means pad frames alternate with stick frames worth holding on to.
+void trackSteamLeftStick(const uint8_t* buf, const uint32_t btn, ParserState& st,
+                         uint16_t& buttons) {
     const bool padOnLeft = (btn & kSteamLeftPadFinger) != 0;
     const bool interleaved = (btn & kSteamLeftPadAndStick) != 0;
     if (!padOnLeft) {
         st.steamStickX = rdLe16(buf, 16);
         st.steamStickY = rdLe16(buf, 18);
         // With no live pad the firmware reports a stick click as a left-pad click.
-        if (!interleaved && (btn & kSteamLeftPadClicked)) b |= XUSB_THUMB_L;
+        const bool clickIsTheStick = !interleaved && (btn & kSteamLeftPadClicked) != 0;
+        if (clickIsTheStick) buttons |= XUSB_THUMB_L;
     } else if (!interleaved) {
         st.steamStickX = 0;
         st.steamStickY = 0;
     }
-    if (btn & kSteamStickButton) b |= XUSB_THUMB_L;
-    s.wButtons = b;
-    s.sLX = st.steamStickX;
-    s.sLY = st.steamStickY;
+    if (btn & kSteamStickButton) buttons |= XUSB_THUMB_L;
+}
 
-    if (btn & kSteamRightPadFinger) {
-        steamRotatePad(rdLe16(buf, 20), rdLe16(buf, 22), s.sRX, s.sRY);
-    } else {
+void decodeSteamRightPad(const uint8_t* buf, const uint32_t btn, DeviceState& s) {
+    const bool fingerDown = (btn & kSteamRightPadFinger) != 0;
+    if (!fingerDown) {
         s.sRX = 0;
         s.sRY = 0;
+        return;
     }
+    steamRotatePad(rdLe16(buf, 20), rdLe16(buf, 22), s.sRX, s.sRY);
+}
 
+void decodeSteamMotion(const uint8_t* buf, DeviceState& s) {
     const int16_t ax = rdLe16(buf, 28);
     const int16_t ay = rdLe16(buf, 30);
     const int16_t az = rdLe16(buf, 32);
@@ -1208,15 +1215,36 @@ bool decodeSteamController(const uint8_t* buf, size_t len, DeviceState& s, Parse
     const int16_t gy = rdLe16(buf, 36);
     const int16_t gz = rdLe16(buf, 38);
     // An all-zero block means the IMU setting never took; publishing it would stream a dead sensor.
-    if ((ax | ay | az | gx | gy | gz) != 0) {
-        s.gyroX = steamGyroToWire(gx);
-        s.gyroY = steamGyroToWire(gz);
-        s.gyroZ = steamGyroToWire(gy);
-        s.accelX = steamAccelToWire(ax);
-        s.accelY = steamAccelToWire(az);
-        s.accelZ = steamAccelToWire(-(int32_t)ay);
-        s.motionValid = true;
-    }
+    const bool imuIsAlive = (ax | ay | az | gx | gy | gz) != 0;
+    if (!imuIsAlive) return;
+
+    s.gyroX = steamGyroToWire(gx);
+    s.gyroY = steamGyroToWire(gz);
+    s.gyroZ = steamGyroToWire(gy);
+    s.accelX = steamAccelToWire(ax);
+    s.accelY = steamAccelToWire(az);
+    s.accelZ = steamAccelToWire(-(int32_t)ay);
+    s.motionValid = true;
+}
+
+bool decodeSteamController(const uint8_t* buf, size_t len, DeviceState& s, ParserState& st) {
+    if (len < kSteamStateLen) return false;
+    if (buf[0] != 0x01 || buf[1] != 0x00) return false;
+    if (buf[2] != kSteamStateType) return false;
+
+    const uint32_t btn = (uint32_t)buf[8] | ((uint32_t)buf[9] << 8) | ((uint32_t)buf[10] << 16);
+
+    uint16_t buttons = decodeSteamButtons(btn);
+    s.bLT = steamTriggerToWire(buf[11]);
+    s.bRT = steamTriggerToWire(buf[12]);
+
+    trackSteamLeftStick(buf, btn, st, buttons);
+    s.wButtons = buttons;
+    s.sLX = st.steamStickX;
+    s.sLY = st.steamStickY;
+
+    decodeSteamRightPad(buf, btn, s);
+    decodeSteamMotion(buf, s);
     return true;
 }
 
@@ -1249,32 +1277,47 @@ void switchEncodeMotor(uint8_t* out, uint16_t magnitude) {
     out[3] = (uint8_t)(code->low & 0xFF);
 }
 
-} // namespace
-
-bool parsePsCalibration(const uint8_t* buf, size_t len, PsImuCalib& out) {
-    out = PsImuCalib{};
-    if (len < 35) return false; // gyro/accel calibration occupies bytes 1..34
-    int32_t gyroBias[3] = {rdLe16(buf, 1), rdLe16(buf, 3), rdLe16(buf, 5)};
-    int32_t gyroPlus[3] = {rdLe16(buf, 7), rdLe16(buf, 11), rdLe16(buf, 15)};
-    int32_t gyroMinus[3] = {rdLe16(buf, 9), rdLe16(buf, 13), rdLe16(buf, 17)};
-    int32_t speed2x = rdLe16(buf, 19) + rdLe16(buf, 21);
+// Gyro calibration occupies bytes 1..21: a per-axis bias, the readings at the two rotation
+// extremes, and the two speed words whose sum is the scale. A zero span means the pad never
+// answered with usable calibration.
+bool parsePsGyroCalibration(const uint8_t* buf, PsImuCalib& out) {
+    const int32_t gyroBias[3] = {rdLe16(buf, 1), rdLe16(buf, 3), rdLe16(buf, 5)};
+    const int32_t gyroPlus[3] = {rdLe16(buf, 7), rdLe16(buf, 11), rdLe16(buf, 15)};
+    const int32_t gyroMinus[3] = {rdLe16(buf, 9), rdLe16(buf, 13), rdLe16(buf, 17)};
+    const int32_t speed2x = rdLe16(buf, 19) + rdLe16(buf, 21);
     for (int i = 0; i < 3; i++) {
-        int32_t a = gyroPlus[i] - gyroBias[i];
-        int32_t b = gyroMinus[i] - gyroBias[i];
-        int32_t denom = (a < 0 ? -a : a) + (b < 0 ? -b : b);
+        const int32_t a = gyroPlus[i] - gyroBias[i];
+        const int32_t b = gyroMinus[i] - gyroBias[i];
+        const int32_t denom = (a < 0 ? -a : a) + (b < 0 ? -b : b);
         if (denom == 0) return false;
         out.gyroNumer[i] = speed2x * kPsGyroResPerDegS;
         out.gyroDenom[i] = denom;
     }
-    int32_t accPlus[3] = {rdLe16(buf, 23), rdLe16(buf, 27), rdLe16(buf, 31)};
-    int32_t accMinus[3] = {rdLe16(buf, 25), rdLe16(buf, 29), rdLe16(buf, 33)};
+    return true;
+}
+
+// Accel calibration occupies bytes 23..34: the +1g and -1g reading per axis, whose midpoint is
+// the bias and whose span is the full 2g range.
+bool parsePsAccelCalibration(const uint8_t* buf, PsImuCalib& out) {
+    const int32_t accPlus[3] = {rdLe16(buf, 23), rdLe16(buf, 27), rdLe16(buf, 31)};
+    const int32_t accMinus[3] = {rdLe16(buf, 25), rdLe16(buf, 29), rdLe16(buf, 33)};
     for (int i = 0; i < 3; i++) {
-        int32_t range2g = accPlus[i] - accMinus[i];
+        const int32_t range2g = accPlus[i] - accMinus[i];
         if (range2g == 0) return false;
         out.accelBias[i] = accPlus[i] - range2g / 2;
         out.accelNumer[i] = 2 * kPsAccelResPerG;
         out.accelDenom[i] = range2g;
     }
+    return true;
+}
+
+} // namespace
+
+bool parsePsCalibration(const uint8_t* buf, size_t len, PsImuCalib& out) {
+    out = PsImuCalib{};
+    if (len < 35) return false; // gyro/accel calibration occupies bytes 1..34
+    if (!parsePsGyroCalibration(buf, out)) return false;
+    if (!parsePsAccelCalibration(buf, out)) return false;
     out.valid = true;
     return true;
 }
@@ -1323,6 +1366,21 @@ WirelessEvent checkWirelessEvent(Parser p, const uint8_t* buf, size_t len) {
     }
 }
 
+uint16_t decodeGenericHidButtons(const uint8_t btnLo, const uint8_t btnHi) {
+    uint16_t buttons = 0;
+    if (btnLo & 0x10) buttons |= XUSB_A;
+    if (btnLo & 0x20) buttons |= XUSB_B;
+    if (btnLo & 0x40) buttons |= XUSB_X;
+    if (btnLo & 0x80) buttons |= XUSB_Y;
+    if (btnHi & 0x01) buttons |= XUSB_LB;
+    if (btnHi & 0x02) buttons |= XUSB_RB;
+    if (btnHi & 0x04) buttons |= XUSB_BACK;
+    if (btnHi & 0x08) buttons |= XUSB_START;
+    if (btnHi & 0x10) buttons |= XUSB_THUMB_L;
+    if (btnHi & 0x20) buttons |= XUSB_THUMB_R;
+    return setDpadFromHat(buttons, (uint8_t)(btnLo & 0x0F));
+}
+
 bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, DeviceState& s) {
     // Conservative shape check: most generic HID gamepads produce reports >= 7 bytes (4 axes,
     // hat+buttons low/high). Anything shorter probably isn't gamepad-shaped; bail rather than
@@ -1332,98 +1390,110 @@ bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, DeviceState& s) {
     s.sLY = scaleU8Centered(buf[1], true);
     s.sRX = scaleU8Centered(buf[2], false);
     s.sRY = scaleU8Centered(buf[3], true);
-    uint16_t b = 0;
-    uint8_t hat = buf[4] & 0x0F;
-    b = setDpadFromHat(b, hat);
-    uint8_t btnLo = buf[4];
-    uint8_t btnHi = len > 5 ? buf[5] : 0;
-    if (btnLo & 0x10) b |= XUSB_A;
-    if (btnLo & 0x20) b |= XUSB_B;
-    if (btnLo & 0x40) b |= XUSB_X;
-    if (btnLo & 0x80) b |= XUSB_Y;
-    if (btnHi & 0x01) b |= XUSB_LB;
-    if (btnHi & 0x02) b |= XUSB_RB;
-    if (btnHi & 0x04) b |= XUSB_BACK;
-    if (btnHi & 0x08) b |= XUSB_START;
-    if (btnHi & 0x10) b |= XUSB_THUMB_L;
-    if (btnHi & 0x20) b |= XUSB_THUMB_R;
-    s.wButtons = b;
+
+    const uint8_t btnLo = buf[4];
+    const uint8_t btnHi = len > 5 ? buf[5] : 0;
+    s.wButtons = decodeGenericHidButtons(btnLo, btnHi);
     s.bLT = (btnHi & 0x40) ? 255 : 0;
     s.bRT = (btnHi & 0x80) ? 255 : 0;
     return true;
 }
 
-size_t buildGipInitPacket(InitKind init, int index, uint8_t seq, uint8_t* out, size_t outCap) {
-    // GIP init packets from Linux xpad. power-on/LED/auth-done are universal; the S-init is the
-    // extra set-mode packet the Xbox One S / Elite Series 2 need. Byte 2 carries the sequence.
-    static const uint8_t kPowerOn[] = {0x05, 0x20, 0x00, 0x01, 0x00};
-    static const uint8_t kSInit[] = {0x05, 0x20, 0x00, 0x0F, 0x06};
-    static const uint8_t kLedOn[] = {0x0A, 0x20, 0x00, 0x03, 0x00, 0x01, 0x14};
-    static const uint8_t kAuthDone[] = {0x06, 0x20, 0x00, 0x02, 0x01, 0x00};
+struct InitPacket {
+    const uint8_t* data;
+    size_t len;
+};
 
-    struct Pkt {
-        const uint8_t* data;
-        size_t len;
-    };
-    static const Pkt kPowerOnSeq[] = {
-        {kPowerOn, sizeof(kPowerOn)}, {kLedOn, sizeof(kLedOn)}, {kAuthDone, sizeof(kAuthDone)}};
-    static const Pkt kSSeq[] = {{kPowerOn, sizeof(kPowerOn)},
-                                {kSInit, sizeof(kSInit)},
-                                {kLedOn, sizeof(kLedOn)},
-                                {kAuthDone, sizeof(kAuthDone)}};
+// A device's init packets in the order they must be sent. An empty one means the device has no
+// sequence for that stage.
+struct InitSequence {
+    const InitPacket* packets;
+    int count;
+};
 
-    const Pkt* seqArr = nullptr;
-    int count = 0;
-    if (init == InitKind::XBOX_ONE_POWERON) {
-        seqArr = kPowerOnSeq;
-        count = 3;
-    } else if (init == InitKind::XBOX_ONE_S) {
-        seqArr = kSSeq;
-        count = 4;
-    } else {
-        return 0;
-    }
-    if (index < 0 || index >= count) return 0;
-    size_t len = seqArr[index].len;
+template <size_t N> constexpr int countOf(const InitPacket (&)[N]) { return (int)N; }
+
+// Copies the index-th packet of a sequence into out. Zero means there is no such packet, or it
+// does not fit, which is how both callers learn the sequence has ended.
+size_t copyInitPacket(const InitSequence& sequence, const int index, uint8_t* out,
+                      const size_t outCap) {
+    if (index < 0 || index >= sequence.count) return 0;
+    const size_t len = sequence.packets[index].len;
     if (len > outCap) return 0;
-    memcpy(out, seqArr[index].data, len);
+    memcpy(out, sequence.packets[index].data, len);
+    return len;
+}
+
+// GIP init packets from Linux xpad. Power-on, LED and auth-done are universal; the S-init is the
+// extra set-mode packet the Xbox One S / Elite Series 2 need. Byte 2 carries the sequence number,
+// which buildGipInitPacket stamps in.
+constexpr uint8_t kGipPowerOn[] = {0x05, 0x20, 0x00, 0x01, 0x00};
+constexpr uint8_t kGipSInit[] = {0x05, 0x20, 0x00, 0x0F, 0x06};
+constexpr uint8_t kGipLedOn[] = {0x0A, 0x20, 0x00, 0x03, 0x00, 0x01, 0x14};
+constexpr uint8_t kGipAuthDone[] = {0x06, 0x20, 0x00, 0x02, 0x01, 0x00};
+
+constexpr InitPacket kGipPowerOnSeq[] = {
+    {kGipPowerOn, sizeof(kGipPowerOn)},
+    {kGipLedOn, sizeof(kGipLedOn)},
+    {kGipAuthDone, sizeof(kGipAuthDone)},
+};
+
+constexpr InitPacket kGipSSeq[] = {
+    {kGipPowerOn, sizeof(kGipPowerOn)},
+    {kGipSInit, sizeof(kGipSInit)},
+    {kGipLedOn, sizeof(kGipLedOn)},
+    {kGipAuthDone, sizeof(kGipAuthDone)},
+};
+
+InitSequence gipSequenceFor(const InitKind init) {
+    if (init == InitKind::XBOX_ONE_POWERON) return {kGipPowerOnSeq, countOf(kGipPowerOnSeq)};
+    if (init == InitKind::XBOX_ONE_S) return {kGipSSeq, countOf(kGipSSeq)};
+    return {nullptr, 0};
+}
+
+size_t buildGipInitPacket(InitKind init, int index, uint8_t seq, uint8_t* out, size_t outCap) {
+    const size_t len = copyInitPacket(gipSequenceFor(init), index, out, outCap);
+    if (len == 0) return 0;
     out[2] = seq;
     return len;
 }
 
-size_t buildSteamConfigPacket(SteamConfig stage, int index, uint8_t* out, size_t outCap) {
-    // Framing is {message id, payload length, payload}. Message ids and the choice of the shortest
-    // working sequence follow the Linux hid-steam driver.
-    static const uint8_t kClearMappings[] = {0x81, 0x00};
-    // Left and right trackpad mode = none (kills mouse emulation), IMU mode = raw accel | raw gyro.
-    static const uint8_t kQuietSettings[] = {0x87, 0x09, 0x07, 0x07, 0x00, 0x08,
-                                             0x07, 0x00, 0x30, 0x18, 0x00};
-    static const uint8_t kDefaultMappings[] = {0x85, 0x00};
-    static const uint8_t kDefaultSettings[] = {0x8E, 0x00};
-    // Loading the defaults does not by itself hand the right pad back as a mouse: SDL follows it
-    // with an explicit right trackpad mode = absolute mouse, and leaving that out is the one way
-    // this teardown could still return a pad its owner cannot use.
-    static const uint8_t kRestoreMouse[] = {0x87, 0x03, 0x08, 0x00, 0x00};
+// Steam Controller framing is {message id, payload length, payload}. The message ids and the
+// choice of the shortest working sequence follow the Linux hid-steam driver.
+constexpr uint8_t kSteamClearMappings[] = {0x81, 0x00};
 
-    struct Pkt {
-        const uint8_t* data;
-        size_t len;
-    };
-    static const Pkt kQuietSeq[] = {{kClearMappings, sizeof(kClearMappings)},
-                                    {kQuietSettings, sizeof(kQuietSettings)}};
-    static const Pkt kRestoreSeq[] = {{kDefaultMappings, sizeof(kDefaultMappings)},
-                                      {kDefaultSettings, sizeof(kDefaultSettings)},
-                                      {kRestoreMouse, sizeof(kRestoreMouse)}};
+// Left and right trackpad mode = none (which kills mouse emulation), IMU mode = raw accel | raw
+// gyro.
+constexpr uint8_t kSteamQuietSettings[] = {0x87, 0x09, 0x07, 0x07, 0x00, 0x08,
+                                           0x07, 0x00, 0x30, 0x18, 0x00};
 
+constexpr uint8_t kSteamDefaultMappings[] = {0x85, 0x00};
+constexpr uint8_t kSteamDefaultSettings[] = {0x8E, 0x00};
+
+// Loading the defaults does not by itself hand the right pad back as a mouse: SDL follows it with
+// an explicit right trackpad mode = absolute mouse, and leaving that out is the one way this
+// teardown could still return a pad its owner cannot use.
+constexpr uint8_t kSteamRestoreMouse[] = {0x87, 0x03, 0x08, 0x00, 0x00};
+
+constexpr InitPacket kSteamQuietSeq[] = {
+    {kSteamClearMappings, sizeof(kSteamClearMappings)},
+    {kSteamQuietSettings, sizeof(kSteamQuietSettings)},
+};
+
+constexpr InitPacket kSteamRestoreSeq[] = {
+    {kSteamDefaultMappings, sizeof(kSteamDefaultMappings)},
+    {kSteamDefaultSettings, sizeof(kSteamDefaultSettings)},
+    {kSteamRestoreMouse, sizeof(kSteamRestoreMouse)},
+};
+
+InitSequence steamSequenceFor(const SteamConfig stage) {
     const bool quiet = stage == SteamConfig::QUIET;
-    const Pkt* seqArr = quiet ? kQuietSeq : kRestoreSeq;
-    const int seqLen = quiet ? (int)(sizeof(kQuietSeq) / sizeof(kQuietSeq[0]))
-                             : (int)(sizeof(kRestoreSeq) / sizeof(kRestoreSeq[0]));
-    if (index < 0 || index >= seqLen) return 0;
-    size_t len = seqArr[index].len;
-    if (len > outCap) return 0;
-    memcpy(out, seqArr[index].data, len);
-    return len;
+    if (quiet) return {kSteamQuietSeq, countOf(kSteamQuietSeq)};
+    return {kSteamRestoreSeq, countOf(kSteamRestoreSeq)};
+}
+
+size_t buildSteamConfigPacket(SteamConfig stage, int index, uint8_t* out, size_t outCap) {
+    return copyInitPacket(steamSequenceFor(stage), index, out, outCap);
 }
 
 // Per-device rumble output reports. Motor convention: strong = large/low-frequency (left), weak =
@@ -1669,86 +1739,119 @@ size_t buildMicMuteLedReport(Parser p, FeedbackState& st, uint8_t state, uint8_t
 }
 
 #ifdef __ANDROID__
+namespace {
+
+bool runSteamQuietInit(const int fd, const int interfaceNumber) {
+    uint8_t buf[16];
+    for (int i = 0;; i++) {
+        const size_t n = buildSteamConfigPacket(SteamConfig::QUIET, i, buf, sizeof(buf));
+        if (n == 0) break;
+        if (!sendFeatureReport(fd, interfaceNumber, buf, n)) {
+            LOGE("Steam Controller: quiet-mode packet %d failed", i);
+            return false;
+        }
+    }
+    LOGI("Steam Controller quiet-mode sequence sent");
+    return true;
+}
+
+// GIP init: power-on tells the pad to start sending input reports; the rest of the sequence (LED,
+// auth-done, and the S set-mode) starts the models the lone power-on left silent.
+bool runGipInit(const int fd, const uint8_t epOut, const InitKind init) {
+    uint8_t buf[16];
+    for (int i = 0;; i++) {
+        const size_t n = buildGipInitPacket(init, i, (uint8_t)i, buf, sizeof(buf));
+        if (n == 0) break;
+        const bool ok = bulkWrite(fd, epOut, buf, n, 200);
+        const bool powerOnFailed = i == 0 && !ok;
+        if (powerOnFailed) {
+            LOGE("Xbox One power-on write failed");
+            return false;
+        }
+        usleep(10000);
+    }
+    return true;
+}
+
+// Status request. The Pro answers with controller info on its IN endpoint; the reply is never
+// read. Sending the request is what moves the device out of whatever residual state the kernel
+// driver left it in when the interface was stolen.
+constexpr uint8_t kSwitchStatus[] = {0x80, 0x02};
+
+// Without this the controller sleeps after a few seconds of idle and stops emitting reports.
+constexpr uint8_t kSwitchDisableTimeout[] = {0x80, 0x04};
+
+// Input report mode 0x30 (standard full report: buttons + sticks + IMU), carried as one rumble +
+// subcommand HID output report: report id 0x01, packet counter, 8-byte neutral rumble pattern,
+// subcommand id 0x03, argument 0x30.
+constexpr uint8_t kSwitchSetReportMode[] = {
+    0x01, 0x00, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x03, 0x30,
+};
+
+// Subcommand 0x48 arg 0x01, so later rumble-only (0x10) reports take effect.
+constexpr uint8_t kSwitchEnableVibration[] = {
+    0x01, 0x01, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x48, 0x01,
+};
+
+constexpr unsigned kSwitchInitSettleUs = 40000;
+
+struct SwitchInitStep {
+    const uint8_t* packet;
+    size_t length;
+    unsigned timeoutMs;
+    unsigned settleUs;
+    bool isFatal;
+    const char* what;
+};
+
+// A fatal step failing leaves the pad unusable, so the sequence stops; the other two only cost a
+// feature and the pad still streams without them.
+constexpr SwitchInitStep kSwitchInitSequence[] = {
+    {kSwitchStatus, sizeof(kSwitchStatus), 100, kSwitchInitSettleUs, true, "status request"},
+    {kSwitchDisableTimeout, sizeof(kSwitchDisableTimeout), 100, kSwitchInitSettleUs, false,
+     "disable-timeout write"},
+    {kSwitchSetReportMode, sizeof(kSwitchSetReportMode), 200, kSwitchInitSettleUs, true,
+     "set-report-mode write"},
+    {kSwitchEnableVibration, sizeof(kSwitchEnableVibration), 200, 0, false,
+     "enable-vibration write"},
+};
+
+bool runSwitchInitStep(const int fd, const uint8_t epOut, const SwitchInitStep& step) {
+    const bool sent = bulkWrite(fd, epOut, step.packet, step.length, step.timeoutMs);
+    if (!sent && step.isFatal) {
+        LOGE("Switch Pro: %s failed", step.what);
+        return false;
+    }
+    if (!sent) LOGI("Switch Pro: %s failed (non-fatal)", step.what);
+    if (step.settleUs != 0) usleep(step.settleUs);
+    return true;
+}
+
+bool runSwitchProHandshake(const int fd, const uint8_t epOut) {
+    if (epOut == 0) {
+        LOGE("Switch Pro: no OUT endpoint, cannot init");
+        return false;
+    }
+    for (const SwitchInitStep& step : kSwitchInitSequence) {
+        if (!runSwitchInitStep(fd, epOut, step)) return false;
+    }
+    LOGI("Switch Pro USB init sequence sent");
+    return true;
+}
+
+} // namespace
+
 bool runInit(int fd, int interfaceNumber, uint8_t epOut, InitKind init) {
     switch (init) {
     case InitKind::NONE:
         return true;
-    case InitKind::STEAM_QUIET: {
-        uint8_t buf[16];
-        for (int i = 0;; i++) {
-            size_t n = buildSteamConfigPacket(SteamConfig::QUIET, i, buf, sizeof(buf));
-            if (n == 0) break;
-            if (!sendFeatureReport(fd, interfaceNumber, buf, n)) {
-                LOGE("Steam Controller: quiet-mode packet %d failed", i);
-                return false;
-            }
-        }
-        LOGI("Steam Controller quiet-mode sequence sent");
-        return true;
-    }
+    case InitKind::STEAM_QUIET:
+        return runSteamQuietInit(fd, interfaceNumber);
     case InitKind::XBOX_ONE_POWERON:
-    case InitKind::XBOX_ONE_S: {
-        // GIP init: power-on tells the pad to start sending input reports; the rest of the sequence
-        // (LED, auth-done, and the S set-mode) starts the models the lone power-on left silent.
-        uint8_t buf[16];
-        for (int i = 0;; i++) {
-            size_t n = buildGipInitPacket(init, i, (uint8_t)i, buf, sizeof(buf));
-            if (n == 0) break;
-            bool ok = bulkWrite(fd, epOut, buf, n, 200);
-            if (i == 0 && !ok) {
-                LOGE("Xbox One power-on write failed");
-                return false;
-            }
-            usleep(10000);
-        }
-        return true;
-    }
-    case InitKind::SWITCH_PRO_HANDSHAKE: {
-        if (epOut == 0) {
-            LOGE("Switch Pro: no OUT endpoint, cannot init");
-            return false;
-        }
-        // Status request. The Pro responds with controller info on its IN endpoint; we don't
-        // need to read the reply, only send the request so the device transitions out of any
-        // residual state the kernel driver left it in when we stole the interface.
-        static const uint8_t kStatus[] = {0x80, 0x02};
-        if (!bulkWrite(fd, epOut, kStatus, sizeof(kStatus), 100)) {
-            LOGE("Switch Pro: status request failed");
-            return false;
-        }
-        usleep(40000);
-
-        // Disable USB timeout. Without this the controller sleeps after a few seconds of idle
-        // and stops emitting input reports.
-        static const uint8_t kDisableTimeout[] = {0x80, 0x04};
-        if (!bulkWrite(fd, epOut, kDisableTimeout, sizeof(kDisableTimeout), 100)) {
-            LOGI("Switch Pro: disable-timeout write failed (non-fatal)");
-        }
-        usleep(40000);
-
-        // Set input report mode 0x30 (standard full report: buttons + sticks + IMU). The format
-        // is one rumble + subcommand HID output report: report id 0x01, packet counter, 8-byte
-        // neutral rumble pattern, subcommand id 0x03, argument 0x30.
-        uint8_t setReportMode[] = {
-            0x01, 0x00, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x03, 0x30,
-        };
-        if (!bulkWrite(fd, epOut, setReportMode, sizeof(setReportMode), 200)) {
-            LOGE("Switch Pro: set-report-mode write failed");
-            return false;
-        }
-        usleep(40000);
-
-        // Enable vibration (subcommand 0x48, arg 0x01) so later rumble-only (0x10) reports take
-        // effect.
-        uint8_t enableVibration[] = {
-            0x01, 0x01, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x48, 0x01,
-        };
-        if (!bulkWrite(fd, epOut, enableVibration, sizeof(enableVibration), 200)) {
-            LOGI("Switch Pro: enable-vibration write failed (non-fatal)");
-        }
-        LOGI("Switch Pro USB init sequence sent");
-        return true;
-    }
+    case InitKind::XBOX_ONE_S:
+        return runGipInit(fd, epOut, init);
+    case InitKind::SWITCH_PRO_HANDSHAKE:
+        return runSwitchProHandshake(fd, epOut);
     }
     return false;
 }

@@ -31,8 +31,10 @@ import com.tinkernorth.dish.ui.main.MainActivity
 import com.tinkernorth.dish.ui.main.MainViewModel
 import com.tinkernorth.dish.ui.main.TouchpadOverlayActivity
 import com.tinkernorth.dish.ui.settings.SettingsActivity
+import com.tinkernorth.dish.ui.setup.EXTRA_INPUT_TYPE
+import com.tinkernorth.dish.ui.setup.EXTRA_SLOT_ID
+import com.tinkernorth.dish.ui.setup.INPUT_ONSCREEN
 import com.tinkernorth.dish.ui.setup.SetupConnectionActivity
-import com.tinkernorth.dish.ui.setup.SetupFlow
 import com.tinkernorth.dish.ui.setup.SetupInputActivity
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
@@ -230,8 +232,8 @@ class DishScreenshots {
     fun shot03_setup_connection() {
         val intent =
             Intent(targetContext, SetupConnectionActivity::class.java).apply {
-                putExtra(SetupFlow.EXTRA_INPUT_TYPE, SetupFlow.INPUT_ONSCREEN)
-                putExtra(SetupFlow.EXTRA_SLOT_ID, "virtual")
+                putExtra(EXTRA_INPUT_TYPE, INPUT_ONSCREEN)
+                putExtra(EXTRA_SLOT_ID, "virtual")
             }
         ActivityScenario.launch<SetupConnectionActivity>(intent).use {
             settle(1200)

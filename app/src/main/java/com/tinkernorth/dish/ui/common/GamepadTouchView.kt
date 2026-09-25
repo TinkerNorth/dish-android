@@ -21,35 +21,35 @@ import androidx.core.graphics.withClip
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.ui.common.GamepadConstants.ABXY_BTN_DRAW_SIZE_FACTOR
-import com.tinkernorth.dish.ui.common.GamepadConstants.ABXY_BTN_SPACING_FACTOR
-import com.tinkernorth.dish.ui.common.GamepadConstants.CENTER_BTN_DRAW_SIZE_FACTOR
-import com.tinkernorth.dish.ui.common.GamepadConstants.HOME_DRAW_SIZE_FACTOR
-import com.tinkernorth.dish.ui.common.GamepadConstants.LIGHTBAR_BG_BLEND_FRACTION
-import com.tinkernorth.dish.ui.common.GamepadConstants.LIGHTBAR_STROKE_DP
-import com.tinkernorth.dish.ui.common.GamepadConstants.MIC_MUTE_LAMP_ALPHA
-import com.tinkernorth.dish.ui.common.GamepadConstants.MIC_MUTE_PULSE_MIN_ALPHA
-import com.tinkernorth.dish.ui.common.GamepadConstants.MIC_MUTE_PULSE_PERIOD_MS
-import com.tinkernorth.dish.ui.common.GamepadConstants.PILL_CORNER_RADIUS_FRACTION
-import com.tinkernorth.dish.ui.common.GamepadConstants.PILL_ICON_SIZE_FRACTION
-import com.tinkernorth.dish.ui.common.GamepadConstants.PLAYER_LED_COUNT
-import com.tinkernorth.dish.ui.common.GamepadConstants.PLAYER_LED_GAP_DP
-import com.tinkernorth.dish.ui.common.GamepadConstants.PLAYER_LED_PITCH_DP
-import com.tinkernorth.dish.ui.common.GamepadConstants.PLAYER_LED_RADIUS_DP
-import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_DIR_LINE_WIDTH_FRACTION
-import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_LABEL_BASELINE_FRACTION
-import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_LABEL_SIZE_MULTI
-import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_LABEL_SIZE_SINGLE
-import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_RING_STROKE_DP
-import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_THUMB_RADIUS_FRACTION
-import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_THUMB_RING_STROKE_DP
-import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_THUMB_TRAVEL_FRACTION
-import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_CLICK_PULSE_MS
-import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_CORNER_RADIUS_FRACTION
-import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_FINGER_DOT_RADIUS_DP
-import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_OUTLINE_STROKE_DP
-import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_TAP_SLOP_DP
-import com.tinkernorth.dish.ui.common.GamepadConstants.TRIGGER_EFFECT_STROKE_DP
+import com.tinkernorth.dish.ui.common.ABXY_BTN_DRAW_SIZE_FACTOR
+import com.tinkernorth.dish.ui.common.ABXY_BTN_SPACING_FACTOR
+import com.tinkernorth.dish.ui.common.CENTER_BTN_DRAW_SIZE_FACTOR
+import com.tinkernorth.dish.ui.common.HOME_DRAW_SIZE_FACTOR
+import com.tinkernorth.dish.ui.common.LIGHTBAR_BG_BLEND_FRACTION
+import com.tinkernorth.dish.ui.common.LIGHTBAR_STROKE_DP
+import com.tinkernorth.dish.ui.common.MIC_MUTE_LAMP_ALPHA
+import com.tinkernorth.dish.ui.common.MIC_MUTE_PULSE_MIN_ALPHA
+import com.tinkernorth.dish.ui.common.MIC_MUTE_PULSE_PERIOD_MS
+import com.tinkernorth.dish.ui.common.PILL_CORNER_RADIUS_FRACTION
+import com.tinkernorth.dish.ui.common.PILL_ICON_SIZE_FRACTION
+import com.tinkernorth.dish.ui.common.PLAYER_LED_COUNT
+import com.tinkernorth.dish.ui.common.PLAYER_LED_GAP_DP
+import com.tinkernorth.dish.ui.common.PLAYER_LED_PITCH_DP
+import com.tinkernorth.dish.ui.common.PLAYER_LED_RADIUS_DP
+import com.tinkernorth.dish.ui.common.STICK_DIR_LINE_WIDTH_FRACTION
+import com.tinkernorth.dish.ui.common.STICK_LABEL_BASELINE_FRACTION
+import com.tinkernorth.dish.ui.common.STICK_LABEL_SIZE_MULTI
+import com.tinkernorth.dish.ui.common.STICK_LABEL_SIZE_SINGLE
+import com.tinkernorth.dish.ui.common.STICK_RING_STROKE_DP
+import com.tinkernorth.dish.ui.common.STICK_THUMB_RADIUS_FRACTION
+import com.tinkernorth.dish.ui.common.STICK_THUMB_RING_STROKE_DP
+import com.tinkernorth.dish.ui.common.STICK_THUMB_TRAVEL_FRACTION
+import com.tinkernorth.dish.ui.common.TRACKPAD_CLICK_PULSE_MS
+import com.tinkernorth.dish.ui.common.TRACKPAD_CORNER_RADIUS_FRACTION
+import com.tinkernorth.dish.ui.common.TRACKPAD_FINGER_DOT_RADIUS_DP
+import com.tinkernorth.dish.ui.common.TRACKPAD_OUTLINE_STROKE_DP
+import com.tinkernorth.dish.ui.common.TRACKPAD_TAP_SLOP_DP
+import com.tinkernorth.dish.ui.common.TRIGGER_EFFECT_STROKE_DP
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -535,14 +535,28 @@ class GamepadTouchView
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
+            drawBackground(canvas)
+            val l = layout ?: return
+            val s = recognizer.state
+            drawControls(canvas, l, s)
+        }
+
+        // A pad with a light bar tints its whole surface towards the bar's colour, which is the
+        // only way a flat drawing can show a light the phone does not have.
+        private fun drawBackground(canvas: Canvas) {
             paintBg.color =
                 lightbarColor
                     ?.takeIf { skin.hasLightbar }
                     ?.let { ColorUtils.blendARGB(surfaceColor, it, LIGHTBAR_BG_BLEND_FRACTION) }
                     ?: surfaceColor
             canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paintBg)
-            val l = layout ?: return
-            val s = recognizer.state
+        }
+
+        private fun drawControls(
+            canvas: Canvas,
+            l: GamepadLayout,
+            s: GamepadState,
+        ) {
             drawDpad(canvas, l, s)
             drawAbxy(canvas, l, s)
             drawStick(canvas, l.leftStickCx, l.leftStickCy, recognizer.leftStickDx, recognizer.leftStickDy, l.stickRadius, "L")
@@ -830,20 +844,20 @@ class GamepadTouchView
                 drawPillButton(c, rect, d, value > 0)
                 return
             }
-            val full = value >= GamepadConstants.TRIGGER_MAX
+            val full = value >= TRIGGER_MAX
             drawPillButton(c, rect, d, full)
-            val boundaryY = rect.top + rect.height() * GamepadConstants.TRIGGER_FULL_ZONE_FRACTION
+            val boundaryY = rect.top + rect.height() * TRIGGER_FULL_ZONE_FRACTION
             if (!full && value > 0) {
                 val r = min(rect.width(), rect.height()) * PILL_CORNER_RADIUS_FRACTION
-                val fillTop = rect.bottom - (rect.bottom - boundaryY) * (value / GamepadConstants.TRIGGER_MAX.toFloat())
+                val fillTop = rect.bottom - (rect.bottom - boundaryY) * (value / TRIGGER_MAX.toFloat())
                 triggerClipPath.reset()
                 triggerClipPath.addRoundRect(rect, r, r, Path.Direction.CW)
                 c.withClip(triggerClipPath) {
                     drawRect(rect.left, fillTop, rect.right, rect.bottom, paintTriggerFill)
                 }
             }
-            val inset = GamepadConstants.TRIGGER_ZONE_DIVIDER_INSET_DP * density
-            paintTriggerDivider.strokeWidth = GamepadConstants.TRIGGER_ZONE_DIVIDER_STROKE_DP * density
+            val inset = TRIGGER_ZONE_DIVIDER_INSET_DP * density
+            paintTriggerDivider.strokeWidth = TRIGGER_ZONE_DIVIDER_STROKE_DP * density
             c.drawLine(rect.left + inset, boundaryY, rect.right - inset, boundaryY, paintTriggerDivider)
         }
 
@@ -884,15 +898,18 @@ class GamepadTouchView
             }
         }
 
+        // Opt out of vsync coalescing so each touch sensor sample is delivered as it arrives
+        // instead of being batched to display refresh.
+        private fun requestUnbufferedOnFirstDown(event: MotionEvent) {
+            val isADown =
+                event.actionMasked == MotionEvent.ACTION_DOWN ||
+                    event.actionMasked == MotionEvent.ACTION_POINTER_DOWN
+            if (isADown) requestUnbufferedDispatch(event)
+        }
+
         override fun onTouchEvent(event: MotionEvent): Boolean {
             val l = layout ?: return false
-            // Opt out of vsync coalescing so each touch sensor sample is delivered as it
-            // arrives instead of being batched to display refresh.
-            if (event.actionMasked == MotionEvent.ACTION_DOWN ||
-                event.actionMasked == MotionEvent.ACTION_POINTER_DOWN
-            ) {
-                requestUnbufferedDispatch(event)
-            }
+            requestUnbufferedOnFirstDown(event)
             recognizer.onTouchEvent(event, l) {
                 listener?.onGamepadStateChanged(recognizer.state)
             }
@@ -929,15 +946,19 @@ class GamepadTouchView
                     eventTimeMs = tap.eventTimeMs,
                 ),
             )
-            postDelayed({
-                trackpadClickFlash = false
-                if (!recognizer.trackpadState.anyFingerDown()) {
-                    listener?.onTrackpadStateChanged(
-                        TouchpadSurfaceView.TouchpadState(eventTimeMs = tap.eventTimeMs + TRACKPAD_CLICK_PULSE_MS),
-                    )
-                }
-                invalidate()
-            }, TRACKPAD_CLICK_PULSE_MS)
+            postDelayed({ endTrackpadClickPulse(tap) }, TRACKPAD_CLICK_PULSE_MS)
+        }
+
+        // A finger that landed during the pulse owns the surface now, so the lift is not
+        // published over it. The flash clears either way.
+        private fun endTrackpadClickPulse(tap: GamepadGestureRecognizer.TrackpadTap) {
+            trackpadClickFlash = false
+            if (!recognizer.trackpadState.anyFingerDown()) {
+                listener?.onTrackpadStateChanged(
+                    TouchpadSurfaceView.TouchpadState(eventTimeMs = tap.eventTimeMs + TRACKPAD_CLICK_PULSE_MS),
+                )
+            }
+            invalidate()
         }
     }
 

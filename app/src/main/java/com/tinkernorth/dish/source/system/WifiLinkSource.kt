@@ -74,35 +74,33 @@ enum class WifiGeneration {
     }
 }
 
-object WifiSubnet {
-    private const val IPV4_BITS = 32
-    private const val OCTET_BITS = 8
-    private const val OCTET_MASK = 0xFF
+private const val IPV4_BITS = 32
+private const val OCTET_BITS = 8
+private const val OCTET_MASK = 0xFF
 
-    // Null when either side is not a dotted IPv4 literal (a hostname, an IPv6 address, no link).
-    fun sameSubnet(
-        phoneIpv4: String?,
-        prefixLength: Int,
-        hostIp: String,
-    ): Boolean? {
-        val phone = parseIpv4(phoneIpv4 ?: return null) ?: return null
-        val host = parseIpv4(hostIp) ?: return null
-        if (prefixLength <= 0 || prefixLength > IPV4_BITS) return null
-        val mask = if (prefixLength == IPV4_BITS) -1 else (-1 shl (IPV4_BITS - prefixLength))
-        return (phone and mask) == (host and mask)
-    }
+// Null when either side is not a dotted IPv4 literal (a hostname, an IPv6 address, no link).
+internal fun sameSubnet(
+    phoneIpv4: String?,
+    prefixLength: Int,
+    hostIp: String,
+): Boolean? {
+    val phone = parseIpv4(phoneIpv4 ?: return null) ?: return null
+    val host = parseIpv4(hostIp) ?: return null
+    if (prefixLength <= 0 || prefixLength > IPV4_BITS) return null
+    val mask = if (prefixLength == IPV4_BITS) -1 else (-1 shl (IPV4_BITS - prefixLength))
+    return (phone and mask) == (host and mask)
+}
 
-    private fun parseIpv4(text: String): Int? {
-        val parts = text.trim().split('.')
-        if (parts.size != 4) return null
-        var value = 0
-        for (part in parts) {
-            val octet = part.toIntOrNull() ?: return null
-            if (octet < 0 || octet > OCTET_MASK) return null
-            value = (value shl OCTET_BITS) or octet
-        }
-        return value
+private fun parseIpv4(text: String): Int? {
+    val parts = text.trim().split('.')
+    if (parts.size != 4) return null
+    var value = 0
+    for (part in parts) {
+        val octet = part.toIntOrNull() ?: return null
+        if (octet < 0 || octet > OCTET_MASK) return null
+        value = (value shl OCTET_BITS) or octet
     }
+    return value
 }
 
 /**

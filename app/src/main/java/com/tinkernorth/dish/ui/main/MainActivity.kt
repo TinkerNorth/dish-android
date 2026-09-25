@@ -6,6 +6,7 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.View
 import android.widget.LinearLayout
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -32,7 +33,8 @@ import com.tinkernorth.dish.source.inputrate.FrameworkInputTimingStore
 import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
-import com.tinkernorth.dish.source.system.LocalNetworkAccess
+import com.tinkernorth.dish.source.system.PERMISSION
+import com.tinkernorth.dish.source.system.isGranted
 import com.tinkernorth.dish.source.update.UpdateNotices
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
@@ -41,6 +43,7 @@ import com.tinkernorth.dish.ui.common.DishSpinnerDrawable
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachGamepadHost
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.openExternalLink
 import com.tinkernorth.dish.ui.donate.attachDonatePill
 import com.tinkernorth.dish.ui.donate.wireDonateButton
@@ -127,36 +130,35 @@ class MainActivity :
         val splash = installSplashScreen()
         splash.setKeepOnScreenCondition { splashHoldUntilFirstRender }
         super.onCreate(savedInstanceState)
-        // GameActivity loads native code on touch; route to fallback before JNI surface is hit.
+        if (redirectedAwayFromTheDashboard()) return
+        installDashboard()
+    }
+
+    // GameActivity loads native code on touch, so the fallback must be chosen before the JNI
+    // surface is hit. Either redirect releases the splash hold at once: this activity is
+    // finishing and the screen it hands off to needs to draw itself.
+    private fun redirectedAwayFromTheDashboard(): Boolean {
         if (com.tinkernorth.dish.DishApplication.nativeLoadFailed) {
-            // Release the splash hold immediately: this activity is finishing
-            // and the NativeUnavailable screen needs to draw itself.
             splashHoldUntilFirstRender = false
             nav.toNativeUnavailable()
             finish()
-            return
+            return true
         }
-        if (!onboarding.state.value.welcomeCompleted) {
+        val needsWelcome = !onboarding.state.value.welcomeCompleted
+        if (needsWelcome) {
             splashHoldUntilFirstRender = false
             nav.toSetupInput()
             finish()
-            return
+            return true
         }
+        return false
+    }
+
+    private fun installDashboard() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         applyPaneLayout(resources.configuration)
-        gamepadHost =
-            attachGamepadHost(
-                binding.root,
-                wakeState,
-                gamepadRegistry,
-                notifications,
-                lowPowerSignal,
-                micIndicator,
-                inputTiming,
-                reachability,
-                capabilityComposer,
-            )
+        gamepadHost = attachHost()
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
         attachDonatePill()
@@ -165,9 +167,22 @@ class MainActivity :
         controllerAdapter = ControllerAdapter(this)
         setupUI()
         observeViewModel()
-        // Fallback splash release: happy path is updateUI()'s first emission.
+        // Fallback splash release: the happy path is updateUI()'s first emission.
         binding.root.postDelayed({ splashHoldUntilFirstRender = false }, SPLASH_HOLD_MAX_MS)
     }
+
+    private fun attachHost() =
+        attachGamepadHost(
+            binding.root,
+            wakeState,
+            gamepadRegistry,
+            notifications,
+            lowPowerSignal,
+            micIndicator,
+            inputTiming,
+            reachability,
+            capabilityComposer,
+        )
 
     override fun onStop() {
         super.onStop()
@@ -184,10 +199,10 @@ class MainActivity :
 
     // The reconnect observer runs off an Activity and can't prompt; ask here or Android 17 fails it silently.
     private fun ensureLocalNetworkForReconnect() {
-        if (localNetworkRequested || LocalNetworkAccess.isGranted(this)) return
+        if (localNetworkRequested || isGranted(this)) return
         if (satellite.remembered().isEmpty()) return
         localNetworkRequested = true
-        localNetworkPermissionLauncher.launch(LocalNetworkAccess.PERMISSION)
+        localNetworkPermissionLauncher.launch(PERMISSION)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -201,11 +216,30 @@ class MainActivity :
         val controllersPane = binding.llControllersPane ?: return
         val landscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE
         panes.orientation = if (landscape) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+        movePaneToFront(panes, controllersPane, landscape)
+        weightPanes(infoPane, controllersPane, landscape)
+    }
+
+    // Controllers lead in landscape and follow in portrait, so the pane is re-parented rather
+    // than laid out twice.
+    private fun movePaneToFront(
+        panes: LinearLayout,
+        controllersPane: View,
+        landscape: Boolean,
+    ) {
         val controllersIndex = if (landscape) 0 else 1
-        if (panes.indexOfChild(controllersPane) != controllersIndex) {
-            panes.removeView(controllersPane)
-            panes.addView(controllersPane, controllersIndex)
-        }
+        if (panes.indexOfChild(controllersPane) == controllersIndex) return
+        panes.removeView(controllersPane)
+        panes.addView(controllersPane, controllersIndex)
+    }
+
+    // Landscape splits the width 2:3; portrait gives the info pane its content height and lets
+    // the controllers take the rest.
+    private fun weightPanes(
+        infoPane: View,
+        controllersPane: View,
+        landscape: Boolean,
+    ) {
         infoPane.updateLayoutParams<LinearLayout.LayoutParams> {
             width = if (landscape) 0 else LinearLayout.LayoutParams.MATCH_PARENT
             height = LinearLayout.LayoutParams.WRAP_CONTENT
@@ -234,35 +268,41 @@ class MainActivity :
     }
 
     private fun observeViewModel() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.uiState.collect { updateUI(it) }
-            }
-        }
+        observeWhileStarted(viewModel.uiState) { updateUI(it) }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.events.collect { handleEvent(it) } }
         }
     }
 
     private fun updateUI(s: MainUiState) {
-        // First emission has been rendered: release the splash hold so the
-        // system splash exits and MainActivity becomes interactive. Idempotent
-        // (the postDelayed safety net may also flip this) so subsequent
-        // emissions are no-ops.
+        // First emission has been rendered: release the splash hold so the system splash exits
+        // and MainActivity becomes interactive. Idempotent, since the postDelayed safety net may
+        // also flip it.
         splashHoldUntilFirstRender = false
-        // Unstable links are still streaming, so they count as online here just like on the connections screen.
-        val liveCount = s.connections.count { it.live.isLiveLink() }
-        val totalCount = s.connections.size
+        renderConnectionsSummary(s)
+        submitSlots(s)
+    }
+
+    private fun renderConnectionsSummary(s: MainUiState) {
         val checking = s.anyConnecting
         binding.ivConnectionsLoading.isVisible = checking
         if (checking) connectionsSpinner.start() else connectionsSpinner.stop()
-        binding.tvConnectionsSummary.text =
-            when {
-                liveCount == 0 && totalCount == 0 -> getString(R.string.status_tap_manage)
-                liveCount == 0 -> resources.getQuantityString(R.plurals.status_remembered, totalCount, totalCount)
-                // Quantity selects on totalCount; args order (liveCount, totalCount) matches %1$d/%2$d.
-                else -> resources.getQuantityString(R.plurals.status_connected_of, totalCount, liveCount, totalCount)
-            }
+        binding.tvConnectionsSummary.text = connectionsSummaryText(s)
+    }
+
+    // Unstable links are still streaming, so they count as online here just as on the connections
+    // screen. The plural selects on totalCount, and the args order matches %1${'$'}d/%2${'$'}d.
+    private fun connectionsSummaryText(s: MainUiState): String {
+        val liveCount = s.connections.count { it.live.isLiveLink() }
+        val totalCount = s.connections.size
+        return when {
+            liveCount == 0 && totalCount == 0 -> getString(R.string.status_tap_manage)
+            liveCount == 0 -> resources.getQuantityString(R.plurals.status_remembered, totalCount, totalCount)
+            else -> resources.getQuantityString(R.plurals.status_connected_of, totalCount, liveCount, totalCount)
+        }
+    }
+
+    private fun submitSlots(s: MainUiState) {
         controllerAdapter.submitSlots(
             s.slots,
             s.connections,

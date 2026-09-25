@@ -61,49 +61,47 @@ data class PathFacts(
     val padHasTouchpad: Boolean = false,
 )
 
-object PathCardMapper {
-    fun map(
-        transport: Transport,
-        claim: ClaimState,
-        facts: PathFacts,
-        wiredUsbPresent: Boolean = false,
-    ): PathCard {
-        // The card reflects the mode the controller is ACTUALLY in: Direct only when a synthetic is live
-        // (claimed, not mid-release, not stuck). Badge and toggle both derive from this so they can never
-        // disagree; intent (stored pref / verified default) drives the auto-claim, not what the switch shows.
-        val onDirect = claim.isClaimedDirect && !claim.restoring && !claim.restoreStuck
-        val risk =
-            when {
-                transport == Transport.Bluetooth -> PathRisk.None
-                !facts.recognized -> PathRisk.GuessedLayout
-                else -> PathRisk.None
-            }
-        // A pad's own trackpad streams only on Direct and has no phone-overlay fallback: nudge only when
-        // cleanly on Standard USB with Direct actually reachable (a recent failure is left to settle first).
-        val suggestDirectForTouch =
-            facts.padHasTouchpad &&
-                transport == Transport.Usb &&
-                !claim.isClaimedDirect &&
-                !claim.restoring &&
-                !claim.restoreStuck &&
-                !claim.needsReplug &&
-                claim.directFailure == null
-        return PathCard(
-            currentMode = if (onDirect) InputPathMode.Direct else InputPathMode.Standard,
-            selected = if (onDirect) PathChoice.Direct else PathChoice.Standard,
-            transport = transport,
-            directAvailable = transport == Transport.Usb,
-            recognized = facts.recognized,
-            restoring = claim.restoring,
-            standard = facts.standard,
-            direct = facts.direct,
-            directPollHz = claim.directPollHz,
-            risk = risk,
-            needsReplug = claim.needsReplug,
-            restoreStuck = claim.restoreStuck,
-            failure = claim.directFailure,
-            suggestDirectForTouch = suggestDirectForTouch,
-            wiredSwitchAvailable = wiredUsbPresent && transport == Transport.Bluetooth,
-        )
-    }
+fun mapPathCard(
+    transport: Transport,
+    claim: ClaimState,
+    facts: PathFacts,
+    wiredUsbPresent: Boolean = false,
+): PathCard {
+    // The card reflects the mode the controller is ACTUALLY in: Direct only when a synthetic is live
+    // (claimed, not mid-release, not stuck). Badge and toggle both derive from this so they can never
+    // disagree; intent (stored pref / verified default) drives the auto-claim, not what the switch shows.
+    val onDirect = claim.isClaimedDirect && !claim.restoring && !claim.restoreStuck
+    val risk =
+        when {
+            transport == Transport.Bluetooth -> PathRisk.None
+            !facts.recognized -> PathRisk.GuessedLayout
+            else -> PathRisk.None
+        }
+    // A pad's own trackpad streams only on Direct and has no phone-overlay fallback: nudge only when
+    // cleanly on Standard USB with Direct actually reachable (a recent failure is left to settle first).
+    val suggestDirectForTouch =
+        facts.padHasTouchpad &&
+            transport == Transport.Usb &&
+            !claim.isClaimedDirect &&
+            !claim.restoring &&
+            !claim.restoreStuck &&
+            !claim.needsReplug &&
+            claim.directFailure == null
+    return PathCard(
+        currentMode = if (onDirect) InputPathMode.Direct else InputPathMode.Standard,
+        selected = if (onDirect) PathChoice.Direct else PathChoice.Standard,
+        transport = transport,
+        directAvailable = transport == Transport.Usb,
+        recognized = facts.recognized,
+        restoring = claim.restoring,
+        standard = facts.standard,
+        direct = facts.direct,
+        directPollHz = claim.directPollHz,
+        risk = risk,
+        needsReplug = claim.needsReplug,
+        restoreStuck = claim.restoreStuck,
+        failure = claim.directFailure,
+        suggestDirectForTouch = suggestDirectForTouch,
+        wiredSwitchAvailable = wiredUsbPresent && transport == Transport.Bluetooth,
+    )
 }

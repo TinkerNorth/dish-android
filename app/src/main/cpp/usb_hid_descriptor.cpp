@@ -2,6 +2,8 @@
 
 #include "usb_hid_descriptor.h"
 
+#include <cstddef>
+
 namespace usbhid {
 
 using gamepad::DeviceState;
@@ -59,91 +61,42 @@ uint8_t scaleTrig8(uint32_t raw, const HidAxis& a) {
     return (uint8_t)scaled;
 }
 
-uint16_t buttonBit(uint8_t idx) {
-    using namespace gamepad;
-    switch (idx) {
-    case 0:
-        return XUSB_A;
-    case 1:
-        return XUSB_B;
-    case 2:
-        return XUSB_X;
-    case 3:
-        return XUSB_Y;
-    case 4:
-        return XUSB_LB;
-    case 5:
-        return XUSB_RB;
-    case 6:
-        return XUSB_BACK;
-    case 7:
-        return XUSB_START;
-    case 8:
-        return XUSB_THUMB_L;
-    case 9:
-        return XUSB_THUMB_R;
-    case 10:
-        return XUSB_GUIDE;
-    default:
-        return 0;
-    }
-}
+struct ButtonMapping {
+    uint8_t declaredIndex;
+    uint16_t xusbBit;
+};
+
+// A descriptor's buttons in declaration order.
+constexpr ButtonMapping STANDARD_BUTTON_MAP[] = {
+    {0, gamepad::XUSB_A},       {1, gamepad::XUSB_B},      {2, gamepad::XUSB_X},
+    {3, gamepad::XUSB_Y},       {4, gamepad::XUSB_LB},     {5, gamepad::XUSB_RB},
+    {6, gamepad::XUSB_BACK},    {7, gamepad::XUSB_START},  {8, gamepad::XUSB_THUMB_L},
+    {9, gamepad::XUSB_THUMB_R}, {10, gamepad::XUSB_GUIDE},
+};
 
 // Switch-order HID pads declare buttons in usage row Y B A X L R ZL ZR Minus Plus L3 R3 Home
-// Capture; remap by position to match decodeSwitchProUsb. ZL/ZR (indices 6/7) fold into the
-// triggers in decodeFromLayout instead of mapping here.
-uint16_t switchOrderButtonBit(uint8_t idx) {
-    using namespace gamepad;
-    switch (idx) {
-    case 0:
-        return XUSB_X;
-    case 1:
-        return XUSB_A;
-    case 2:
-        return XUSB_B;
-    case 3:
-        return XUSB_Y;
-    case 4:
-        return XUSB_LB;
-    case 5:
-        return XUSB_RB;
-    case 8:
-        return XUSB_BACK;
-    case 9:
-        return XUSB_START;
-    case 10:
-        return XUSB_THUMB_L;
-    case 11:
-        return XUSB_THUMB_R;
-    case 12:
-        return XUSB_GUIDE;
-    default:
-        return 0;
+// Capture, so the mapping is by position. Indices 6 and 7 are ZL/ZR and are absent here: they
+// fold into the triggers in decodeFromLayout instead.
+constexpr ButtonMapping SWITCH_ORDER_BUTTON_MAP[] = {
+    {0, gamepad::XUSB_X},        {1, gamepad::XUSB_A},      {2, gamepad::XUSB_B},
+    {3, gamepad::XUSB_Y},        {4, gamepad::XUSB_LB},     {5, gamepad::XUSB_RB},
+    {8, gamepad::XUSB_BACK},     {9, gamepad::XUSB_START},  {10, gamepad::XUSB_THUMB_L},
+    {11, gamepad::XUSB_THUMB_R}, {12, gamepad::XUSB_GUIDE},
+};
+
+template <size_t N>
+uint16_t bitForDeclaredIndex(const ButtonMapping (&mappings)[N], const uint8_t idx) {
+    for (const ButtonMapping& mapping : mappings) {
+        const bool isTheIndex = mapping.declaredIndex == idx;
+        if (isTheIndex) return mapping.xusbBit;
     }
+    return 0;
 }
 
-uint16_t dpadBitsForDir(int dir) {
-    using namespace gamepad;
-    switch (dir) {
-    case 0:
-        return XUSB_DPAD_UP;
-    case 1:
-        return (uint16_t)(XUSB_DPAD_UP | XUSB_DPAD_RIGHT);
-    case 2:
-        return XUSB_DPAD_RIGHT;
-    case 3:
-        return (uint16_t)(XUSB_DPAD_DOWN | XUSB_DPAD_RIGHT);
-    case 4:
-        return XUSB_DPAD_DOWN;
-    case 5:
-        return (uint16_t)(XUSB_DPAD_DOWN | XUSB_DPAD_LEFT);
-    case 6:
-        return XUSB_DPAD_LEFT;
-    case 7:
-        return (uint16_t)(XUSB_DPAD_UP | XUSB_DPAD_LEFT);
-    default:
-        return 0;
-    }
+uint16_t buttonBit(uint8_t idx) { return bitForDeclaredIndex(STANDARD_BUTTON_MAP, idx); }
+
+uint16_t switchOrderButtonBit(uint8_t idx) {
+    return bitForDeclaredIndex(SWITCH_ORDER_BUTTON_MAP, idx);
 }
 
 void setAxis(HidAxis& a, uint32_t bit, uint32_t size, int32_t lo, int32_t hi) {
@@ -199,136 +152,186 @@ void assignUsage(HidLayout& out, uint32_t page, uint32_t usage, uint32_t bit, ui
     }
 }
 
-} // namespace
+// One item off the descriptor stream. A long item (prefix 0xFE) carries no data this parser
+// understands, so it is reported with `skip` set and its payload stepped over.
+struct HidItem {
+    uint8_t type;
+    uint8_t tag;
+    uint32_t data;
+    uint8_t dataLen;
+    bool skip;
+    bool truncated;
+};
 
-bool parseReportDescriptor(const uint8_t* desc, size_t len, HidLayout& out) {
-    out = HidLayout{};
-
-    uint32_t usagePage = 0, reportSize = 0, reportCount = 0;
-    int32_t logMin = 0, logMax = 0;
-    uint8_t currentReportId = 0;
-    uint32_t bitCursor = 0;
-    bool locked = false;
-    uint8_t lockedReportId = 0;
-
-    uint32_t usages[kMaxUsages];
-    size_t usageCount = 0;
-    uint32_t usageMin = 0;
-    bool haveRange = false;
-
-    size_t i = 0;
-    while (i < len) {
-        uint8_t prefix = desc[i++];
-        if (prefix == 0xFE) { // long item: 1 size byte + 1 tag byte + payload
-            if (i >= len) break;
-            uint8_t payload = desc[i];
-            i += 2u + payload;
-            continue;
-        }
-        uint8_t bSize = prefix & 0x03u;
-        uint8_t dataLen = bSize == 3 ? 4 : bSize;
-        uint8_t bType = (prefix >> 2) & 0x03u;
-        uint8_t bTag = (prefix >> 4) & 0x0Fu;
-        if (i + dataLen > len) break;
-        uint32_t data = 0;
-        for (uint8_t k = 0; k < dataLen; k++) data |= (uint32_t)desc[i + k] << (8u * k);
-        i += dataLen;
-
-        if (bType == 0) {      // Main
-            if (bTag == 0x8) { // Input
-                uint32_t startBit = bitCursor;
-                bitCursor += reportSize * reportCount;
-                bool isConst = (data & 0x01u) != 0;
-                if (!isConst && reportSize > 0 && reportCount > 0) {
-                    if (!locked) {
-                        locked = true;
-                        lockedReportId = currentReportId;
-                        out.reportId = currentReportId;
-                    }
-                    if (currentReportId == lockedReportId) {
-                        if (usagePage == 0x09) {
-                            if (out.buttonCount == 0) {
-                                out.buttonBitOffset = (uint16_t)startBit;
-                                uint32_t cnt =
-                                    reportCount > kMaxButtons ? kMaxButtons : reportCount;
-                                out.buttonCount = (uint8_t)cnt;
-                            }
-                        } else if (usagePage == 0x01 || usagePage == 0x02) {
-                            for (uint32_t f = 0; f < reportCount; f++) {
-                                uint32_t usage;
-                                if (haveRange) {
-                                    usage = usageMin + f;
-                                } else if (usageCount == 0) {
-                                    break;
-                                } else {
-                                    usage = usages[f < usageCount ? f : usageCount - 1];
-                                }
-                                assignUsage(out, usagePage, usage, startBit + f * reportSize,
-                                            reportSize, logMin, logMax);
-                            }
-                        }
-                    }
-                }
-            }
-            usageCount = 0;
-            haveRange = false;
-            usageMin = 0;
-        } else if (bType == 1) { // Global
-            switch (bTag) {
-            case 0x0:
-                usagePage = data;
-                break;
-            case 0x1:
-                logMin = signExtend(data, dataLen);
-                break;
-            case 0x2:
-                logMax = signExtend(data, dataLen);
-                break;
-            case 0x7:
-                reportSize = data;
-                break;
-            case 0x8:
-                currentReportId = (uint8_t)data;
-                bitCursor = 0;
-                break;
-            case 0x9:
-                reportCount = data;
-                break;
-            default:
-                break;
-            }
-        } else if (bType == 2) { // Local
-            switch (bTag) {
-            case 0x0:
-                if (usageCount < kMaxUsages) usages[usageCount++] = data;
-                break;
-            case 0x1:
-                usageMin = data;
-                haveRange = true;
-                break;
-            case 0x2:
-                haveRange = true;
-                break;
-            default:
-                break;
-            }
-        }
+// A long item carries a payload-length byte, then a tag byte, then that many data bytes. No
+// gamepad descriptor uses one, so it is stepped over whole.
+HidItem readLongItem(const uint8_t* desc, const size_t len, size_t& i) {
+    HidItem item = {0, 0, 0, 0, false, false};
+    if (i >= len) {
+        item.truncated = true;
+        return item;
     }
-
-    out.valid = out.lx.present || out.ly.present || out.buttonCount > 0 || out.hasHat;
-    return out.valid;
+    const uint8_t payload = desc[i];
+    i += 2u + payload;
+    item.skip = true;
+    return item;
 }
 
-bool decodeFromLayout(const uint8_t* buf, size_t len, DeviceState& s, const HidLayout& L) {
-    if (!L.valid) return false;
-    size_t dataStart = 0;
-    if (L.reportId != 0) {
-        if (len < 1 || buf[0] != L.reportId) return false;
-        dataStart = 1;
+// A short item packs its data length, type and tag into the prefix byte; bSize 3 means 4 bytes,
+// which is the one size that is not its own encoding.
+HidItem readShortItem(const uint8_t* desc, const size_t len, const uint8_t prefix, size_t& i) {
+    HidItem item = {0, 0, 0, 0, false, false};
+    const uint8_t bSize = prefix & 0x03u;
+    item.dataLen = bSize == 3 ? 4 : bSize;
+    item.type = (prefix >> 2) & 0x03u;
+    item.tag = (prefix >> 4) & 0x0Fu;
+    if (i + item.dataLen > len) {
+        item.truncated = true;
+        return item;
     }
-    const uint8_t* d = buf + dataStart;
-    size_t dlen = len - dataStart;
+    for (uint8_t k = 0; k < item.dataLen; k++) item.data |= (uint32_t)desc[i + k] << (8u * k);
+    i += item.dataLen;
+    return item;
+}
 
+HidItem readHidItem(const uint8_t* desc, const size_t len, size_t& i) {
+    const uint8_t prefix = desc[i++];
+    const bool isLongItem = prefix == 0xFE;
+    if (isLongItem) return readLongItem(desc, len, i);
+    return readShortItem(desc, len, prefix, i);
+}
+
+// The global and local item state the stream accumulates until a Main item consumes it.
+struct HidParseState {
+    uint32_t usagePage;
+    uint32_t reportSize;
+    uint32_t reportCount;
+    int32_t logMin;
+    int32_t logMax;
+    uint8_t currentReportId;
+    uint32_t bitCursor;
+    bool locked;
+    uint8_t lockedReportId;
+    uint32_t usages[kMaxUsages];
+    size_t usageCount;
+    uint32_t usageMin;
+    bool haveRange;
+};
+
+void applyGlobalItem(const HidItem& item, HidParseState& st) {
+    switch (item.tag) {
+    case 0x0:
+        st.usagePage = item.data;
+        break;
+    case 0x1:
+        st.logMin = signExtend(item.data, item.dataLen);
+        break;
+    case 0x2:
+        st.logMax = signExtend(item.data, item.dataLen);
+        break;
+    case 0x7:
+        st.reportSize = item.data;
+        break;
+    case 0x8:
+        st.currentReportId = (uint8_t)item.data;
+        st.bitCursor = 0;
+        break;
+    case 0x9:
+        st.reportCount = item.data;
+        break;
+    default:
+        break;
+    }
+}
+
+void applyLocalItem(const HidItem& item, HidParseState& st) {
+    switch (item.tag) {
+    case 0x0:
+        if (st.usageCount < kMaxUsages) st.usages[st.usageCount++] = item.data;
+        break;
+    case 0x1:
+        st.usageMin = item.data;
+        st.haveRange = true;
+        break;
+    case 0x2:
+        st.haveRange = true;
+        break;
+    default:
+        break;
+    }
+}
+
+void takeButtonField(const HidParseState& st, const uint32_t startBit, HidLayout& out) {
+    const bool alreadyTaken = out.buttonCount != 0;
+    if (alreadyTaken) return;
+    out.buttonBitOffset = (uint16_t)startBit;
+    const uint32_t count = st.reportCount > kMaxButtons ? kMaxButtons : st.reportCount;
+    out.buttonCount = (uint8_t)count;
+}
+
+void takeAxisFields(const HidParseState& st, const uint32_t startBit, HidLayout& out) {
+    for (uint32_t f = 0; f < st.reportCount; f++) {
+        uint32_t usage;
+        if (st.haveRange) {
+            usage = st.usageMin + f;
+        } else if (st.usageCount == 0) {
+            break;
+        } else {
+            usage = st.usages[f < st.usageCount ? f : st.usageCount - 1];
+        }
+        assignUsage(out, st.usagePage, usage, startBit + f * st.reportSize, st.reportSize,
+                    st.logMin, st.logMax);
+    }
+}
+
+// The first non-constant Input item locks the report id this layout describes; later items from a
+// different report are the device's other interfaces and are not ours to read.
+void applyInputItem(const HidItem& item, HidParseState& st, HidLayout& out) {
+    const uint32_t startBit = st.bitCursor;
+    st.bitCursor += st.reportSize * st.reportCount;
+
+    const bool isConstantPadding = (item.data & 0x01u) != 0;
+    const bool carriesFields = st.reportSize > 0 && st.reportCount > 0;
+    if (isConstantPadding || !carriesFields) return;
+
+    if (!st.locked) {
+        st.locked = true;
+        st.lockedReportId = st.currentReportId;
+        out.reportId = st.currentReportId;
+    }
+    const bool isTheLockedReport = st.currentReportId == st.lockedReportId;
+    if (!isTheLockedReport) return;
+
+    const bool isButtonPage = st.usagePage == 0x09;
+    if (isButtonPage) {
+        takeButtonField(st, startBit, out);
+        return;
+    }
+    const bool isAxisPage = st.usagePage == 0x01 || st.usagePage == 0x02;
+    if (isAxisPage) takeAxisFields(st, startBit, out);
+}
+
+void clearLocalItems(HidParseState& st) {
+    st.usageCount = 0;
+    st.haveRange = false;
+    st.usageMin = 0;
+}
+
+// The report-id prefix byte, when the layout says the device sends one.
+bool skipReportIdPrefix(const uint8_t* buf, const size_t len, const HidLayout& L,
+                        size_t& dataStart) {
+    const bool sendsAPrefix = L.reportId != 0;
+    if (!sendsAPrefix) {
+        dataStart = 0;
+        return true;
+    }
+    const bool isOurReport = len >= 1 && buf[0] == L.reportId;
+    if (!isOurReport) return false;
+    dataStart = 1;
+    return true;
+}
+
+void decodeLayoutAxes(const uint8_t* d, const size_t dlen, const HidLayout& L, DeviceState& s) {
     if (L.lx.present)
         s.sLX = scaleAxis16(extractBits(d, dlen, L.lx.bitOffset, L.lx.bitSize), L.lx, false);
     if (L.ly.present)
@@ -339,36 +342,102 @@ bool decodeFromLayout(const uint8_t* buf, size_t len, DeviceState& s, const HidL
         s.sRY = scaleAxis16(extractBits(d, dlen, L.ry.bitOffset, L.ry.bitSize), L.ry, true);
     if (L.lt.present) s.bLT = scaleTrig8(extractBits(d, dlen, L.lt.bitOffset, L.lt.bitSize), L.lt);
     if (L.rt.present) s.bRT = scaleTrig8(extractBits(d, dlen, L.rt.bitOffset, L.rt.bitSize), L.rt);
+}
 
-    uint16_t b = 0;
-    if (L.hasHat) {
-        uint32_t raw = extractBits(d, dlen, L.hatBitOffset, L.hatBitSize);
-        int dir = (int)raw - (int)L.hatLogicalMin;
-        int range = (int)L.hatLogicalMax - (int)L.hatLogicalMin;
-        if (dir >= 0 && dir <= range && dir <= 7) b = (uint16_t)(b | dpadBitsForDir(dir));
-    }
-    if (L.switchOrderButtons) {
-        bool zl = false, zr = false;
-        for (uint8_t i = 0; i < L.buttonCount; i++) {
-            if (!extractBits(d, dlen, (uint32_t)L.buttonBitOffset + i, 1)) continue;
-            if (i == 6) {
-                zl = true;
-            } else if (i == 7) {
-                zr = true;
-            } else {
-                b = (uint16_t)(b | switchOrderButtonBit(i));
-            }
+uint16_t decodeLayoutHat(const uint8_t* d, const size_t dlen, const HidLayout& L) {
+    if (!L.hasHat) return 0;
+    const uint32_t raw = extractBits(d, dlen, L.hatBitOffset, L.hatBitSize);
+    const int dir = (int)raw - (int)L.hatLogicalMin;
+    const int range = (int)L.hatLogicalMax - (int)L.hatLogicalMin;
+    const bool isADirection = dir >= 0 && dir <= range && dir <= 7;
+    if (!isADirection) return 0;
+    return gamepad::hatDirectionBits(dir);
+}
+
+bool layoutButtonIsDown(const uint8_t* d, const size_t dlen, const HidLayout& L, const uint8_t i) {
+    return extractBits(d, dlen, (uint32_t)L.buttonBitOffset + i, 1) != 0;
+}
+
+// A Switch-order pad carries ZL and ZR in the button block; they drive the triggers, not buttons.
+uint16_t decodeSwitchOrderButtons(const uint8_t* d, const size_t dlen, const HidLayout& L,
+                                  DeviceState& s) {
+    uint16_t buttons = 0;
+    bool zl = false;
+    bool zr = false;
+    for (uint8_t i = 0; i < L.buttonCount; i++) {
+        if (!layoutButtonIsDown(d, dlen, L, i)) continue;
+        if (i == 6) {
+            zl = true;
+        } else if (i == 7) {
+            zr = true;
+        } else {
+            buttons = (uint16_t)(buttons | switchOrderButtonBit(i));
         }
-        s.bLT = zl ? 255 : 0;
-        s.bRT = zr ? 255 : 0;
-    } else {
-        for (uint8_t i = 0; i < L.buttonCount; i++) {
-            if (extractBits(d, dlen, (uint32_t)L.buttonBitOffset + i, 1)) {
-                b = (uint16_t)(b | buttonBit(i));
-            }
-        }
     }
-    s.wButtons = b;
+    s.bLT = zl ? 255 : 0;
+    s.bRT = zr ? 255 : 0;
+    return buttons;
+}
+
+uint16_t decodeStandardButtons(const uint8_t* d, const size_t dlen, const HidLayout& L) {
+    uint16_t buttons = 0;
+    for (uint8_t i = 0; i < L.buttonCount; i++) {
+        if (layoutButtonIsDown(d, dlen, L, i)) buttons = (uint16_t)(buttons | buttonBit(i));
+    }
+    return buttons;
+}
+
+} // namespace
+
+// A Main item consumes whatever the Global and Local items have accumulated and then clears the
+// Local ones; only an Input main item carries fields this parser wants.
+void applyItem(const HidItem& item, HidParseState& st, HidLayout& out) {
+    const bool isMainItem = item.type == 0;
+    if (isMainItem) {
+        const bool isInputItem = item.tag == 0x8;
+        if (isInputItem) applyInputItem(item, st, out);
+        clearLocalItems(st);
+        return;
+    }
+    const bool isGlobalItem = item.type == 1;
+    if (isGlobalItem) {
+        applyGlobalItem(item, st);
+        return;
+    }
+    const bool isLocalItem = item.type == 2;
+    if (isLocalItem) applyLocalItem(item, st);
+}
+
+bool parseReportDescriptor(const uint8_t* desc, size_t len, HidLayout& out) {
+    out = HidLayout{};
+    HidParseState st = {};
+
+    size_t i = 0;
+    while (i < len) {
+        const HidItem item = readHidItem(desc, len, i);
+        if (item.truncated) break;
+        if (item.skip) continue;
+        applyItem(item, st, out);
+    }
+
+    out.valid = out.lx.present || out.ly.present || out.buttonCount > 0 || out.hasHat;
+    return out.valid;
+}
+
+bool decodeFromLayout(const uint8_t* buf, size_t len, DeviceState& s, const HidLayout& L) {
+    if (!L.valid) return false;
+    size_t dataStart = 0;
+    if (!skipReportIdPrefix(buf, len, L, dataStart)) return false;
+
+    const uint8_t* d = buf + dataStart;
+    const size_t dlen = len - dataStart;
+
+    decodeLayoutAxes(d, dlen, L, s);
+
+    const uint16_t hatBits = decodeLayoutHat(d, dlen, L);
+    const uint16_t buttonBits = L.switchOrderButtons ? decodeSwitchOrderButtons(d, dlen, L, s)
+                                                     : decodeStandardButtons(d, dlen, L);
+    s.wButtons = (uint16_t)(hatBits | buttonBits);
     return true;
 }
 

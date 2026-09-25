@@ -4,41 +4,37 @@ package com.tinkernorth.dish.core.net.moonlight
 
 import java.util.concurrent.ConcurrentHashMap
 
+// Pure translation from the satellite wire conventions the app's sources
+// already speak (docs/contract.md scales) onto the Moonlight control-stream
+// ones (Wolf control.hpp), so the two transports share every source.
+// Satellite wire: gyro int16 at ±2000 deg/s full scale, accel int16 at
+// ±4 g. Moonlight wants floats: gyro in deg/s, accel in m/s^2.
+private const val GYRO_SCALE_DEG_S = 2000.0f / 32767.0f
+private const val ACCEL_SCALE_G = 4.0f / 32767.0f
+private const val STANDARD_GRAVITY = 9.80665f
+
+fun gyroDegS(wire: Short): Float = wire * GYRO_SCALE_DEG_S
+
+fun accelMs2(wire: Short): Float = wire * ACCEL_SCALE_G * STANDARD_GRAVITY
+
+// Satellite touch coordinates are full-range int16; Moonlight's are 0..1.
+fun touchNorm(wire: Short): Float = (wire.toInt() + 32768) / 65535.0f
+
 /**
- * Pure translation from the satellite wire conventions the app's sources
- * already speak (docs/contract.md scales) onto the Moonlight control-stream
- * ones (Wolf control.hpp), so the two transports share every source.
+ * Satellite battery status byte -> Moonlight BATTERY_STATE. Wired (no
+ * battery, AC powered) maps to NOT_PRESENT, which hosts treat as "nothing
+ * to show", the same thing the satellite does with it.
  */
-object MoonlightTelemetry {
-    // Satellite wire: gyro int16 at ±2000 deg/s full scale, accel int16 at
-    // ±4 g. Moonlight wants floats: gyro in deg/s, accel in m/s^2.
-    private const val GYRO_SCALE_DEG_S = 2000.0f / 32767.0f
-    private const val ACCEL_SCALE_G = 4.0f / 32767.0f
-    private const val STANDARD_GRAVITY = 9.80665f
+fun batteryState(satelliteStatus: Int): Int =
+    when (satelliteStatus) {
+        1 -> BATTERY_DISCHARGING
+        2 -> BATTERY_CHARGING
+        3 -> BATTERY_FULL
+        4 -> BATTERY_NOT_PRESENT
+        else -> BATTERY_STATE_UNKNOWN
+    }
 
-    fun gyroDegS(wire: Short): Float = wire * GYRO_SCALE_DEG_S
-
-    fun accelMs2(wire: Short): Float = wire * ACCEL_SCALE_G * STANDARD_GRAVITY
-
-    // Satellite touch coordinates are full-range int16; Moonlight's are 0..1.
-    fun touchNorm(wire: Short): Float = (wire.toInt() + 32768) / 65535.0f
-
-    /**
-     * Satellite battery status byte -> Moonlight BATTERY_STATE. Wired (no
-     * battery, AC powered) maps to NOT_PRESENT, which hosts treat as "nothing
-     * to show", the same thing the satellite does with it.
-     */
-    fun batteryState(satelliteStatus: Int): Int =
-        when (satelliteStatus) {
-            1 -> MoonlightControlProtocol.BATTERY_DISCHARGING
-            2 -> MoonlightControlProtocol.BATTERY_CHARGING
-            3 -> MoonlightControlProtocol.BATTERY_FULL
-            4 -> MoonlightControlProtocol.BATTERY_NOT_PRESENT
-            else -> MoonlightControlProtocol.BATTERY_STATE_UNKNOWN
-        }
-
-    fun batteryPercentage(level: Int): Int = if (level in 0..100) level else MoonlightControlProtocol.BATTERY_PERCENTAGE_UNKNOWN
-}
+fun batteryPercentage(level: Int): Int = if (level in 0..100) level else BATTERY_PERCENTAGE_UNKNOWN
 
 /**
  * Host-requested motion streaming state for one Moonlight session
@@ -157,15 +153,15 @@ class MoonlightTouchDiffer {
     ): FingerState {
         when {
             !prev.active && cur.active ->
-                out += TouchEvent(MoonlightControlProtocol.TOUCH_EVENT_DOWN, cur.id, cur.x, cur.y, 1.0f)
+                out += TouchEvent(TOUCH_EVENT_DOWN, cur.id, cur.x, cur.y, 1.0f)
             prev.active && !cur.active ->
-                out += TouchEvent(MoonlightControlProtocol.TOUCH_EVENT_UP, prev.id, prev.x, prev.y, 0.0f)
+                out += TouchEvent(TOUCH_EVENT_UP, prev.id, prev.x, prev.y, 0.0f)
             prev.active && cur.active && prev.id != cur.id -> {
-                out += TouchEvent(MoonlightControlProtocol.TOUCH_EVENT_UP, prev.id, prev.x, prev.y, 0.0f)
-                out += TouchEvent(MoonlightControlProtocol.TOUCH_EVENT_DOWN, cur.id, cur.x, cur.y, 1.0f)
+                out += TouchEvent(TOUCH_EVENT_UP, prev.id, prev.x, prev.y, 0.0f)
+                out += TouchEvent(TOUCH_EVENT_DOWN, cur.id, cur.x, cur.y, 1.0f)
             }
             prev.active && cur.active && (prev.x != cur.x || prev.y != cur.y) ->
-                out += TouchEvent(MoonlightControlProtocol.TOUCH_EVENT_MOVE, cur.id, cur.x, cur.y, 1.0f)
+                out += TouchEvent(TOUCH_EVENT_MOVE, cur.id, cur.x, cur.y, 1.0f)
         }
         return cur
     }

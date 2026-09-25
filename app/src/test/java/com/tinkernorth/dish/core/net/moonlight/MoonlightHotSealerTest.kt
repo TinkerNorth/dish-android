@@ -16,9 +16,9 @@ class MoonlightHotSealerTest {
         val sealer = MoonlightHotSealer(key)
         val reference = MoonlightControlPacket(key)
         for (seq in 0..3) {
-            val buttons = if (seq % 2 == 0) MoonlightControlProtocol.BTN_A else MoonlightControlProtocol.BTN_B
+            val buttons = if (seq % 2 == 0) BTN_A else BTN_B
             val hot = sealer.sealControllerMulti(0, 1, buttons, 0, 0, 0, 0, 0, 0)
-            val plaintext = MoonlightInputEncoder.controllerMulti(0, 1, buttons, 0, 0, 0, 0, 0, 0)
+            val plaintext = controllerMulti(0, 1, buttons, 0, 0, 0, 0, 0, 0)
             val expected = reference.sealWithSeq(seq, plaintext)
             assertEquals("seq $seq", bytesToHex(expected), bytesToHex(hot))
         }
@@ -28,15 +28,15 @@ class MoonlightHotSealerTest {
     fun `sealed packets round-trip through the receiver and advance seq`() {
         val sealer = MoonlightHotSealer(key)
         val receiver = MoonlightControlPacket(key)
-        val first = sealer.sealControllerMulti(0, 1, MoonlightControlProtocol.BTN_X, 10, 20, 0, 0, 0, 0)
+        val first = sealer.sealControllerMulti(0, 1, BTN_X, 10, 20, 0, 0, 0, 0)
         assertEquals(1, sealer.nextSeq)
         val decoded = receiver.open(first)!!
-        val event = MoonlightEventDecoder.decode(decoded)
+        val event = decodeMoonlightEvent(decoded)
         // CONTROLLER_MULTI is an INPUT_DATA type the decoder classifies as Unknown (host does not send it back);
         // the point is the seal decrypts cleanly and the plaintext matches the encoder.
-        assertEquals(MoonlightEvent.Unknown(MoonlightControlProtocol.CTRL_INPUT_DATA), event)
+        assertEquals(MoonlightEvent.Unknown(CTRL_INPUT_DATA), event)
         assertEquals(
-            bytesToHex(MoonlightInputEncoder.controllerMulti(0, 1, MoonlightControlProtocol.BTN_X, 10, 20, 0, 0, 0, 0)),
+            bytesToHex(controllerMulti(0, 1, BTN_X, 10, 20, 0, 0, 0, 0)),
             bytesToHex(decoded),
         )
     }
@@ -53,11 +53,11 @@ class MoonlightHotSealerTest {
         val receiver = MoonlightControlPacket(key)
         var last = ByteArray(0)
         repeat(PAST_THE_WRAP) {
-            last = sealer.sealControllerMulti(0, 1, MoonlightControlProtocol.BTN_A, 0, 0, 0, 0, 0, 0)
+            last = sealer.sealControllerMulti(0, 1, BTN_A, 0, 0, 0, 0, 0, 0)
         }
         assertEquals(PAST_THE_WRAP, sealer.nextSeq)
         assertEquals(
-            bytesToHex(MoonlightInputEncoder.controllerMulti(0, 1, MoonlightControlProtocol.BTN_A, 0, 0, 0, 0, 0, 0)),
+            bytesToHex(controllerMulti(0, 1, BTN_A, 0, 0, 0, 0, 0, 0)),
             bytesToHex(receiver.open(last)!!),
         )
     }
@@ -74,10 +74,10 @@ class MoonlightHotSealerTest {
         val receiver = MoonlightControlPacket(key)
         var last = ByteArray(0)
         repeat(PAST_THE_WRAP) {
-            last = sealer.seal(MoonlightInputEncoder.periodicPing())
+            last = sealer.seal(periodicPing())
         }
         assertEquals(PAST_THE_WRAP, sealer.nextSeq)
-        assertEquals(bytesToHex(MoonlightInputEncoder.periodicPing()), bytesToHex(receiver.open(last)!!))
+        assertEquals(bytesToHex(periodicPing()), bytesToHex(receiver.open(last)!!))
     }
 
     private companion object {

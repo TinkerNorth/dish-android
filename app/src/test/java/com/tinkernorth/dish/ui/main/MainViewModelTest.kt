@@ -12,8 +12,10 @@ import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.core.net.DishProtocol
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.DISH_PROTOCOL_CURRENT
+import com.tinkernorth.dish.core.net.DishProtocolCompat
+import com.tinkernorth.dish.core.net.moonlight.NINTENDO
+import com.tinkernorth.dish.core.net.moonlight.XBOX
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.connection.ConnectionEvent
@@ -255,12 +257,12 @@ class MainViewModelTest {
     fun `host compat projects each satellite's protocol verdict for the update chips`() =
         runTest(dispatcher) {
             hostFeaturesStore.noteProtocolVersion("satellite:old", 1)
-            hostFeaturesStore.noteProtocolVersion("satellite:current", DishProtocol.CURRENT)
+            hostFeaturesStore.noteProtocolVersion("satellite:current", DISH_PROTOCOL_CURRENT)
             dispatcher.scheduler.runCurrent()
 
             val compat = vm.uiState.value.hostCompat
-            assertEquals(DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE, compat["satellite:old"])
-            assertEquals(DishProtocol.Compat.CURRENT, compat["satellite:current"])
+            assertEquals(DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE, compat["satellite:old"])
+            assertEquals(DishProtocolCompat.CURRENT, compat["satellite:current"])
         }
 
     @Test
@@ -441,10 +443,10 @@ class MainViewModelTest {
     @Test
     fun `gamepadSkinFor maps a moonlight Xbox pick to the Xbox skin despite the id collision`() =
         runTest(dispatcher) {
-            bindToKind(ConnectionKind.MOONLIGHT, mapOf(VIRTUAL_SLOT_ID to MoonlightEmulatedType.XBOX))
+            bindToKind(ConnectionKind.MOONLIGHT, mapOf(VIRTUAL_SLOT_ID to XBOX))
             assertEquals(GamepadSkin.Xbox, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
 
-            bindToKind(ConnectionKind.MOONLIGHT, mapOf(VIRTUAL_SLOT_ID to MoonlightEmulatedType.NINTENDO))
+            bindToKind(ConnectionKind.MOONLIGHT, mapOf(VIRTUAL_SLOT_ID to NINTENDO))
             assertEquals(GamepadSkin.Switch, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
         }
 
@@ -454,7 +456,7 @@ class MainViewModelTest {
             every {
                 capabilityComposer.capabilityForCandidate(
                     VIRTUAL_SLOT_ID,
-                    MoonlightEmulatedType.XBOX,
+                    XBOX,
                     ConnectionKind.MOONLIGHT,
                     "c:1",
                 )
@@ -465,7 +467,7 @@ class MainViewModelTest {
             every {
                 capabilityComposer.capabilityForCandidate(
                     VIRTUAL_SLOT_ID,
-                    MoonlightEmulatedType.XBOX,
+                    XBOX,
                     ConnectionKind.MOONLIGHT,
                     "c:1",
                 )

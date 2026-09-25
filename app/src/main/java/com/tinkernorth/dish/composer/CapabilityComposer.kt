@@ -8,10 +8,11 @@ import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.moonlight.fromStored
+import com.tinkernorth.dish.core.net.moonlight.resolveMoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
-import com.tinkernorth.dish.repository.TouchpadModeValue
+import com.tinkernorth.dish.repository.TOUCHPAD_MODE_OFF
 import com.tinkernorth.dish.source.audio.PadAudioRoutes
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
 import com.tinkernorth.dish.source.store.MicEnabledStore
@@ -77,7 +78,6 @@ class CapabilityComposer
         private val hostFacts: SatelliteHostFacts,
         scope: CoroutineScope,
     ) : AbstractComposer<Map<String, SlotCapabilities>>(scope, emptyMap()) {
-        // Fixed hardware fact, captured at construction so it needs no flow of its own.
         private val phoneHasGyro: Boolean = phoneAvailability.hasGyro
 
         private val slotToggles: Flow<SlotToggles> =
@@ -140,27 +140,25 @@ class CapabilityComposer
         val wireProjection: Flow<Map<String, WireProjection>> =
             combine(state, mouseSurface.state) { caps, _ ->
                 caps.mapValues { (slotId, slot) ->
-                    WireProjection(CapabilityResolver.wireCaps(slot), touchpadWireMode(slotId))
+                    WireProjection(wireCaps(slot), touchpadWireMode(slotId))
                 }
             }.distinctUntilChanged()
 
-        // The live per-slot map is the reactive read-surface for consumers that show a
-        // BOUND slot's capabilities (dashboard cards, overlay), migrated onto it
-        // incrementally. Draft-editing screens that preview an unsaved type/host use
-        // capabilityForCandidate, since the bound state does not reflect the draft.
+        // The read-surface for BOUND slots. A screen previewing an unsaved type/host uses
+        // capabilityForCandidate instead, since this does not reflect the draft.
         fun capabilityFor(slotId: String): SlotCapabilities = state.value[slotId] ?: SlotCapabilities.NONE
 
         /**
          * The whole caps word the satellite descriptor carries for [slotId]: the base a pad always
          * has, motion gated on the input gyro and the user toggle, the feedback caps gated on what
          * the bound input can actuate, and the audio caps on their toggles too
-         * ([CapabilityResolver.wireCaps] holds the rules). Deliberately NOT gated on
+         * ([wireCaps] holds the rules). Deliberately NOT gated on
          * link-liveness: a reconnect must recover the pad's capabilities without a re-handshake,
          * so this is a different projection from the `available`/`live` views.
          *
          * This is the per-connection lambda SatelliteConnection builds every descriptor from.
          */
-        fun wireCapsFor(slotId: String): Int = CapabilityResolver.wireCaps(capabilityFor(slotId))
+        fun wireCapsFor(slotId: String): Int = wireCaps(capabilityFor(slotId))
 
         /**
          * The descriptor's touchpadMode for [slotId], pulled at descriptor-build time like
@@ -170,8 +168,8 @@ class CapabilityComposer
          * so going through [state] would declare a stale "off" and need a second PUT to heal.
          */
         fun touchpadWireMode(slotId: String): String {
-            val connId = hub.bindings.value[slotId] ?: return TouchpadModeValue.OFF
-            return TouchpadRouting.wireMode(
+            val connId = hub.bindings.value[slotId] ?: return TOUCHPAD_MODE_OFF
+            return wireMode(
                 mouseSurfaceOpen = mouseSurface.isOpen(slotId),
                 controller = liveControllerLayer(slotId),
                 type =
@@ -198,14 +196,12 @@ class CapabilityComposer
             candidateHostId: String?,
             candidateDirect: Boolean? = null,
         ): SlotCapabilities =
-            CapabilityResolver.resolve(
+            resolve(
                 controller = candidateControllerLayer(slotId, candidateDirect),
-                transport = TransportProfiles.forKind(candidateHostKind),
+                transport = transportProfileFor(candidateHostKind),
                 type = typeCapabilitiesFor(candidateType, candidateHostId, candidateHostKind),
                 host = candidateHostLayer(candidateHostKind, candidateHostId),
                 userEnabled = ALL,
-                // Pre-bind runtime probe: lets the report show a feature present-but-down
-                // (e.g. motion backend missing) before the user commits.
                 runtimeDown = candidateRuntimeDownLayer(candidateHostKind, candidateHostId),
             )
 
@@ -223,26 +219,19 @@ class CapabilityComposer
             val rumbleOn = userToggles.rumble[slotId] ?: RumbleEnabledStore.DEFAULT_ENABLED
             val micOn = userToggles.mic[slotId] ?: MicEnabledStore.DEFAULT_ENABLED
             val speakerOn = userToggles.speaker[slotId] ?: SpeakerEnabledStore.DEFAULT_ENABLED
-            return CapabilityResolver.resolve(
+            return resolve(
                 controller = controller,
                 transport = transportLayer(summary),
                 type = typeLayer(slotId, summary),
                 host = hostLayer(connId, summary, hosts.features),
-                userEnabled = CapabilityResolver.userEnabledCapabilities(motionOn, rumbleOn, micOn, speakerOn),
+                userEnabled = userEnabledCapabilities(motionOn, rumbleOn, micOn, speakerOn),
                 runtimeDown = runtimeDownLayer(connId, slotId, hosts.motionBackend),
             )
         }
 
         private fun virtualControllerLayer(): CapabilitySet {
-            // The phone IS the input AND the actuator: its screen sources the touchpad
-            // and mouse, its vibrator actuates rumble (trigger rumble folds into it),
-            // its own battery reports, and the skin renders the light surfaces the
-            // hardware lacks — lightbar, player LEDs and an active adaptive-trigger
-            // effect all draw on the on-screen pad (VirtualPadFeedbackStore). Motion
-            // rides only if the phone has a gyro. Audio needs no probe at all: every
-            // phone has a microphone and a speaker, which is exactly what the emulated
-            // pad's two endpoints need, so both ride unconditionally. The type layer
-            // still gates which of these a given emulated pad actually carries.
+            // The phone is both the input and the actuator; the light surfaces it has no
+            // hardware for are drawn on the on-screen pad (VirtualPadFeedbackStore).
             val out =
                 mutableSetOf(
                     Feature.GAMEPAD,
@@ -266,11 +255,6 @@ class CapabilityComposer
             device: PhysicalGamepadRegistry.Device,
             direct: Boolean = device.isUsbSynthetic,
         ): CapabilitySet {
-            // The pad supplies the gamepad axes. Touch comes from the pad's OWN trackpad where
-            // the path can read it (USB Direct); the phone screen substitutes only for a pad
-            // that has no trackpad at all. Rumble needs the pad's OWN motor: routing never
-            // falls back to the phone for a physical controller, so a motorless pad has no
-            // rumble.
             val vid = device.vendorId
             val pid = device.productId
             val out = mutableSetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.BATTERY)
@@ -279,9 +263,8 @@ class CapabilityComposer
                 out += Feature.MOUSE
             }
             if (direct) {
-                // A Direct pad has no framework InputDevice to probe; everything, including the
-                // trigger and player-LED surfaces the framework path never reaches, comes from the
-                // native tables. (The light bar is the one framework pads also drive, over Bluetooth.)
+                // A Direct pad has no framework InputDevice to probe, so everything comes from
+                // the native tables.
                 if (native.modelHasImu(vid, pid)) out += Feature.MOTION
                 if (native.modelHasRumble(vid, pid)) out += Feature.RUMBLE
                 if (native.modelHasLightbar(vid, pid)) out += Feature.LIGHTBAR
@@ -299,9 +282,8 @@ class CapabilityComposer
                     out += Feature.LIGHTBAR
                 }
             }
-            // The pad's own audio endpoints are Android's to route, not ours: we claim only
-            // the HID interface (or, on the framework path, nothing at all), so its USB-audio
-            // function stays with the OS on either path. That makes the model tables the wrong
+            // We claim only the HID interface, so the pad's USB-audio function stays with the
+            // OS on either path. That makes the model tables the wrong
             // source here, and the OS route table the right one: a pad whose audio function
             // the OS never enumerated can't be captured from or played to, whatever its model
             // says it has. A Bluetooth pad has no such function and resolves to nothing.
@@ -365,7 +347,7 @@ class CapabilityComposer
             device: PhysicalGamepadRegistry.Device,
             direct: Boolean = device.isUsbSynthetic,
         ): TouchpadSource =
-            TouchpadRouting.sourceFor(
+            sourceFor(
                 isVirtual = false,
                 padHasTouchpad = native.modelHasTouchpad(device.vendorId, device.productId),
                 padCaptured = direct || (!device.isUsbSynthetic && device.touchpadDeviceId != null),
@@ -395,7 +377,7 @@ class CapabilityComposer
         }
 
         // Unbound slots get a permissive transport so candidate/report queries see inherent availability.
-        private fun transportLayer(summary: ConnectionSummary?): CapabilitySet = summary?.let { TransportProfiles.forKind(it.kind) } ?: ALL
+        private fun transportLayer(summary: ConnectionSummary?): CapabilitySet = summary?.let { transportProfileFor(it.kind) } ?: ALL
 
         private fun typeLayer(
             slotId: String,
@@ -417,9 +399,9 @@ class CapabilityComposer
             kind: ConnectionKind,
         ): CapabilitySet {
             if (kind == ConnectionKind.MOONLIGHT) {
-                return MoonlightCatalog.typeCapabilities(
-                    MoonlightEmulatedType.resolve(
-                        MoonlightEmulatedType.fromStored(typeId),
+                return moonlightTypeCapabilities(
+                    resolveMoonlightEmulatedType(
+                        fromStored(typeId),
                         sourceHasMotion = false,
                     ),
                 )
@@ -429,8 +411,8 @@ class CapabilityComposer
                     ?.let { hostFacts.catalog.cached(it) }
                     ?.controllerTypes
                     ?.firstOrNull { it.id == typeId }
-            return catalogType?.let { CapabilityResolver.typeCapabilities(it) }
-                ?: BundledCatalog.typeCapabilitiesById(typeId)
+            return catalogType?.let { catalogTypeCapabilities(it) }
+                ?: typeCapabilitiesById(typeId)
         }
 
         // BLUETOOTH limits via transport, so its host layer is permissive; an unbound slot is
@@ -441,7 +423,7 @@ class CapabilityComposer
             hostMap: Map<String, HostFeatureSet>,
         ): CapabilitySet {
             if (summary == null || connId == null) return ALL
-            if (summary.kind == ConnectionKind.MOONLIGHT) return MoonlightCatalog.HOST_LAYER
+            if (summary.kind == ConnectionKind.MOONLIGHT) return HOST_LAYER
             if (summary.kind != ConnectionKind.SATELLITE) return ALL
             return (hostMap[connId] ?: HostFeatureSet.SATELLITE_DEFAULT).toCapabilitySet()
         }
@@ -450,7 +432,7 @@ class CapabilityComposer
             kind: ConnectionKind,
             hostId: String?,
         ): CapabilitySet {
-            if (kind == ConnectionKind.MOONLIGHT) return MoonlightCatalog.HOST_LAYER
+            if (kind == ConnectionKind.MOONLIGHT) return HOST_LAYER
             if (kind != ConnectionKind.SATELLITE) return ALL
             val features = hostId?.let { hostFacts.features.featuresFor(it) } ?: HostFeatureSet.SATELLITE_DEFAULT
             return features.toCapabilitySet()

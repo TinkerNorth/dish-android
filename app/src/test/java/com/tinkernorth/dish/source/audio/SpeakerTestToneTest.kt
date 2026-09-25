@@ -23,6 +23,19 @@ class SpeakerTestToneTest {
         var openedChannels: Int? = null
         var openedLane: PlayoutLane? = null
 
+        // Accepts every frame whole, so a short write never stands in for the assertion that the
+        // tone reached the track.
+        private inner class WritingSession : SpeakerPlayoutSession {
+            override fun write(pcmStereo: ShortArray): Int {
+                written += pcmStereo
+                return pcmStereo.size
+            }
+
+            override fun close() {
+                closed = true
+            }
+        }
+
         override fun open(
             frameSamples: Int,
             preferredDeviceId: Int,
@@ -33,34 +46,23 @@ class SpeakerTestToneTest {
             openedEndpoint = preferredDeviceId
             openedChannels = channels
             openedLane = lane
-            return object : SpeakerPlayoutSession {
-                override fun write(pcmStereo: ShortArray): Int {
-                    written += pcmStereo
-                    return pcmStereo.size
-                }
-
-                override fun close() {
-                    closed = true
-                }
-            }
+            return WritingSession()
         }
     }
 
     private val routing =
-        object : SlotAudioRoutes {
-            override val changes = MutableStateFlow(emptyMap<Int, PadAudioRoute>())
-
-            override fun forSlot(slotId: String): PadAudioRoute =
-                if (slotId == "-5") PadAudioRoute(microphone = false, speaker = true, playbackDeviceId = 42) else PadAudioRoute.NONE
-        }
+        MapSlotAudioRoutes(
+            MutableStateFlow(emptyMap()),
+            mapOf("-5" to PadAudioRoute(microphone = false, speaker = true, playbackDeviceId = 42)),
+        )
 
     @Test
     fun `plays every frame on the pad's own endpoint and closes the track`() =
         runTest {
             val sink = FakeSink()
-            assertTrue(SpeakerTestTone(sink, routing, TestTonePolicy.FRAMES).play("-5"))
+            assertTrue(SpeakerTestTone(sink, routing, FRAMES).play("-5"))
             assertEquals(42, sink.openedEndpoint)
-            assertEquals(TestTonePolicy.FRAMES, sink.written.size)
+            assertEquals(FRAMES, sink.written.size)
             assertTrue(sink.written.all { it.size == SpeakerEngine.FRAME_SAMPLES })
             assertTrue(sink.closed)
         }
@@ -69,7 +71,7 @@ class SpeakerTestToneTest {
     fun `the phone route plays out the default output`() =
         runTest {
             val sink = FakeSink()
-            assertTrue(SpeakerTestTone(sink, routing, TestTonePolicy.FRAMES).play("virtual"))
+            assertTrue(SpeakerTestTone(sink, routing, FRAMES).play("virtual"))
             assertEquals(NO_AUDIO_DEVICE, sink.openedEndpoint)
         }
 
@@ -77,20 +79,20 @@ class SpeakerTestToneTest {
     fun `a refused output reports false and writes nothing`() =
         runTest {
             val sink = FakeSink(refuse = true)
-            assertFalse(SpeakerTestTone(sink, routing, TestTonePolicy.FRAMES).play("-5"))
+            assertFalse(SpeakerTestTone(sink, routing, FRAMES).play("-5"))
             assertTrue(sink.written.isEmpty())
         }
 
     @Test
     fun `the tone fades in from silence, stays under full scale and keeps both channels equal`() {
-        val first = TestTonePolicy.frame(0)
+        val first = frame(0)
         assertEquals(0, first[0].toInt())
         assertEquals(0, first[1].toInt())
-        val last = TestTonePolicy.frame(TestTonePolicy.FRAMES - 1)
+        val last = frame(FRAMES - 1)
         assertEquals(0, last[last.size - 2].toInt())
         var peak = 0
-        for (index in 0 until TestTonePolicy.FRAMES) {
-            val frame = TestTonePolicy.frame(index)
+        for (index in 0 until FRAMES) {
+            val frame = frame(index)
             for (i in 0 until frame.size step 2) {
                 assertEquals(frame[i], frame[i + 1])
                 peak = maxOf(peak, abs(frame[i].toInt()))

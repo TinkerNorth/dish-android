@@ -25,7 +25,7 @@ class PadTouchpadCapturePolicyTest {
     @Test
     fun `a routed framework pad with a surface maps that surface to its slot`() {
         val routes =
-            PadTouchpadCapturePolicy.routes(
+            routes(
                 devices = mapOf(7 to pad(7, surface = 7), 8 to pad(8, surface = 31)),
                 reachable = setOf("7", "8"),
                 touchpadSource = { TouchpadSource.PAD },
@@ -36,7 +36,7 @@ class PadTouchpadCapturePolicyTest {
     @Test
     fun `a pad without a surface, an unbound pad, and a Direct pad route nothing`() {
         val routes =
-            PadTouchpadCapturePolicy.routes(
+            routes(
                 devices =
                     mapOf(
                         1 to pad(1, surface = null),
@@ -52,7 +52,7 @@ class PadTouchpadCapturePolicyTest {
     @Test
     fun `the composer's source decides, so a pad the phone screen sources is not captured`() {
         val routes =
-            PadTouchpadCapturePolicy.routes(
+            routes(
                 devices = mapOf(4 to pad(4, surface = 4)),
                 reachable = setOf("4"),
                 touchpadSource = { TouchpadSource.PHONE },
@@ -62,20 +62,20 @@ class PadTouchpadCapturePolicyTest {
 
     @Test
     fun `capture wants focus and at least one route`() {
-        assertFalse(PadTouchpadCapturePolicy.shouldCapture(emptyMap(), focused = true))
-        assertFalse(PadTouchpadCapturePolicy.shouldCapture(mapOf(1 to "1"), focused = false))
-        assertTrue(PadTouchpadCapturePolicy.shouldCapture(mapOf(1 to "1"), focused = true))
+        assertFalse(shouldCapture(emptyMap(), focused = true))
+        assertFalse(shouldCapture(mapOf(1 to "1"), focused = false))
+        assertTrue(shouldCapture(mapOf(1 to "1"), focused = true))
     }
 
     @Test
     fun `only a captured touchpad event for a routed device names a slot`() {
         val routes = mapOf(7 to "7")
-        val touchpad = PadTouchpadCapturePolicy.SOURCE_TOUCHPAD
-        assertEquals("7", PadTouchpadCapturePolicy.slotForEvent(routes, touchpad, 7))
+        val touchpad = SOURCE_TOUCHPAD
+        assertEquals("7", slotForEvent(routes, touchpad, 7))
         // The pad's joystick axes and its mouse-mode cursor moves keep their own path.
-        assertEquals(null, PadTouchpadCapturePolicy.slotForEvent(routes, 0x01000010, 7)) // SOURCE_JOYSTICK
-        assertEquals(null, PadTouchpadCapturePolicy.slotForEvent(routes, 0x00002002, 7)) // SOURCE_MOUSE
+        assertEquals(null, slotForEvent(routes, 0x01000010, 7)) // SOURCE_JOYSTICK
+        assertEquals(null, slotForEvent(routes, 0x00002002, 7)) // SOURCE_MOUSE
         // A surface the app does not route is not consumed either.
-        assertEquals(null, PadTouchpadCapturePolicy.slotForEvent(routes, touchpad, 8))
+        assertEquals(null, slotForEvent(routes, touchpad, 8))
     }
 }

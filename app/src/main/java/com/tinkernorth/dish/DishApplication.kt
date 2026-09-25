@@ -5,6 +5,7 @@ package com.tinkernorth.dish
 import android.app.Application
 import android.content.pm.ApplicationInfo
 import android.os.StrictMode
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.tinkernorth.dish.bench.HotPathBenchController
 import com.tinkernorth.dish.composer.CatalogPrewarmer
@@ -128,13 +129,18 @@ class DishApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         installStrictModeIfDebuggable()
+        installProcessWideDefaults()
+        installNativeBacked()
+    }
+
+    private fun installProcessWideDefaults() {
         // AppCompatDelegate default night mode is process-wide; apply here before any Activity
         // inflates so the first frame already matches the user's pick.
         themePreferenceStore.applyPersistedMode()
-        // Must install before native-load try so the opt-in applies even when load fails.
+        // Must install before the native-load try so the opt-in applies even when load fails.
         ProcessLifecycleOwner.get().lifecycle.addObserver(crashReportingController)
-        // The GitHub build's release check runs only while the app is on screen;
-        // the Play build binds a no-op here.
+        // The GitHub build's release check runs only while the app is on screen; the Play build
+        // binds a no-op here.
         ProcessLifecycleOwner.get().lifecycle.addObserver(updateNotices)
         // Warm each satellite's catalog once its link is Live; independent of the native load.
         catalogPrewarmer.start()
@@ -142,15 +148,19 @@ class DishApplication : Application() {
         // only in that document, so a session restored without anyone opening the binding screen
         // would otherwise stream with the microphone and the controller speaker switched off.
         hostCapabilitiesProbe.start()
-        // Missing ABI on sideloaded builds throws UnsatisfiedLinkError on first
-        // native ref; route to NativeUnavailableActivity instead of crashing.
+    }
+
+    // Missing ABI on sideloaded builds throws UnsatisfiedLinkError on the first native ref; route
+    // to NativeUnavailableActivity instead of crashing.
+    private fun installNativeBacked() {
         try {
             installNativeBackedObservers()
             HotPathBenchController.install(this, processScope)
             diagnosticsLogRecorder.install()
             linkHistoryRecorder.install()
             // Re-arm latency profiling only if the user previously left it on (they accepted the
-            // warning then). Default is false, so a fresh install keeps the hot path measurement-free.
+            // warning then). Default is false, so a fresh install keeps the hot path
+            // measurement-free.
             physicalInputNative.setHotPathBench(latencyProfilingStore.state.value)
         } catch (t: UnsatisfiedLinkError) {
             nativeLoadFailed = true
@@ -165,61 +175,77 @@ class DishApplication : Application() {
     private fun installStrictModeIfDebuggable() {
         val isDebuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
         if (!isDebuggable) return
-        StrictMode.setThreadPolicy(
-            StrictMode.ThreadPolicy
-                .Builder()
-                .detectDiskReads()
-                .detectDiskWrites()
-                .detectNetwork()
-                .penaltyLog()
-                .build(),
-        )
-        StrictMode.setVmPolicy(
-            StrictMode.VmPolicy
-                .Builder()
-                .detectLeakedClosableObjects()
-                .detectLeakedRegistrationObjects()
-                .detectActivityLeaks()
-                .penaltyLog()
-                .build(),
-        )
+        StrictMode.setThreadPolicy(loggingThreadPolicy())
+        StrictMode.setVmPolicy(loggingVmPolicy())
     }
+
+    // Logged rather than fatal: a debug build should surface these, not refuse to run.
+    private fun loggingThreadPolicy(): StrictMode.ThreadPolicy =
+        StrictMode.ThreadPolicy
+            .Builder()
+            .detectDiskReads()
+            .detectDiskWrites()
+            .detectNetwork()
+            .penaltyLog()
+            .build()
+
+    private fun loggingVmPolicy(): StrictMode.VmPolicy =
+        StrictMode.VmPolicy
+            .Builder()
+            .detectLeakedClosableObjects()
+            .detectLeakedRegistrationObjects()
+            .detectActivityLeaks()
+            .penaltyLog()
+            .build()
 
     private fun installNativeBackedObservers() {
         val lifecycle = ProcessLifecycleOwner.get().lifecycle
+        installSessionObservers(lifecycle)
+        installInputSources(lifecycle)
+        installAudioEngines(lifecycle)
+        installNativeBridges()
+        lifecycle.addObserver(networkStateObserver)
+        lifecycle.addObserver(streamingServiceController)
+    }
+
+    private fun installSessionObservers(lifecycle: Lifecycle) {
         lifecycle.addObserver(connectionForegroundObserver)
         lifecycle.addObserver(slotTopologyController)
         lifecycle.addObserver(moonlightSessionController)
-        // Process-scoped so bindings survive the MainActivity → GamepadOverlayActivity handoff.
+    }
+
+    // The installs here are process-scoped so bindings survive the MainActivity →
+    // GamepadOverlayActivity handoff, and so the capability model is composed whether or not a
+    // screen is up.
+    private fun installInputSources(lifecycle: Lifecycle) {
         physicalGamepadRegistry.install()
         usbGamepadManager.install()
         pollRateSampler.install()
         inputRateStore.install()
+        padAudioRouteResolver.install()
         lifecycle.addObserver(physicalSlotBindingObserver)
         lifecycle.addObserver(physicalBatterySource)
         lifecycle.addObserver(virtualBatterySource)
         lifecycle.addObserver(physicalMotionSource)
         lifecycle.addObserver(wakeStateController)
-        BluetoothGamepadBridge.install(btRegistry)
-        MoonlightGamepadBridge.install(moonlightManager)
         lifecycle.addObserver(bluetoothBondMonitor)
         lifecycle.addObserver(bluetoothAdapterStateObserver)
         lifecycle.addObserver(bluetoothPermissionStateObserver)
+    }
+
+    // Both engines are process-STARTED like every other streaming source: leaving the app tears
+    // down the foreground service and with it the session, so a microphone that outlived the
+    // foreground would have nowhere to send. Capture registers after the permission gate so the
+    // first plan it sees already carries a re-read grant.
+    private fun installAudioEngines(lifecycle: Lifecycle) {
         lifecycle.addObserver(micPermissionGate)
-        // Capture is process-STARTED like every other streaming source: leaving the app tears
-        // down the foreground service and with it the session, so a microphone that outlived the
-        // foreground would have nowhere to send. Registered after the permission gate so the
-        // first plan it sees already carries a re-read grant.
         lifecycle.addObserver(micEngine)
-        // Playback is process-STARTED for the same reason, and its native dispatch thread starts
-        // only when a slot actually plays.
         lifecycle.addObserver(speakerEngine)
-        // Process-scoped like the USB manager's own install: the capability model is composed
-        // whether or not a screen is up, and a physical pad's mic/speaker caps are this table's
-        // answer.
-        padAudioRouteResolver.install()
-        lifecycle.addObserver(networkStateObserver)
-        lifecycle.addObserver(streamingServiceController)
+    }
+
+    private fun installNativeBridges() {
+        BluetoothGamepadBridge.install(btRegistry)
+        MoonlightGamepadBridge.install(moonlightManager)
         RumbleBridge.install(rumbleRouter)
         FeedbackBridge.install(feedbackRouter)
         // A Direct-claimed DualSense's own mute button, coming up from the report decoder that

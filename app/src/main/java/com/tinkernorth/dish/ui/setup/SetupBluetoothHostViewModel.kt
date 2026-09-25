@@ -9,7 +9,7 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
-import com.tinkernorth.dish.core.input.BluetoothGamepad
+import com.tinkernorth.dish.core.input.GamepadProfile
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
@@ -59,7 +59,7 @@ class SetupBluetoothHostViewModel
             val id: String,
             val name: String,
             val mac: String,
-            val profile: BluetoothGamepad.GamepadProfile,
+            val profile: GamepadProfile,
         )
 
         data class State(
@@ -68,7 +68,7 @@ class SetupBluetoothHostViewModel
             val permissionMissing: Boolean = false,
             val hasGyro: Boolean = false,
             // Set once advertising starts so the screen can name the committed type.
-            val advertisingProfile: BluetoothGamepad.GamepadProfile? = null,
+            val advertisingProfile: GamepadProfile? = null,
             val discoverable: Boolean = false,
         )
 
@@ -81,7 +81,7 @@ class SetupBluetoothHostViewModel
             // the dashboard. Carries what the success toast needs.
             data class Done(
                 val hostName: String,
-                val profile: BluetoothGamepad.GamepadProfile,
+                val profile: GamepadProfile,
                 val bound: Boolean,
             ) : Event
         }
@@ -169,10 +169,10 @@ class SetupBluetoothHostViewModel
             }
         }
 
-        fun onTypeChosen(profile: BluetoothGamepad.GamepadProfile) = beginAdvertising(profile, autoConnectMac = null)
+        fun onTypeChosen(profile: GamepadProfile) = beginAdvertising(profile, autoConnectMac = null)
 
         private fun beginAdvertising(
-            profile: BluetoothGamepad.GamepadProfile,
+            profile: GamepadProfile,
             autoConnectMac: String?,
         ) {
             proceeded = false
@@ -255,14 +255,14 @@ class SetupBluetoothHostViewModel
 
         private fun emitDone(
             hostName: String,
-            profile: BluetoothGamepad.GamepadProfile,
+            profile: GamepadProfile,
             bound: Boolean,
         ) {
             viewModelScope.launch { _events.emit(Event.Done(hostName, profile, bound)) }
         }
 
-        private fun typeFor(profile: BluetoothGamepad.GamepadProfile): Int =
-            if (profile == BluetoothGamepad.GamepadProfile.PLAYSTATION) CONTROLLER_TYPE_PLAYSTATION else CONTROLLER_TYPE_XBOX
+        private fun typeFor(profile: GamepadProfile): Int =
+            if (profile == GamepadProfile.PLAYSTATION) CONTROLLER_TYPE_PLAYSTATION else CONTROLLER_TYPE_XBOX
 
         private fun RememberedBt.toRow(): HostRow =
             HostRow(
@@ -274,8 +274,8 @@ class SetupBluetoothHostViewModel
 
         private fun pendingId(): String = "bt-pending-${System.currentTimeMillis()}"
 
-        private fun profileOf(profileName: String): BluetoothGamepad.GamepadProfile =
-            BluetoothGamepad.GamepadProfile.entries
+        private fun profileOf(profileName: String): GamepadProfile =
+            GamepadProfile.entries
                 .firstOrNull { it.profileName == profileName || it.name == profileName }
-                ?: BluetoothGamepad.GamepadProfile.XBOX
+                ?: GamepadProfile.XBOX
     }

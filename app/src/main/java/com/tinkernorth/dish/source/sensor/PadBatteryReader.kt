@@ -39,10 +39,10 @@ class PadBatteryReader
         // of the last report, and the card shows that. (The wire is the USB rule's, see
         // BatteryRouting: the phone battery, whatever the pad says.)
         fun sample(device: PhysicalGamepadRegistry.Device): BatterySample? =
-            if (device.isUsbSynthetic) directPadSample(device.id) else frameworkPadSample(device.id)
+            if (device.isUsbSynthetic) readDirectPadSample(device.id) else frameworkPadSample(device.id)
 
-        private fun directPadSample(deviceId: Int): BatterySample? {
-            val sample = PhysicalBatteryMapping.directPadSample(native.getDirectPadBattery(deviceId))
+        private fun readDirectPadSample(deviceId: Int): BatterySample? {
+            val sample = directPadSample(native.getDirectPadBattery(deviceId))
             if (sample != null) Log.d(TAG, "pad $deviceId own battery (Direct) $sample")
             return sample
         }
@@ -63,7 +63,7 @@ class PadBatteryReader
         ): BatterySample? {
             val state = device.batteryState
             val sample =
-                PhysicalBatteryMapping.controllerSample(
+                controllerSample(
                     isPresent = state.isPresent,
                     capacity = state.capacity,
                     status = state.status,

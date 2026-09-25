@@ -5,7 +5,8 @@ package com.tinkernorth.dish.ui.diagnostics
 import android.content.Context
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
-import com.tinkernorth.dish.core.net.DishProtocol
+import com.tinkernorth.dish.core.net.DishProtocolCompat
+import com.tinkernorth.dish.core.net.dishProtocolCompatFor
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightSessionState
 import com.tinkernorth.dish.ui.common.statusChipTextRes
@@ -71,12 +72,12 @@ internal fun Context.satelliteHostLines(host: HostDiag): List<String> {
 private fun Context.protocolValue(version: Int): String {
     val base = getString(R.string.diagnostics_protocol_value, version)
     val compat =
-        when (DishProtocol.compatFor(version)) {
-            DishProtocol.Compat.CURRENT -> getString(R.string.diagnostics_protocol_current)
-            DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE -> getString(R.string.chip_satellite_update_available)
-            DishProtocol.Compat.SATELLITE_UPDATE_REQUIRED -> getString(R.string.chip_satellite_update_required)
-            DishProtocol.Compat.APP_UPDATE_REQUIRED -> getString(R.string.chip_app_update_required)
-            DishProtocol.Compat.UNKNOWN -> null
+        when (dishProtocolCompatFor(version)) {
+            DishProtocolCompat.CURRENT -> getString(R.string.diagnostics_protocol_current)
+            DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE -> getString(R.string.chip_satellite_update_available)
+            DishProtocolCompat.SATELLITE_UPDATE_REQUIRED -> getString(R.string.chip_satellite_update_required)
+            DishProtocolCompat.APP_UPDATE_REQUIRED -> getString(R.string.chip_app_update_required)
+            DishProtocolCompat.UNKNOWN -> null
         }
     return compat?.let { getString(R.string.diagnostics_joined, base, it) } ?: base
 }
@@ -124,44 +125,5 @@ internal fun Context.bluetoothHostLines(host: HostDiag): List<String> {
     (state?.profileName ?: host.btProfile)?.let { lines += diagKv(R.string.diagnostics_host_profile, it) }
     lines += diagKv(R.string.diagnostics_host_connected_as, state?.connectedName ?: getString(R.string.diagnostics_none))
     lines += diagKv(R.string.diagnostics_reports_sent, (host.bluetooth?.reportsSent ?: 0L).toString())
-    return lines
-}
-
-internal fun Context.hostNetworkLines(host: HostDiag): List<String> {
-    val lines = mutableListOf<String>()
-    when (host.kind) {
-        ConnectionKind.SATELLITE -> {
-            val stats = host.satellite?.stats
-            val rtt =
-                stats?.rttP50Ms?.let { p50 ->
-                    getString(
-                        R.string.diagnostics_rtt_value,
-                        p50,
-                        stats.rttP99Ms ?: p50,
-                        p50 / 2,
-                        resources.getQuantityString(R.plurals.diagnostics_pings_count, stats.rttSamples, stats.rttSamples),
-                    )
-                } ?: getString(R.string.diagnostics_unknown)
-            lines += diagKv(R.string.diagnostics_round_trip, rtt)
-            stats?.let {
-                lines +=
-                    diagKv(
-                        R.string.diagnostics_pings,
-                        getString(
-                            R.string.diagnostics_pings_value,
-                            resources.getQuantityString(R.plurals.diagnostics_pings_sent, it.pings.pluralCount(), it.pings),
-                            resources.getQuantityString(R.plurals.diagnostics_pings_acked, it.acks.pluralCount(), it.acks),
-                            resources.getQuantityString(R.plurals.diagnostics_pings_missed, it.missed, it.missed),
-                        ),
-                    )
-            }
-            host.satellite?.let { lines += diagKv(R.string.diagnostics_packets_sent, it.packetsSent.toString()) }
-        }
-        ConnectionKind.MOONLIGHT -> {
-            val rtt = host.moonlight?.rttMs?.let { getString(R.string.diagnostics_ms_whole, it) } ?: getString(R.string.diagnostics_unknown)
-            lines += diagKv(R.string.diagnostics_control_round_trip, rtt)
-        }
-        ConnectionKind.BLUETOOTH -> lines += getString(R.string.diagnostics_bt_no_round_trip)
-    }
     return lines
 }

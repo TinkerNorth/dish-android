@@ -13,6 +13,7 @@ import android.text.style.TypefaceSpan
 import android.util.TypedValue
 import android.view.View
 import android.widget.TextView
+import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
@@ -63,6 +64,19 @@ class DishNotifications
         // and new screens of an activity transition can never both render a banner.
         private val attachments = ArrayDeque<Attachment>()
         private val attachLock = Any()
+
+        // A screen that comes back to the front takes the queue again; one that is destroyed
+        // gives it up and clears whatever it was still showing.
+        private inner class AttachmentLifecycle(
+            private val attachment: Attachment,
+        ) : DefaultLifecycleObserver {
+            override fun onResume(owner: LifecycleOwner) = activate(attachment)
+
+            override fun onDestroy(owner: LifecycleOwner) {
+                drop(attachment)
+                attachment.dismissAll()
+            }
+        }
 
         private fun activate(attachment: Attachment) {
             synchronized(attachLock) {
@@ -188,18 +202,7 @@ class DishNotifications
                 }
             }
 
-            owner.lifecycle.addObserver(
-                object : DefaultLifecycleObserver {
-                    override fun onResume(owner: LifecycleOwner) {
-                        activate(attachment)
-                    }
-
-                    override fun onDestroy(owner: LifecycleOwner) {
-                        drop(attachment)
-                        attachment.dismissAll()
-                    }
-                },
-            )
+            owner.lifecycle.addObserver(AttachmentLifecycle(attachment))
 
             return attachment
         }
@@ -380,16 +383,27 @@ private fun buildStyledText(
 }
 
 private fun Snackbar.applyDishTheme(severity: DishNotification.Severity): Snackbar {
-    val ctx = view.context
-    val res = ctx.resources
+    styleSurface(severity)
+    styleMessageText()
+    styleActionText(severity)
+    return this
+}
+
+private fun Snackbar.styleSurface(severity: DishNotification.Severity) {
+    val res = view.resources
     view.setBackgroundResource(backgroundForSeverity(severity))
-    // Clear M3 colorInverseSurface tint so the dark notification_bg_<severity> drawable renders as-is.
+    // Clear the M3 colorInverseSurface tint so the dark notification_bg_<severity> drawable
+    // renders as-is.
     view.backgroundTintList = null
     view.elevation = res.getDimension(R.dimen.notification_elevation)
     val horizontalPad = res.getDimensionPixelSize(R.dimen.notification_padding_horizontal)
     val verticalPad = res.getDimensionPixelSize(R.dimen.notification_padding_vertical)
     view.setPadding(horizontalPad, verticalPad, horizontalPad, verticalPad)
-    setTextColor(ctx.getColor(R.color.colorOnSurface))
+    setTextColor(view.context.getColor(R.color.colorOnSurface))
+}
+
+private fun Snackbar.styleMessageText() {
+    val res = view.resources
     view.findViewById<TextView>(com.google.android.material.R.id.snackbar_text)?.apply {
         maxLines = MAX_TEXT_LINES
         // COMPLEX_UNIT_PX with getDimension(sp) avoids the implicit re-scale of textSize=Sp.
@@ -397,22 +411,25 @@ private fun Snackbar.applyDishTheme(severity: DishNotification.Severity): Snackb
         typeface = Typeface.DEFAULT_BOLD
         setPadding(res.getDimensionPixelSize(R.dimen.notification_text_leading_indent), 0, 0, 0)
     }
-    val actionColor =
-        when (severity) {
-            DishNotification.Severity.INFO,
-            DishNotification.Severity.SUCCESS,
-            -> R.color.colorPrimary
-            DishNotification.Severity.WARN -> R.color.colorWarning
-            DishNotification.Severity.ERROR -> R.color.colorError
-        }
-    setActionTextColor(ctx.getColor(actionColor))
+}
+
+private fun Snackbar.styleActionText(severity: DishNotification.Severity) {
+    val res = view.resources
+    setActionTextColor(view.context.getColor(actionColorForSeverity(severity)))
     view.findViewById<TextView>(com.google.android.material.R.id.snackbar_action)?.apply {
         typeface = Typeface.DEFAULT_BOLD
         setTextSize(TypedValue.COMPLEX_UNIT_PX, res.getDimension(R.dimen.notification_text_action))
         letterSpacing = ACTION_LETTER_SPACING
     }
-    return this
 }
+
+@ColorRes
+private fun actionColorForSeverity(severity: DishNotification.Severity): Int =
+    when (severity) {
+        DishNotification.Severity.INFO, DishNotification.Severity.SUCCESS -> R.color.colorPrimary
+        DishNotification.Severity.WARN -> R.color.colorWarning
+        DishNotification.Severity.ERROR -> R.color.colorError
+    }
 
 @androidx.annotation.DrawableRes
 private fun backgroundForSeverity(severity: DishNotification.Severity): Int =

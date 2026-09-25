@@ -86,23 +86,27 @@ class MoonlightSessionService : Service() {
         nm.notify(NOTIFICATION_ID, build(hostIds))
     }
 
-    private fun build(hostIds: Set<String>): Notification {
-        val openIntent =
-            PendingIntent.getActivity(
-                this,
-                0,
-                Intent(this, MainActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP) },
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
+    private fun openAppIntent(): PendingIntent =
+        PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP) },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    // One line for the first host, because the notification has room for one: a session with no
+    // pads yet is still starting, and no host at all is idle.
+    private fun bodyFor(hostIds: Set<String>): String {
         val primary = hostIds.firstOrNull()
-        val label = primary?.let { hub.summary(it)?.label }
-        val pads = primary?.let { moonlight.get(it)?.padCount } ?: 0
-        val body =
-            when {
-                label == null -> getString(R.string.ml_service_body_idle)
-                pads > 0 -> resources.getQuantityString(R.plurals.ml_service_body, pads, pads, label)
-                else -> getString(R.string.ml_service_body_starting, label)
-            }
+        val label = primary?.let { hub.summary(it)?.label } ?: return getString(R.string.ml_service_body_idle)
+        val pads = primary.let { moonlight.get(it)?.padCount } ?: 0
+        if (pads > 0) return resources.getQuantityString(R.plurals.ml_service_body, pads, pads, label)
+        return getString(R.string.ml_service_body_starting, label)
+    }
+
+    private fun build(hostIds: Set<String>): Notification {
+        val openIntent = openAppIntent()
+        val body = bodyFor(hostIds)
         return NotificationCompat
             .Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_dish_connected)

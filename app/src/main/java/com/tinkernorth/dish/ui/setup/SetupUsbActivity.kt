@@ -7,9 +7,6 @@ import android.view.View
 import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.annotation.StringRes
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivitySetupUsbBinding
 import com.tinkernorth.dish.databinding.SetupChoiceRowBinding
@@ -17,9 +14,9 @@ import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.source.usb.DirectClaimFailure
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -49,20 +46,12 @@ class SetupUsbActivity : BaseGamepadHostActivity() {
     }
 
     private fun observe() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.state.collect { render(it) }
-            }
-        }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.events.collect { event ->
-                    when (event) {
-                        is SetupUsbViewModel.Event.Proceed ->
-                            nav.toSetupConnection(SetupFlow.INPUT_USB, event.slotId)
-                        is SetupUsbViewModel.Event.Recover -> showRecovery(event.reason)
-                    }
-                }
+        observeWhileStarted(viewModel.state) { render(it) }
+        observeWhileStarted(viewModel.events) { event ->
+            when (event) {
+                is SetupUsbViewModel.Event.Proceed ->
+                    nav.toSetupConnection(INPUT_USB, event.slotId)
+                is SetupUsbViewModel.Event.Recover -> showRecovery(event.reason)
             }
         }
     }
@@ -127,7 +116,7 @@ class SetupUsbActivity : BaseGamepadHostActivity() {
     // start over / exit are handled by the dialog.
     private fun showRecovery(reason: DirectClaimFailure?) {
         val message = reason?.let { getString(reasonText(it)) }
-        SetupErrorDialog.show(this, message) {
+        show(this, message) {
             when (viewModel.state.value.stage) {
                 SetupUsbViewModel.Stage.GRANTING -> viewModel.showPrompt()
                 else -> viewModel.chooseStandard()

@@ -49,9 +49,9 @@ class FrameworkTimingWindowTest {
     @Test
     fun `percentiles use nearest rank`() {
         val values = floatArrayOf(5f, 1f, 3f, 2f, 4f)
-        assertEquals(3f, Percentiles.of(values, 0.5), 0f)
-        assertEquals(5f, Percentiles.of(values, 0.99), 0f)
-        assertEquals(0f, Percentiles.of(FloatArray(0), 0.5), 0f)
+        assertEquals(3f, percentileOf(values, 0.5), 0f)
+        assertEquals(5f, percentileOf(values, 0.99), 0f)
+        assertEquals(0f, percentileOf(FloatArray(0), 0.5), 0f)
     }
 
     @Test

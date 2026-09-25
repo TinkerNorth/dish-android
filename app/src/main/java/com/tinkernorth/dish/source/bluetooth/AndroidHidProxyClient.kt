@@ -12,7 +12,7 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
-import com.tinkernorth.dish.core.input.BluetoothGamepad
+import com.tinkernorth.dish.core.input.GamepadProfile
 import com.tinkernorth.dish.core.input.REPORT_ID
 import com.tinkernorth.dish.core.input.REPORT_SIZE
 import com.tinkernorth.dish.core.input.buildHidDescriptor
@@ -28,7 +28,7 @@ class AndroidHidProxyClient(
     @Volatile private var hidDevice: BluetoothHidDevice? = null
 
     @Volatile private var connectedDevice: BluetoothDevice? = null
-    private var currentProfile: BluetoothGamepad.GamepadProfile? = null
+    private var currentProfile: GamepadProfile? = null
 
     // Per-thread (sendReport is reached from the BT dispatch and on-screen-pad threads); avoids a
     // payload allocation per report.
@@ -54,32 +54,42 @@ class AndroidHidProxyClient(
         }
     }
 
-    override fun registerApp(profile: BluetoothGamepad.GamepadProfile) {
+    override fun registerApp(profile: GamepadProfile) {
         val hid = hidDevice ?: return
         currentProfile = profile
-        val sdp =
-            BluetoothHidDeviceAppSdpSettings(
-                profile.sdpName,
-                profile.sdpDescription,
-                profile.sdpProvider,
-                BluetoothHidDevice.SUBCLASS2_GAMEPAD,
-                buildHidDescriptor(),
-            )
-        val qos =
-            BluetoothHidDeviceAppQosSettings(
-                BluetoothHidDeviceAppQosSettings.SERVICE_GUARANTEED,
-                TOKEN_RATE,
-                BluetoothHidDeviceAppQosSettings.MAX,
-                BluetoothHidDeviceAppQosSettings.MAX,
-                BT_SLOT_US,
-                JITTER_US,
-            )
         try {
-            hid.registerApp(sdp, null, qos, { it.run() }, hidCallback)
+            hid.registerApp(sdpFor(profile), null, guaranteedQos(), ::runInPlace, hidCallback)
         } catch (e: SecurityException) {
             events?.onError("Bluetooth permission denied: ${e.message ?: "BLUETOOTH_CONNECT not granted"}")
         }
     }
+
+    // The callbacks already arrive on a thread this client is happy to work on, so there is
+    // nothing to hand them off to.
+    private fun runInPlace(command: Runnable) = command.run()
+
+    // What the host reads about this pad before it has ever sent a report: the profile's identity
+    // plus the HID descriptor the persona is built from.
+    private fun sdpFor(profile: GamepadProfile) =
+        BluetoothHidDeviceAppSdpSettings(
+            profile.sdpName,
+            profile.sdpDescription,
+            profile.sdpProvider,
+            BluetoothHidDevice.SUBCLASS2_GAMEPAD,
+            buildHidDescriptor(),
+        )
+
+    // Guaranteed rather than best-effort: an input report that arrives late is worse than one
+    // that costs the link a slot.
+    private fun guaranteedQos() =
+        BluetoothHidDeviceAppQosSettings(
+            BluetoothHidDeviceAppQosSettings.SERVICE_GUARANTEED,
+            TOKEN_RATE,
+            BluetoothHidDeviceAppQosSettings.MAX,
+            BluetoothHidDeviceAppQosSettings.MAX,
+            BT_SLOT_US,
+            JITTER_US,
+        )
 
     override fun connectToHost(mac: String) {
         val hid = hidDevice ?: return
@@ -143,37 +153,13 @@ class AndroidHidProxyClient(
     // reached from the profile callbacks on a binder thread, so it must not throw and must not
     // stop half way: the three steps are independent, and a stack that has already gone away
     // must not keep the ones after it from running.
+    // Every step is best-effort and independent: a stack that has already gone away, or a grant
+    // the user revoked, must not stop the rest of the release.
     override fun unregisterAndRelease() {
-        val hid = hidDevice
-        val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-        if (hid != null) {
-            val device = connectedDevice
-            if (device != null) {
-                try {
-                    hid.disconnect(device)
-                } catch (e: SecurityException) {
-                    // Without the grant the link is the OS's to drop; the rest of the release stands.
-                    Log.w(TAG, "disconnect without BLUETOOTH_CONNECT: ${e.message}")
-                } catch (e: IllegalStateException) {
-                    Log.w(TAG, "disconnect after the stack went away: ${e.message}")
-                }
-            }
-            try {
-                hid.unregisterApp()
-            } catch (e: SecurityException) {
-                // The proxy is still closed below; the OS tears the registration down with it.
-                Log.w(TAG, "unregisterApp without BLUETOOTH_CONNECT: ${e.message}")
-            } catch (e: IllegalStateException) {
-                Log.w(TAG, "unregisterApp after the stack went away: ${e.message}")
-            }
-            try {
-                manager?.adapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, hid)
-            } catch (e: IllegalArgumentException) {
-                // Closing a proxy whose service binding is already gone.
-                Log.w(TAG, "the HID proxy was already released: ${e.message}")
-            } catch (e: IllegalStateException) {
-                Log.w(TAG, "closeProfileProxy after the stack went away: ${e.message}")
-            }
+        hidDevice?.let { hid ->
+            disconnectQuietly(hid)
+            unregisterAppQuietly(hid)
+            closeProxyQuietly(hid)
         }
         hidDevice = null
         connectedDevice = null
@@ -181,50 +167,95 @@ class AndroidHidProxyClient(
         events = null
     }
 
-    private val profileListener =
-        object : BluetoothProfile.ServiceListener {
-            override fun onServiceConnected(
-                profile: Int,
-                proxy: BluetoothProfile,
-            ) {
-                if (profile != BluetoothProfile.HID_DEVICE) return
-                hidDevice = proxy as BluetoothHidDevice
-                events?.onAcquired()
-            }
+    private fun disconnectQuietly(hid: BluetoothHidDevice) {
+        val device = connectedDevice ?: return
+        try {
+            hid.disconnect(device)
+        } catch (e: SecurityException) {
+            // Without the grant the link is the OS's to drop.
+            Log.w(TAG, "disconnect without BLUETOOTH_CONNECT: ${e.message}")
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "disconnect after the stack went away: ${e.message}")
+        }
+    }
 
-            override fun onServiceDisconnected(profile: Int) {
-                if (profile != BluetoothProfile.HID_DEVICE) return
-                hidDevice = null
-                connectedDevice = null
-                events?.onReleased()
+    private fun unregisterAppQuietly(hid: BluetoothHidDevice) {
+        try {
+            hid.unregisterApp()
+        } catch (e: SecurityException) {
+            // The proxy is still closed below; the OS tears the registration down with it.
+            Log.w(TAG, "unregisterApp without BLUETOOTH_CONNECT: ${e.message}")
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "unregisterApp after the stack went away: ${e.message}")
+        }
+    }
+
+    private fun closeProxyQuietly(hid: BluetoothHidDevice) {
+        val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        try {
+            manager?.adapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, hid)
+        } catch (e: IllegalArgumentException) {
+            // Closing a proxy whose service binding is already gone.
+            Log.w(TAG, "the HID proxy was already released: ${e.message}")
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "closeProfileProxy after the stack went away: ${e.message}")
+        }
+    }
+
+    private inner class HidProfileListener : BluetoothProfile.ServiceListener {
+        override fun onServiceConnected(
+            profile: Int,
+            proxy: BluetoothProfile,
+        ) {
+            if (profile != BluetoothProfile.HID_DEVICE) return
+            hidDevice = proxy as BluetoothHidDevice
+            events?.onAcquired()
+        }
+
+        override fun onServiceDisconnected(profile: Int) {
+            if (profile != BluetoothProfile.HID_DEVICE) return
+            hidDevice = null
+            connectedDevice = null
+            events?.onReleased()
+        }
+    }
+
+    private val profileListener = HidProfileListener()
+
+    // The platform's own view of this HID app: whether it is registered, and which host is on
+    // the other end of it.
+    private inner class HidDeviceCallback : BluetoothHidDevice.Callback() {
+        override fun onAppStatusChanged(
+            pluggedDevice: BluetoothDevice?,
+            registered: Boolean,
+        ) {
+            if (registered) events?.onAppRegistered() else events?.onAppUnregistered()
+        }
+
+        override fun onConnectionStateChanged(
+            device: BluetoothDevice,
+            state: Int,
+        ) {
+            when (state) {
+                BluetoothProfile.STATE_CONNECTED -> onHostConnected(device)
+                BluetoothProfile.STATE_DISCONNECTED -> onHostDisconnected(device)
             }
         }
 
-    private val hidCallback =
-        object : BluetoothHidDevice.Callback() {
-            override fun onAppStatusChanged(
-                pluggedDevice: BluetoothDevice?,
-                registered: Boolean,
-            ) {
-                if (registered) events?.onAppRegistered() else events?.onAppUnregistered()
-            }
-
-            override fun onConnectionStateChanged(
-                device: BluetoothDevice,
-                state: Int,
-            ) {
-                when (state) {
-                    BluetoothProfile.STATE_CONNECTED -> {
-                        connectedDevice = device
-                        events?.onHostConnected(device.address, hostName(device))
-                    }
-                    BluetoothProfile.STATE_DISCONNECTED -> {
-                        if (connectedDevice?.address == device.address) connectedDevice = null
-                        events?.onHostDisconnected(device.address)
-                    }
-                }
-            }
+        private fun onHostConnected(device: BluetoothDevice) {
+            connectedDevice = device
+            events?.onHostConnected(device.address, hostName(device))
         }
+
+        // A disconnect for a host that is not the current one is stale; it still reaches the
+        // listener, but it must not clear a newer connection.
+        private fun onHostDisconnected(device: BluetoothDevice) {
+            if (connectedDevice?.address == device.address) connectedDevice = null
+            events?.onHostDisconnected(device.address)
+        }
+    }
+
+    private val hidCallback = HidDeviceCallback()
 
     // The connected callback runs whatever the grant is; a host whose name we may not read is
     // still connected, just unnamed.

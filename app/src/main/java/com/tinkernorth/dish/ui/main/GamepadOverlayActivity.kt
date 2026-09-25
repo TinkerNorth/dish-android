@@ -22,22 +22,25 @@ import com.tinkernorth.dish.core.input.hidToXusb
 import com.tinkernorth.dish.core.input.withMicMute
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.core.net.moonlight.MoonlightControlProtocol
+import com.tinkernorth.dish.core.net.moonlight.BTN_TOUCHPAD
 import com.tinkernorth.dish.databinding.ActivityGamepadOverlayBinding
-import com.tinkernorth.dish.repository.TouchpadModeValue
+import com.tinkernorth.dish.repository.TOUCHPAD_MODE_OFF
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.sensor.MotionStreamState
 import com.tinkernorth.dish.source.sensor.PhoneBatterySource
 import com.tinkernorth.dish.source.sensor.PhoneMotionSource
 import com.tinkernorth.dish.source.store.MicMuteStore
+import com.tinkernorth.dish.source.store.VirtualPadFeedback
 import com.tinkernorth.dish.ui.common.GamepadSkin
 import com.tinkernorth.dish.ui.common.GamepadTouchView
 import com.tinkernorth.dish.ui.common.ResendPacer
 import com.tinkernorth.dish.ui.common.TouchpadSurfaceView
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.paintConnectionMenuItem
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.common.showConnectionDialog
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -107,54 +110,64 @@ class GamepadOverlayActivity :
         batterySource = PhoneBatterySource(applicationContext)
         repaintFrom(currentMotionPaint())
 
+        observeMotionPaint()
+        observeVirtualFeedback()
+        observeMicMute()
+    }
+
+    private fun observeMotionPaint() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 try {
-                    combine(
-                        hub.connections.map { conns -> conns.firstOrNull { it.id == connectionId } },
-                        capabilityComposer.state.map {
-                            it[VIRTUAL_SLOT_ID] ?: SlotCapabilities.NONE
-                        },
-                        motionSource.state,
-                    ) { summary, capability, sourceState ->
-                        OverlayMotionPaint(summary, capability, sourceState)
-                    }.distinctUntilChanged().collect { paint ->
-                        applyMotionGate(paint.capability, paint.summary)
-                        repaintFrom(paint)
-                    }
+                    overlayMotionPaint().collect { paint -> repaint(paint) }
                 } finally {
-                    // Stop on collector cancellation (STOP / activity destroy)
-                    // so a backgrounded overlay never leaks sensor listeners.
+                    // Stop on collector cancellation (STOP / activity destroy) so a backgrounded
+                    // overlay never leaks sensor listeners.
                     motionSource.stop()
                 }
             }
         }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                // Host-driven feedback painted onto the skin: lightbar colour,
-                // player LEDs, adaptive-trigger accents.
-                virtualFeedback.state.collect { fb ->
-                    binding.gamepadTouchView.lightbarColor = fb.lightbarColor
-                    binding.gamepadTouchView.playerLedMask = fb.playerLedMask
-                    binding.gamepadTouchView.leftTriggerEffect = fb.leftTriggerEffect
-                    binding.gamepadTouchView.rightTriggerEffect = fb.rightTriggerEffect
-                    binding.gamepadTouchView.micMuteLedState = fb.micLedState
-                }
-            }
-        }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                // The mute state itself, which is what rides the wire, gates capture, and owns
-                // the mute pill's face. It lives in the store rather than in the view because
-                // the pad's own button (and the app-wide mic chip) writes the same state, and
-                // because the microphone must keep obeying it after the overlay is gone.
-                micMute.state.collect {
-                    val muted = it[VIRTUAL_SLOT_ID] ?: MicMuteStore.DEFAULT_MUTED
-                    micMuted = muted
-                    binding.gamepadTouchView.micMuted = muted
-                }
-            }
-        }
+    }
+
+    private fun overlayMotionPaint(): Flow<OverlayMotionPaint> =
+        combine(
+            hub.connections.map { conns -> conns.firstOrNull { it.id == connectionId } },
+            capabilityComposer.state.map { it[VIRTUAL_SLOT_ID] ?: SlotCapabilities.NONE },
+            motionSource.state,
+        ) { summary, capability, sourceState -> OverlayMotionPaint(summary, capability, sourceState) }
+            .distinctUntilChanged()
+
+    private fun repaint(paint: OverlayMotionPaint) {
+        applyMotionGate(paint.capability, paint.summary)
+        repaintFrom(paint)
+    }
+
+    // Host-driven feedback painted onto the skin: lightbar colour, player LEDs, adaptive-trigger
+    // accents.
+    private fun observeVirtualFeedback() {
+        observeWhileStarted(virtualFeedback.state) { fb -> showVirtualFeedback(fb) }
+    }
+
+    private fun showVirtualFeedback(fb: VirtualPadFeedback) {
+        binding.gamepadTouchView.lightbarColor = fb.lightbarColor
+        binding.gamepadTouchView.playerLedMask = fb.playerLedMask
+        binding.gamepadTouchView.leftTriggerEffect = fb.leftTriggerEffect
+        binding.gamepadTouchView.rightTriggerEffect = fb.rightTriggerEffect
+        binding.gamepadTouchView.micMuteLedState = fb.micLedState
+    }
+
+    // The mute state itself, which is what rides the wire, gates capture, and owns the mute pill's
+    // face. It lives in the store rather than in the view because the pad's own button (and the
+    // app-wide mic chip) writes the same state, and because the microphone must keep obeying it
+    // after the overlay is gone.
+    private fun observeMicMute() {
+        observeWhileStarted(micMute.state) { muted -> showMicMuted(muted[VIRTUAL_SLOT_ID]) }
+    }
+
+    private fun showMicMuted(muted: Boolean?) {
+        val isMuted = muted ?: MicMuteStore.DEFAULT_MUTED
+        micMuted = isMuted
+        binding.gamepadTouchView.micMuted = isMuted
     }
 
     // Resend-thread-only (single-threaded Handler dispatcher).
@@ -299,7 +312,7 @@ class GamepadOverlayActivity :
         when {
             !capability.typeOk(Feature.TOUCHPAD) -> GamepadTouchView.TrackpadMode.NONE
             summary?.kind == ConnectionKind.SATELLITE &&
-                capabilityComposer.touchpadWireMode(VIRTUAL_SLOT_ID) != TouchpadModeValue.OFF ->
+                capabilityComposer.touchpadWireMode(VIRTUAL_SLOT_ID) != TOUCHPAD_MODE_OFF ->
                 GamepadTouchView.TrackpadMode.TOUCH
             summary?.kind == ConnectionKind.MOONLIGHT -> GamepadTouchView.TrackpadMode.TOUCH
             else -> GamepadTouchView.TrackpadMode.NONE
@@ -374,24 +387,28 @@ class GamepadOverlayActivity :
         val summary = hub.summary(connectionId) ?: return
         if (!summary.live.isLiveLink()) return
         when (summary.kind) {
-            ConnectionKind.BLUETOOTH -> {
-                val report =
-                    btRegistry.buildReport(
-                        connectionId,
-                        state.buttons,
-                        state.hatSwitch,
-                        state.leftX,
-                        state.leftY,
-                        state.rightX,
-                        state.rightY,
-                        state.leftTrigger,
-                        state.rightTrigger,
-                    ) ?: return
-                btRegistry.sendReport(connectionId, report)
-            }
+            ConnectionKind.BLUETOOTH -> sendBluetoothReport(state)
             ConnectionKind.SATELLITE -> sendSatelliteReport(state)
             ConnectionKind.MOONLIGHT -> sendMoonlightReport(state)
         }
+    }
+
+    // A null report means the persona has no descriptor yet, which is a link that is up but not
+    // ready; dropping the frame is right, the next one carries the same state.
+    private fun sendBluetoothReport(state: GamepadTouchView.GamepadState) {
+        val report =
+            btRegistry.buildReport(
+                connectionId,
+                state.buttons,
+                state.hatSwitch,
+                state.leftX,
+                state.leftY,
+                state.rightX,
+                state.rightY,
+                state.leftTrigger,
+                state.rightTrigger,
+            ) ?: return
+        btRegistry.sendReport(connectionId, report)
     }
 
     // Moonlight's low-16 button flags share XInput's bit layout, so the XUSB
@@ -400,7 +417,7 @@ class GamepadOverlayActivity :
     private fun sendMoonlightReport(state: GamepadTouchView.GamepadState) {
         var buttons = hidToXusb(state.buttons, state.hatSwitch)
         if (state.buttons and GamepadTouchView.BTN_TOUCHPAD_CLICK != 0) {
-            buttons = buttons or MoonlightControlProtocol.BTN_TOUCHPAD
+            buttons = buttons or BTN_TOUCHPAD
         }
         val conn = moonlight.get(connectionId) ?: return
         val pad = conn.padFor(VIRTUAL_SLOT_ID) ?: return

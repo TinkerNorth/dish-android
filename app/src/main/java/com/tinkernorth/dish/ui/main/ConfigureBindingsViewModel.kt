@@ -17,18 +17,26 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.InputFunctions
 import com.tinkernorth.dish.composer.LinkState
-import com.tinkernorth.dish.composer.LinkTiers
+import com.tinkernorth.dish.composer.comparatorByLinkTier
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.CatalogTypeDto
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.core.net.DishProtocol
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.DishProtocolCompat
+import com.tinkernorth.dish.core.net.moonlight.AUTO
+import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
+import com.tinkernorth.dish.core.net.moonlight.NINTENDO
+import com.tinkernorth.dish.core.net.moonlight.ORDER
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
+import com.tinkernorth.dish.core.net.moonlight.XBOX
+import com.tinkernorth.dish.core.net.moonlight.fromStored
+import com.tinkernorth.dish.core.net.moonlight.resolveMoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.SatelliteCapabilitiesRepository
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
+import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
@@ -82,7 +90,7 @@ data class BindingHost(
     val kind: ConnectionKind,
 )
 
-internal fun List<BindingHost>.orderedForPicker(): List<BindingHost> = sortedWith(LinkTiers.byTier(BindingHost::kind))
+internal fun List<BindingHost>.orderedForPicker(): List<BindingHost> = sortedWith(comparatorByLinkTier(BindingHost::kind))
 
 // The host side of each candidate resolution (transport ∩ type ∩ host), unioned across
 // the candidate types. The input's controller layer deliberately stays out: the card
@@ -165,7 +173,7 @@ data class ConfigUiState(
     // What the chosen Moonlight host last told us. Null for every other kind of destination.
     val moonlight: MoonlightSessionInput? = null,
     // Per-connection protocol verdict (satellite hosts only), for the update chips.
-    val hostCompat: Map<String, DishProtocol.Compat> = emptyMap(),
+    val hostCompat: Map<String, DishProtocolCompat> = emptyMap(),
     // RECORD_AUDIO, re-read on every resume: the OS says nothing when a grant is revoked.
     val micPermissionGranted: Boolean = false,
 ) {
@@ -255,6 +263,13 @@ data class ApplyStep(
     val label: String,
 )
 
+private data class ApplyTarget(
+    val snapshot: BindingSnapshot,
+    val draft: BindingDraft,
+    val type: Int,
+    val host: BindingHost,
+)
+
 sealed interface ApplyState {
     data object Idle : ApplyState
 
@@ -310,31 +325,44 @@ class ConfigureBindingsViewModel
 
         private var loadedSlotId: String? = null
 
-        private var moonlightPairing: MoonlightPairingUi? = null
-        private var moonlightFailure: MoonlightFailure? = null
-        private var pairingJob: kotlinx.coroutines.Job? = null
+        private val moonlightSection = MoonlightSection()
 
         fun load(slotId: String) {
             if (loadedSlotId == slotId) return
             loadedSlotId = slotId
-            val snapshot = buildSnapshot(slotId)
-            val hosts = buildHosts()
+
             val draft = buildSeedDraft(slotId)
-            val conns = hub.connections.value
-            _ui.value =
-                ConfigUiState(
-                    loaded = true,
-                    snapshot = snapshot,
-                    hosts = hosts,
-                    draft = draft,
-                    typeOptions = bundledTypeOptions(),
-                    connections = conns,
-                    knownHostLabels = conns.associate { it.id to it.label },
-                    controllerPresent = controllerPresent(snapshot),
-                    micPermissionGranted = micPermission.granted,
-                ).withCapabilities()
+            _ui.value = seedStateFor(slotId, draft)
             draft.hostId?.let { refreshTypeOptions(it) }
-            // Refresh the host list as connections come and go, without disturbing the in-progress draft.
+
+            observeConnections()
+            observeControllerPresence()
+            observeHostCompat()
+            moonlightSection.observeEvents()
+        }
+
+        private fun seedStateFor(
+            slotId: String,
+            draft: BindingDraft,
+        ): ConfigUiState {
+            val snapshot = buildSnapshot(slotId)
+            val conns = hub.connections.value
+            return ConfigUiState(
+                loaded = true,
+                snapshot = snapshot,
+                hosts = buildHosts(),
+                draft = draft,
+                typeOptions = bundledTypeOptions(),
+                connections = conns,
+                knownHostLabels = conns.associate { it.id to it.label },
+                controllerPresent = controllerPresent(snapshot),
+                micPermissionGranted = micPermission.granted,
+            ).withCapabilities()
+        }
+
+        // Refresh the host list as connections come and go, without disturbing the in-progress
+        // draft.
+        private fun observeConnections() {
             hub.connections
                 .onEach { latest ->
                     _ui.update { state ->
@@ -346,14 +374,22 @@ class ConfigureBindingsViewModel
                             ).withCapabilities()
                     }
                 }.launchIn(viewModelScope)
+        }
+
+        private fun observeControllerPresence() {
             gamepadRegistry.devices
-                .onEach { _ui.update { state -> state.copy(controllerPresent = controllerPresent(state.snapshot)).withCapabilities() } }
-                .launchIn(viewModelScope)
+                .onEach {
+                    _ui.update { state ->
+                        state.copy(controllerPresent = controllerPresent(state.snapshot)).withCapabilities()
+                    }
+                }.launchIn(viewModelScope)
+        }
+
+        private fun observeHostCompat() {
             hostFeaturesStore.state
                 .onEach { features ->
                     _ui.update { it.copy(hostCompat = features.mapValues { (_, f) -> f.compat }) }
                 }.launchIn(viewModelScope)
-            observeMoonlightEvents()
         }
 
         fun setHost(hostId: String) {
@@ -381,7 +417,7 @@ class ConfigureBindingsViewModel
         ): CapabilitySet {
             val candidateTypes =
                 if (hostKind == ConnectionKind.MOONLIGHT) {
-                    listOf(MoonlightEmulatedType.XBOX, MoonlightEmulatedType.PLAYSTATION, MoonlightEmulatedType.NINTENDO)
+                    listOf(XBOX, PLAYSTATION, NINTENDO)
                 } else {
                     listOf(
                         CONTROLLER_TYPE_XBOX,
@@ -401,18 +437,18 @@ class ConfigureBindingsViewModel
          * card renders the resolved type's rows for exactly this reason.
          */
         fun moonlightResolvedType(type: Int): Int {
-            val picked = MoonlightEmulatedType.fromStored(type)
-            if (picked != MoonlightEmulatedType.AUTO) return picked
-            val slotId = loadedSlotId ?: return MoonlightEmulatedType.XBOX
+            val picked = fromStored(type)
+            if (picked != AUTO) return picked
+            val slotId = loadedSlotId ?: return XBOX
             val caps =
                 capabilityComposer.capabilityForCandidate(
                     slotId = slotId,
-                    candidateType = MoonlightEmulatedType.XBOX,
+                    candidateType = XBOX,
                     candidateHostKind = ConnectionKind.MOONLIGHT,
                     candidateHostId = _ui.value.draft?.hostId,
                     candidateDirect = _ui.value.candidateDirect,
                 )
-            return MoonlightEmulatedType.resolve(picked, caps.inputOk(Feature.MOTION))
+            return resolveMoonlightEmulatedType(picked, caps.inputOk(Feature.MOTION))
         }
 
         /** Re-verify the chosen Moonlight host: on entering the screen, and before a session. */
@@ -457,10 +493,10 @@ class ConfigureBindingsViewModel
             val full = (conn?.padCount ?: 0) >= MOONLIGHT_MAX_PADS && pad == null
             return MoonlightSessionInput(
                 trust = probe.trust,
-                pairing = moonlightPairing,
+                pairing = moonlightSection.pairing,
                 apps = appsUiFrom(probe),
                 phase = phase,
-                failure = if (full) MoonlightFailure.HostFull else moonlightFailure,
+                failure = if (full) MoonlightFailure.HostFull else moonlightSection.failure,
                 selectedAppId = moonlight.rememberedAppId(hostId).takeIf { it.isNotEmpty() },
             )
         }
@@ -485,92 +521,140 @@ class ConfigureBindingsViewModel
             }
         }
 
-        fun onMoonlightAction(action: MoonlightAction) {
-            val hostId = _ui.value.draft?.hostId
-            if (hostId == null) {
-                Log.w(TAG, "Moonlight action $action with no destination chosen")
-                return
+        fun onMoonlightAction(action: MoonlightAction) = moonlightSection.onAction(action)
+
+        // The Moonlight card's own state: what the pairing dialog is showing and what went wrong
+        // last, plus the one job that drives a pairing. It lives here rather than on the
+        // ViewModel because nothing outside the card reads any of it.
+        private inner class MoonlightSection {
+            var pairing: MoonlightPairingUi? = null
+                private set
+            var failure: MoonlightFailure? = null
+                private set
+
+            private var pairingJob: kotlinx.coroutines.Job? = null
+
+            fun observeEvents() {
+                moonlight.events
+                    .onEach(::onEvent)
+                    .launchIn(viewModelScope)
             }
-            val host = moonlight.rememberedHost(hostId)
-            if (host == null) {
-                Log.w(TAG, "Moonlight action $action for unknown host $hostId")
+
+            fun onAction(action: MoonlightAction) {
+                val hostId = _ui.value.draft?.hostId
+                if (hostId == null) {
+                    Log.w(TAG, "Moonlight action $action with no destination chosen")
+                    return
+                }
+                val host = hostOrNull(action, hostId) ?: return
+                Log.i(TAG, "Moonlight action $action on ${host.address}")
+                apply(action, hostId, host)
+            }
+
+            // Null means the remembered host is gone, which has been logged and leaves the card
+            // to re-render itself as unreachable.
+            private fun hostOrNull(
+                action: MoonlightAction,
+                hostId: String,
+            ): MoonlightHost? {
+                val host = moonlight.rememberedHost(hostId)
+                if (host == null) {
+                    Log.w(TAG, "Moonlight action $action for unknown host $hostId")
+                    refreshMoonlight()
+                }
+                return host
+            }
+
+            private fun apply(
+                action: MoonlightAction,
+                hostId: String,
+                host: MoonlightHost,
+            ) {
+                when (action) {
+                    MoonlightAction.PAIR, MoonlightAction.PAIR_AGAIN, MoonlightAction.TRY_AGAIN,
+                    MoonlightAction.NEW_CODE,
+                    -> startPairing(host)
+                    MoonlightAction.CANCEL -> cancelPairing()
+                    MoonlightAction.QUIT_APP -> quitApp(host)
+                    MoonlightAction.RETRY, MoonlightAction.RECONNECT, MoonlightAction.START_SESSION ->
+                        restartSession(hostId)
+                    MoonlightAction.SEE_BINDINGS -> Unit
+                }
+            }
+
+            // A live job is REPLACED, not a reason to do nothing. New code is only ever offered
+            // while a pairing is in flight, so an "already pairing" guard here would make the one
+            // button that state exists to offer unreachable by construction.
+            private fun startPairing(host: MoonlightHost) {
+                cancelJob()
+                pairingJob =
+                    viewModelScope.launch {
+                        moonlight.pairHost(host)
+                        refreshMoonlight()
+                    }
+            }
+
+            private fun cancelPairing() {
+                cancelJob()
+                pairing = null
                 refreshMoonlight()
-                return
             }
-            Log.i(TAG, "Moonlight action $action on ${host.address}")
-            when (action) {
-                MoonlightAction.PAIR, MoonlightAction.PAIR_AGAIN, MoonlightAction.TRY_AGAIN,
-                MoonlightAction.NEW_CODE,
-                -> startMoonlightPairing(host)
-                MoonlightAction.CANCEL -> {
-                    cancelMoonlightPairing()
-                    moonlightPairing = null
-                    refreshMoonlight()
-                }
-                MoonlightAction.QUIT_APP -> {
-                    moonlight.quitHostApp(host)
-                    moonlightFailure = null
-                    refreshMoonlight()
-                }
-                MoonlightAction.RETRY, MoonlightAction.RECONNECT, MoonlightAction.START_SESSION -> {
-                    moonlightFailure = null
-                    moonlight.disconnect(hostId)
-                    moonlight.retrySessions()
-                    refreshMoonlight()
-                }
-                MoonlightAction.SEE_BINDINGS -> Unit
+
+            private fun cancelJob() {
+                pairingJob?.cancel()
+                pairingJob = null
             }
-        }
 
-        // A live job is REPLACED, not a reason to do nothing. New code is only ever offered
-        // while a pairing is in flight, so the old guard made the one button that state
-        // exists to offer unreachable by construction.
-        private fun startMoonlightPairing(host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost) {
-            cancelMoonlightPairing()
-            pairingJob =
-                viewModelScope.launch {
-                    moonlight.pairHost(host)
-                    refreshMoonlight()
-                }
-        }
-
-        private fun cancelMoonlightPairing() {
-            pairingJob?.cancel()
-            pairingJob = null
-        }
-
-        private fun observeMoonlightEvents() {
-            moonlight.events
-                .onEach { event -> onMoonlightEvent(event) }
-                .launchIn(viewModelScope)
-        }
-
-        private fun onMoonlightEvent(event: MoonlightConnectionEvent) {
-            when (event) {
-                is MoonlightConnectionEvent.PairingPinReady -> moonlightPairing = MoonlightPairingUi.Pin(event.pin)
-                is MoonlightConnectionEvent.PairingFailed -> {
-                    Log.w(TAG, "pairing with ${event.host.address} failed: ${event.reason}")
-                    moonlightPairing = MoonlightPairingUi.Failed
-                }
-                is MoonlightConnectionEvent.Paired -> moonlightPairing = null
-                is MoonlightConnectionEvent.AppAlreadyRunning ->
-                    if (!event.resumable) moonlightFailure = MoonlightFailure.BusyOther
-                is MoonlightConnectionEvent.RejoinRefused -> moonlightFailure = MoonlightFailure.ResumeFailed
-                is MoonlightConnectionEvent.LaunchRefused -> moonlightFailure = MoonlightFailure.Refused(event.message)
-                is MoonlightConnectionEvent.SetupFailed -> moonlightFailure = MoonlightFailure.SetupFailed
-                is MoonlightConnectionEvent.HostFull -> moonlightFailure = MoonlightFailure.HostFull
-                is MoonlightConnectionEvent.HostReplaced, is MoonlightConnectionEvent.EndedByHost -> Unit
-                is MoonlightConnectionEvent.Error, is MoonlightConnectionEvent.Notice -> Unit
+            private fun quitApp(host: MoonlightHost) {
+                moonlight.quitHostApp(host)
+                failure = null
+                refreshMoonlight()
             }
-            _ui.update { state ->
-                if (!state.isMoonlightHost) {
-                    state
-                } else {
-                    state.copy(
-                        moonlight =
-                            state.moonlight?.copy(pairing = moonlightPairing, failure = moonlightFailure)
-                                ?: MoonlightSessionInput(pairing = moonlightPairing, failure = moonlightFailure),
-                    )
+
+            private fun restartSession(hostId: String) {
+                failure = null
+                moonlight.disconnect(hostId)
+                moonlight.retrySessions()
+                refreshMoonlight()
+            }
+
+            private fun onEvent(event: MoonlightConnectionEvent) {
+                record(event)
+                republish()
+            }
+
+            private fun record(event: MoonlightConnectionEvent) {
+                when (event) {
+                    is MoonlightConnectionEvent.PairingPinReady -> pairing = MoonlightPairingUi.Pin(event.pin)
+                    is MoonlightConnectionEvent.PairingFailed -> {
+                        Log.w(TAG, "pairing with ${event.host.address} failed: ${event.reason}")
+                        pairing = MoonlightPairingUi.Failed
+                    }
+                    is MoonlightConnectionEvent.Paired -> pairing = null
+                    is MoonlightConnectionEvent.AppAlreadyRunning ->
+                        if (!event.resumable) failure = MoonlightFailure.BusyOther
+                    is MoonlightConnectionEvent.RejoinRefused -> failure = MoonlightFailure.ResumeFailed
+                    is MoonlightConnectionEvent.LaunchRefused -> failure = MoonlightFailure.Refused(event.message)
+                    is MoonlightConnectionEvent.SetupFailed -> failure = MoonlightFailure.SetupFailed
+                    is MoonlightConnectionEvent.HostFull -> failure = MoonlightFailure.HostFull
+                    is MoonlightConnectionEvent.HostReplaced, is MoonlightConnectionEvent.EndedByHost -> Unit
+                    is MoonlightConnectionEvent.Error, is MoonlightConnectionEvent.Notice -> Unit
+                }
+            }
+
+            // A slot bound to something other than Moonlight has no card to update, so an event
+            // that arrives for a different screen leaves the state alone.
+            private fun republish() {
+                _ui.update { state ->
+                    if (!state.isMoonlightHost) {
+                        state
+                    } else {
+                        state.copy(
+                            moonlight =
+                                state.moonlight?.copy(pairing = pairing, failure = failure)
+                                    ?: MoonlightSessionInput(pairing = pairing, failure = failure),
+                        )
+                    }
                 }
             }
         }
@@ -678,6 +762,51 @@ class ConfigureBindingsViewModel
             return twins.any { !it.isDisconnecting }
         }
 
+        // Apply is gated on canApply (a resolved type); guard defensively so an unresolved type
+        // never ships. Every one of these used to return without a word, so a Bind button that
+        // could not act was indistinguishable from one that had not been pressed.
+        private fun resolveApplyTarget(state: ConfigUiState): ApplyTarget? {
+            val snapshot = state.snapshot
+            val draft = state.draft
+            val type = draft?.type
+            val host = state.hosts.firstOrNull { it.id == draft?.hostId }
+            if (snapshot == null || draft == null || type == null || host == null) {
+                Log.w(
+                    TAG,
+                    "apply refused: snapshot=${snapshot != null} draft=${draft != null} " +
+                        "type=$type host=${draft?.hostId}",
+                )
+                return null
+            }
+            return ApplyTarget(snapshot, draft, type, host)
+        }
+
+        private fun finished(
+            target: ApplyTarget,
+            errorMessage: String? = null,
+            warningMessage: String? = null,
+        ) = ApplyState.Finished(
+            errorMessage = errorMessage,
+            warningMessage = warningMessage,
+            hostName = target.host.label,
+            controllerName = target.snapshot.name,
+        )
+
+        // Local delivery gates, persisted per slot. Rumble applies regardless of the controller's
+        // own motor because the phone vibrates as a fallback. Motion and audio are gated on the
+        // path carrying them: writing a mic "on" for a slot with no microphone endpoint would
+        // advertise one the moment the user moved that slot to a host that has one.
+        private fun persistLocalGates(
+            state: ConfigUiState,
+            draft: BindingDraft,
+            slotId: String,
+        ) {
+            if (state.motionAvailable) motionEnabledStore.setEnabled(slotId, draft.motionOn)
+            rumbleEnabledStore.setEnabled(slotId, draft.rumbleOn)
+            if (state.micAvailable) micEnabledStore.setEnabled(slotId, draft.micOn)
+            if (state.speakerAvailable) speakerEnabledStore.setEnabled(slotId, draft.speakerOn)
+        }
+
         /**
          * Nothing the user edits commits until here. The whole binding is ONE
          * declarative call to the satellite: the descriptor (type, caps,
@@ -687,90 +816,76 @@ class ConfigureBindingsViewModel
          */
         fun apply() {
             val state = _ui.value
-            val snapshot = state.snapshot
-            val draft = state.draft
-            // Apply is gated on canApply (a resolved type); guard defensively so an unresolved
-            // type never ships. Every one of these used to return without a word, so a Bind
-            // button that could not act was indistinguishable from one that had not been pressed.
-            val type = draft?.type
-            val host = state.hosts.firstOrNull { it.id == draft?.hostId }
-            if (snapshot == null || draft == null || type == null || host == null) {
-                Log.w(
-                    TAG,
-                    "apply refused: snapshot=${snapshot != null} draft=${draft != null} " +
-                        "type=$type host=${draft?.hostId}",
-                )
-                return
-            }
-            val hostId = host.id
+            val target = resolveApplyTarget(state) ?: return
             if (_applyState.value is ApplyState.Running) return
+            viewModelScope.launch { runApply(state, target, buildSteps(state)) }
+        }
 
-            val steps = buildSteps(state)
-            viewModelScope.launch {
-                var done = 0
-                _applyState.value = ApplyState.Running(steps, done)
+        private suspend fun runApply(
+            state: ConfigUiState,
+            target: ApplyTarget,
+            steps: List<ApplyStep>,
+        ) {
+            var done = 0
+            _applyState.value = ApplyState.Running(steps, done)
 
-                var directFellBack = false
-                if (snapshot.link == BindingLink.USB && snapshot.directCapable) {
-                    val achieved = applyUsbPath(snapshot.slotId, draft.directOn)
-                    directFellBack = draft.directOn && !achieved
-                    done++
-                    _applyState.value = ApplyState.Running(steps, done)
-                }
-
-                val slotId = resolveCurrentSlotId(snapshot)
-
-                if (state.motionAvailable) {
-                    // Local gate; its capability bit rides the same descriptor.
-                    motionEnabledStore.setEnabled(slotId, draft.motionOn)
-                }
-                // Rumble is a local delivery gate (the phone vibrates as a fallback),
-                // so it applies regardless of the controller's own motor.
-                rumbleEnabledStore.setEnabled(slotId, draft.rumbleOn)
-                // Audio persists like motion, gated on the path carrying it: writing a
-                // mic "on" for a slot that has no microphone endpoint would advertise one
-                // the moment the user later moved that slot to a host that does.
-                if (state.micAvailable) micEnabledStore.setEnabled(slotId, draft.micOn)
-                if (state.speakerAvailable) speakerEnabledStore.setEnabled(slotId, draft.speakerOn)
-                val bound = hub.bind(slotId, hostId, type)
-                if (!bound) {
-                    _applyState.value =
-                        ApplyState.Finished(
-                            errorMessage = context.getString(R.string.binding_apply_error_slot_gone, snapshot.name),
-                            warningMessage = null,
-                            hostName = host.label,
-                            controllerName = snapshot.name,
-                        )
-                    return@launch
-                }
-                val applied = awaitApplied(host, slotId)
+            val directFellBack = applyDirectPathIfOffered(target)
+            if (directFellBack != null) {
                 done++
                 _applyState.value = ApplyState.Running(steps, done)
-                if (!applied) {
-                    _applyState.value =
-                        ApplyState.Finished(
-                            errorMessage = context.getString(R.string.binding_apply_error_no_connect, host.label),
-                            warningMessage = null,
-                            hostName = host.label,
-                            controllerName = snapshot.name,
-                        )
-                    return@launch
-                }
-
-                val warningMessage =
-                    if (directFellBack) {
-                        context.getString(R.string.binding_apply_warn_detail, snapshot.name, host.label)
-                    } else {
-                        null
-                    }
-                _applyState.value =
-                    ApplyState.Finished(
-                        errorMessage = null,
-                        warningMessage = warningMessage,
-                        hostName = host.label,
-                        controllerName = snapshot.name,
-                    )
             }
+
+            val slotId = resolveCurrentSlotId(target.snapshot)
+            persistLocalGates(state, target.draft, slotId)
+
+            val bound = hub.bind(slotId, target.host.id, target.type)
+            if (!bound) {
+                _applyState.value =
+                    finished(
+                        target,
+                        errorMessage =
+                            context.getString(R.string.binding_apply_error_slot_gone, target.snapshot.name),
+                    )
+                return
+            }
+
+            val applied = awaitApplied(target.host, slotId)
+            done++
+            _applyState.value = ApplyState.Running(steps, done)
+            if (!applied) {
+                _applyState.value =
+                    finished(
+                        target,
+                        errorMessage =
+                            context.getString(R.string.binding_apply_error_no_connect, target.host.label),
+                    )
+                return
+            }
+
+            val fellBack = directFellBack == true
+            _applyState.value =
+                finished(
+                    target,
+                    warningMessage =
+                        if (fellBack) {
+                            context.getString(
+                                R.string.binding_apply_warn_detail,
+                                target.snapshot.name,
+                                target.host.label,
+                            )
+                        } else {
+                            null
+                        },
+                )
+        }
+
+        // Null when this slot has no Direct path to move; otherwise whether Direct was asked for
+        // and did not take, which is the warning the user sees at the end.
+        private suspend fun applyDirectPathIfOffered(target: ApplyTarget): Boolean? {
+            val offersDirect = target.snapshot.link == BindingLink.USB && target.snapshot.directCapable
+            if (!offersDirect) return null
+            val achieved = applyUsbPath(target.snapshot.slotId, target.draft.directOn)
+            return target.draft.directOn && !achieved
         }
 
         private fun buildSteps(state: ConfigUiState): List<ApplyStep> {
@@ -869,25 +984,15 @@ class ConfigureBindingsViewModel
         // The four types a Moonlight host can be asked to plug in. Hard-coded because no host
         // reports them: the type byte travels client to host in CONTROLLER_ARRIVAL and nothing
         // comes back the other way.
-        private fun moonlightTypeOptions(): List<TypeOption> =
-            MoonlightEmulatedType.ORDER.map { TypeOption(it, context.getString(moonlightTypeLabelRes(it))) }
+        private fun moonlightTypeOptions(): List<TypeOption> = ORDER.map { TypeOption(it, context.getString(moonlightTypeLabelRes(it))) }
 
         // A Moonlight host owns its own four types and has no catalog to fetch, so it must be
         // answered before the satellite lookup: satellite.get() is null for a Moonlight id, which
         // used to leave the type unresolved forever and Apply disabled with it.
         private fun refreshTypeOptions(hostId: String) {
-            if (hub.summary(hostId)?.kind == ConnectionKind.MOONLIGHT) {
-                val stored = loadedSlotId?.let { hub.satTypes.value[hostId to it] }
-                val seeded = MoonlightEmulatedType.fromStored(stored ?: moonlight.rememberedEmulatedType(hostId))
-                _ui.update { state ->
-                    state
-                        .copy(
-                            typeOptions = moonlightTypeOptions(),
-                            typeFetchFailed = false,
-                            draft = state.draft?.copy(type = state.draft.type ?: seeded),
-                        ).withCapabilities()
-                }
-                refreshMoonlight()
+            val isMoonlightHost = hub.summary(hostId)?.kind == ConnectionKind.MOONLIGHT
+            if (isMoonlightHost) {
+                refreshMoonlightTypeOptions(hostId)
                 return
             }
             val conn = satellite.get(hostId)
@@ -895,36 +1000,65 @@ class ConfigureBindingsViewModel
                 _ui.update { it.copy(typeOptions = bundledTypeOptions()) }
                 return
             }
-            // Fresh resolve for this satellite host: clear any prior error, seed from cache if present.
+            seedSatelliteTypeOptionsFromCache(hostId)
+            viewModelScope.launch { fetchSatelliteCatalog(conn, hostId) }
+        }
+
+        private fun refreshMoonlightTypeOptions(hostId: String) {
+            val stored = loadedSlotId?.let { hub.satTypes.value[hostId to it] }
+            val seeded = fromStored(stored ?: moonlight.rememberedEmulatedType(hostId))
+            _ui.update { state ->
+                state
+                    .copy(
+                        typeOptions = moonlightTypeOptions(),
+                        typeFetchFailed = false,
+                        draft = state.draft?.copy(type = state.draft.type ?: seeded),
+                    ).withCapabilities()
+            }
+            refreshMoonlight()
+        }
+
+        // Fresh resolve for this satellite host: clear any prior error, seed from cache if present.
+        private fun seedSatelliteTypeOptionsFromCache(hostId: String) {
             _ui.update { state ->
                 val cleared = state.copy(typeFetchFailed = false)
-                catalogRepo.cached(hostId)?.let { cached ->
-                    cleared
-                        .copy(typeOptions = typeOptionsFrom(cached.controllerTypes))
-                        .withCatalogDefault(cached.controllerTypes)
-                } ?: cleared
+                val cached = catalogRepo.cached(hostId) ?: return@update cleared
+                cleared
+                    .copy(typeOptions = typeOptionsFrom(cached.controllerTypes))
+                    .withCatalogDefault(cached.controllerTypes)
             }
-            viewModelScope.launch {
-                // Probe live host state first: it seeds the host layer + pre-bind runtime
-                // (motion backend up/down) before the catalog round-trip, so the candidate
-                // report reflects the real receiver even if the catalog is slow/unreachable.
-                capabilitiesRepo.refresh(conn.server.value, hostId)
-                _ui.update { state -> state.withCapabilities() }
-                val catalog = catalogRepo.catalogFor(conn.server.value, hostId)
-                if (catalog == null) {
-                    // Fetch failed: surface Error only when nothing is cached (a cache still resolves the type).
-                    _ui.update { state -> if (catalogRepo.cached(hostId) == null) state.copy(typeFetchFailed = true) else state }
-                    return@launch
-                }
-                // Recompute the gates too: the fetched catalog's per-type features now back
-                // the type layer, not just the picker labels.
-                _ui.update { state ->
-                    state
-                        .copy(typeOptions = typeOptionsFrom(catalog.controllerTypes), typeFetchFailed = false)
-                        .withCatalogDefault(catalog.controllerTypes)
-                        .withCapabilities()
-                }
+        }
+
+        private suspend fun fetchSatelliteCatalog(
+            conn: SatelliteConnection,
+            hostId: String,
+        ) {
+            // Probe live host state first: it seeds the host layer + pre-bind runtime (motion
+            // backend up/down) before the catalog round-trip, so the candidate report reflects the
+            // real receiver even if the catalog is slow or unreachable.
+            capabilitiesRepo.refresh(conn.server.value, hostId)
+            _ui.update { state -> state.withCapabilities() }
+
+            val catalog = catalogRepo.catalogFor(conn.server.value, hostId)
+            if (catalog == null) {
+                markCatalogFetchFailed(hostId)
+                return
             }
+            // Recompute the gates too: the fetched catalog's per-type features now back the type
+            // layer, not just the picker labels.
+            _ui.update { state ->
+                state
+                    .copy(typeOptions = typeOptionsFrom(catalog.controllerTypes), typeFetchFailed = false)
+                    .withCatalogDefault(catalog.controllerTypes)
+                    .withCapabilities()
+            }
+        }
+
+        // Surface Error only when nothing is cached: a cache still resolves the type.
+        private fun markCatalogFetchFailed(hostId: String) {
+            val nothingCached = catalogRepo.cached(hostId) == null
+            if (!nothingCached) return
+            _ui.update { state -> state.copy(typeFetchFailed = true) }
         }
 
         private fun typeOptionsFrom(types: List<CatalogTypeDto>): List<TypeOption> {
@@ -953,17 +1087,29 @@ class ConfigureBindingsViewModel
 
         private fun buildSnapshot(slotId: String): BindingSnapshot {
             val bound = hub.bindings.value[slotId] != null
-            if (slotId == VIRTUAL_SLOT_ID) {
-                return BindingSnapshot(
-                    slotId = slotId,
-                    name = context.getString(R.string.default_virtual_controller_name),
-                    link = BindingLink.ONSCREEN,
-                    directCapable = false,
-                    directVerified = false,
-                    bound = bound,
-                    directPollHz = 0,
-                )
-            }
+            if (slotId == VIRTUAL_SLOT_ID) return virtualSnapshot(bound)
+            return physicalSnapshot(slotId, bound)
+        }
+
+        // The on-screen pad has no device behind it: no transport to read and nothing to claim
+        // directly, so every capability that depends on hardware answers no.
+        private fun virtualSnapshot(bound: Boolean) =
+            BindingSnapshot(
+                slotId = VIRTUAL_SLOT_ID,
+                name = context.getString(R.string.default_virtual_controller_name),
+                link = BindingLink.ONSCREEN,
+                directCapable = false,
+                directVerified = false,
+                bound = bound,
+                directPollHz = 0,
+            )
+
+        // A slot whose device has gone still renders: the screen shows what was bound, not a
+        // blank, so an unplugged pad can be unbound rather than stranding the slot.
+        private fun physicalSnapshot(
+            slotId: String,
+            bound: Boolean,
+        ): BindingSnapshot {
             val device = slotId.toIntOrNull()?.let { gamepadRegistry.devices.value[it] }
             val isUsb = device?.transport != Transport.Bluetooth
             val vid = device?.vendorId ?: 0

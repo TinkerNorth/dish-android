@@ -7,7 +7,7 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.DiscoveredServer
-import com.tinkernorth.dish.core.net.DishProtocol
+import com.tinkernorth.dish.core.net.DishProtocolCompat
 import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
 import com.tinkernorth.dish.source.connection.ConnectIntent
 import com.tinkernorth.dish.source.connection.ConnectionEvent
@@ -90,7 +90,7 @@ class SetupConnectionViewModelTest {
             val host =
                 vm.state.value.hosts
                     .first { it.id == id }
-            assertEquals(DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE, host.compat)
+            assertEquals(DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE, host.compat)
         }
 
     @Test
@@ -102,7 +102,7 @@ class SetupConnectionViewModelTest {
             val host =
                 vm.state.value.hosts
                     .first { it.id == id }
-            assertEquals(DishProtocol.Compat.UNKNOWN, host.compat)
+            assertEquals(DishProtocolCompat.UNKNOWN, host.compat)
         }
 
     @Test

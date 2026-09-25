@@ -230,6 +230,33 @@ TEST(ApplyKey, R2DownSetsTriggerAndKeyFlag) {
     EXPECT_TRUE(s.rtFromKey);
 }
 
+TEST(ApplyKey, R2UpClearsTriggerAndKeyFlag) {
+    DeviceState s;
+    applyKey(s, KC_BUTTON_R2, true);
+    EXPECT_TRUE(applyKey(s, KC_BUTTON_R2, false));
+    EXPECT_EQ(0, s.bRT);
+    EXPECT_FALSE(s.rtFromKey);
+}
+
+TEST(ApplyKey, TheTwoTriggersAreIndependent) {
+    DeviceState s;
+    applyKey(s, KC_BUTTON_L2, true);
+    applyKey(s, KC_BUTTON_R2, true);
+    applyKey(s, KC_BUTTON_L2, false);
+    EXPECT_EQ(0, s.bLT);
+    EXPECT_FALSE(s.ltFromKey);
+    EXPECT_EQ(255, s.bRT);
+    EXPECT_TRUE(s.rtFromKey);
+}
+
+TEST(ApplyKey, ATriggerKeyNeverTouchesTheButtonWord) {
+    DeviceState s;
+    s.wButtons = XUSB_A;
+    applyKey(s, KC_BUTTON_L2, true);
+    applyKey(s, KC_BUTTON_R2, true);
+    EXPECT_EQ(XUSB_A, s.wButtons);
+}
+
 TEST(ApplyKey, UnknownKeycodeReturnsFalseAndNoStateChange) {
     DeviceState s;
     s.wButtons = XUSB_A;

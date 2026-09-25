@@ -34,7 +34,7 @@ class MdnsDiscovery
 
                 // Serialise via channel: NsdManager.resolveService is single-flight on older Android.
                 val found = Channel<NsdServiceInfo>(Channel.UNLIMITED)
-                val listener = discoveryListener(found)
+                val listener = ChannelDiscoveryListener(TAG, found)
 
                 // Many devices drop inbound mDNS multicast in Wi-Fi power-save unless a lock is held.
                 val multicastLock = acquireMulticastLock()
@@ -79,41 +79,15 @@ class MdnsDiscovery
             }.getOrNull()
         }
 
-        private fun discoveryListener(found: Channel<NsdServiceInfo>): NsdManager.DiscoveryListener =
-            object : NsdManager.DiscoveryListener {
-                override fun onServiceFound(serviceInfo: NsdServiceInfo) {
-                    found.trySend(serviceInfo)
-                }
-
-                override fun onServiceLost(serviceInfo: NsdServiceInfo) = Unit
-
-                override fun onDiscoveryStarted(serviceType: String) = Unit
-
-                override fun onDiscoveryStopped(serviceType: String) = Unit
-
-                override fun onStartDiscoveryFailed(
-                    serviceType: String,
-                    errorCode: Int,
-                ) {
-                    Log.w(TAG, "discovery start failed: $errorCode")
-                    found.close()
-                }
-
-                override fun onStopDiscoveryFailed(
-                    serviceType: String,
-                    errorCode: Int,
-                ) = Unit
-            }
-
         private suspend fun resolveOne(
             nsd: NsdManager,
             info: NsdServiceInfo,
-        ): DiscoveredServer? = NsdServiceResolver.resolve(nsd, info)?.let(::toServer)
+        ): DiscoveredServer? = resolveNsdService(nsd, info)?.let(::toServer)
 
         private fun toServer(info: NsdServiceInfo): DiscoveredServer? =
             mdnsServiceToServer(
                 serviceName = info.serviceName.orEmpty(),
-                hostAddress = NsdServiceResolver.hostAddress(info),
+                hostAddress = hostAddress(info),
                 srvPort = info.port,
                 txt = info.attributes.orEmpty(),
             )

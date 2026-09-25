@@ -8,9 +8,6 @@ import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
@@ -19,8 +16,11 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.core.model.Feature
-import com.tinkernorth.dish.core.net.DishProtocol
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.DishProtocolCompat
+import com.tinkernorth.dish.core.net.moonlight.AUTO
+import com.tinkernorth.dish.core.net.moonlight.NINTENDO
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
+import com.tinkernorth.dish.core.net.moonlight.XBOX
 import com.tinkernorth.dish.databinding.ActivitySetupConfigureBinding
 import com.tinkernorth.dish.databinding.SetupReviewCardBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
@@ -30,6 +30,7 @@ import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.bundledControllerTypeGlyphRes
 import com.tinkernorth.dish.ui.common.moonlightTypeGlyphRes
 import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.main.ApplyState
 import com.tinkernorth.dish.ui.main.BindingLink
@@ -42,7 +43,6 @@ import com.tinkernorth.dish.ui.main.bindCompat
 import com.tinkernorth.dish.ui.main.bindMoonlightSession
 import com.tinkernorth.dish.ui.main.iconRes
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 // Stage 4 of the guided flow: type + capability table (4A), feel (4B), review &
@@ -79,8 +79,8 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         wireSetupSkip(binding.toolbar, onboarding)
         binding.breadcrumb.applyStep(SETUP_STEP_BINDING)
 
-        val slotId = intent.getStringExtra(SetupFlow.EXTRA_SLOT_ID)
-        val connectionId = intent.getStringExtra(SetupFlow.EXTRA_CONNECTION_ID)
+        val slotId = intent.getStringExtra(EXTRA_SLOT_ID)
+        val connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID)
         if (slotId == null || connectionId == null) {
             finish()
             return
@@ -104,26 +104,18 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         binding.cardTypeDualsense.typeCard.setOnClickListener { pickType(CONTROLLER_TYPE_DUALSENSE) }
         binding.cardTypeSwitchpro.typeCard.setOnClickListener { pickType(CONTROLLER_TYPE_SWITCHPRO) }
 
-        binding.cardMlAuto.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.AUTO) }
-        binding.cardMlXbox.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.XBOX) }
-        binding.cardMlPlaystation.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.PLAYSTATION) }
-        binding.cardMlNintendo.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.NINTENDO) }
+        binding.cardMlAuto.typeCard.setOnClickListener { pickType(AUTO) }
+        binding.cardMlXbox.typeCard.setOnClickListener { pickType(XBOX) }
+        binding.cardMlPlaystation.typeCard.setOnClickListener { pickType(PLAYSTATION) }
+        binding.cardMlNintendo.typeCard.setOnClickListener { pickType(NINTENDO) }
     }
 
     private fun observe() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.ui.collect { state ->
-                    current = state
-                    if (state.loaded) render(state)
-                }
-            }
+        observeWhileStarted(viewModel.ui) { state ->
+            current = state
+            if (state.loaded) render(state)
         }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.applyState.collect { renderApplyState(it) }
-            }
-        }
+        observeWhileStarted(viewModel.applyState) { renderApplyState(it) }
     }
 
     private fun render(state: ConfigUiState) {
@@ -145,38 +137,54 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     // pick. A Bluetooth host has its type fixed upstream, so only the chosen one
     // shows and the cards stop being tappable.
     private fun renderType(state: ConfigUiState) {
+        renderTypeHeadings(state)
+        renderPadTypeCards(state)
+        renderMoonlightTypeCards(state)
+    }
+
+    private fun renderTypeHeadings(state: ConfigUiState) {
         val moonlight = state.isMoonlightHost
         binding.tvTitle.setText(if (moonlight) R.string.ml_type_title else R.string.setup_cfg_type_title)
-        binding.tvSubtitle.text =
-            when {
-                moonlight -> getString(R.string.ml_type_caption, state.selectedHost?.label.orEmpty())
-                state.isBluetoothHost -> getString(R.string.setup_cfg_type_locked_subtitle)
-                else -> getString(R.string.setup_cfg_type_subtitle)
-            }
+        binding.tvSubtitle.text = typeSubtitleFor(state)
         binding.btnContinue.setText(R.string.setup_cfg_continue)
-        // Tapping a type commits and advances; only the locked Bluetooth-host case,
-        // where the cards aren't tappable, needs the Next button.
+        // Tapping a type commits and advances; only the locked Bluetooth-host case, where the
+        // cards aren't tappable, needs the Next button.
         binding.btnContinue.visibility = visibleIf(state.isBluetoothHost)
+    }
 
-        val selectedType = state.draft?.type ?: CONTROLLER_TYPE_XBOX
+    private fun typeSubtitleFor(state: ConfigUiState): String =
+        when {
+            state.isMoonlightHost -> getString(R.string.ml_type_caption, state.selectedHost?.label.orEmpty())
+            state.isBluetoothHost -> getString(R.string.setup_cfg_type_locked_subtitle)
+            else -> getString(R.string.setup_cfg_type_subtitle)
+        }
+
+    private fun padTypeCards() =
+        listOf(
+            binding.cardTypeXbox to CONTROLLER_TYPE_XBOX,
+            binding.cardTypePlaystation to CONTROLLER_TYPE_PLAYSTATION,
+            binding.cardTypeDualsense to CONTROLLER_TYPE_DUALSENSE,
+            binding.cardTypeSwitchpro to CONTROLLER_TYPE_SWITCHPRO,
+        )
+
+    // A Bluetooth host locks to one type, so its other cards never show, and a Moonlight host
+    // uses the separate set below instead of these.
+    private fun renderPadTypeCards(state: ConfigUiState) {
+        val moonlight = state.isMoonlightHost
         val locked = state.isBluetoothHost
-        bindTypeCard(binding.cardTypeXbox, state, CONTROLLER_TYPE_XBOX, locked)
-        bindTypeCard(binding.cardTypePlaystation, state, CONTROLLER_TYPE_PLAYSTATION, locked)
-        bindTypeCard(binding.cardTypeDualsense, state, CONTROLLER_TYPE_DUALSENSE, locked)
-        bindTypeCard(binding.cardTypeSwitchpro, state, CONTROLLER_TYPE_SWITCHPRO, locked)
-        // A Bluetooth host locks to Xbox/PlayStation, so its other cards never show.
-        binding.cardTypeXbox.typeCard.visibility = visibleIf(!moonlight && (!locked || selectedType == CONTROLLER_TYPE_XBOX))
-        binding.cardTypePlaystation.typeCard.visibility =
-            visibleIf(!moonlight && (!locked || selectedType == CONTROLLER_TYPE_PLAYSTATION))
-        binding.cardTypeDualsense.typeCard.visibility =
-            visibleIf(!moonlight && (!locked || selectedType == CONTROLLER_TYPE_DUALSENSE))
-        binding.cardTypeSwitchpro.typeCard.visibility =
-            visibleIf(!moonlight && (!locked || selectedType == CONTROLLER_TYPE_SWITCHPRO))
+        val selectedType = state.draft?.type ?: CONTROLLER_TYPE_XBOX
+        for ((card, type) in padTypeCards()) {
+            bindTypeCard(card, state, type, locked)
+            card.typeCard.visibility = visibleIf(!moonlight && (!locked || selectedType == type))
+        }
+    }
 
-        bindMoonlightTypeCard(binding.cardMlAuto, state, MoonlightEmulatedType.AUTO, moonlight)
-        bindMoonlightTypeCard(binding.cardMlXbox, state, MoonlightEmulatedType.XBOX, moonlight)
-        bindMoonlightTypeCard(binding.cardMlPlaystation, state, MoonlightEmulatedType.PLAYSTATION, moonlight)
-        bindMoonlightTypeCard(binding.cardMlNintendo, state, MoonlightEmulatedType.NINTENDO, moonlight)
+    private fun renderMoonlightTypeCards(state: ConfigUiState) {
+        val moonlight = state.isMoonlightHost
+        bindMoonlightTypeCard(binding.cardMlAuto, state, AUTO, moonlight)
+        bindMoonlightTypeCard(binding.cardMlXbox, state, XBOX, moonlight)
+        bindMoonlightTypeCard(binding.cardMlPlaystation, state, PLAYSTATION, moonlight)
+        bindMoonlightTypeCard(binding.cardMlNintendo, state, NINTENDO, moonlight)
     }
 
     private fun bindTypeCard(
@@ -227,7 +235,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         card.typeChevron.visibility = View.GONE
         card.typeCard.isClickable = true
         card.typeCard.isChecked = state.draft?.type == candidateType
-        val auto = candidateType == MoonlightEmulatedType.AUTO
+        val auto = candidateType == AUTO
         card.typeBadge.visibility = visibleIf(auto)
         card.typeCaption.visibility = visibleIf(auto)
         if (auto) {
@@ -276,25 +284,39 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         binding.btnContinue.visibility = View.VISIBLE
 
         val motionVisible = state.motionAvailable
-        binding.motionRow.visibility = visibleIf(motionVisible)
-        if (motionVisible) {
-            binding.swMotion.setOnCheckedChangeListener(null)
-            binding.swMotion.isChecked = state.draft?.motionOn == true
-            binding.swMotion.setOnCheckedChangeListener { _, isChecked -> viewModel.setMotion(isChecked) }
-        }
-
         // Rumble shows when the path can carry it: a Satellite host returns it, the phone
         // vibrates as a fallback for the on-screen pad, and a physical pad needs its own motor.
         val rumbleVisible = state.capabilities.isAvailable(Feature.RUMBLE)
-        binding.rumbleDivider.visibility = visibleIf(rumbleVisible && motionVisible)
-        binding.rumbleRow.visibility = visibleIf(rumbleVisible)
-        if (rumbleVisible) {
-            binding.swRumble.setOnCheckedChangeListener(null)
-            binding.swRumble.isChecked = state.draft?.rumbleOn == true
-            binding.swRumble.setOnCheckedChangeListener { _, isChecked -> viewModel.setRumble(isChecked) }
-        }
-
+        renderMotionRow(state, motionVisible)
+        renderRumbleRow(state, rumbleVisible, motionVisible)
         binding.tvFeelEmpty.visibility = visibleIf(!motionVisible && !rumbleVisible)
+    }
+
+    // The listener is cleared before the checked state is set: setChecked fires it, and a render
+    // must not read as the user having flipped the switch.
+    private fun renderMotionRow(
+        state: ConfigUiState,
+        visible: Boolean,
+    ) {
+        binding.motionRow.visibility = visibleIf(visible)
+        if (!visible) return
+        binding.swMotion.setOnCheckedChangeListener(null)
+        binding.swMotion.isChecked = state.draft?.motionOn == true
+        binding.swMotion.setOnCheckedChangeListener { _, isChecked -> viewModel.setMotion(isChecked) }
+    }
+
+    // The divider only earns its space between two visible rows.
+    private fun renderRumbleRow(
+        state: ConfigUiState,
+        visible: Boolean,
+        motionVisible: Boolean,
+    ) {
+        binding.rumbleDivider.visibility = visibleIf(visible && motionVisible)
+        binding.rumbleRow.visibility = visibleIf(visible)
+        if (!visible) return
+        binding.swRumble.setOnCheckedChangeListener(null)
+        binding.swRumble.isChecked = state.draft?.rumbleOn == true
+        binding.swRumble.setOnCheckedChangeListener { _, isChecked -> viewModel.setRumble(isChecked) }
     }
 
     // 4C: one card per source and destination, each showing what it sends (up)
@@ -465,7 +487,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                 sublabel = getString(R.string.setup_cfg_dest_satellite),
                 sends = emptyList(),
                 gets = if (model.mouseMode) listOf(mouse) else emptyList(),
-                compat = state.draft?.hostId?.let { state.hostCompat[it] } ?: DishProtocol.Compat.UNKNOWN,
+                compat = state.draft?.hostId?.let { state.hostCompat[it] } ?: DishProtocolCompat.UNKNOWN,
             ),
             ReviewNode(
                 kind = R.string.binding_label_destination,
@@ -496,7 +518,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
         val touchpad = ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad)
         val mouse = ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse)
-        val stored = state.draft?.type ?: MoonlightEmulatedType.AUTO
+        val stored = state.draft?.type ?: AUTO
         return listOf(
             ReviewNode(
                 kind = R.string.binding_label_destination,
@@ -545,7 +567,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         val sublabel: String,
         val sends: List<ReviewFlow>,
         val gets: List<ReviewFlow>,
-        val compat: DishProtocol.Compat = DishProtocol.Compat.UNKNOWN,
+        val compat: DishProtocolCompat = DishProtocolCompat.UNKNOWN,
     )
 
     private fun renderApplyState(state: ApplyState) {
@@ -555,7 +577,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
             is ApplyState.Finished -> {
                 setBindBusy(false)
                 if (state.errorMessage != null) {
-                    SetupErrorDialog.show(this, state.errorMessage) { viewModel.apply() }
+                    show(this, state.errorMessage) { viewModel.apply() }
                 } else {
                     finishToDashboard(state)
                 }

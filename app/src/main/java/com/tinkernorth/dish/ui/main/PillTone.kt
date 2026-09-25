@@ -9,7 +9,7 @@ import android.view.ViewGroup
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.core.net.DishProtocol
+import com.tinkernorth.dish.core.net.DishProtocolCompat
 import com.tinkernorth.dish.databinding.BindingPillBinding
 import com.tinkernorth.dish.ui.common.setLeadingIcon
 
@@ -56,24 +56,24 @@ internal fun ViewGroup.inflateBindingPill(
 // Protocol-compat chip, shared by every surface that names a host: soft amber for a
 // host that still works at an older protocol, error red when one side must update.
 // Null when there is nothing to say (current, or never probed).
-internal fun compatPillParts(compat: DishProtocol.Compat): Pair<Int, PillTone>? =
+internal fun compatPillParts(compat: DishProtocolCompat): Pair<Int, PillTone>? =
     when (compat) {
-        DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE ->
+        DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE ->
             R.string.chip_satellite_update_available to PillTone.WARN
-        DishProtocol.Compat.SATELLITE_UPDATE_REQUIRED ->
+        DishProtocolCompat.SATELLITE_UPDATE_REQUIRED ->
             R.string.chip_satellite_update_required to PillTone.ERROR
-        DishProtocol.Compat.APP_UPDATE_REQUIRED ->
+        DishProtocolCompat.APP_UPDATE_REQUIRED ->
             R.string.chip_app_update_required to PillTone.ERROR
-        DishProtocol.Compat.UNKNOWN, DishProtocol.Compat.CURRENT -> null
+        DishProtocolCompat.UNKNOWN, DishProtocolCompat.CURRENT -> null
     }
 
 internal fun compatPillSpec(
     context: Context,
-    compat: DishProtocol.Compat,
+    compat: DishProtocolCompat,
 ): PillSpec? = compatPillParts(compat)?.let { (text, tone) -> PillSpec(context.getString(text), null, tone) }
 
 // Paints one binding_pill include as the compat chip, or hides it when current/unknown.
-internal fun BindingPillBinding.bindCompat(compat: DishProtocol.Compat) {
+internal fun BindingPillBinding.bindCompat(compat: DishProtocolCompat) {
     val spec = compatPillSpec(root.context, compat)
     if (spec == null) {
         root.visibility = View.GONE

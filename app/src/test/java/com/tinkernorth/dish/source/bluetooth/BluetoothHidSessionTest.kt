@@ -2,7 +2,7 @@
 
 package com.tinkernorth.dish.source.bluetooth
 
-import com.tinkernorth.dish.core.input.BluetoothGamepad.GamepadProfile
+import com.tinkernorth.dish.core.input.GamepadProfile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

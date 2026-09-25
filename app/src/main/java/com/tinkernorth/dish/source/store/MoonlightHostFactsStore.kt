@@ -3,7 +3,7 @@
 package com.tinkernorth.dish.source.store
 
 import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
-import com.tinkernorth.dish.core.net.moonlight.MoonlightXml
+import com.tinkernorth.dish.core.net.moonlight.ServerInfo
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -22,7 +22,7 @@ class MoonlightHostFactsStore
     constructor() : AbstractStateSource<Map<String, MoonlightHostFacts>>(emptyMap()) {
         fun note(
             hostId: String,
-            info: MoonlightXml.ServerInfo,
+            info: ServerInfo,
             nowMs: Long = System.currentTimeMillis(),
         ) {
             val facts =

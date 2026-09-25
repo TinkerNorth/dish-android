@@ -10,7 +10,9 @@ import android.net.wifi.WifiManager
 import android.util.Log
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.di.IoDispatcher
-import com.tinkernorth.dish.source.connection.NsdServiceResolver
+import com.tinkernorth.dish.source.connection.ChannelDiscoveryListener
+import com.tinkernorth.dish.source.connection.hostAddress
+import com.tinkernorth.dish.source.connection.resolveNsdService
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
@@ -39,7 +41,7 @@ class MdnsMoonlightDiscovery
                     context.getSystemService(Context.NSD_SERVICE) as? NsdManager
                         ?: return@withContext emptyList()
                 val found = Channel<NsdServiceInfo>(Channel.UNLIMITED)
-                val listener = discoveryListener(found)
+                val listener = ChannelDiscoveryListener(TAG, found)
                 val multicastLock = acquireMulticastLock()
                 try {
                     try {
@@ -76,39 +78,13 @@ class MdnsMoonlightDiscovery
             }.getOrNull()
         }
 
-        private fun discoveryListener(found: Channel<NsdServiceInfo>): NsdManager.DiscoveryListener =
-            object : NsdManager.DiscoveryListener {
-                override fun onServiceFound(serviceInfo: NsdServiceInfo) {
-                    found.trySend(serviceInfo)
-                }
-
-                override fun onServiceLost(serviceInfo: NsdServiceInfo) = Unit
-
-                override fun onDiscoveryStarted(serviceType: String) = Unit
-
-                override fun onDiscoveryStopped(serviceType: String) = Unit
-
-                override fun onStartDiscoveryFailed(
-                    serviceType: String,
-                    errorCode: Int,
-                ) {
-                    Log.w(TAG, "discovery start failed: $errorCode")
-                    found.close()
-                }
-
-                override fun onStopDiscoveryFailed(
-                    serviceType: String,
-                    errorCode: Int,
-                ) = Unit
-            }
-
         private suspend fun resolveOne(
             nsd: NsdManager,
             info: NsdServiceInfo,
-        ): MoonlightHost? = NsdServiceResolver.resolve(nsd, info)?.let(::toHost)
+        ): MoonlightHost? = resolveNsdService(nsd, info)?.let(::toHost)
 
         private fun toHost(info: NsdServiceInfo): MoonlightHost? =
-            mdnsServiceToHost(info.serviceName.orEmpty(), NsdServiceResolver.hostAddress(info), info.attributes.orEmpty())
+            mdnsServiceToHost(info.serviceName.orEmpty(), hostAddress(info), info.attributes.orEmpty())
 
         private companion object {
             const val TAG = "MdnsMoonlightDiscovery"

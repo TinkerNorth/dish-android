@@ -63,29 +63,29 @@ class PhysicalBatterySource
 
         override fun onStart(owner: LifecycleOwner) {
             if (pollJob != null) return
-            pollJob =
-                scope.launch {
-                    polls.receiveAsFlow().collect { pollOnce() }
-                }
-            reachableJob =
-                reachability.state
-                    .onEach(::onReachableChanged)
-                    .launchIn(scope)
-            devicesJob =
-                registry.devices
-                    .map { devs -> devs.mapValues { (_, d) -> d.transport } }
-                    .distinctUntilChanged()
-                    .onEach(::onDevicesChanged)
-                    .launchIn(scope)
-            tickJob =
-                scope.launch {
-                    while (isActive) {
-                        requestPoll()
-                        delay(BatteryValidator.REPORT_INTERVAL_SECONDS * 1000L)
-                    }
-                }
+            pollJob = scope.launch { polls.receiveAsFlow().collect { pollOnce() } }
+            reachableJob = reachability.state.onEach(::onReachableChanged).launchIn(scope)
+            devicesJob = observeTransports()
+            tickJob = startPollTicker()
             registerChargingReceiver()
         }
+
+        // Only the transport decides which reader answers for a pad, so a device that changes
+        // anything else must not re-run the whole poll.
+        private fun observeTransports(): Job =
+            registry.devices
+                .map { devs -> devs.mapValues { (_, d) -> d.transport } }
+                .distinctUntilChanged()
+                .onEach(::onDevicesChanged)
+                .launchIn(scope)
+
+        private fun startPollTicker(): Job =
+            scope.launch {
+                while (isActive) {
+                    requestPoll()
+                    delay(BatteryValidator.REPORT_INTERVAL_SECONDS * 1000L)
+                }
+            }
 
         override fun onStop(owner: LifecycleOwner) {
             reachableJob?.cancel()
@@ -108,20 +108,21 @@ class PhysicalBatterySource
             polls.trySend(Unit)
         }
 
+        private inner class HostChargingReceiver : BroadcastReceiver() {
+            override fun onReceive(
+                ctx: Context?,
+                intent: Intent?,
+            ) {
+                val status = intent?.let(::chargingStatusOf) ?: return
+                if (status == lastChargingStatus) return
+                lastChargingStatus = status
+                Log.d(TAG, "host charging state changed -> $status, polling pads")
+                requestPoll()
+            }
+        }
+
         private fun registerChargingReceiver() {
-            val receiver =
-                object : BroadcastReceiver() {
-                    override fun onReceive(
-                        ctx: Context?,
-                        intent: Intent?,
-                    ) {
-                        val status = intent?.let(::chargingStatusOf) ?: return
-                        if (status == lastChargingStatus) return
-                        lastChargingStatus = status
-                        Log.d(TAG, "host charging state changed -> $status, polling pads")
-                        requestPoll()
-                    }
-                }
+            val receiver = HostChargingReceiver()
             ContextCompat.registerReceiver(
                 context,
                 receiver,
@@ -150,7 +151,7 @@ class PhysicalBatterySource
             for ((deviceId, device) in devices) {
                 if (device.transitioning || device.isDisconnecting) continue
                 val slotId = deviceId.toString()
-                val routed = BatteryRouting.route(device.transport, reader.sample(device), phone)
+                val routed = route(device.transport, reader.sample(device), phone)
                 publishDisplay(slotId, routed.display)
                 val conn = reachable[slotId] ?: continue
                 validator.publish(routed.wire) { s ->

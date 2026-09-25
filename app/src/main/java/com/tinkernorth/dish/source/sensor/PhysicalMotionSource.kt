@@ -52,20 +52,21 @@ class PhysicalMotionSource
             // Gate first gyro emission until accel reports; otherwise ships (0,0,0) read as zero-gravity.
             private var accelSeen: Boolean = false
 
-            private val listener =
-                object : SensorEventListener {
-                    override fun onSensorChanged(event: SensorEvent) {
-                        when (event.sensor.type) {
-                            Sensor.TYPE_ACCELEROMETER -> onAccel(event.values)
-                            Sensor.TYPE_GYROSCOPE -> onGyro(event.values)
-                        }
+            private inner class PadSensorListener : SensorEventListener {
+                override fun onSensorChanged(event: SensorEvent) {
+                    when (event.sensor.type) {
+                        Sensor.TYPE_ACCELEROMETER -> onAccel(event.values)
+                        Sensor.TYPE_GYROSCOPE -> onGyro(event.values)
                     }
-
-                    override fun onAccuracyChanged(
-                        sensor: Sensor?,
-                        accuracy: Int,
-                    ) = Unit
                 }
+
+                override fun onAccuracyChanged(
+                    sensor: Sensor?,
+                    accuracy: Int,
+                ) = Unit
+            }
+
+            private val listener = PadSensorListener()
 
             init {
                 // 4-arg registerListener keeps callbacks off the main thread.
@@ -93,9 +94,9 @@ class PhysicalMotionSource
             private fun onAccel(values: FloatArray) {
                 if (values.size < 3) return
                 // No remap: a controller's IMU is already in the wire frame.
-                accelX = MotionScaling.accelMssToWire(values[0])
-                accelY = MotionScaling.accelMssToWire(values[1])
-                accelZ = MotionScaling.accelMssToWire(values[2])
+                accelX = accelMssToWire(values[0])
+                accelY = accelMssToWire(values[1])
+                accelZ = accelMssToWire(values[2])
                 accelSeen = true
             }
 
@@ -103,31 +104,31 @@ class PhysicalMotionSource
                 if (values.size < 3) return
                 if (!shouldEmitGyro(accel != null, accelSeen)) return
                 val conn = reachable[slotId] ?: return
-                // A Moonlight host consumes motion only after MOTION_EVENT asked for
-                // it; a satellite sink always wants it (descriptor-advertised).
+                // A Moonlight host consumes motion only after MOTION_EVENT asked for it; a
+                // satellite sink always wants it (descriptor-advertised).
                 if (!conn.motionWanted(slotId)) return
-                val sample =
-                    convertControllerSample(
-                        gyroX = values[0],
-                        gyroY = values[1],
-                        gyroZ = values[2],
-                        accelX = accelX,
-                        accelY = accelY,
-                        accelZ = accelZ,
-                    )
-                rateLimiter.publish(deviceId, sample) { s, deltaUs ->
-                    inputRateStore.recordMotionSample(slotId)
-                    conn.sendMotion(
-                        slotId,
-                        s.gyroX,
-                        s.gyroY,
-                        s.gyroZ,
-                        s.accelX,
-                        s.accelY,
-                        s.accelZ,
-                        deltaUs,
-                    )
-                }
+
+                val sample = sampleFrom(values)
+                rateLimiter.publish(deviceId, sample) { s, deltaUs -> send(conn, s, deltaUs) }
+            }
+
+            private fun sampleFrom(values: FloatArray) =
+                convertControllerSample(
+                    gyroX = values[0],
+                    gyroY = values[1],
+                    gyroZ = values[2],
+                    accelX = accelX,
+                    accelY = accelY,
+                    accelZ = accelZ,
+                )
+
+            private fun send(
+                conn: TelemetrySink,
+                s: MotionRateLimiter.MotionSample,
+                deltaUs: Int,
+            ) {
+                inputRateStore.recordMotionSample(slotId)
+                conn.sendMotion(slotId, s.gyroX, s.gyroY, s.gyroZ, s.accelX, s.accelY, s.accelZ, deltaUs)
             }
         }
 
@@ -227,9 +228,9 @@ class PhysicalMotionSource
                 accelZ: Short,
             ): MotionRateLimiter.MotionSample =
                 MotionRateLimiter.MotionSample(
-                    gyroX = MotionScaling.gyroRadToWire(gyroX),
-                    gyroY = MotionScaling.gyroRadToWire(gyroY),
-                    gyroZ = MotionScaling.gyroRadToWire(gyroZ),
+                    gyroX = gyroRadToWire(gyroX),
+                    gyroY = gyroRadToWire(gyroY),
+                    gyroZ = gyroRadToWire(gyroZ),
                     accelX = accelX,
                     accelY = accelY,
                     accelZ = accelZ,

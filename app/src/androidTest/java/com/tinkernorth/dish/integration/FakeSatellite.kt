@@ -3,7 +3,8 @@
 package com.tinkernorth.dish.integration
 
 import com.tinkernorth.dish.core.model.DiscoveredServer
-import com.tinkernorth.dish.core.net.SessionCrypto
+import com.tinkernorth.dish.core.net.deriveSessionKey
+import com.tinkernorth.dish.core.net.hmacProof
 import okhttp3.tls.HeldCertificate
 import org.json.JSONArray
 import org.json.JSONObject
@@ -366,7 +367,7 @@ class FakeSatellite(
         val key = pairingKeyHex ?: return false
         val deviceId = headers["x-device-id"] ?: return false
         val proof = headers["x-hmac-proof"] ?: return false
-        return proof == SessionCrypto.hmacProof(hexToBytes(key), deviceId)
+        return proof == hmacProof(hexToBytes(key), deviceId)
     }
 
     private fun unpair(headers: Map<String, String>): Pair<String, String> {
@@ -392,7 +393,7 @@ class FakeSatellite(
         lastTokenHex = tokenHex
         downCounter = 0
         sessionKey =
-            SessionCrypto.deriveSessionKey(
+            deriveSessionKey(
                 hexToBytes(pairingKeyHex!!),
                 hexToBytes(saltHex),
                 hexToBytes(tokenHex),

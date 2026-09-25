@@ -265,75 +265,124 @@ static void enqueueBridgeReport(BridgeReport&& r) {
     g_bridgeQueueCv.notify_one();
 }
 
-static void bridgeDispatchLoop() {
-    JNIEnv* env = nullptr;
-    if (!g_jvm || g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK || env == nullptr) {
-        LOGE("bridgeDispatchLoop: AttachCurrentThread failed");
+static bool bridgeHasWork() {
+    return !g_bridgeDispatchRunning.load(std::memory_order_relaxed) || !g_bridgeQueue.empty() ||
+           !g_micMuteQueue.empty();
+}
+
+static bool bridgeIsDrainedAndStopping() {
+    return !g_bridgeDispatchRunning.load(std::memory_order_relaxed) && g_bridgeQueue.empty() &&
+           g_micMuteQueue.empty();
+}
+
+static void callMicMuteUpcall(JNIEnv* env, const int32_t deviceId, const bool muted) {
+    if (g_micMuteBridgeClass == nullptr || g_micMutePadMethod == nullptr) return;
+    env->CallStaticVoidMethod(g_micMuteBridgeClass, g_micMutePadMethod, (jint)deviceId,
+                              (jboolean)muted);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+}
+
+// Which static method carries this report. Answers false when the class or the method never
+// resolved, which is the honest answer for a bridge Kotlin has not installed.
+static bool bridgeTargetFor(const BridgeReport& r, jclass& outCls, jmethodID& outMethod) {
+    const bool isMoonlight = r.kind == SLOT_MOONLIGHT;
+    outCls = isMoonlight ? g_moonlightBridgeClass : g_btBridgeClass;
+    outMethod = isMoonlight ? g_moonlightDispatchMethod : g_btDispatchMethod;
+    if (isMoonlight && r.payload == BridgeReport::MOTION) outMethod = g_moonlightMotionMethod;
+    if (isMoonlight && r.payload == BridgeReport::TOUCH) outMethod = g_moonlightTouchMethod;
+    return outCls != nullptr && outMethod != nullptr;
+}
+
+// A Moonlight session carries up to four pads on one stream, so its upcall also names which pad
+// the report belongs to; the Bluetooth link is one pad by nature.
+static void callBridgeUpcall(JNIEnv* env, jclass cls, jmethodID method, jstring connId,
+                             const BridgeReport& r) {
+    const bool isMoonlight = r.kind == SLOT_MOONLIGHT;
+    const bool isMotion = isMoonlight && r.payload == BridgeReport::MOTION;
+    const bool isTouch = isMoonlight && r.payload == BridgeReport::TOUCH;
+
+    if (isMotion) {
+        env->CallStaticVoidMethod(cls, method, connId, (jint)r.controllerNumber, (jint)r.gyro[0],
+                                  (jint)r.gyro[1], (jint)r.gyro[2], (jint)r.accel[0],
+                                  (jint)r.accel[1], (jint)r.accel[2], (jint)r.timestampDeltaUs);
         return;
     }
+    if (isTouch) {
+        env->CallStaticVoidMethod(
+            cls, method, connId, (jint)r.controllerNumber, (jboolean)r.touch.f0Active,
+            (jint)r.touch.f0Id, (jint)r.touch.f0X, (jint)r.touch.f0Y, (jboolean)r.touch.f1Active,
+            (jint)r.touch.f1Id, (jint)r.touch.f1X, (jint)r.touch.f1Y, (jboolean)r.touch.clickDown);
+        return;
+    }
+    if (isMoonlight) {
+        env->CallStaticVoidMethod(cls, method, connId, (jint)r.controllerNumber, (jint)r.wButtons,
+                                  (jint)r.bLT, (jint)r.bRT, (jint)r.sLX, (jint)r.sLY, (jint)r.sRX,
+                                  (jint)r.sRY);
+        return;
+    }
+    env->CallStaticVoidMethod(cls, method, connId, (jint)r.wButtons, (jint)r.bLT, (jint)r.bRT,
+                              (jint)r.sLX, (jint)r.sLY, (jint)r.sRX, (jint)r.sRY);
+}
+
+static void dispatchBridgeReport(JNIEnv* env, const BridgeReport& r) {
+    jclass cls = nullptr;
+    jmethodID method = nullptr;
+    if (!bridgeTargetFor(r, cls, method)) return;
+
+    jstring connId = env->NewStringUTF(r.connectionId.c_str());
+    callBridgeUpcall(env, cls, method, connId, r);
+    env->DeleteLocalRef(connId);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+}
+
+// Attaches the calling thread to the JVM for the life of a dispatch loop. Null means the attach
+// failed, which that loop cannot recover from.
+static JNIEnv* attachDispatchThread(const char* what) {
+    JNIEnv* env = nullptr;
+    const bool attached = g_jvm != nullptr && g_jvm->AttachCurrentThread(&env, nullptr) == JNI_OK;
+    if (attached && env != nullptr) return env;
+    LOGE("%s: AttachCurrentThread failed", what);
+    return nullptr;
+}
+
+// What one wait on the bridge queue produced. Nothing means a spurious wake with both queues
+// empty, which is not a reason to stop.
+enum class BridgeWork { Report, Mute, Nothing, Stop };
+
+// Both queues are drained under one lock, and the lock is gone by the time the caller makes its
+// JVM upcall. Mute edges come first: they are rarer and they gate capture, so they must not wait
+// behind a queue of input reports.
+static BridgeWork takeNextBridgeWork(BridgeReport& report, std::pair<int32_t, bool>& mute) {
+    std::unique_lock<std::mutex> lock(g_bridgeQueueMtx);
+    g_bridgeQueueCv.wait(lock, bridgeHasWork);
+    if (bridgeIsDrainedAndStopping()) return BridgeWork::Stop;
+    if (!g_micMuteQueue.empty()) {
+        mute = g_micMuteQueue.front();
+        g_micMuteQueue.pop_front();
+        return BridgeWork::Mute;
+    }
+    if (g_bridgeQueue.empty()) return BridgeWork::Nothing;
+    report = std::move(g_bridgeQueue.front());
+    g_bridgeQueue.pop_front();
+    return BridgeWork::Report;
+}
+
+static void bridgeDispatchLoop() {
+    JNIEnv* env = attachDispatchThread("bridgeDispatchLoop");
+    if (env == nullptr) return;
     dish::elevateCurrentThreadToInputPriority();
     LOGI("Bridge dispatch thread started");
     while (g_bridgeDispatchRunning.load(std::memory_order_relaxed)) {
-        BridgeReport r;
-        {
-            std::unique_lock<std::mutex> lock(g_bridgeQueueMtx);
-            g_bridgeQueueCv.wait(lock, [] {
-                return !g_bridgeDispatchRunning.load(std::memory_order_relaxed) ||
-                       !g_bridgeQueue.empty() || !g_micMuteQueue.empty();
-            });
-            if (!g_bridgeDispatchRunning.load(std::memory_order_relaxed) && g_bridgeQueue.empty() &&
-                g_micMuteQueue.empty())
-                break;
-            // Mute edges first: they are rarer and they gate capture, so they must not wait
-            // behind a queue of input reports.
-            if (!g_micMuteQueue.empty()) {
-                auto ev = g_micMuteQueue.front();
-                g_micMuteQueue.pop_front();
-                lock.unlock();
-                if (g_micMuteBridgeClass != nullptr && g_micMutePadMethod != nullptr) {
-                    env->CallStaticVoidMethod(g_micMuteBridgeClass, g_micMutePadMethod,
-                                              (jint)ev.first, (jboolean)ev.second);
-                    if (env->ExceptionCheck()) env->ExceptionClear();
-                }
-                continue;
-            }
-            if (g_bridgeQueue.empty()) continue;
-            r = std::move(g_bridgeQueue.front());
-            g_bridgeQueue.pop_front();
+        BridgeReport report;
+        std::pair<int32_t, bool> mute{};
+        const BridgeWork work = takeNextBridgeWork(report, mute);
+        if (work == BridgeWork::Stop) break;
+        if (work == BridgeWork::Nothing) continue;
+        if (work == BridgeWork::Mute) {
+            callMicMuteUpcall(env, mute.first, mute.second);
+            continue;
         }
-        jclass cls = r.kind == SLOT_MOONLIGHT ? g_moonlightBridgeClass : g_btBridgeClass;
-        jmethodID method =
-            r.kind == SLOT_MOONLIGHT ? g_moonlightDispatchMethod : g_btDispatchMethod;
-        if (r.kind == SLOT_MOONLIGHT && r.payload == BridgeReport::MOTION)
-            method = g_moonlightMotionMethod;
-        if (r.kind == SLOT_MOONLIGHT && r.payload == BridgeReport::TOUCH)
-            method = g_moonlightTouchMethod;
-        if (cls == nullptr || method == nullptr) continue;
-        jstring connId = env->NewStringUTF(r.connectionId.c_str());
-        // A Moonlight session carries up to four pads on one stream, so its upcall also
-        // names which pad the report belongs to; the Bluetooth link is one pad by nature.
-        if (r.kind == SLOT_MOONLIGHT && r.payload == BridgeReport::MOTION) {
-            env->CallStaticVoidMethod(cls, method, connId, (jint)r.controllerNumber,
-                                      (jint)r.gyro[0], (jint)r.gyro[1], (jint)r.gyro[2],
-                                      (jint)r.accel[0], (jint)r.accel[1], (jint)r.accel[2],
-                                      (jint)r.timestampDeltaUs);
-        } else if (r.kind == SLOT_MOONLIGHT && r.payload == BridgeReport::TOUCH) {
-            env->CallStaticVoidMethod(
-                cls, method, connId, (jint)r.controllerNumber, (jboolean)r.touch.f0Active,
-                (jint)r.touch.f0Id, (jint)r.touch.f0X, (jint)r.touch.f0Y,
-                (jboolean)r.touch.f1Active, (jint)r.touch.f1Id, (jint)r.touch.f1X,
-                (jint)r.touch.f1Y, (jboolean)r.touch.clickDown);
-        } else if (r.kind == SLOT_MOONLIGHT) {
-            env->CallStaticVoidMethod(cls, method, connId, (jint)r.controllerNumber,
-                                      (jint)r.wButtons, (jint)r.bLT, (jint)r.bRT, (jint)r.sLX,
-                                      (jint)r.sLY, (jint)r.sRX, (jint)r.sRY);
-        } else {
-            env->CallStaticVoidMethod(cls, method, connId, (jint)r.wButtons, (jint)r.bLT,
-                                      (jint)r.bRT, (jint)r.sLX, (jint)r.sLY, (jint)r.sRX,
-                                      (jint)r.sRY);
-        }
-        env->DeleteLocalRef(connId);
-        if (env->ExceptionCheck()) env->ExceptionClear();
+        dispatchBridgeReport(env, report);
     }
     g_jvm->DetachCurrentThread();
     LOGI("Bridge dispatch thread stopped");
@@ -454,41 +503,51 @@ static void deliverSpeakerPcm(JNIEnv* env, int handle, uint8_t ctrlIdx, int lane
     if (env->ExceptionCheck()) env->ExceptionClear();
 }
 
-static void audioDispatchLoop() {
-    JNIEnv* env = nullptr;
-    if (!g_jvm || g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK || env == nullptr) {
-        LOGE("audioDispatchLoop: AttachCurrentThread failed");
-        return;
+static bool audioHasWork() {
+    return !g_audioDispatchRunning.load(std::memory_order_relaxed) || !g_audioQueue.empty();
+}
+
+static bool audioIsDrainedAndStopping() {
+    return !g_audioDispatchRunning.load(std::memory_order_relaxed) && g_audioQueue.empty();
+}
+
+// Answers whether a frame was taken. False means the loop has been stopped and the queue is
+// empty, so there is nothing left to deliver.
+static bool takeNextSpeakerFrame(SpeakerFrame& out) {
+    std::unique_lock<std::mutex> lock(g_audioQueueMtx);
+    g_audioQueueCv.wait(lock, audioHasWork);
+    if (audioIsDrainedAndStopping()) return false;
+    out = std::move(g_audioQueue.front());
+    g_audioQueue.pop_front();
+    return true;
+}
+
+static void deliverSpeakerFrames(JNIEnv* env, const SpeakerFrame& f, const int16_t* pcm,
+                                 const bool* concealed, const int produced) {
+    for (int i = 0; i < produced; i++) {
+        deliverSpeakerPcm(env, f.handle, f.ctrlIdx, f.lane,
+                          pcm + i * dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES, concealed[i]);
     }
-    // Named for its first caller; the value it sets is URGENT_AUDIO niceness,
-    // which is exactly what a 20 ms decode cadence wants.
+}
+
+static void audioDispatchLoop() {
+    JNIEnv* env = attachDispatchThread("audioDispatchLoop");
+    if (env == nullptr) return;
+    // Named for its first caller; the value it sets is URGENT_AUDIO niceness, which is exactly
+    // what a 20 ms decode cadence wants.
     dish::elevateCurrentThreadToInputPriority();
     LOGI("Speaker audio dispatch thread started");
-    // Allocated once for the thread: one push can drain the whole window and
-    // conceal ahead of it, so size for the worst case rather than reallocating.
+    // Allocated once for the thread: one push can drain the whole window and conceal ahead of it,
+    // so this is sized for the worst case rather than reallocated.
     std::vector<int16_t> pcm(static_cast<size_t>(dish_audio::AUDIO_JITTER_MAX_EVENTS_PER_PUSH) *
                              dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES);
     bool concealed[dish_audio::AUDIO_JITTER_MAX_EVENTS_PER_PUSH] = {};
     while (g_audioDispatchRunning.load(std::memory_order_relaxed)) {
         SpeakerFrame f;
-        {
-            std::unique_lock<std::mutex> lock(g_audioQueueMtx);
-            g_audioQueueCv.wait(lock, [] {
-                return !g_audioDispatchRunning.load(std::memory_order_relaxed) ||
-                       !g_audioQueue.empty();
-            });
-            if (!g_audioDispatchRunning.load(std::memory_order_relaxed) && g_audioQueue.empty())
-                break;
-            f = std::move(g_audioQueue.front());
-            g_audioQueue.pop_front();
-        }
+        if (!takeNextSpeakerFrame(f)) break;
         if (!f.session || f.session->closed.load(std::memory_order_acquire)) continue;
         const int produced = decodeSpeakerFrame(f, pcm, concealed);
-        for (int i = 0; i < produced; i++) {
-            deliverSpeakerPcm(env, f.handle, f.ctrlIdx, f.lane,
-                              pcm.data() + i * dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES,
-                              concealed[i]);
-        }
+        deliverSpeakerFrames(env, f, pcm.data(), concealed, produced);
     }
     g_jvm->DetachCurrentThread();
     LOGI("Speaker audio dispatch thread stopped");
@@ -505,6 +564,45 @@ static inline float axisCur(const GameActivityMotionEvent* ev, int axis) {
     return ev->pointers[0].axisValues[axis];
 }
 
+// The satellite takes the pad state as a wire XUSB report, straight out of the stack: one slot
+// byte then the report, no allocation on the per-packet path.
+static void publishGamepadToSatellite(const SlotBinding& binding, const DeviceState& s) {
+    auto session = getSession(binding.sessionHandle);
+    if (!session) return;
+    uint8_t payload[1 + sizeof(XUSB_REPORT)];
+    payload[0] = (uint8_t)(binding.controllerIndex & 0xFF);
+    XUSB_REPORT* r = (XUSB_REPORT*)(payload + 1);
+    r->wButtons = s.wButtons;
+    r->bLeftTrigger = s.bLT;
+    r->bRightTrigger = s.bRT;
+    r->sThumbLX = s.sLX;
+    r->sThumbLY = s.sLY;
+    r->sThumbRX = s.sRX;
+    r->sThumbRY = s.sRY;
+    sendEncrypted(session.get(), MSG_GAMEPAD_DATA, payload, sizeof(payload));
+    session->sentByCtrl[binding.controllerIndex & 15].fetch_add(1, std::memory_order_relaxed);
+    hotpath::markGamepadSent(); // stage-1 end: the URB-driven packet has left sendto()
+}
+
+// Bluetooth and Moonlight both leave through Kotlin, so the state is queued for the bridge thread
+// rather than written here: this call holds g_slotsMtx and must not make a JVM upcall under it.
+static void publishGamepadToBridge(const SlotBinding& binding, const DeviceState& s) {
+    if (binding.bridgeConnectionId.empty()) return;
+    BridgeReport r{};
+    r.kind = binding.kind;
+    r.payload = BridgeReport::GAMEPAD;
+    r.connectionId = binding.bridgeConnectionId;
+    r.controllerNumber = binding.controllerIndex;
+    r.wButtons = s.wButtons;
+    r.bLT = s.bLT;
+    r.bRT = s.bRT;
+    r.sLX = s.sLX;
+    r.sLY = s.sLY;
+    r.sRX = s.sRX;
+    r.sRY = s.sRY;
+    enqueueBridgeReport(std::move(r));
+}
+
 // Lock order: devices < slots < (sessions | btQueue).
 static void publishIfChanged(int32_t deviceId, DeviceState& s) {
     std::lock_guard<std::mutex> lock(g_slotsMtx);
@@ -513,39 +611,18 @@ static void publishIfChanged(int32_t deviceId, DeviceState& s) {
     // Bind-check before consume: a sample dropped for lack of a slot must not burn the latch, or
     // the slot it later binds to never sees that state.
     if (!gamepad::consumePublishIfChanged(s)) return;
-    const SlotBinding& binding = it->second;
 
-    if (binding.kind == SLOT_SATELLITE) {
-        auto session = getSession(binding.sessionHandle);
-        if (!session) return;
-        uint8_t payload[1 + sizeof(XUSB_REPORT)];
-        payload[0] = (uint8_t)(binding.controllerIndex & 0xFF);
-        XUSB_REPORT* r = (XUSB_REPORT*)(payload + 1);
-        r->wButtons = s.wButtons;
-        r->bLeftTrigger = s.bLT;
-        r->bRightTrigger = s.bRT;
-        r->sThumbLX = s.sLX;
-        r->sThumbLY = s.sLY;
-        r->sThumbRX = s.sRX;
-        r->sThumbRY = s.sRY;
-        sendEncrypted(session.get(), MSG_GAMEPAD_DATA, payload, sizeof(payload));
-        session->sentByCtrl[binding.controllerIndex & 15].fetch_add(1, std::memory_order_relaxed);
-        hotpath::markGamepadSent(); // stage-1 end: the URB-driven packet has left sendto()
-    } else if (binding.kind == SLOT_BLUETOOTH || binding.kind == SLOT_MOONLIGHT) {
-        if (binding.bridgeConnectionId.empty()) return;
-        BridgeReport r{};
-        r.kind = binding.kind;
-        r.payload = BridgeReport::GAMEPAD;
-        r.connectionId = binding.bridgeConnectionId;
-        r.controllerNumber = binding.controllerIndex;
-        r.wButtons = s.wButtons;
-        r.bLT = s.bLT;
-        r.bRT = s.bRT;
-        r.sLX = s.sLX;
-        r.sLY = s.sLY;
-        r.sRX = s.sRX;
-        r.sRY = s.sRY;
-        enqueueBridgeReport(std::move(r));
+    const SlotBinding& binding = it->second;
+    switch (binding.kind) {
+    case SLOT_SATELLITE:
+        publishGamepadToSatellite(binding, s);
+        return;
+    case SLOT_BLUETOOTH:
+    case SLOT_MOONLIGHT:
+        publishGamepadToBridge(binding, s);
+        return;
+    case SLOT_NONE:
+        return;
     }
 }
 
@@ -583,9 +660,7 @@ void prewarmDevice(int32_t deviceId) {
 // the same budget as the latency bench markers.
 static std::atomic<bool> g_inspect{false};
 
-void applyUsbReport(int32_t deviceId, const gamepad::DeviceState& nu) {
-    std::lock_guard<std::mutex> lock(g_devicesMtx);
-    auto& s = g_devices[deviceId];
+static void copyPadAxes(const gamepad::DeviceState& nu, gamepad::DeviceState& s) {
     s.wButtons = nu.wButtons;
     s.bLT = nu.bLT;
     s.bRT = nu.bRT;
@@ -593,32 +668,46 @@ void applyUsbReport(int32_t deviceId, const gamepad::DeviceState& nu) {
     s.sLY = nu.sLY;
     s.sRX = nu.sRX;
     s.sRY = nu.sRY;
+}
+
+// Copy-on-valid keeps the last known sample visible: a report that carries no motion must not
+// read as a stopped pad in the inspector.
+static void mirrorMotionForInspector(const gamepad::DeviceState& nu, gamepad::DeviceState& s) {
+    if (!nu.motionValid) return;
+    s.motionValid = true;
+    s.gyroX = nu.gyroX;
+    s.gyroY = nu.gyroY;
+    s.gyroZ = nu.gyroZ;
+    s.accelX = nu.accelX;
+    s.accelY = nu.accelY;
+    s.accelZ = nu.accelZ;
+}
+
+// Same copy-on-valid rule: a report without a touch update must not read as a lift.
+static void mirrorTouchForInspector(const gamepad::DeviceState& nu, gamepad::DeviceState& s) {
+    if (!nu.touchValid) return;
+    s.touchValid = true;
+    s.touch0Active = nu.touch0Active;
+    s.touch0Id = nu.touch0Id;
+    s.touch0X = nu.touch0X;
+    s.touch0Y = nu.touch0Y;
+    s.touch1Active = nu.touch1Active;
+    s.touch1Id = nu.touch1Id;
+    s.touch1X = nu.touch1X;
+    s.touch1Y = nu.touch1Y;
+    s.touchClick = nu.touchClick;
+}
+
+void applyUsbReport(int32_t deviceId, const gamepad::DeviceState& nu) {
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    auto& s = g_devices[deviceId];
+    copyPadAxes(nu, s);
     applyUsbStickDeadzone(s.sLX, s.sLY);
     applyUsbStickDeadzone(s.sRX, s.sRY);
-    if (g_inspect.load(std::memory_order_relaxed)) {
-        // Copy-on-valid keeps the last known sample visible: a report without a touch
-        // update must not read as a lift in the inspector.
-        if (nu.motionValid) {
-            s.motionValid = true;
-            s.gyroX = nu.gyroX;
-            s.gyroY = nu.gyroY;
-            s.gyroZ = nu.gyroZ;
-            s.accelX = nu.accelX;
-            s.accelY = nu.accelY;
-            s.accelZ = nu.accelZ;
-        }
-        if (nu.touchValid) {
-            s.touchValid = true;
-            s.touch0Active = nu.touch0Active;
-            s.touch0Id = nu.touch0Id;
-            s.touch0X = nu.touch0X;
-            s.touch0Y = nu.touch0Y;
-            s.touch1Active = nu.touch1Active;
-            s.touch1Id = nu.touch1Id;
-            s.touch1X = nu.touch1X;
-            s.touch1Y = nu.touch1Y;
-            s.touchClick = nu.touchClick;
-        }
+    const bool inspecting = g_inspect.load(std::memory_order_relaxed);
+    if (inspecting) {
+        mirrorMotionForInspector(nu, s);
+        mirrorTouchForInspector(nu, s);
     }
     publishIfChanged(deviceId, s);
 }
@@ -687,74 +776,127 @@ void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyro
 // transport. Satellite gets the full-state frame; Moonlight gets it via the bridge, where
 // Kotlin diffs it into CONTROLLER_TOUCH events. Routing (ds4 pad vs mouse vs off) is the
 // satellite receiver's job, declared per slot in the descriptor.
-void applyUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_t eventTimeMs) {
-    std::lock_guard<std::mutex> lock(g_slotsMtx);
-    auto it = g_slots.find(deviceId);
-    if (it == g_slots.end()) return;
-    const SlotBinding& binding = it->second;
-    if (binding.kind == SLOT_MOONLIGHT) {
-        if (binding.bridgeConnectionId.empty()) return;
-        BridgeReport r{};
-        r.kind = SLOT_MOONLIGHT;
-        r.payload = BridgeReport::TOUCH;
-        r.connectionId = binding.bridgeConnectionId;
-        r.controllerNumber = binding.controllerIndex;
-        r.touch = t;
-        // eventTimeMs is not carried: events are re-timed by the reliable control stream.
-        enqueueBridgeReport(std::move(r));
-        return;
-    }
-    if (binding.kind != SLOT_SATELLITE) return;
+// eventTimeMs is not carried: Moonlight re-times these events on the reliable control stream.
+static void publishTouchToBridge(const SlotBinding& binding, const gamepad::TouchpadState& t) {
+    if (binding.bridgeConnectionId.empty()) return;
+    BridgeReport r{};
+    r.kind = SLOT_MOONLIGHT;
+    r.payload = BridgeReport::TOUCH;
+    r.connectionId = binding.bridgeConnectionId;
+    r.controllerNumber = binding.controllerIndex;
+    r.touch = t;
+    enqueueBridgeReport(std::move(r));
+}
+
+// Protocol 2 widened the payload to 19 bytes; a protocol 1 satellite still gets the 16-byte form.
+static void publishTouchToSatellite(const SlotBinding& binding, const gamepad::TouchpadState& t,
+                                    const uint32_t eventTimeMs) {
     auto session = getSession(binding.sessionHandle);
     if (!session) return;
     uint8_t payload[19];
     const uint8_t idx = (uint8_t)(binding.controllerIndex & 0xFF);
-    if (session->protocolVersion.load() >= 2) {
+    const bool isProtocol2 = session->protocolVersion.load() >= 2;
+    if (isProtocol2) {
         dish_wire::encodeTouchpadPayloadV2(payload, idx, t.f0Active, t.f1Active, t.clickDown, false,
                                            false, t.f0Id, t.f0X, t.f0Y, t.f1Id, t.f1X, t.f1Y,
                                            eventTimeMs, 0);
         sendEncrypted(session.get(), MSG_TOUCHPAD, payload, 19);
-    } else {
-        dish_wire::encodeTouchpadPayloadV1(payload, idx, t.f0Active, t.f1Active, t.clickDown,
-                                           t.f0Id, t.f0X, t.f0Y, t.f1Id, t.f1X, t.f1Y, eventTimeMs);
-        sendEncrypted(session.get(), MSG_TOUCHPAD, payload, 16);
+        return;
+    }
+    dish_wire::encodeTouchpadPayloadV1(payload, idx, t.f0Active, t.f1Active, t.clickDown, t.f0Id,
+                                       t.f0X, t.f0Y, t.f1Id, t.f1X, t.f1Y, eventTimeMs);
+    sendEncrypted(session.get(), MSG_TOUCHPAD, payload, 16);
+}
+
+void applyUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_t eventTimeMs) {
+    std::lock_guard<std::mutex> lock(g_slotsMtx);
+    auto it = g_slots.find(deviceId);
+    if (it == g_slots.end()) return;
+
+    const SlotBinding& binding = it->second;
+    switch (binding.kind) {
+    case SLOT_MOONLIGHT:
+        publishTouchToBridge(binding, t);
+        return;
+    case SLOT_SATELLITE:
+        publishTouchToSatellite(binding, t, eventTimeMs);
+        return;
+    case SLOT_BLUETOOTH:
+    case SLOT_NONE:
+        return;
     }
 }
 
 } // namespace dispatch
 
 // Returning true consumes the event so it can't trigger incidental View focus navigation.
-static bool gamepadKeyFilter(const GameActivityKeyEvent* ev) {
-    int32_t source = ev->source;
-    bool isGame = (source & AINPUT_SOURCE_GAMEPAD) == AINPUT_SOURCE_GAMEPAD ||
-                  (source & AINPUT_SOURCE_JOYSTICK) == AINPUT_SOURCE_JOYSTICK;
-    if (!isGame) return false;
-    int32_t kc = ev->keyCode;
-    int32_t deviceId = ev->deviceId;
-    std::lock_guard<std::mutex> lock(g_devicesMtx);
-    auto it = g_devices.find(deviceId);
-    uint8_t quirk = it != g_devices.end() ? it->second.quirk : 0;
-    bool isMappedKey = (quirk & gamepad::QUIRK_SWITCH_LAYOUT)
-                           ? gamepad::switchLayoutConsumesKey(kc)
-                           : (kc == AKEYCODE_BUTTON_L2 || kc == AKEYCODE_BUTTON_R2) ||
-                                 gamepad::keycodeToXusb(kc) != 0;
-    if (!isMappedKey) return false;
+static bool isGamepadSource(const int32_t source) {
+    return (source & AINPUT_SOURCE_GAMEPAD) == AINPUT_SOURCE_GAMEPAD ||
+           (source & AINPUT_SOURCE_JOYSTICK) == AINPUT_SOURCE_JOYSTICK;
+}
 
-    int32_t action = ev->action;
-    if (action == AKEY_EVENT_ACTION_DOWN || action == AKEY_EVENT_ACTION_UP) {
-        g_frameworkEventCounts[deviceId]++;
-        auto& state = g_devices[deviceId];
-        if (gamepad::applyKey(state, kc, action == AKEY_EVENT_ACTION_DOWN)) {
-            publishIfChanged(deviceId, state);
-        }
+// Caller holds g_devicesMtx. An unknown device has no quirks yet, which is the standard layout.
+static uint8_t quirkFor(const int32_t deviceId) {
+    auto it = g_devices.find(deviceId);
+    if (it == g_devices.end()) return 0;
+    return it->second.quirk;
+}
+
+// A pad on the Switch layout answers for its own key set. Every other pad takes the standard map
+// plus the two trigger keycodes, which applyKey turns into analogue values rather than bits.
+static bool isMappedGamepadKey(const int32_t keyCode, const uint8_t quirk) {
+    const bool isSwitchLayout = (quirk & gamepad::QUIRK_SWITCH_LAYOUT) != 0;
+    if (isSwitchLayout) return gamepad::switchLayoutConsumesKey(keyCode);
+    const bool isTriggerKey = keyCode == AKEYCODE_BUTTON_L2 || keyCode == AKEYCODE_BUTTON_R2;
+    return isTriggerKey || gamepad::keycodeToXusb(keyCode) != 0;
+}
+
+static bool gamepadKeyFilter(const GameActivityKeyEvent* ev) {
+    if (!isGamepadSource(ev->source)) return false;
+    const int32_t kc = ev->keyCode;
+    const int32_t deviceId = ev->deviceId;
+
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    if (!isMappedGamepadKey(kc, quirkFor(deviceId))) return false;
+
+    const int32_t action = ev->action;
+    const bool isEdge = action == AKEY_EVENT_ACTION_DOWN || action == AKEY_EVENT_ACTION_UP;
+    if (!isEdge) return true;
+
+    g_frameworkEventCounts[deviceId]++;
+    auto& state = g_devices[deviceId];
+    if (gamepad::applyKey(state, kc, action == AKEY_EVENT_ACTION_DOWN)) {
+        publishIfChanged(deviceId, state);
     }
     return true;
 }
 
+// Right-stick layout varies by pad (Z/RZ against RX/RY); the larger-magnitude axis is the one
+// the pad is actually driving.
+static float pickLargerMagnitude(const float a, const float b) {
+    return std::fabs(a) >= std::fabs(b) ? a : b;
+}
+
+// Latest sample wins: historicals are intermediate states the next apply overwrites anyway.
+static void applyMotionAxes(const GameActivityMotionEvent* ev, gamepad::DeviceState& state) {
+    const float rightX =
+        pickLargerMagnitude(axisCur(ev, AMOTION_EVENT_AXIS_Z), axisCur(ev, AMOTION_EVENT_AXIS_RX));
+    const float rightY =
+        pickLargerMagnitude(axisCur(ev, AMOTION_EVENT_AXIS_RZ), axisCur(ev, AMOTION_EVENT_AXIS_RY));
+    const float lt =
+        std::max(axisCur(ev, AMOTION_EVENT_AXIS_LTRIGGER), axisCur(ev, AMOTION_EVENT_AXIS_BRAKE));
+    const float rt =
+        std::max(axisCur(ev, AMOTION_EVENT_AXIS_RTRIGGER), axisCur(ev, AMOTION_EVENT_AXIS_GAS));
+    gamepad::applyAxes(state, axisCur(ev, AMOTION_EVENT_AXIS_X), axisCur(ev, AMOTION_EVENT_AXIS_Y),
+                       rightX, rightY, lt, rt, axisCur(ev, AMOTION_EVENT_AXIS_HAT_X),
+                       axisCur(ev, AMOTION_EVENT_AXIS_HAT_Y));
+}
+
 static bool gamepadMotionFilter(const GameActivityMotionEvent* ev) {
-    if ((ev->source & AINPUT_SOURCE_JOYSTICK) != AINPUT_SOURCE_JOYSTICK) return false;
-    int32_t action = ev->action & AMOTION_EVENT_ACTION_MASK;
-    int32_t deviceId = ev->deviceId;
+    const bool isJoystick = (ev->source & AINPUT_SOURCE_JOYSTICK) == AINPUT_SOURCE_JOYSTICK;
+    if (!isJoystick) return false;
+    const int32_t action = ev->action & AMOTION_EVENT_ACTION_MASK;
+    const int32_t deviceId = ev->deviceId;
 
     std::lock_guard<std::mutex> lock(g_devicesMtx);
     auto& state = g_devices[deviceId];
@@ -765,23 +907,9 @@ static bool gamepadMotionFilter(const GameActivityMotionEvent* ev) {
         return true;
     }
     if (action != AMOTION_EVENT_ACTION_MOVE) return true;
-    g_frameworkEventCounts[deviceId]++;
 
-    // Latest sample wins: historicals are intermediate states the next apply overwrites anyway.
-    float z = axisCur(ev, AMOTION_EVENT_AXIS_Z);
-    float rz = axisCur(ev, AMOTION_EVENT_AXIS_RZ);
-    float rx = axisCur(ev, AMOTION_EVENT_AXIS_RX);
-    float ry = axisCur(ev, AMOTION_EVENT_AXIS_RY);
-    // Right-stick layout varies (Z/RZ vs RX/RY); pick the larger-magnitude pair.
-    float rightX = std::fabs(z) >= std::fabs(rx) ? z : rx;
-    float rightY = std::fabs(rz) >= std::fabs(ry) ? rz : ry;
-    float lt =
-        std::max(axisCur(ev, AMOTION_EVENT_AXIS_LTRIGGER), axisCur(ev, AMOTION_EVENT_AXIS_BRAKE));
-    float rt =
-        std::max(axisCur(ev, AMOTION_EVENT_AXIS_RTRIGGER), axisCur(ev, AMOTION_EVENT_AXIS_GAS));
-    gamepad::applyAxes(state, axisCur(ev, AMOTION_EVENT_AXIS_X), axisCur(ev, AMOTION_EVENT_AXIS_Y),
-                       rightX, rightY, lt, rt, axisCur(ev, AMOTION_EVENT_AXIS_HAT_X),
-                       axisCur(ev, AMOTION_EVENT_AXIS_HAT_Y));
+    g_frameworkEventCounts[deviceId]++;
+    applyMotionAxes(ev, state);
     publishIfChanged(deviceId, state);
     return true;
 }
@@ -850,38 +978,49 @@ static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
     return sent == (ssize_t)totalLen;
 }
 
+// stage-2: the round-trip clock starts here, on this session's own clock.
+static void armLatencyPing(Session& s) {
+    if (!hotpath::enabled()) return;
+    const int64_t now = hotpath::nowMonotonicNs();
+    if (!hotpath::shouldArmPing(s.lastPingNs.load(std::memory_order_relaxed), now)) return;
+    s.lastPingNs.store(now, std::memory_order_relaxed);
+}
+
+// Every ping counts as missed until its ACK clears the counter; enough in a row is a dead link.
+static void countMissedAck(Session& s, const int intervalMs) {
+    const int missMax = HEARTBEAT_DEATH_TIMEOUT_MS / intervalMs;
+    const bool isDead = s.missedAcks.fetch_add(1, std::memory_order_relaxed) + 1 >= missMax;
+    if (!isDead) return;
+    LOGE("Missed %d heartbeat ACKs, connection dead", missMax);
+    s.connectionAlive.store(false, std::memory_order_relaxed);
+}
+
+// Slept in slices so a stop is observed well before the next interval is up.
+static constexpr int kHeartbeatSliceMs = 50;
+
+static void sleepUntilNextHeartbeat(Session& s, const int intervalMs) {
+    for (int i = 0; i < intervalMs / kHeartbeatSliceMs; i++) {
+        if (!s.heartbeat.running()) break;
+        usleep(kHeartbeatSliceMs * 1000);
+    }
+}
+
 static void heartbeatLoop(std::shared_ptr<Session> s) {
     LOGI("Heartbeat thread started (sock=%d)", s->udpSock);
     while (s->heartbeat.running()) {
         sendEncrypted(s.get(), MSG_HEARTBEAT_PING, nullptr, 0);
         s->rtt.pings.fetch_add(1, std::memory_order_relaxed);
-        if (hotpath::enabled()) {
-            // stage-2: round-trip clock starts here, on this session's own clock.
-            const int64_t now = hotpath::nowMonotonicNs();
-            if (hotpath::shouldArmPing(s->lastPingNs.load(std::memory_order_relaxed), now)) {
-                s->lastPingNs.store(now, std::memory_order_relaxed);
-            }
-        }
+        armLatencyPing(*s);
 
         const int intervalMs = g_heartbeatIntervalMs.load(std::memory_order_relaxed);
-        const int missMax = HEARTBEAT_DEATH_TIMEOUT_MS / intervalMs;
-        if (s->missedAcks.fetch_add(1, std::memory_order_relaxed) + 1 >= missMax) {
-            LOGE("Missed %d heartbeat ACKs, connection dead", missMax);
-            s->connectionAlive.store(false, std::memory_order_relaxed);
-        }
-
-        for (int i = 0; i < intervalMs / 50; i++) {
-            if (!s->heartbeat.running()) break;
-            usleep(50000);
-        }
+        countMissedAck(*s, intervalMs);
+        sleepUntilNextHeartbeat(*s, intervalMs);
     }
     LOGI("Heartbeat thread stopped");
 }
 
-void android_main(struct android_app* app) {
-    LOGI("android_main started (filter-inline input mode)");
-
-    // GameActivity only fills AXIS_X/Y by default; opt-in to every axis the motion filter reads.
+// GameActivity only fills AXIS_X/Y by default; opt-in to every axis the motion filter reads.
+static void enableGamepadAxes() {
     GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_Z);
     GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_RZ);
     GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_RX);
@@ -892,25 +1031,39 @@ void android_main(struct android_app* app) {
     GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_GAS);
     GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_HAT_X);
     GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_HAT_Y);
+}
 
+// Answers whether the loop should run again: a looper error or a destroy request ends it.
+static bool pumpLooperOnce(struct android_app* app) {
+    int events = 0;
+    struct android_poll_source* source = nullptr;
+    const int result = ALooper_pollOnce(-1, nullptr, &events, (void**)&source);
+    if (result == ALOOPER_POLL_ERROR) {
+        LOGE("ALooper_pollOnce returned ALOOPER_POLL_ERROR");
+        return false;
+    }
+    if (source != nullptr) source->process(source->app, source);
+    return !app->destroyRequested;
+}
+
+// The filters consume every event inline on the input thread, so the buffers are only drained
+// here; nothing reads them.
+static void drainInputBuffers(struct android_app* app) {
+    struct android_input_buffer* ib = android_app_swap_input_buffers(app);
+    if (ib == nullptr) return;
+    if (ib->motionEventsCount > 0) android_app_clear_motion_events(ib);
+    if (ib->keyEventsCount > 0) android_app_clear_key_events(ib);
+}
+
+void android_main(struct android_app* app) {
+    LOGI("android_main started (filter-inline input mode)");
+    enableGamepadAxes();
     app->keyEventFilter = gamepadKeyFilter;
     app->motionEventFilter = gamepadMotionFilter;
 
     while (!app->destroyRequested) {
-        int events;
-        struct android_poll_source* source = nullptr;
-        int result = ALooper_pollOnce(-1, nullptr, &events, (void**)&source);
-        if (result == ALOOPER_POLL_ERROR) {
-            LOGE("ALooper_pollOnce returned ALOOPER_POLL_ERROR");
-            break;
-        }
-        if (source != nullptr) source->process(source->app, source);
-        if (app->destroyRequested) break;
-
-        struct android_input_buffer* ib = android_app_swap_input_buffers(app);
-        if (ib == nullptr) continue;
-        if (ib->motionEventsCount > 0) android_app_clear_motion_events(ib);
-        if (ib->keyEventsCount > 0) android_app_clear_key_events(ib);
+        if (!pumpLooperOnce(app)) break;
+        drainInputBuffers(app);
     }
     LOGI("android_main: destroy requested, exiting");
 }

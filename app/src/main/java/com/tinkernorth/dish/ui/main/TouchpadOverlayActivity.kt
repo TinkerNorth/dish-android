@@ -76,13 +76,14 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
         binding.touchpadMovePad.clickWhenTouched = false
         binding.touchpadMovePad.label = getString(R.string.touchpad_pad_move_label)
         binding.touchpadMovePad.hint = getString(R.string.touchpad_pad_move_hint)
-        binding.touchpadMovePad.listener =
-            object : TouchpadSurfaceView.Listener {
-                override fun onTouchpadStateChanged(state: TouchpadSurfaceView.TouchpadState) {
-                    state.buttonPressed = clickHeld
-                    report(state)
-                }
-            }
+        binding.touchpadMovePad.listener = MovePadListener()
+    }
+
+    private inner class MovePadListener : TouchpadSurfaceView.Listener {
+        override fun onTouchpadStateChanged(state: TouchpadSurfaceView.TouchpadState) {
+            state.buttonPressed = clickHeld
+            report(state)
+        }
     }
 
     // The click button and the move surface merge into the slot's single frame stream:

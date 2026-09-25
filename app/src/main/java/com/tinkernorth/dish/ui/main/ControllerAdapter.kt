@@ -26,8 +26,9 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.core.net.DishProtocol
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.DishProtocolCompat
+import com.tinkernorth.dish.core.net.moonlight.AUTO
+import com.tinkernorth.dish.core.net.moonlight.fromStored
 import com.tinkernorth.dish.databinding.BindingDecisionRowBinding
 import com.tinkernorth.dish.databinding.BindingPillBinding
 import com.tinkernorth.dish.databinding.BindingValueMonoBinding
@@ -35,7 +36,7 @@ import com.tinkernorth.dish.databinding.BindingValueNoneBinding
 import com.tinkernorth.dish.databinding.BindingValueNotBoundBinding
 import com.tinkernorth.dish.databinding.ItemControllerBinding
 import com.tinkernorth.dish.hotpath.input.Transport
-import com.tinkernorth.dish.repository.TouchpadModeValue
+import com.tinkernorth.dish.repository.TOUCHPAD_MODE_DS4
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.ui.common.bundledControllerTypeLabelRes
 import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
@@ -142,7 +143,7 @@ class ControllerAdapter(
         val pathCard: PathCard? = null,
         val inputRates: SlotInputRates? = null,
         val screenPeakHz: Int = 0,
-        val hostCompat: DishProtocol.Compat = DishProtocol.Compat.UNKNOWN,
+        val hostCompat: DishProtocolCompat = DishProtocolCompat.UNKNOWN,
     )
 
     fun submitSlots(
@@ -153,7 +154,7 @@ class ControllerAdapter(
         pathCards: Map<String, PathCard> = emptyMap(),
         inputRates: Map<String, SlotInputRates> = emptyMap(),
         screenPeakHz: Int = 0,
-        hostCompat: Map<String, DishProtocol.Compat> = emptyMap(),
+        hostCompat: Map<String, DishProtocolCompat> = emptyMap(),
     ) {
         submitList(
             slots.map { slot ->
@@ -165,7 +166,7 @@ class ControllerAdapter(
                     pathCard = pathCards[slot.id],
                     inputRates = inputRates[slot.id],
                     screenPeakHz = screenPeakHz,
-                    hostCompat = slot.boundConnectionId?.let { hostCompat[it] } ?: DishProtocol.Compat.UNKNOWN,
+                    hostCompat = slot.boundConnectionId?.let { hostCompat[it] } ?: DishProtocolCompat.UNKNOWN,
                 )
             },
         )
@@ -348,7 +349,7 @@ class ControllerAdapter(
                 // the label comes from the Moonlight mapper and never the bundled one.
                 ConnectionKind.MOONLIGHT -> {
                     val stored = bound.satelliteControllerTypes[row.slot.id]
-                    ctx.getString(moonlightTypeLabelRes(MoonlightEmulatedType.fromStored(stored ?: MoonlightEmulatedType.AUTO)))
+                    ctx.getString(moonlightTypeLabelRes(fromStored(stored ?: AUTO)))
                 }
             }
 
@@ -750,88 +751,11 @@ internal fun pointerFuncFacts(row: ControllerAdapter.Row): List<PointerPillFact>
     buildList {
         when {
             row.pathCard?.suggestDirectForTouch == true -> add(PointerPillFact.PAD_NEEDS_DIRECT)
-            row.pointer?.mode == TouchpadModeValue.DS4 -> add(PointerPillFact.PAD_ON)
+            row.pointer?.mode == TOUCHPAD_MODE_DS4 -> add(PointerPillFact.PAD_ON)
             row.motionCap.typeOk(Feature.TOUCHPAD) -> add(PointerPillFact.PAD_OFF)
         }
         if (row.pointer?.mouseOpenable == true) add(PointerPillFact.MOUSE_READY)
     }
-
-internal data class CardActionSpec(
-    @DrawableRes val icon: Int,
-    @StringRes val label: Int,
-    val kind: CardActionKind,
-)
-
-// The action row's shape IS the RecyclerView view type: each (filled count, outlined) pair
-// maps to a layout holding exactly those buttons, so binding never shows or hides one.
-internal data class CardActions(
-    val filled: List<CardActionSpec>,
-    val outlined: CardActionSpec?,
-) {
-    val viewType: Int get() = filled.size * 2 + if (outlined != null) 1 else 0
-}
-
-@LayoutRes
-internal fun cardActionsLayoutFor(viewType: Int): Int =
-    when (viewType) {
-        VIEW_TYPE_O1 -> R.layout.binding_card_actions_o1
-        VIEW_TYPE_F1 -> R.layout.binding_card_actions_f1
-        VIEW_TYPE_F1_O1 -> R.layout.binding_card_actions_f1_o1
-        VIEW_TYPE_F2 -> R.layout.binding_card_actions_f2
-        VIEW_TYPE_F2_O1 -> R.layout.binding_card_actions_f2_o1
-        VIEW_TYPE_F3_O1 -> R.layout.binding_card_actions_f3_o1
-        VIEW_TYPE_F4_O1 -> R.layout.binding_card_actions_f4_o1
-        else -> error("No card actions layout for view type $viewType")
-    }
-
-private const val VIEW_TYPE_O1 = 1
-private const val VIEW_TYPE_F1 = 2
-private const val VIEW_TYPE_F1_O1 = 3
-private const val VIEW_TYPE_F2 = 4
-private const val VIEW_TYPE_F2_O1 = 5
-private const val VIEW_TYPE_F3_O1 = 7
-private const val VIEW_TYPE_F4_O1 = 9
-
-private val CONFIGURE_SPEC =
-    CardActionSpec(R.drawable.ic_tune, R.string.binding_action_configure, CardActionKind.CONFIGURE)
-private val SETUP_WIRED_SPEC =
-    CardActionSpec(R.drawable.ic_usb, R.string.binding_action_use_wired, CardActionKind.SETUP_WIRED)
-
-internal fun computeCardActions(row: ControllerAdapter.Row): CardActions {
-    val slot = row.slot
-    val bound = slot.boundStatus
-    if (bound == null || slot.boundConnectionId == null) {
-        val filled = mutableListOf<CardActionSpec>()
-        if (row.pathCard?.wiredSwitchAvailable == true) filled += SETUP_WIRED_SPEC
-        if (row.connections.isEmpty()) {
-            filled += CardActionSpec(R.drawable.ic_satellite, R.string.binding_action_find_hosts, CardActionKind.FIND_HOSTS)
-            return CardActions(filled, outlined = null)
-        }
-        return CardActions(filled, CONFIGURE_SPEC)
-    }
-    val filled = mutableListOf<CardActionSpec>()
-    val connected = bound.live == LinkState.Connected
-    val satellite = bound.kind == ConnectionKind.SATELLITE
-    val pointerHost = satellite || bound.kind == ConnectionKind.MOONLIGHT
-    if (slot.inputType == SlotInputType.VIRTUAL && connected) {
-        filled += CardActionSpec(R.drawable.ic_open_gamepad, R.string.action_open_gamepad, CardActionKind.GAMEPAD)
-    }
-    // A phone pointer surface only exists where the phone is the slot's touch source:
-    // a USB-direct pad streaming its own trackpad gets neither button, because two
-    // producers would fight over the slot's single MSG_TOUCHPAD stream. The virtual
-    // slot never offers the touchpad surface: its trackpad lives inside the pad itself.
-    if (satellite && connected && slot.inputType != SlotInputType.VIRTUAL && row.pointer?.touchpadOpenable == true) {
-        filled += CardActionSpec(R.drawable.ic_open_touchpad, R.string.action_open_touchpad, CardActionKind.TOUCHPAD)
-    }
-    if (pointerHost && connected && row.pointer?.mouseOpenable == true) {
-        filled += CardActionSpec(R.drawable.ic_mouse, R.string.action_open_mouse, CardActionKind.MOUSE)
-    }
-    if (satellite && connected && row.pathCard?.suggestDirectForTouch == true) {
-        filled += CardActionSpec(R.drawable.ic_bolt, R.string.card_switch_to_direct, CardActionKind.SWITCH_DIRECT)
-    }
-    if (row.pathCard?.wiredSwitchAvailable == true) filled += SETUP_WIRED_SPEC
-    return CardActions(filled, CONFIGURE_SPEC)
-}
 
 private const val BATTERY_FULL_FLOOR = 90
 private const val BATTERY_HIGH_FLOOR = 60

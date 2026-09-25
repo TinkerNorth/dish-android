@@ -77,29 +77,33 @@ fun AppCompatActivity.paintConnectionMenuItem(
 }
 
 fun AppCompatActivity.showConnectionDialog(summary: ConnectionSummary?) {
-    val kindLabel =
-        when (summary?.kind) {
-            ConnectionKind.SATELLITE -> getString(R.string.overlay_connection_kind_satellite)
-            ConnectionKind.BLUETOOTH -> getString(R.string.overlay_connection_kind_bluetooth)
-            ConnectionKind.MOONLIGHT -> getString(R.string.overlay_connection_kind_moonlight)
-            null -> getString(R.string.overlay_status_unknown)
-        }
-    val stateLabel =
-        summary?.let { statusChipText(this, it.live) }
-            ?: getString(R.string.overlay_status_not_connected)
     val title =
         summary?.label?.takeIf { it.isNotBlank() }
             ?: getString(R.string.overlay_dialog_connection_title)
-    val message =
-        buildString {
-            append(kindLabel)
-            val detail = summary?.detail
-            if (!detail.isNullOrBlank()) append('\n').append(detail)
-            append("\n\n").append(stateLabel)
-        }
     MaterialAlertDialogBuilder(this)
         .setTitle(title)
-        .setMessage(message)
+        .setMessage(connectionDialogMessage(summary))
         .setPositiveButton(R.string.action_close, null)
         .show()
+}
+
+private fun AppCompatActivity.connectionKindLabel(summary: ConnectionSummary?): String =
+    when (summary?.kind) {
+        ConnectionKind.SATELLITE -> getString(R.string.overlay_connection_kind_satellite)
+        ConnectionKind.BLUETOOTH -> getString(R.string.overlay_connection_kind_bluetooth)
+        ConnectionKind.MOONLIGHT -> getString(R.string.overlay_connection_kind_moonlight)
+        null -> getString(R.string.overlay_status_unknown)
+    }
+
+// Kind, then the host's own detail if it has one, then the live state on its own line.
+private fun AppCompatActivity.connectionDialogMessage(summary: ConnectionSummary?): String {
+    val stateLabel =
+        summary?.let { statusChipText(this, it.live) }
+            ?: getString(R.string.overlay_status_not_connected)
+    return buildString {
+        append(connectionKindLabel(summary))
+        val detail = summary?.detail
+        if (!detail.isNullOrBlank()) append('\n').append(detail)
+        append("\n\n").append(stateLabel)
+    }
 }

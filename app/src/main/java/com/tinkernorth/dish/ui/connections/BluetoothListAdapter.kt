@@ -87,6 +87,14 @@ class BluetoothListAdapter(
         fun bind(ui: BtRowUi) {
             val c = ui.summary
             b.paintConnection(c.label, c.detail, statusChipText(ctx, c.live), ConnectionKind.BLUETOOTH, c.live)
+            bindPrimaryAction(ui)
+            bindSecondaryAction(ui)
+        }
+
+        // The primary button offers whatever the link state leaves to do: a live link
+        // disconnects, a stale one repairs, and a connecting one only shows its spinner.
+        private fun bindPrimaryAction(ui: BtRowUi) {
+            val c = ui.summary
             when (c.live) {
                 LinkState.Connected, LinkState.Unstable -> {
                     b.btnRowAction.setLoading(false, "", ctx.getString(R.string.action_disconnect))
@@ -105,10 +113,14 @@ class BluetoothListAdapter(
                     b.btnRowAction.setOnClickListener { listener.onConnect(c.id) }
                 }
             }
+        }
+
+        // Forget for a remembered host, Cancel for one this row is still trying to reach.
+        private fun bindSecondaryAction(ui: BtRowUi) {
             b.btnRowSecondary.visibility = View.VISIBLE
             b.btnRowSecondary.text =
                 ctx.getString(if (ui.secondaryIsForget) R.string.action_forget_short else R.string.action_cancel)
-            b.btnRowSecondary.setOnClickListener { listener.onSecondary(c) }
+            b.btnRowSecondary.setOnClickListener { listener.onSecondary(ui.summary) }
         }
     }
 
@@ -116,22 +128,23 @@ class BluetoothListAdapter(
         private const val TYPE_ROW = 0
         private const val TYPE_EMPTY = 1
 
-        private val Diff =
-            object : DiffUtil.ItemCallback<BluetoothRow>() {
-                override fun areItemsTheSame(
-                    o: BluetoothRow,
-                    n: BluetoothRow,
-                ): Boolean =
-                    when {
-                        o is BluetoothRow.Item && n is BluetoothRow.Item -> o.ui.summary.id == n.ui.summary.id
-                        o is BluetoothRow.Empty && n is BluetoothRow.Empty -> true
-                        else -> false
-                    }
-
-                override fun areContentsTheSame(
-                    o: BluetoothRow,
-                    n: BluetoothRow,
-                ): Boolean = o == n
-            }
+        private val Diff = BluetoothRowDiff()
     }
+}
+
+private class BluetoothRowDiff : DiffUtil.ItemCallback<BluetoothRow>() {
+    override fun areItemsTheSame(
+        o: BluetoothRow,
+        n: BluetoothRow,
+    ): Boolean =
+        when {
+            o is BluetoothRow.Item && n is BluetoothRow.Item -> o.ui.summary.id == n.ui.summary.id
+            o is BluetoothRow.Empty && n is BluetoothRow.Empty -> true
+            else -> false
+        }
+
+    override fun areContentsTheSame(
+        o: BluetoothRow,
+        n: BluetoothRow,
+    ): Boolean = o == n
 }

@@ -12,7 +12,9 @@ import androidx.navigation.NavInflater
 import androidx.navigation.NavigatorProvider
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.ui.main.MainActivity
-import com.tinkernorth.dish.ui.setup.SetupFlow
+import com.tinkernorth.dish.ui.setup.EXTRA_CONNECTION_ID
+import com.tinkernorth.dish.ui.setup.EXTRA_INPUT_TYPE
+import com.tinkernorth.dish.ui.setup.EXTRA_SLOT_ID
 
 // Activity destinations can't carry <action> children, so navigate by destination id, not action id.
 // Drives ActivityNavigator directly instead of NavController: setGraph() auto-navigates to the start
@@ -84,8 +86,8 @@ class DishNavigator(
         go(
             R.id.setupConnectionActivity,
             Bundle().apply {
-                putString(SetupFlow.EXTRA_INPUT_TYPE, inputType)
-                putString(SetupFlow.EXTRA_SLOT_ID, slotId)
+                putString(EXTRA_INPUT_TYPE, inputType)
+                putString(EXTRA_SLOT_ID, slotId)
             },
         )
     }
@@ -97,8 +99,8 @@ class DishNavigator(
         go(
             R.id.setupBluetoothHostActivity,
             Bundle().apply {
-                putString(SetupFlow.EXTRA_INPUT_TYPE, inputType)
-                putString(SetupFlow.EXTRA_SLOT_ID, slotId)
+                putString(EXTRA_INPUT_TYPE, inputType)
+                putString(EXTRA_SLOT_ID, slotId)
             },
         )
     }
@@ -110,8 +112,8 @@ class DishNavigator(
         go(
             R.id.setupConfigureActivity,
             Bundle().apply {
-                putString(SetupFlow.EXTRA_SLOT_ID, slotId)
-                putString(SetupFlow.EXTRA_CONNECTION_ID, connectionId)
+                putString(EXTRA_SLOT_ID, slotId)
+                putString(EXTRA_CONNECTION_ID, connectionId)
             },
         )
     }

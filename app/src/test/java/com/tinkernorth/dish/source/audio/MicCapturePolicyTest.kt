@@ -54,7 +54,7 @@ class MicCapturePolicyTest {
         assertEquals("the matrix is 2^4 rows", MATRIX_ROWS, rows.size)
         for (row in rows) {
             val plan =
-                MicCapturePolicy.plan(
+                micCapturePlanFor(
                     listOf(slot(streaming = row.streaming, micEnabled = row.micEnabled, muted = row.muted)),
                     permissionGranted = row.granted,
                 )
@@ -77,7 +77,7 @@ class MicCapturePolicyTest {
         // The distinction is the whole reason there are two sets: the foreground service keeps
         // its microphone type across a mute (it can only be re-taken from the foreground), while
         // not one packet goes out.
-        val plan = MicCapturePolicy.plan(listOf(slot(muted = true)), permissionGranted = true)
+        val plan = micCapturePlanFor(listOf(slot(muted = true)), permissionGranted = true)
         assertEquals(setOf(MicCaptureTarget(SLOT, CONN)), plan.armed)
         assertTrue(plan.delivering.isEmpty())
         assertFalse(plan.capturing)
@@ -88,7 +88,7 @@ class MicCapturePolicyTest {
         // Not just a delivery gate: a service claiming a microphone type it cannot use would be a
         // microphone the user sees in the status bar and cannot account for.
         val plan =
-            MicCapturePolicy.plan(
+            micCapturePlanFor(
                 listOf(slot(slotId = "a"), slot(slotId = "b", connectionId = "other")),
                 permissionGranted = false,
             )
@@ -97,14 +97,14 @@ class MicCapturePolicyTest {
 
     @Test
     fun `an unbound slot contributes nothing`() {
-        val plan = MicCapturePolicy.plan(listOf(slot(connectionId = null)), permissionGranted = true)
+        val plan = micCapturePlanFor(listOf(slot(connectionId = null)), permissionGranted = true)
         assertEquals(MicCapturePlan.IDLE, plan)
     }
 
     @Test
     fun `slots are independent, so one muted slot does not silence another`() {
         val plan =
-            MicCapturePolicy.plan(
+            micCapturePlanFor(
                 listOf(
                     slot(slotId = "virtual", muted = true),
                     slot(slotId = "-1000", connectionId = "conn-b"),
@@ -121,7 +121,7 @@ class MicCapturePolicyTest {
     @Test
     fun `a slot whose capability path does not carry a microphone is excluded on its own`() {
         val plan =
-            MicCapturePolicy.plan(
+            micCapturePlanFor(
                 listOf(slot(slotId = "off", micEnabled = false), slot(slotId = "on")),
                 permissionGranted = true,
             )
@@ -131,13 +131,13 @@ class MicCapturePolicyTest {
 
     @Test
     fun `a slot that stopped streaming drops out even while its toggle stays on`() {
-        val plan = MicCapturePolicy.plan(listOf(slot(streaming = false)), permissionGranted = true)
+        val plan = micCapturePlanFor(listOf(slot(streaming = false)), permissionGranted = true)
         assertEquals(MicCapturePlan.IDLE, plan)
     }
 
     @Test
     fun `no slots at all is idle, not an empty capture`() {
-        assertEquals(MicCapturePlan.IDLE, MicCapturePolicy.plan(emptyList(), permissionGranted = true))
+        assertEquals(MicCapturePlan.IDLE, micCapturePlanFor(emptyList(), permissionGranted = true))
         assertFalse(MicCapturePlan.IDLE.capturing)
     }
 

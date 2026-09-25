@@ -14,7 +14,7 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.DiscoveredServer
-import com.tinkernorth.dish.core.net.DishProtocol
+import com.tinkernorth.dish.core.net.DishProtocolCompat
 import com.tinkernorth.dish.databinding.RowConnectionBinding
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.ui.common.setLoading
@@ -23,7 +23,7 @@ import com.tinkernorth.dish.ui.common.statusChipText
 sealed interface SatelliteRow {
     data class Known(
         val summary: ConnectionSummary,
-        val compat: DishProtocol.Compat = DishProtocol.Compat.UNKNOWN,
+        val compat: DishProtocolCompat = DishProtocolCompat.UNKNOWN,
     ) : SatelliteRow
 
     data class Discovered(
@@ -97,6 +97,15 @@ class SatelliteListAdapter(
         private fun bindKnown(row: SatelliteRow.Known) {
             val c = row.summary
             b.paintConnection(c.label, c.detail, statusChipText(ctx, c.live), ConnectionKind.SATELLITE, c.live)
+            bindPrimaryAction(row)
+            bindForgetAction(row)
+            paintCompat(row.compat)
+        }
+
+        // The primary button offers whatever the link state leaves to do: a live link
+        // disconnects, a stale one repairs, and a connecting one only shows its spinner.
+        private fun bindPrimaryAction(row: SatelliteRow.Known) {
+            val c = row.summary
             when (c.live) {
                 LinkState.Connected, LinkState.Unstable -> {
                     b.btnRowAction.setLoading(false, "", ctx.getString(R.string.action_disconnect))
@@ -119,22 +128,24 @@ class SatelliteListAdapter(
                     b.btnRowAction.setOnClickListener { listener.onConnect(row) }
                 }
             }
-            b.btnRowSecondary.visibility = View.VISIBLE
-            b.btnRowSecondary.text = ctx.getString(R.string.action_forget_short)
-            b.btnRowSecondary.setOnClickListener { listener.onForget(c.id) }
-            paintCompat(row.compat)
         }
 
-        private fun paintCompat(compat: DishProtocol.Compat) {
+        private fun bindForgetAction(row: SatelliteRow.Known) {
+            b.btnRowSecondary.visibility = View.VISIBLE
+            b.btnRowSecondary.text = ctx.getString(R.string.action_forget_short)
+            b.btnRowSecondary.setOnClickListener { listener.onForget(row.summary.id) }
+        }
+
+        private fun paintCompat(compat: DishProtocolCompat) {
             val spec =
                 when (compat) {
-                    DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE ->
+                    DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE ->
                         Triple(R.string.chip_satellite_update_available, R.drawable.bg_binding_pill_warn, R.color.colorTertiary)
-                    DishProtocol.Compat.SATELLITE_UPDATE_REQUIRED ->
+                    DishProtocolCompat.SATELLITE_UPDATE_REQUIRED ->
                         Triple(R.string.chip_satellite_update_required, R.drawable.bg_binding_pill_error, R.color.colorError)
-                    DishProtocol.Compat.APP_UPDATE_REQUIRED ->
+                    DishProtocolCompat.APP_UPDATE_REQUIRED ->
                         Triple(R.string.chip_app_update_required, R.drawable.bg_binding_pill_error, R.color.colorError)
-                    DishProtocol.Compat.UNKNOWN, DishProtocol.Compat.CURRENT -> null
+                    DishProtocolCompat.UNKNOWN, DishProtocolCompat.CURRENT -> null
                 }
             if (spec == null) {
                 b.tvRowUpdate.visibility = View.GONE
@@ -168,24 +179,25 @@ class SatelliteListAdapter(
         private const val TYPE_ROW = 0
         private const val TYPE_EMPTY = 1
 
-        private val Diff =
-            object : DiffUtil.ItemCallback<SatelliteRow>() {
-                override fun areItemsTheSame(
-                    o: SatelliteRow,
-                    n: SatelliteRow,
-                ): Boolean =
-                    when {
-                        o is SatelliteRow.Known && n is SatelliteRow.Known -> o.summary.id == n.summary.id
-                        o is SatelliteRow.Discovered && n is SatelliteRow.Discovered ->
-                            SatelliteConnection.idFor(o.server) == SatelliteConnection.idFor(n.server)
-                        o is SatelliteRow.Empty && n is SatelliteRow.Empty -> true
-                        else -> false
-                    }
-
-                override fun areContentsTheSame(
-                    o: SatelliteRow,
-                    n: SatelliteRow,
-                ): Boolean = o == n
-            }
+        private val Diff = SatelliteRowDiff()
     }
+}
+
+private class SatelliteRowDiff : DiffUtil.ItemCallback<SatelliteRow>() {
+    override fun areItemsTheSame(
+        o: SatelliteRow,
+        n: SatelliteRow,
+    ): Boolean =
+        when {
+            o is SatelliteRow.Known && n is SatelliteRow.Known -> o.summary.id == n.summary.id
+            o is SatelliteRow.Discovered && n is SatelliteRow.Discovered ->
+                SatelliteConnection.idFor(o.server) == SatelliteConnection.idFor(n.server)
+            o is SatelliteRow.Empty && n is SatelliteRow.Empty -> true
+            else -> false
+        }
+
+    override fun areContentsTheSame(
+        o: SatelliteRow,
+        n: SatelliteRow,
+    ): Boolean = o == n
 }

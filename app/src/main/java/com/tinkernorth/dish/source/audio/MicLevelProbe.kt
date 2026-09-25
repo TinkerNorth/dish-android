@@ -21,34 +21,32 @@ sealed interface MicProbeReading {
         val rms: Float,
         val peak: Float,
     ) : MicProbeReading {
-        val meter: Float get() = MicLevelMeter.meter(rms)
+        val meter: Float get() = meter(rms)
     }
 }
 
-object MicLevelMeter {
-    private const val FLOOR_DB = -60f
+private const val FLOOR_DB = -60f
 
-    fun level(window: ShortArray): MicProbeReading.Level {
-        if (window.isEmpty()) return MicProbeReading.Level(rms = 0f, peak = 0f)
-        var peak = 0
-        var sumSquares = 0.0
-        for (s in window) {
-            val v = s.toInt()
-            if (abs(v) > peak) peak = abs(v)
-            sumSquares += v.toDouble() * v
-        }
-        val scale = -Short.MIN_VALUE.toFloat()
-        return MicProbeReading.Level(
-            rms = (sqrt(sumSquares / window.size) / scale).toFloat(),
-            peak = peak / scale,
-        )
+internal fun level(window: ShortArray): MicProbeReading.Level {
+    if (window.isEmpty()) return MicProbeReading.Level(rms = 0f, peak = 0f)
+    var peak = 0
+    var sumSquares = 0.0
+    for (s in window) {
+        val v = s.toInt()
+        if (abs(v) > peak) peak = abs(v)
+        sumSquares += v.toDouble() * v
     }
+    val scale = -Short.MIN_VALUE.toFloat()
+    return MicProbeReading.Level(
+        rms = (sqrt(sumSquares / window.size) / scale).toFloat(),
+        peak = peak / scale,
+    )
+}
 
-    fun meter(rms: Float): Float {
-        if (rms <= 0f) return 0f
-        val db = 20f * log10(rms)
-        return ((db - FLOOR_DB) / -FLOOR_DB).coerceIn(0f, 1f)
-    }
+internal fun meter(rms: Float): Float {
+    if (rms <= 0f) return 0f
+    val db = 20f * log10(rms)
+    return ((db - FLOOR_DB) / -FLOOR_DB).coerceIn(0f, 1f)
 }
 
 class MicLevelProbe internal constructor(
@@ -78,7 +76,7 @@ class MicLevelProbe internal constructor(
                         emit(MicProbeReading.Unavailable)
                         break
                     }
-                    emit(MicLevelMeter.level(window))
+                    emit(level(window))
                 }
             } finally {
                 session.close()

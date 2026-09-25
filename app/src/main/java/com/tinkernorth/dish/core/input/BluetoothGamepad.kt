@@ -2,28 +2,6 @@
 
 package com.tinkernorth.dish.core.input
 
-object BluetoothGamepad {
-    enum class GamepadProfile(
-        val profileName: String,
-        val sdpName: String,
-        val sdpDescription: String,
-        val sdpProvider: String,
-    ) {
-        XBOX(
-            profileName = "Xbox",
-            sdpName = "Dish Xbox Controller",
-            sdpDescription = "Wireless Xbox Controller",
-            sdpProvider = "TinkerNorth",
-        ),
-        PLAYSTATION(
-            profileName = "PlayStation",
-            sdpName = "Dish PS Controller",
-            sdpDescription = "Wireless PlayStation Controller",
-            sdpProvider = "TinkerNorth",
-        ),
-    }
-}
-
 // The HID report descriptor, one item per line as the HID 1.11 spec writes them: a tag byte
 // followed by its data bytes. Kept as text so the structure reads the way a descriptor tool
 // prints it; hidItems turns it into the bytes the SDP record carries.

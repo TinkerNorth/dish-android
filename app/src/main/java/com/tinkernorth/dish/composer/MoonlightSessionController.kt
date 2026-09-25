@@ -9,8 +9,12 @@ import android.util.Log
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.architecture.abstracts.AbstractController
 import com.tinkernorth.dish.core.model.Feature
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.moonlight.AUTO
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEvent
+import com.tinkernorth.dish.core.net.moonlight.XBOX
+import com.tinkernorth.dish.core.net.moonlight.fromStored
+import com.tinkernorth.dish.core.net.moonlight.resolveMoonlightEmulatedType
+import com.tinkernorth.dish.core.net.moonlight.supportedButtons
 import com.tinkernorth.dish.hotpath.input.FeedbackRouter
 import com.tinkernorth.dish.hotpath.input.RumbleRouter
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
@@ -144,12 +148,12 @@ class MoonlightSessionController
                     candidateHostKind = ConnectionKind.MOONLIGHT,
                     candidateHostId = hostId,
                 )
-            val bits = MoonlightCatalog.capabilityBits(resolved, caps.available)
+            val bits = capabilityBits(resolved, caps.available)
             return MoonlightPadRequest(
                 slotId = slotId,
                 emulatedType = resolved,
                 capabilities = bits,
-                supportedButtons = MoonlightEmulatedType.supportedButtons(bits),
+                supportedButtons = supportedButtons(bits),
             )
         }
 
@@ -160,16 +164,16 @@ class MoonlightSessionController
             hostId: String,
             storedType: Int?,
         ): Int {
-            val picked = MoonlightEmulatedType.fromStored(storedType ?: MoonlightEmulatedType.AUTO)
-            if (picked != MoonlightEmulatedType.AUTO) return picked
+            val picked = fromStored(storedType ?: AUTO)
+            if (picked != AUTO) return picked
             val source =
                 capabilities.capabilityForCandidate(
                     slotId = slotId,
-                    candidateType = MoonlightEmulatedType.XBOX,
+                    candidateType = XBOX,
                     candidateHostKind = ConnectionKind.MOONLIGHT,
                     candidateHostId = hostId,
                 )
-            return MoonlightEmulatedType.resolve(picked, source.inputOk(Feature.MOTION))
+            return resolveMoonlightEmulatedType(picked, source.inputOk(Feature.MOTION))
         }
 
         private fun startService() {

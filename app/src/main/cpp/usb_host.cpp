@@ -79,6 +79,10 @@ int32_t allocSyntheticId() { return g_nextSyntheticId.fetch_sub(1, std::memory_o
 // already redelivered the one we just resubmitted.
 static constexpr int kInFlightUrbs = 2;
 
+// Short enough that a stop request is observed promptly, long enough that an idle pad does not
+// spin the poll thread.
+static constexpr int kUrbPollTimeoutMs = 100;
+
 // Minimum spacing between MSG_MOTION sends per device (~125 Hz). Caps the motion stream so a
 // high-rate IMU (DS4/DualSense report far above the Switch's rate) can't flood the UDP queue;
 // the input reports themselves are never throttled.
@@ -94,38 +98,213 @@ struct UrbSlot {
     bool pending = false;
 };
 
+bool submitUrb(DeviceCtx& ctx, UrbSlot& s) {
+    memset(s.urb.get(), 0, sizeof(*s.urb));
+    s.urb->type = USBDEVFS_URB_TYPE_INTERRUPT;
+    s.urb->endpoint = ctx.epIn;
+    s.urb->buffer = s.buf.data();
+    s.urb->buffer_length = (int)s.buf.size();
+    if (ioctl(ctx.fd, USBDEVFS_SUBMITURB, s.urb.get()) < 0) {
+        LOGE("dev=%d SUBMITURB(ep=0x%02X) failed: %s", ctx.syntheticDeviceId, ctx.epIn,
+             strerror(errno));
+        return false;
+    }
+    s.pending = true;
+    return true;
+}
+
+// Fills the storage and the pointer table, then primes the ring. Answers how many URBs are in
+// flight; zero means the endpoint never accepted one and there is nothing to poll.
+int setUpUrbSlots(DeviceCtx& ctx, std::unique_ptr<UrbSlot> (&storage)[kInFlightUrbs],
+                  UrbSlot* (&slots)[kInFlightUrbs]) {
+    for (int i = 0; i < kInFlightUrbs; i++) {
+        storage[i] = std::make_unique<UrbSlot>();
+        storage[i]->urb = std::make_unique<usbdevfs_urb>();
+        storage[i]->buf.resize(ctx.epInMaxPacket);
+        slots[i] = storage[i].get();
+    }
+    int submitted = 0;
+    for (int i = 0; i < kInFlightUrbs; i++) {
+        if (!submitUrb(ctx, *slots[i])) break;
+        submitted++;
+    }
+    return submitted;
+}
+
+UrbSlot* findCompletedSlot(UrbSlot* (&slots)[kInFlightUrbs], const usbdevfs_urb* reaped) {
+    for (int i = 0; i < kInFlightUrbs; i++) {
+        if (slots[i]->urb.get() == reaped) return slots[i];
+    }
+    return nullptr;
+}
+
+// A level in tenths moves minutes apart and Kotlin polls it, so a store is all the mirror costs.
+void publishBattery(DeviceCtx& ctx, const gamepad::DeviceState& scratch) {
+    if (!scratch.batteryValid) return;
+    const uint32_t packed = ((uint32_t)scratch.batteryLevel << 8) | scratch.batteryStatus;
+    ctx.lastBattery.store((int32_t)packed, std::memory_order_relaxed);
+}
+
+// The decoder owns the mute latch (the wire bit has to be folded in here, on this thread, with no
+// JNI in the way); Kotlin gets told only on the edge, so the mirror costs nothing per report.
+void publishMicMuteEdge(DeviceCtx& ctx, bool& lastMicMuted) {
+    const bool changed = ctx.stickRange.micMuted != lastMicMuted;
+    if (!changed) return;
+    lastMicMuted = ctx.stickRange.micMuted;
+    dispatch::applyPadMicMute(ctx.syntheticDeviceId, lastMicMuted);
+}
+
+void publishMotion(DeviceCtx& ctx, const gamepad::DeviceState& scratch, const int64_t nowNs) {
+    const bool isFirstSample = ctx.lastMotionNs == 0;
+    const bool intervalElapsed = nowNs - ctx.lastMotionNs >= kMotionMinIntervalNs;
+    if (!isFirstSample && !intervalElapsed) return;
+
+    const uint32_t deltaUs = isFirstSample ? 0 : (uint32_t)((nowNs - ctx.lastMotionNs) / 1000);
+    ctx.lastMotionNs = nowNs;
+    ctx.motionCount.fetch_add(1, std::memory_order_relaxed);
+    dispatch::applyUsbMotion(ctx.syntheticDeviceId, scratch.gyroX, scratch.gyroY, scratch.gyroZ,
+                             scratch.accelX, scratch.accelY, scratch.accelZ, deltaUs);
+}
+
+void publishTouch(DeviceCtx& ctx, const gamepad::DeviceState& scratch, const int64_t nowNs) {
+    gamepad::TouchpadState cur;
+    cur.f0Active = scratch.touch0Active;
+    cur.f1Active = scratch.touch1Active;
+    cur.clickDown = scratch.touchClick;
+    cur.f0Id = scratch.touch0Id;
+    cur.f1Id = scratch.touch1Id;
+    cur.f0X = scratch.touch0X;
+    cur.f0Y = scratch.touch0Y;
+    cur.f1X = scratch.touch1X;
+    cur.f1Y = scratch.touch1Y;
+    const bool worthSending = ctx.touchGate.decide(cur, nowNs) != gamepad::TouchpadSend::SKIP;
+    if (!worthSending) return;
+    dispatch::applyUsbTouchpad(ctx.syntheticDeviceId, ctx.touchGate.lastSent(),
+                               (uint32_t)ctx.touchGate.lastEventTimeMs());
+}
+
+int64_t monotonicNowNs() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+}
+
+void publishDecodedReport(DeviceCtx& ctx, const gamepad::DeviceState& scratch, bool& lastMicMuted) {
+    dispatch::applyUsbReport(ctx.syntheticDeviceId, scratch);
+    publishMicMuteEdge(ctx, lastMicMuted);
+    publishBattery(ctx, scratch);
+
+    const bool needsTimestamp = scratch.motionValid || scratch.touchValid;
+    const int64_t nowNs = needsTimestamp ? monotonicNowNs() : 0;
+    if (scratch.motionValid) publishMotion(ctx, scratch, nowNs);
+    if (scratch.touchValid) publishTouch(ctx, scratch, nowNs);
+}
+
+// Both directions publish neutral: a departed pad must not keep its last input latched, and a
+// returning pad rebooted, so any held stick memory is stale.
+void publishWirelessEvent(DeviceCtx& ctx, const usbparsers::WirelessEvent wev,
+                          gamepad::DeviceState& scratch) {
+    ctx.stickRange.steamStickX = 0;
+    ctx.stickRange.steamStickY = 0;
+    dispatch::applyUsbReport(ctx.syntheticDeviceId, scratch);
+    if (wev != usbparsers::WirelessEvent::CONNECT) return;
+    // The reboot wiped the quiet-mode settings, so re-run the attach init or the pad streams
+    // without motion while its lizard keyboard leaks through.
+    usbparsers::runInit(ctx.fd, ctx.interfaceNumber, ctx.epOut, ctx.init);
+}
+
+void publishCompletedUrb(DeviceCtx& ctx, const UrbSlot& completed, const int actualLength,
+                         gamepad::DeviceState& scratch, bool& lastMicMuted) {
+    hotpath::markInputRead(ctx.syntheticDeviceId); // stage-1 start: a fresh input report is in hand
+    ctx.urbCount.fetch_add(1, std::memory_order_relaxed);
+    memset(&scratch, 0, sizeof(scratch));
+
+    const usbparsers::WirelessEvent wev =
+        usbparsers::checkWirelessEvent(ctx.parser, completed.buf.data(), (size_t)actualLength);
+    if (wev != usbparsers::WirelessEvent::NONE) {
+        publishWirelessEvent(ctx, wev, scratch);
+        return;
+    }
+    const bool decoded = usbparsers::decodeReport(ctx.parser, completed.buf.data(),
+                                                  (size_t)actualLength, scratch, &ctx.stickRange);
+    if (decoded) publishDecodedReport(ctx, scratch, lastMicMuted);
+}
+
+void discardPendingUrbs(DeviceCtx& ctx, UrbSlot* (&slots)[kInFlightUrbs]) {
+    int pendingCount = 0;
+    for (int i = 0; i < kInFlightUrbs; i++) {
+        if (!slots[i]->pending) continue;
+        ioctl(ctx.fd, USBDEVFS_DISCARDURB, slots[i]->urb.get());
+        pendingCount++;
+    }
+    while (pendingCount > 0) {
+        usbdevfs_urb* dummy = nullptr;
+        if (ioctl(ctx.fd, USBDEVFS_REAPURB, &dummy) < 0) break;
+        pendingCount--;
+    }
+}
+
+// Reaps everything the kernel has ready and resubmits each slot. Answers false when the loop
+// should stop: the device went away, an ioctl failed, or a resubmit was refused.
+bool reapReadyUrbs(DeviceCtx& ctx, UrbSlot* (&slots)[kInFlightUrbs], gamepad::DeviceState& scratch,
+                   bool& lastMicMuted) {
+    while (true) {
+        usbdevfs_urb* reaped = nullptr;
+        const int r = ioctl(ctx.fd, USBDEVFS_REAPURBNDELAY, &reaped);
+        if (r < 0) {
+            if (errno == EAGAIN) return true;
+            LOGE("dev=%d REAPURB failed: %s", ctx.syntheticDeviceId, strerror(errno));
+            ctx.urbErrorCount.fetch_add(1, std::memory_order_relaxed);
+            return false;
+        }
+        if (reaped == nullptr) return true;
+
+        UrbSlot* completed = findCompletedSlot(slots, reaped);
+        if (completed == nullptr) continue;
+        completed->pending = false;
+
+        if (reaped->status == -ENODEV) {
+            LOGI("dev=%d disappeared (ENODEV), exiting poll loop", ctx.syntheticDeviceId);
+            return false;
+        }
+        if (reaped->status != 0) {
+            ctx.urbErrorCount.fetch_add(1, std::memory_order_relaxed);
+            ctx.lastUrbStatus.store(reaped->status, std::memory_order_relaxed);
+        }
+        const bool carriesAReport = reaped->status == 0 && reaped->actual_length > 0;
+        if (carriesAReport) {
+            publishCompletedUrb(ctx, *completed, reaped->actual_length, scratch, lastMicMuted);
+        }
+        if (!submitUrb(ctx, *completed)) {
+            ctx.urbErrorCount.fetch_add(1, std::memory_order_relaxed);
+            return false;
+        }
+    }
+}
+
+// What one wait on the URB fd came back with. Idle covers both a timeout and an EINTR: neither
+// is an error and neither has a completion to reap.
+enum class PollOutcome { Ready, Idle, Stop };
+
+PollOutcome waitForUrbCompletion(DeviceCtx& ctx) {
+    struct pollfd pfd = {};
+    pfd.fd = ctx.fd;
+    pfd.events = POLLOUT;
+    const int pr = poll(&pfd, 1, kUrbPollTimeoutMs);
+    if (ctx.stop.load(std::memory_order_relaxed)) return PollOutcome::Stop;
+    if (pr > 0) return PollOutcome::Ready;
+    if (pr == 0) return PollOutcome::Idle;
+    if (errno == EINTR) return PollOutcome::Idle;
+    LOGE("dev=%d poll failed: %s", ctx.syntheticDeviceId, strerror(errno));
+    return PollOutcome::Stop;
+}
+
 void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
     dish::elevateCurrentThreadToInputPriority();
     std::unique_ptr<UrbSlot> slotStorage[kInFlightUrbs];
     UrbSlot* slots[kInFlightUrbs];
-    for (int i = 0; i < kInFlightUrbs; i++) {
-        slotStorage[i] = std::make_unique<UrbSlot>();
-        slotStorage[i]->urb = std::make_unique<usbdevfs_urb>();
-        slotStorage[i]->buf.resize(ctx->epInMaxPacket);
-        slots[i] = slotStorage[i].get();
-    }
-
-    auto submitSlot = [&](UrbSlot& s) -> bool {
-        memset(s.urb.get(), 0, sizeof(*s.urb));
-        s.urb->type = USBDEVFS_URB_TYPE_INTERRUPT;
-        s.urb->endpoint = ctx->epIn;
-        s.urb->buffer = s.buf.data();
-        s.urb->buffer_length = (int)s.buf.size();
-        if (ioctl(ctx->fd, USBDEVFS_SUBMITURB, s.urb.get()) < 0) {
-            LOGE("dev=%d SUBMITURB(ep=0x%02X) failed: %s", ctx->syntheticDeviceId, ctx->epIn,
-                 strerror(errno));
-            return false;
-        }
-        s.pending = true;
-        return true;
-    };
-
-    int initial = 0;
-    for (int i = 0; i < kInFlightUrbs; i++) {
-        if (!submitSlot(*slots[i])) break;
-        initial++;
-    }
-    if (initial == 0) {
+    const int submitted = setUpUrbSlots(*ctx, slotStorage, slots);
+    if (submitted == 0) {
         LOGE("dev=%d initial submit failed, exiting poll loop", ctx->syntheticDeviceId);
         return;
     }
@@ -137,151 +316,13 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
     bool running = true;
 
     while (running && !ctx->stop.load(std::memory_order_relaxed)) {
-        struct pollfd pfd = {};
-        pfd.fd = ctx->fd;
-        pfd.events = POLLOUT;
-        int pr = poll(&pfd, 1, 100);
-        if (ctx->stop.load(std::memory_order_relaxed)) break;
-        if (pr < 0) {
-            if (errno == EINTR) continue;
-            LOGE("dev=%d poll failed: %s", ctx->syntheticDeviceId, strerror(errno));
-            break;
-        }
-        if (pr == 0) continue;
-
-        while (running) {
-            usbdevfs_urb* reaped = nullptr;
-            int r = ioctl(ctx->fd, USBDEVFS_REAPURBNDELAY, &reaped);
-            if (r < 0) {
-                if (errno == EAGAIN) break;
-                LOGE("dev=%d REAPURB failed: %s", ctx->syntheticDeviceId, strerror(errno));
-                ctx->urbErrorCount.fetch_add(1, std::memory_order_relaxed);
-                running = false;
-                break;
-            }
-            if (reaped == nullptr) break;
-
-            UrbSlot* completed = nullptr;
-            for (int i = 0; i < kInFlightUrbs; i++) {
-                if (slots[i]->urb.get() == reaped) {
-                    completed = slots[i];
-                    break;
-                }
-            }
-            if (completed == nullptr) continue;
-            completed->pending = false;
-
-            if (reaped->status == -ENODEV) {
-                LOGI("dev=%d disappeared (ENODEV), exiting poll loop", ctx->syntheticDeviceId);
-                running = false;
-                break;
-            }
-
-            if (reaped->status != 0) {
-                ctx->urbErrorCount.fetch_add(1, std::memory_order_relaxed);
-                ctx->lastUrbStatus.store(reaped->status, std::memory_order_relaxed);
-            }
-
-            if (reaped->status == 0 && reaped->actual_length > 0) {
-                hotpath::markInputRead(
-                    ctx->syntheticDeviceId); // stage-1 start: a fresh input report is in hand
-                ctx->urbCount.fetch_add(1, std::memory_order_relaxed);
-                memset(&scratch, 0, sizeof(scratch));
-                usbparsers::WirelessEvent wev = usbparsers::checkWirelessEvent(
-                    ctx->parser, completed->buf.data(), (size_t)reaped->actual_length);
-                if (wev != usbparsers::WirelessEvent::NONE) {
-                    // Both directions publish neutral: a departed pad must not keep its last input
-                    // latched, and a returning pad rebooted, so any held stick memory is stale.
-                    ctx->stickRange.steamStickX = 0;
-                    ctx->stickRange.steamStickY = 0;
-                    dispatch::applyUsbReport(ctx->syntheticDeviceId, scratch);
-                    if (wev == usbparsers::WirelessEvent::CONNECT) {
-                        // The reboot wiped the quiet-mode settings, so re-run the attach init or
-                        // the pad streams without motion while its lizard keyboard leaks through.
-                        usbparsers::runInit(ctx->fd, ctx->interfaceNumber, ctx->epOut, ctx->init);
-                    }
-                } else if (usbparsers::decodeReport(ctx->parser, completed->buf.data(),
-                                                    (size_t)reaped->actual_length, scratch,
-                                                    &ctx->stickRange)) {
-                    dispatch::applyUsbReport(ctx->syntheticDeviceId, scratch);
-
-                    // The decoder owns the mute latch (the wire bit has to be folded in here, on
-                    // this thread, with no JNI in the way); Kotlin gets told only on the edge, so
-                    // the mirror costs nothing per report.
-                    if (ctx->stickRange.micMuted != lastMicMuted) {
-                        lastMicMuted = ctx->stickRange.micMuted;
-                        dispatch::applyPadMicMute(ctx->syntheticDeviceId, lastMicMuted);
-                    }
-
-                    // A level in tenths moves minutes apart and Kotlin polls it, so a store is
-                    // all the mirror costs.
-                    if (scratch.batteryValid) {
-                        ctx->lastBattery.store((int32_t)(((uint32_t)scratch.batteryLevel << 8) |
-                                                         scratch.batteryStatus),
-                                               std::memory_order_relaxed);
-                    }
-
-                    int64_t nowNs = 0;
-                    if (scratch.motionValid || scratch.touchValid) {
-                        struct timespec ts;
-                        clock_gettime(CLOCK_MONOTONIC, &ts);
-                        nowNs = (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
-                    }
-
-                    if (scratch.motionValid) {
-                        if (ctx->lastMotionNs == 0 ||
-                            nowNs - ctx->lastMotionNs >= kMotionMinIntervalNs) {
-                            uint32_t deltaUs = ctx->lastMotionNs == 0
-                                                   ? 0
-                                                   : (uint32_t)((nowNs - ctx->lastMotionNs) / 1000);
-                            ctx->lastMotionNs = nowNs;
-                            ctx->motionCount.fetch_add(1, std::memory_order_relaxed);
-                            dispatch::applyUsbMotion(ctx->syntheticDeviceId, scratch.gyroX,
-                                                     scratch.gyroY, scratch.gyroZ, scratch.accelX,
-                                                     scratch.accelY, scratch.accelZ, deltaUs);
-                        }
-                    }
-
-                    if (scratch.touchValid) {
-                        gamepad::TouchpadState cur;
-                        cur.f0Active = scratch.touch0Active;
-                        cur.f1Active = scratch.touch1Active;
-                        cur.clickDown = scratch.touchClick;
-                        cur.f0Id = scratch.touch0Id;
-                        cur.f1Id = scratch.touch1Id;
-                        cur.f0X = scratch.touch0X;
-                        cur.f0Y = scratch.touch0Y;
-                        cur.f1X = scratch.touch1X;
-                        cur.f1Y = scratch.touch1Y;
-                        if (ctx->touchGate.decide(cur, nowNs) != gamepad::TouchpadSend::SKIP) {
-                            dispatch::applyUsbTouchpad(ctx->syntheticDeviceId,
-                                                       ctx->touchGate.lastSent(),
-                                                       (uint32_t)ctx->touchGate.lastEventTimeMs());
-                        }
-                    }
-                }
-            }
-
-            if (!submitSlot(*completed)) {
-                ctx->urbErrorCount.fetch_add(1, std::memory_order_relaxed);
-                running = false;
-                break;
-            }
-        }
+        const PollOutcome outcome = waitForUrbCompletion(*ctx);
+        if (outcome == PollOutcome::Stop) break;
+        if (outcome == PollOutcome::Idle) continue;
+        running = reapReadyUrbs(*ctx, slots, scratch, lastMicMuted);
     }
 
-    int pendingCount = 0;
-    for (int i = 0; i < kInFlightUrbs; i++) {
-        if (slots[i]->pending) {
-            ioctl(ctx->fd, USBDEVFS_DISCARDURB, slots[i]->urb.get());
-            pendingCount++;
-        }
-    }
-    while (pendingCount > 0) {
-        usbdevfs_urb* dummy = nullptr;
-        if (ioctl(ctx->fd, USBDEVFS_REAPURB, &dummy) < 0) break;
-        pendingCount--;
-    }
+    discardPendingUrbs(*ctx, slots);
     LOGI("dev=%d poll loop exited", ctx->syntheticDeviceId);
 }
 

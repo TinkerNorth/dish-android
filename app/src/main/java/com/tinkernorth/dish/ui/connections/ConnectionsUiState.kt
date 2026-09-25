@@ -6,7 +6,7 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.HostFeatureSet
-import com.tinkernorth.dish.core.net.DishProtocol
+import com.tinkernorth.dish.core.net.dishProtocolCompatFor
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 
 data class ConnectionsUiState(
@@ -45,7 +45,7 @@ fun satelliteRows(
     return buildList {
         satConns.forEach {
             val version = features[it.id]?.protocolVersion?.takeIf { v -> v > 0 }
-            add(SatelliteRow.Known(it, DishProtocol.compatFor(version)))
+            add(SatelliteRow.Known(it, dishProtocolCompatFor(version)))
         }
         discovered.forEach { server ->
             if (SatelliteConnection.idFor(server) !in knownIds) add(SatelliteRow.Discovered(server))

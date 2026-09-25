@@ -83,32 +83,53 @@ class GamepadActivityHost(
     fun install(notifications: DishNotifications? = null) {
         padTouchpad.install()
         activity.lifecycle.addObserver(padTouchpad)
+        observeLowPower()
+        observeScreenHold()
+        observeStreamingSlots()
+        if (notifications != null) attachNotifications(notifications)
+    }
+
+    private fun observeLowPower() {
         lowPowerManager.state
-            .onEach { lowPowerSignal.setActive(it == LowPowerManager.State.ACTIVE) }
+            .onEach(::applyLowPowerState)
             .launchIn(activity.lifecycleScope)
+    }
+
+    private fun applyLowPowerState(state: LowPowerManager.State) {
+        lowPowerSignal.setActive(state == LowPowerManager.State.ACTIVE)
+    }
+
+    // A hold keeps the screen on without counting as streaming, so the two are carried separately
+    // all the way to applyScreenOn rather than collapsed here.
+    private fun observeScreenHold() {
         activity.lifecycleScope.launch {
             activity.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 combine(wakeState.shouldKeepScreenOn, screenHold) { streaming, hold -> streaming to (streaming || hold) }
                     .collect { (streaming, keepOn) -> applyScreenOn(keepOn, streaming) }
             }
         }
+    }
+
+    private fun observeStreamingSlots() {
         activity.lifecycleScope.launch {
             activity.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 wakeState.streamingSlotCount.collect { lowPowerManager.refreshStatus() }
             }
         }
-        if (notifications != null) {
-            val attachment = notifications.attach(activity, rootView)
-            // Anchor Snackbar above countdown pill during the pre-dim window so banners don't draw over "Low power in Ns".
-            snackbarAnchorJob =
-                lowPowerManager.state
-                    .onEach { state ->
-                        attachment.anchorView =
-                            if (state == LowPowerManager.State.COUNTDOWN) countdownBannerView else null
-                    }.launchIn(activity.lifecycleScope)
-            notificationsAttachment = attachment
-        }
     }
+
+    private fun attachNotifications(notifications: DishNotifications) {
+        val attachment = notifications.attach(activity, rootView)
+        // Anchored above the countdown pill during the pre-dim window, so a banner does not draw
+        // over "Low power in Ns".
+        snackbarAnchorJob =
+            lowPowerManager.state
+                .onEach { state -> attachment.anchorView = anchorFor(state) }
+                .launchIn(activity.lifecycleScope)
+        notificationsAttachment = attachment
+    }
+
+    private fun anchorFor(state: LowPowerManager.State): View? = if (state == LowPowerManager.State.COUNTDOWN) countdownBannerView else null
 
     fun cancelDimOnStop() {
         lowPowerManager.cancel()
@@ -145,25 +166,29 @@ class GamepadActivityHost(
             requestUnbufferedJoystickDispatch(event)
         }
         if (isJoy && inputTiming.enabled) inputTiming.record(event.deviceId, event.eventTime, SystemClock.uptimeMillis())
-        return isJoy &&
-            PhysicalSlotNative.processGamepadMotionEvent(
-                event.deviceId,
-                event.source,
-                event.action,
-                event.getAxisValue(MotionEvent.AXIS_X),
-                event.getAxisValue(MotionEvent.AXIS_Y),
-                event.getAxisValue(MotionEvent.AXIS_Z),
-                event.getAxisValue(MotionEvent.AXIS_RZ),
-                event.getAxisValue(MotionEvent.AXIS_RX),
-                event.getAxisValue(MotionEvent.AXIS_RY),
-                event.getAxisValue(MotionEvent.AXIS_HAT_X),
-                event.getAxisValue(MotionEvent.AXIS_HAT_Y),
-                event.getAxisValue(MotionEvent.AXIS_LTRIGGER),
-                event.getAxisValue(MotionEvent.AXIS_RTRIGGER),
-                event.getAxisValue(MotionEvent.AXIS_BRAKE),
-                event.getAxisValue(MotionEvent.AXIS_GAS),
-            )
+        return isJoy && sendMotionToNative(event)
     }
+
+    // The 250 Hz path. A private, monomorphic call that allocates nothing and reads each axis
+    // straight off the event the framework already handed us: nothing here is copied or boxed.
+    private fun sendMotionToNative(event: MotionEvent): Boolean =
+        PhysicalSlotNative.processGamepadMotionEvent(
+            event.deviceId,
+            event.source,
+            event.action,
+            event.getAxisValue(MotionEvent.AXIS_X),
+            event.getAxisValue(MotionEvent.AXIS_Y),
+            event.getAxisValue(MotionEvent.AXIS_Z),
+            event.getAxisValue(MotionEvent.AXIS_RZ),
+            event.getAxisValue(MotionEvent.AXIS_RX),
+            event.getAxisValue(MotionEvent.AXIS_RY),
+            event.getAxisValue(MotionEvent.AXIS_HAT_X),
+            event.getAxisValue(MotionEvent.AXIS_HAT_Y),
+            event.getAxisValue(MotionEvent.AXIS_LTRIGGER),
+            event.getAxisValue(MotionEvent.AXIS_RTRIGGER),
+            event.getAxisValue(MotionEvent.AXIS_BRAKE),
+            event.getAxisValue(MotionEvent.AXIS_GAS),
+        )
 
     // Read overlayActive BEFORE notifying so a DOWN that dismisses the dim still wins the gate and consumes the rest of the gesture.
     fun dispatchTouchEvent(ev: MotionEvent): Boolean {

@@ -32,10 +32,10 @@ class MoonlightControlPacket(
         seq: Int,
         plaintext: ByteArray,
     ): ByteArray {
-        val tagThenCt = MoonlightCrypto.controlSeal(gcmKey, seq, plaintext)
+        val tagThenCt = controlSeal(gcmKey, seq, plaintext)
         val len = SEQ_LEN + tagThenCt.size
         val buf = ByteBuffer.allocate(HEADER_LEN + len).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putShort(MoonlightControlProtocol.PACKET_TYPE_ENCRYPTED.toShort())
+        buf.putShort(PACKET_TYPE_ENCRYPTED.toShort())
         buf.putShort(len.toShort())
         buf.putInt(seq)
         buf.put(tagThenCt)
@@ -45,21 +45,21 @@ class MoonlightControlPacket(
     /**
      * Open a received encrypted control packet, returning the decrypted
      * plaintext. Returns null on a short/malformed frame and throws
-     * [javax.crypto.AEADBadTagException] (via [MoonlightCrypto.controlOpen]) on a
+     * [javax.crypto.AEADBadTagException] (via [controlOpen]) on a
      * tampered payload, so a forged packet is dropped, never acted on.
      */
     fun open(packet: ByteArray): ByteArray? {
-        if (packet.size < HEADER_LEN + SEQ_LEN + MoonlightCrypto.GCM_TAG_LEN) return null
+        if (packet.size < HEADER_LEN + SEQ_LEN + GCM_TAG_LEN) return null
         val buf = ByteBuffer.wrap(packet).order(ByteOrder.LITTLE_ENDIAN)
         val type = buf.short.toInt() and 0xFFFF
-        if (type != MoonlightControlProtocol.PACKET_TYPE_ENCRYPTED) return null
+        if (type != PACKET_TYPE_ENCRYPTED) return null
         val len = buf.short.toInt() and 0xFFFF
-        if (len < SEQ_LEN + MoonlightCrypto.GCM_TAG_LEN) return null
+        if (len < SEQ_LEN + GCM_TAG_LEN) return null
         if (buf.remaining() < len) return null
         val seq = buf.int
         val tagThenCt = ByteArray(len - SEQ_LEN)
         buf.get(tagThenCt)
-        return MoonlightCrypto.controlOpen(gcmKey, seq, tagThenCt)
+        return controlOpen(gcmKey, seq, tagThenCt)
     }
 
     companion object {

@@ -20,8 +20,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.tinkernorth.dish.DishApplication
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.source.audio.MicIndicatorPolicy
 import com.tinkernorth.dish.source.audio.MicIndicatorState
+import com.tinkernorth.dish.source.audio.micIndicatorStateOf
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
@@ -73,24 +73,26 @@ class StreamingService : Service() {
         super.onCreate()
         liveness.markLive()
         ensureChannel()
-        // Refused foreground start: the service is already stopping, so don't wire observers that would
-        // notify for a service that never entered the foreground.
+        // Refused foreground start: the service is already stopping, so don't wire observers that
+        // would notify for a service that never entered the foreground.
         if (!startForegroundInitial()) return
-        // Held Direct claims keep the service up on their own: WakeState zeroes the slot count when
-        // the app leaves the foreground, but a claimed pad still needs this process alive for its
-        // eventual device-side restore. Collected in the process scope so a background unplug or
-        // release still reaches the stopSelf below.
-        observerJob =
-            combine(
-                wakeState.streamingSlotCount,
-                hub.connections,
-                usbGamepadManager.controllers,
-                micCapture.state,
-            ) { count, conns, controllers, plan ->
-                ServiceSnapshot(count, conns, controllers.directClaimCount(), plan.arming, MicIndicatorPolicy.of(plan))
-            }.onEach(::refresh)
-                .launchIn(wakeStateScope())
+        observerJob = observeServiceSnapshot()
     }
+
+    // Held Direct claims keep the service up on their own: WakeState zeroes the slot count when
+    // the app leaves the foreground, but a claimed pad still needs this process alive for its
+    // eventual device-side restore. Collected in the process scope so a background unplug or
+    // release still reaches the stopSelf in refresh.
+    private fun observeServiceSnapshot(): Job =
+        combine(
+            wakeState.streamingSlotCount,
+            hub.connections,
+            usbGamepadManager.controllers,
+            micCapture.state,
+        ) { count, conns, controllers, plan ->
+            ServiceSnapshot(count, conns, controllers.directClaimCount(), plan.arming, micIndicatorStateOf(plan))
+        }.onEach(::refresh)
+            .launchIn(wakeStateScope())
 
     override fun onDestroy() {
         observerJob?.cancel()
@@ -134,7 +136,7 @@ class StreamingService : Service() {
             build(
                 count = wakeState.streamingSlotCount.value,
                 primaryLabel = null,
-                micState = MicIndicatorPolicy.of(plan),
+                micState = micIndicatorStateOf(plan),
             )
         return startInForeground(notification, plan.arming)
     }
