@@ -12,15 +12,18 @@ import kotlinx.coroutines.flow.update
 abstract class AbstractStateSource<S>(
     initialState: S,
 ) : DefaultLifecycleObserver {
-    private val _state = MutableStateFlow(initialState)
-    val state: StateFlow<S> = _state.asStateFlow()
+    @PublishedApi
+    internal val mutableState = MutableStateFlow(initialState)
+    val state: StateFlow<S> = mutableState.asStateFlow()
 
-    protected fun setState(reducer: (S) -> S) {
-        _state.update(reducer)
+    // Inline, so a reducer passed here is a body the compiler inlines at the call site rather than a
+    // stored callback object, and the shape rules read it as such.
+    protected inline fun setState(reducer: (S) -> S) {
+        mutableState.update(reducer)
     }
 
     protected fun setState(value: S) {
-        _state.value = value
+        mutableState.value = value
     }
 
     override fun onStart(owner: LifecycleOwner) = Unit
