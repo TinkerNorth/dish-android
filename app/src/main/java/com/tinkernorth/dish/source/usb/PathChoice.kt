@@ -14,17 +14,16 @@ enum class PathChoice {
             Direct -> STORAGE_DIRECT
             Standard -> STORAGE_STANDARD
         }
-
-    companion object {
-        // Persisted in cloud-backed user_preferences; add values, never rename existing ones.
-        private const val STORAGE_DIRECT = "direct"
-        private const val STORAGE_STANDARD = "standard"
-
-        fun fromStorageValue(value: String?): PathChoice? =
-            when (value) {
-                STORAGE_DIRECT -> Direct
-                STORAGE_STANDARD -> Standard
-                else -> null
-            }
-    }
 }
+
+// Persisted in cloud-backed user_preferences; add values, never rename existing ones.
+private const val STORAGE_DIRECT = "direct"
+private const val STORAGE_STANDARD = "standard"
+
+// Null is Auto: nothing stored, or a value from a build this one does not know.
+internal fun pathChoiceFromStorage(value: String?): PathChoice? =
+    when (value) {
+        STORAGE_DIRECT -> PathChoice.Direct
+        STORAGE_STANDARD -> PathChoice.Standard
+        else -> null
+    }

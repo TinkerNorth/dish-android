@@ -44,8 +44,6 @@ class PhysicalBatterySource
     ) : DefaultLifecycleObserver {
         private val phoneBattery = PhoneBatterySource(context)
 
-        private val validator = BatteryValidator()
-
         private val polls = Channel<Unit>(Channel.CONFLATED)
 
         private var reachableJob: Job? = null
@@ -83,7 +81,7 @@ class PhysicalBatterySource
             scope.launch {
                 while (isActive) {
                     requestPoll()
-                    delay(BatteryValidator.REPORT_INTERVAL_SECONDS * 1000L)
+                    delay(BatteryValidator.REPORT_INTERVAL_MS)
                 }
             }
 
@@ -154,9 +152,7 @@ class PhysicalBatterySource
                 val routed = route(device.transport, reader.sample(device), phone)
                 publishDisplay(slotId, routed.display)
                 val conn = reachable[slotId] ?: continue
-                validator.publish(routed.wire) { s ->
-                    conn.sendBattery(slotId, s.level, s.status)
-                }
+                publishBatterySample(routed.wire) { s -> conn.sendBattery(slotId, s.level, s.status) }
             }
         }
 
@@ -168,7 +164,7 @@ class PhysicalBatterySource
                 statusStore.clear(slotId)
                 return
             }
-            validator.publish(sample) { s -> statusStore.put(slotId, s) }
+            publishBatterySample(sample) { s -> statusStore.put(slotId, s) }
         }
 
         private fun chargingStatusOf(intent: Intent): Int =

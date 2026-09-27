@@ -16,6 +16,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -331,13 +332,13 @@ class SatelliteConnection(
         slotId: String,
         controllerType: Int,
     ) {
-        var added = false
-        _slots.update { map ->
-            if (map.containsKey(slotId)) return@update map
-            added = true
-            val index = lowestFreeIndex(map.values.map { it.controllerIndex })
-            map + (slotId to SlotBinding(index, controllerType, registered = false))
-        }
+        val prior =
+            _slots.getAndUpdate { map ->
+                if (map.containsKey(slotId)) return@getAndUpdate map
+                val index = lowestFreeIndex(map.values.map { it.controllerIndex })
+                map + (slotId to SlotBinding(index, controllerType, registered = false))
+            }
+        val added = slotId !in prior
         if (added && _state.value == SatelliteSessionState.Live) onSlotChanged(slotId)
     }
 
@@ -362,14 +363,15 @@ class SatelliteConnection(
         slotId: String,
         transform: (SlotBinding) -> SlotBinding,
     ) {
-        var changed = false
-        _slots.update { map ->
-            val cur = map[slotId] ?: return@update map
-            val next = transform(cur)
-            if (next == cur) return@update map
-            changed = true
-            map + (slotId to next)
-        }
+        val prior =
+            _slots.getAndUpdate { map ->
+                val cur = map[slotId] ?: return@getAndUpdate map
+                val next = transform(cur)
+                if (next == cur) return@getAndUpdate map
+                map + (slotId to next)
+            }
+        val before = prior[slotId] ?: return
+        val changed = transform(before) != before
         if (changed && _state.value == SatelliteSessionState.Live) onSlotChanged(slotId)
     }
 
@@ -392,13 +394,8 @@ class SatelliteConnection(
     }
 
     internal fun detachSlot(slotId: String) {
-        var removed: SlotBinding? = null
-        _slots.update { map ->
-            val cur = map[slotId] ?: return@update map
-            removed = cur
-            map - slotId
-        }
-        val info = removed ?: return
+        val prior = _slots.getAndUpdate { map -> if (slotId in map) map - slotId else map }
+        val info = prior[slotId] ?: return
         motionBackendStatusStore?.clear(id, slotId)
         if (_state.value == SatelliteSessionState.Live && info.registered) {
             onSlotRemoved(info.controllerIndex)
@@ -410,13 +407,13 @@ class SatelliteConnection(
         toSlotId: String,
     ): Boolean {
         if (fromSlotId == toSlotId) return _slots.value.containsKey(toSlotId)
-        var renamed = false
-        _slots.update { map ->
-            val cur = map[fromSlotId] ?: return@update map
-            if (map.containsKey(toSlotId)) return@update map
-            renamed = true
-            (map - fromSlotId) + (toSlotId to cur)
-        }
+        val prior =
+            _slots.getAndUpdate { map ->
+                val cur = map[fromSlotId] ?: return@getAndUpdate map
+                if (map.containsKey(toSlotId)) return@getAndUpdate map
+                (map - fromSlotId) + (toSlotId to cur)
+            }
+        val renamed = fromSlotId in prior && toSlotId !in prior
         if (renamed) {
             motionBackendStatusStore?.let { store ->
                 store.statusFor(id, fromSlotId)?.let { status ->
@@ -610,14 +607,14 @@ class SatelliteConnection(
         // Keyed on the stable machineId so a receiver that changes IP keeps the
         // same identity; ip:udpPort only for a beacon that carries no id at all.
         fun idFor(server: DiscoveredServer): String = "$ID_PREFIX${server.stableKey}"
-
-        private fun lowestFreeIndex(taken: List<Int>): Int {
-            val set = taken.toHashSet()
-            var i = 0
-            while (i in set) i++
-            return i
-        }
     }
+}
+
+internal fun lowestFreeIndex(taken: List<Int>): Int {
+    val set = taken.toHashSet()
+    var i = 0
+    while (i in set) i++
+    return i
 }
 
 enum class SatelliteSessionState { Idle, Linking, Live, Faltering }

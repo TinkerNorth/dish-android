@@ -275,4 +275,12 @@ class DishNotificationsApiTest {
         assertEquals(100, ids.distinct().size)
         assertTrue("ids monotonic", ids == ids.sorted())
     }
+
+    @Test
+    fun `durationForMs maps persistent to indefinite and the rest by length`() {
+        assertEquals(com.google.android.material.snackbar.Snackbar.LENGTH_INDEFINITE, durationForMs(DishNotification.DURATION_PERSISTENT))
+        assertEquals(com.google.android.material.snackbar.Snackbar.LENGTH_LONG, durationForMs(DishNotification.DURATION_LONG))
+        assertEquals(com.google.android.material.snackbar.Snackbar.LENGTH_LONG, durationForMs(DishNotification.DURATION_LONG + 1))
+        assertEquals(com.google.android.material.snackbar.Snackbar.LENGTH_SHORT, durationForMs(DishNotification.DURATION_SHORT))
+    }
 }

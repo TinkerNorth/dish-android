@@ -84,7 +84,7 @@ class FrameworkLightGateway
         ) {
             // Alpha is brightness on the native side (it scales the LEDs and drives the global
             // channel), so full opacity is what makes the requested color land at full strength.
-            val argb = 0xFF000000.toInt() or ((r and 0xFF) shl 16) or ((g and 0xFF) shl 8) or (b and 0xFF)
+            val argb = opaqueArgb(r, g, b)
             synchronized(lock) {
                 val current = held[deviceId]
                 if (current != null && current.lastArgb == argb) return

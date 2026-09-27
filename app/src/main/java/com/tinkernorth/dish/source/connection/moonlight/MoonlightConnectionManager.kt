@@ -9,6 +9,7 @@ import com.tinkernorth.dish.core.net.bytesToHex
 import com.tinkernorth.dish.core.net.moonlight.AUTO
 import com.tinkernorth.dish.core.net.moonlight.MoonlightApp
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
+import com.tinkernorth.dish.core.net.moonlight.MoonlightEvent
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
 import com.tinkernorth.dish.core.net.moonlight.MoonlightPairing
@@ -211,7 +212,7 @@ class MoonlightConnectionManager
         private val _events =
             MutableSharedFlow<MoonlightConnectionEvent>(
                 replay = 0,
-                extraBufferCapacity = 8,
+                extraBufferCapacity = EVENT_BUFFER,
                 onBufferOverflow = BufferOverflow.DROP_OLDEST,
             )
         val events: SharedFlow<MoonlightConnectionEvent> = _events.asSharedFlow()
@@ -318,10 +319,8 @@ class MoonlightConnectionManager
                         .takeIf { it.ok }
                         ?.let { parseServerInfo(it.body) }
                 plain?.let { hostFacts.note(host.id, it) }
-                // "Do we hold a pairing" is the PAIRED FLAG, not a non-empty uniqueid.
-                // Real hosts publish no uniqueid TXT record, so reading it off that made
-                // every mDNS-discovered host report M5 ("never paired") when it went
-                // offline instead of M6 ("remembered, will start when it is back").
+                // Holding a pairing is the paired flag, never a non-empty uniqueid: real hosts
+                // publish no uniqueid TXT record at all.
                 val record = store.get(host.id)?.takeIf { it.paired }
                 val storedId = record?.uniqueId.orEmpty()
                 if (plain == null) {
@@ -333,14 +332,8 @@ class MoonlightConnectionManager
                     Log.i(TAG, "${host.address} answers as ${plain.uniqueId}, remembered as $storedId: host replaced")
                     return@withContext MoonlightProbe(trust = MoonlightTrustState.REPLACED)
                 }
-                // THE PLAINTEXT PairStatus IS NOT AN ANSWER ABOUT PAIRING, so nothing may
-                // be gated on it. Sunshine computes that field only on the mutual-TLS
-                // route and hands every plaintext caller a 0: measured against the live
-                // host, which reports 0 for this device's own uniqueid and 0 for one it
-                // has never seen, while answering the same device's mutual-TLS call with
-                // a 1. Treating the 0 as "not paired" made the probe unable to return
-                // PAIRED at all, and openStream only launches on PAIRED, so no session
-                // could ever start. The mutual-TLS call is the only thing that can say.
+                // The plaintext PairStatus is not an answer about pairing: Sunshine computes it only
+                // on the mutual-TLS route and hands every plaintext caller a 0.
                 val secure = gateway.getHttps(serverInfoHttps(host.address, host.httpsPort, deviceId), host.id)
                 if (!secure.ok) {
                     val trust = if (record == null) MoonlightTrustState.NOT_PAIRED else MoonlightTrustState.TRUST_LOST
@@ -525,12 +518,8 @@ class MoonlightConnectionManager
             withContext(ioDispatcher) {
                 Log.i(TAG, "pair requested for ${host.name} at ${host.address} (${host.id})")
                 if (isPaired(host)) {
-                    // CONFIRMING TRUST IS A PAIRING OUTCOME AND HAS TO PERSIST LIKE ONE.
-                    // A device that forgot a host the host still trusts is answered here
-                    // without a PIN. Emitting Paired and writing nothing left the record
-                    // empty and the row reading "Not paired", so the button did the same
-                    // nothing every time it was pressed, and the only trace of any of it
-                    // was a mutual-TLS /serverinfo in the HOST's log.
+                    // Confirming trust is a pairing outcome and persists like one: a device that forgot
+                    // a host the host still trusts is answered here without a PIN.
                     Log.i(TAG, "${host.address} already trusts this device; recording the pairing")
                     rememberPaired(host, paired = true)
                     _events.emit(MoonlightConnectionEvent.Paired(host))
@@ -690,8 +679,7 @@ class MoonlightConnectionManager
             }
             val session =
                 MoonlightControlSession(rikey, rtsp.enetConnectData, transport, System::currentTimeMillis) { event ->
-                    if (event is com.tinkernorth.dish.core.net.moonlight.MoonlightEvent.Termination) onHostTerminated(conn, host)
-                    conn.dispatchFeedback(event)
+                    onControlEvent(conn, host, event)
                 }
             if (!session.connect()) {
                 Log.w(TAG, "control channel refused on ${host.address}:${rtsp.controlPort}")
@@ -980,18 +968,32 @@ class MoonlightConnectionManager
             return "%04d".format(n)
         }
 
+        // A termination is the host's goodbye; everything else is feedback for the pad it names.
+        private fun onControlEvent(
+            conn: MoonlightConnection,
+            host: MoonlightHost,
+            event: MoonlightEvent,
+        ) {
+            if (event is MoonlightEvent.Termination) onHostTerminated(conn, host)
+            conn.dispatchFeedback(event)
+        }
+
         private fun getOrCreateUniqueId(): String {
-            val prefs = context.getSharedPreferences("moonlight", android.content.Context.MODE_PRIVATE)
-            return prefs.getString("uniqueid", null) ?: java.util.UUID
+            val prefs = context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+            return prefs.getString(KEY_UNIQUE_ID, null) ?: java.util.UUID
                 .randomUUID()
                 .toString()
                 .replace("-", "")
-                .take(16)
-                .also { id -> prefs.edit { putString("uniqueid", id) } }
+                .take(UNIQUE_ID_LEN)
+                .also { id -> prefs.edit { putString(KEY_UNIQUE_ID, id) } }
         }
 
         private companion object {
             const val TAG = "MoonlightConnectionMgr"
+            const val PREFS_NAME = "moonlight"
+            const val KEY_UNIQUE_ID = "uniqueid"
+            const val UNIQUE_ID_LEN = 16
+            const val EVENT_BUFFER = 8
             const val DISCOVERY_TIMEOUT_MS = 4000
             const val RIKEY_LEN = 16
             const val PIN_RANGE = 10_000

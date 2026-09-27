@@ -7,6 +7,7 @@ import android.content.SharedPreferences
 import androidx.core.content.edit
 import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
 import com.tinkernorth.dish.source.usb.PathChoice
+import com.tinkernorth.dish.source.usb.pathChoiceFromStorage
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -19,7 +20,7 @@ class UsbPathPreferenceStore
     constructor(
         @ApplicationContext context: Context,
     ) : AbstractStateSource<Map<String, PathChoice>>(
-            initialState = readInitial(context),
+            initialState = readInitialPathChoices(context),
         ) {
         private val prefs: SharedPreferences =
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -65,16 +66,17 @@ class UsbPathPreferenceStore
                 vendorId: Int,
                 productId: Int,
             ): String = "%04x:%04x".format(vendorId and 0xFFFF, productId and 0xFFFF)
-
-            private fun readInitial(context: Context): Map<String, PathChoice> {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val raw = prefs.getString(KEY_CHOICES, null) ?: return emptyMap()
-                return runCatching {
-                    Json
-                        .decodeFromString<Map<String, String>>(raw)
-                        .mapNotNull { (k, v) -> PathChoice.fromStorageValue(v)?.let { k to it } }
-                        .toMap()
-                }.getOrDefault(emptyMap())
-            }
         }
     }
+
+// A value this build cannot read drops that one model's pick, and an unreadable blob drops them all.
+private fun readInitialPathChoices(context: Context): Map<String, PathChoice> {
+    val prefs = context.getSharedPreferences(UsbPathPreferenceStore.PREFS_NAME, Context.MODE_PRIVATE)
+    val raw = prefs.getString(UsbPathPreferenceStore.KEY_CHOICES, null) ?: return emptyMap()
+    return runCatching {
+        Json
+            .decodeFromString<Map<String, String>>(raw)
+            .mapNotNull { (k, v) -> pathChoiceFromStorage(v)?.let { k to it } }
+            .toMap()
+    }.getOrDefault(emptyMap())
+}

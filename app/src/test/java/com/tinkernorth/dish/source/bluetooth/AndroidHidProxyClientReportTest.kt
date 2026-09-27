@@ -4,6 +4,7 @@ package com.tinkernorth.dish.source.bluetooth
 
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothHidDevice
+import android.bluetooth.BluetoothProfile
 import android.content.Context
 import io.mockk.every
 import io.mockk.mockk
@@ -13,6 +14,8 @@ import io.mockk.verify
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -81,5 +84,41 @@ class AndroidHidProxyClientReportTest {
 
         assertTrue(client.sendReport(ByteArray(14) { it.toByte() }))
         assertArrayEquals(ByteArray(13) { (it + 1).toByte() }, payload.captured)
+    }
+
+    private fun deviceAt(mac: String): BluetoothDevice =
+        mockk(relaxed = true) {
+            every { address } returns mac
+        }
+
+    private fun hidCallback(): BluetoothHidDevice.Callback =
+        AndroidHidProxyClient::class.java
+            .getDeclaredField("hidCallback")
+            .apply { isAccessible = true }
+            .get(client) as BluetoothHidDevice.Callback
+
+    private fun connectedDevice(): BluetoothDevice? =
+        AndroidHidProxyClient::class.java
+            .getDeclaredField("connectedDevice")
+            .apply { isAccessible = true }
+            .get(client) as BluetoothDevice?
+
+    @Test
+    fun `a stale disconnect for another host keeps the current connection`() {
+        val current = deviceAt("AA:BB")
+        setField("connectedDevice", current)
+
+        hidCallback().onConnectionStateChanged(deviceAt("CC:DD"), BluetoothProfile.STATE_DISCONNECTED)
+
+        assertSame(current, connectedDevice())
+    }
+
+    @Test
+    fun `a disconnect for the connected host clears it`() {
+        setField("connectedDevice", deviceAt("AA:BB"))
+
+        hidCallback().onConnectionStateChanged(deviceAt("AA:BB"), BluetoothProfile.STATE_DISCONNECTED)
+
+        assertNull(connectedDevice())
     }
 }

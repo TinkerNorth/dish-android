@@ -12,3 +12,15 @@ data class FrameworkLight(
     val input: Boolean,
     val rgb: Boolean,
 )
+
+private const val CHANNEL_MASK = 0xFF
+private const val RED_SHIFT = 16
+private const val GREEN_SHIFT = 8
+private const val OPAQUE_ALPHA = 0xFF000000.toInt()
+
+// A lightbar colour at full opacity, in the ARGB layout the lights API and the skin both take.
+internal fun opaqueArgb(
+    r: Int,
+    g: Int,
+    b: Int,
+): Int = OPAQUE_ALPHA or ((r and CHANNEL_MASK) shl RED_SHIFT) or ((g and CHANNEL_MASK) shl GREEN_SHIFT) or (b and CHANNEL_MASK)

@@ -83,6 +83,42 @@ class SlotBindingStoreTest {
     }
 
     @Test
+    fun `migrate moves the binding in one emission`() =
+        runTest {
+            val store = SlotBindingStore()
+            store.bind("slot-A", "conn-1")
+            val seen = mutableListOf<Map<String, String>>()
+            val job = launch(UnconfinedTestDispatcher(testScheduler)) { store.state.collect { seen += it } }
+
+            store.migrate("slot-A", "slot-B")
+            runCurrent()
+            job.cancel()
+
+            assertEquals(listOf(mapOf("slot-A" to "conn-1"), mapOf("slot-B" to "conn-1")), seen)
+        }
+
+    @Test
+    fun `migrate from an unbound slot changes nothing`() {
+        val store = SlotBindingStore()
+        store.bind("slot-A", "conn-1")
+
+        store.migrate("ghost", "slot-B")
+
+        assertEquals(mapOf("slot-A" to "conn-1"), store.bindings.value)
+    }
+
+    @Test
+    fun `migrate onto a slot that is already bound takes it over`() {
+        val store = SlotBindingStore()
+        store.bind("slot-A", "conn-1")
+        store.bind("slot-B", "conn-2")
+
+        store.migrate("slot-A", "slot-B")
+
+        assertEquals(mapOf("slot-B" to "conn-1"), store.bindings.value)
+    }
+
+    @Test
     fun `re-binding a slot to the identical connection does not emit a new state`() =
         runTest {
             val store = SlotBindingStore()

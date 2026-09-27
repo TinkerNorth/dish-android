@@ -21,9 +21,9 @@ private class DimCountdown(
     seconds: Int,
     private val label: android.widget.TextView,
     private val onFinished: () -> Unit,
-) : CountDownTimer(seconds * 1000L, 1000L) {
+) : CountDownTimer(seconds * MS_PER_SECOND, MS_PER_SECOND) {
     override fun onTick(millisUntilFinished: Long) {
-        val secondsRemaining = (millisUntilFinished / 1000) + 1
+        val secondsRemaining = (millisUntilFinished / MS_PER_SECOND) + 1
         label.text = String.format(Locale.getDefault(), "%d", secondsRemaining)
     }
 
@@ -73,7 +73,6 @@ class LowPowerManager(
 
     fun onUserInteraction() {
         when (state.value) {
-            // Re-arm explicitly: shouldKeepScreenOn StateFlow won't re-emit true so onLockStateChanged is silent.
             State.ACTIVE -> {
                 exit()
                 resetInactivityTimer()
@@ -179,7 +178,7 @@ class LowPowerManager(
                     now.get(Calendar.MINUTE),
                 )
             updateStatus()
-            clockHandler.postDelayed(this, 15_000L)
+            clockHandler.postDelayed(this, CLOCK_TICK_MS)
         }
     }
 
@@ -199,3 +198,8 @@ class LowPowerManager(
         private const val MIN_BRIGHTNESS = 0.01f
     }
 }
+
+private const val MS_PER_SECOND = 1000L
+
+// The dim overlay's clock only shows hours and minutes, so a quarter-minute tick keeps it honest.
+private const val CLOCK_TICK_MS = 15_000L

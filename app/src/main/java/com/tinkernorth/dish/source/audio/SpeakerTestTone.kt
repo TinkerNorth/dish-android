@@ -23,7 +23,7 @@ fun frame(
 ): ShortArray {
     val perWindow = frameSamples / 2
     val perNote = perWindow * FRAMES / 2
-    val fadeSamples = sampleRate * FADE_MS / 1000
+    val fadeSamples = sampleRate * FADE_MS / MS_PER_SECOND
     val out = ShortArray(frameSamples)
     for (i in 0 until perWindow) {
         val n = index * perWindow + i
@@ -70,3 +70,5 @@ class SpeakerTestTone internal constructor(
         const val DRAIN_MS = 120L
     }
 }
+
+private const val MS_PER_SECOND = 1000

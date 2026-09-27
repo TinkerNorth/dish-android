@@ -71,10 +71,9 @@ class AudioTrackSpeakerSink
             channels: Int,
             lane: PlayoutLane,
         ): SpeakerPlayoutSession? {
-            // A lane needs its pair to exist at the offset it writes, and the platform only
-            // has masks for the two widths a pad's endpoint comes in.
+            // The platform only has masks for the two widths a pad's endpoint comes in.
             val channelMask = channelMaskFor(channels)
-            if (channelMask == null || lane.pairOffset + PlayoutLane.STEREO_CHANNELS > channels) return null
+            if (channelMask == null || !laneFitsEndpoint(lane, channels)) return null
             // Room for a few windows so a scheduling hiccup on the dispatch thread does not empty
             // the track; the start threshold below is what decides the latency, not this. Sized
             // at the device's width: a quad window is twice a stereo one.
@@ -214,19 +213,12 @@ class AudioTrackSpeakerSink
                         return 0
                     }
                     if (!playing) startWhenPrimed(written)
-                    // Reported in the caller's stereo samples, whatever the device's width.
-                    written / channels * PlayoutLane.STEREO_CHANNELS
+                    stereoSamplesWritten(written, channels)
                 }
 
             private fun spreadToDevice(pcmStereo: ShortArray): ShortArray {
                 if (channels == PlayoutLane.STEREO_CHANNELS) return pcmStereo
-                val frames = pcmStereo.size / PlayoutLane.STEREO_CHANNELS
-                if (spread.size != frames * channels) spread = ShortArray(frames * channels)
-                for (f in 0 until frames) {
-                    val o = f * channels + pairOffset
-                    spread[o] = pcmStereo[f * PlayoutLane.STEREO_CHANNELS]
-                    spread[o + 1] = pcmStereo[f * PlayoutLane.STEREO_CHANNELS + 1]
-                }
+                spread = spreadStereoToDevice(pcmStereo, channels, pairOffset, spread)
                 return spread
             }
 
@@ -275,3 +267,37 @@ class AudioTrackSpeakerSink
             const val START_THRESHOLD_FRAMES = 2
         }
     }
+
+// A lane needs its pair to exist at the offset it writes: the haptic pair has no room on a
+// stereo endpoint.
+internal fun laneFitsEndpoint(
+    lane: PlayoutLane,
+    channels: Int,
+): Boolean = lane.pairOffset + PlayoutLane.STEREO_CHANNELS <= channels
+
+// WRITE_NON_BLOCKING accounts in whole frames at the device's width; the caller counts in the
+// wire's stereo samples, whatever that width is.
+internal fun stereoSamplesWritten(
+    written: Int,
+    channels: Int,
+): Int = written / channels * PlayoutLane.STEREO_CHANNELS
+
+// The wire's stereo window spread to the device's width, this lane's pair at [pairOffset] and
+// the rest left alone. A stereo device takes the window as it is; [scratch] is reused when it
+// already has the right size, so a steady stream allocates nothing.
+internal fun spreadStereoToDevice(
+    pcmStereo: ShortArray,
+    channels: Int,
+    pairOffset: Int,
+    scratch: ShortArray,
+): ShortArray {
+    if (channels == PlayoutLane.STEREO_CHANNELS) return pcmStereo
+    val frames = pcmStereo.size / PlayoutLane.STEREO_CHANNELS
+    val out = if (scratch.size == frames * channels) scratch else ShortArray(frames * channels)
+    for (f in 0 until frames) {
+        val o = f * channels + pairOffset
+        out[o] = pcmStereo[f * PlayoutLane.STEREO_CHANNELS]
+        out[o + 1] = pcmStereo[f * PlayoutLane.STEREO_CHANNELS + 1]
+    }
+    return out
+}

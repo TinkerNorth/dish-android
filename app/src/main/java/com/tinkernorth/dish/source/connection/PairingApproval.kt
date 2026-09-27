@@ -14,7 +14,7 @@ import kotlin.random.Random
  * read identically when the operator compares them. [random] is injectable
  * so a test can assert the shape deterministically.
  */
-fun generatePin(random: Random = Random.Default): String = buildString { repeat(PIN_DIGITS) { append(random.nextInt(10)) } }
+fun generatePin(random: Random = Random.Default): String = buildString { repeat(PIN_DIGITS) { append(random.nextInt(PIN_RADIX)) } }
 
 sealed interface Status {
     data class Approved(
@@ -33,17 +33,22 @@ sealed interface Status {
  * can never be mistaken for a usable session key.
  */
 fun classifyStatus(json: String): Status {
-    val status = jsonGet(json, "status")
-    val key = jsonGet(json, "sharedKey")
+    val status = jsonGet(json, KEY_STATUS)
+    val key = jsonGet(json, KEY_SHARED_KEY)
     return when {
         // Require the hex alphabet, not just the length: a 64-char non-hex
         // key would otherwise decode to garbage downstream in hexToBytes.
-        status == "approved" && key != null && SHARED_KEY_HEX.matches(key) ->
+        status == STATUS_APPROVED && key != null && SHARED_KEY_HEX.matches(key) ->
             Status.Approved(key)
-        status == "pending" -> Status.Pending
+        status == STATUS_PENDING -> Status.Pending
         else -> Status.Declined
     }
 }
 
 private const val PIN_DIGITS = 4
+private const val PIN_RADIX = 10
+private const val KEY_STATUS = "status"
+private const val KEY_SHARED_KEY = "sharedKey"
+private const val STATUS_APPROVED = "approved"
+private const val STATUS_PENDING = "pending"
 private val SHARED_KEY_HEX = Regex("[0-9a-fA-F]{64}")

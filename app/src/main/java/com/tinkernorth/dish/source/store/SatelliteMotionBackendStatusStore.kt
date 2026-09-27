@@ -13,17 +13,17 @@ data class SatelliteMotionBackendStatus(
     val effective: Boolean get() = sinkSupportedForType && backendOk
 
     companion object {
-        // Caller short-circuits on sentinel -1 ("no extended ACK"); this only handles 0..255.
-        fun fromFlags(flags: Int): SatelliteMotionBackendStatus =
-            SatelliteMotionBackendStatus(
-                sinkSupportedForType = (flags and FLAG_SINK_SUPPORTED_FOR_TYPE) != 0,
-                backendOk = (flags and FLAG_BACKEND_OK) != 0,
-            )
-
         const val FLAG_SINK_SUPPORTED_FOR_TYPE: Int = 0x01
         const val FLAG_BACKEND_OK: Int = 0x02
     }
 }
+
+// The ack's motion flag byte (0..255); the sentinel -1 for "no extended ack" is the caller's to skip.
+internal fun motionBackendStatusFromFlags(flags: Int): SatelliteMotionBackendStatus =
+    SatelliteMotionBackendStatus(
+        sinkSupportedForType = (flags and SatelliteMotionBackendStatus.FLAG_SINK_SUPPORTED_FOR_TYPE) != 0,
+        backendOk = (flags and SatelliteMotionBackendStatus.FLAG_BACKEND_OK) != 0,
+    )
 
 @Singleton
 class SatelliteMotionBackendStatusStore

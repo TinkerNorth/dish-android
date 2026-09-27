@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.source.store
 
+import com.tinkernorth.dish.source.lights.opaqueArgb
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -48,14 +49,11 @@ class VirtualPadFeedbackStore
             g: Int,
             b: Int,
         ) {
-            _state.value =
-                _state.value.copy(
-                    lightbarColor = 0xFF000000.toInt() or ((r and 0xFF) shl 16) or ((g and 0xFF) shl 8) or (b and 0xFF),
-                )
+            _state.value = _state.value.copy(lightbarColor = opaqueArgb(r, g, b))
         }
 
         fun setPlayerLeds(ledMask: Int) {
-            _state.value = _state.value.copy(playerLedMask = ledMask and 0x1F)
+            _state.value = _state.value.copy(playerLedMask = ledMask and PLAYER_LED_MASK)
         }
 
         fun setTriggerEffects(
@@ -74,3 +72,6 @@ class VirtualPadFeedbackStore
             _state.value = _state.value.copy(micLedState = state.coerceIn(MIC_LED_OFF, MIC_LED_PULSE))
         }
     }
+
+// The wire's ledMask carries five player LEDs; anything above them is reserved.
+private const val PLAYER_LED_MASK = 0x1F

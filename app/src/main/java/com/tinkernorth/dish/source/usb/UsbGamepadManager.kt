@@ -165,8 +165,6 @@ class UsbGamepadManager
 
         private val receiver = UsbPermissionReceiver()
 
-        // ── Signal sources → events ──────────────────────────────────────────
-
         private fun onUsbPresent(device: UsbDevice) {
             if (!isGamepadShaped(device)) return
             val key = vidPidKey(device.vendorId, device.productId)
@@ -264,8 +262,6 @@ class UsbGamepadManager
             }
         }
 
-        // ── The reducer driver (main thread) ─────────────────────────────────
-
         private fun applyEvent(
             key: Int,
             event: UsbEvent,
@@ -325,8 +321,6 @@ class UsbGamepadManager
                     }
                 }
         }
-
-        // ── Effectors ────────────────────────────────────────────────────────
 
         private fun runClaim(key: Int) {
             when (val outcome = usbDevices[key]?.let { doClaim(it) }) {
@@ -451,9 +445,6 @@ class UsbGamepadManager
                 productId = device.productId,
             )
             connectionHubProvider.get().bindClaimedSynthetic(routedFrameworkId?.toString(), synthetic.toString())
-            // Drop the framework we just stole now, rather than leaving it in the 5s disconnect grace where
-            // it would collide with the framework that re-enumerates on a switch back to Standard and show a
-            // second card for one controller.
             routedFrameworkId?.let { registry.forgetSupersededFramework(it) }
             Log.i(TAG, "claimed ${device.vendorId.toHex4()}:${device.productId.toHex4()} → dev=$synthetic")
             return ClaimOutcome.Ok(synthetic)
@@ -544,23 +535,6 @@ class UsbGamepadManager
             scope.launch(Dispatchers.Main) { usbManager?.requestPermission(device, pending) }
         }
 
-        // ── Pure-ish helpers ─────────────────────────────────────────────────
-
-        private fun liveFrameworkFor(
-            devices: Map<Int, PhysicalGamepadRegistry.Device>,
-            vendorId: Int,
-            productId: Int,
-        ): Int? =
-            devices.values
-                .firstOrNull {
-                    !it.isUsbSynthetic &&
-                        !it.transitioning &&
-                        !it.needsReplug &&
-                        !it.isDisconnecting &&
-                        it.vendorId == vendorId &&
-                        it.productId == productId
-                }?.id
-
         // Capture the framework device's current binding so it survives a Standard→Direct→Standard trip.
         private fun UsbController.withCapturedBinding(frameworkId: Int?): UsbController {
             frameworkId ?: return this
@@ -570,36 +544,16 @@ class UsbGamepadManager
             return copy(connId = connId, type = hub.satTypes.value[connId to slot])
         }
 
-        private fun friendlyName(device: UsbDevice): String {
-            val known = native.lookupKnownModelName(device.vendorId, device.productId)
-            if (known.isNotEmpty()) return known
-            val product = device.productName
-            return product?.takeIf { it.isNotBlank() } ?: device.deviceName
-        }
+        private fun friendlyName(device: UsbDevice): String =
+            friendlyUsbName(
+                knownModelName = native.lookupKnownModelName(device.vendorId, device.productId),
+                deviceName = device.deviceName,
+                productName = device::getProductName,
+            )
 
         private fun isGamepadShaped(device: UsbDevice): Boolean = findInterruptInPair(device) != null
 
-        private fun gameInterfaceRank(intf: UsbInterface): Int {
-            val cls = intf.interfaceClass
-            if (cls == UsbConstants.USB_CLASS_HID) {
-                // A pad that also emulates a keyboard/mouse (the Steam Controller does, and lists
-                // them first) is never driven from its boot-protocol interfaces.
-                val bootHumanInterface =
-                    intf.interfaceSubclass == HID_BOOT_SUBCLASS &&
-                        (intf.interfaceProtocol == HID_KEYBOARD_PROTOCOL || intf.interfaceProtocol == HID_MOUSE_PROTOCOL)
-                return if (bootHumanInterface) RANK_HID_BOOT else RANK_HID
-            }
-            if (cls != UsbConstants.USB_CLASS_VENDOR_SPEC) return RANK_NONE
-            val sub = intf.interfaceSubclass
-            val proto = intf.interfaceProtocol
-            return when {
-                sub == XINPUT_SUBCLASS && proto == XINPUT_PROTOCOL -> RANK_XINPUT
-                sub == GIP_SUBCLASS && proto == GIP_PROTOCOL -> RANK_GIP
-                sub == XINPUT_SUBCLASS && (proto == XINPUT_AUX_PROTOCOL || proto == XINPUT_AUDIO_PROTOCOL) -> RANK_NONE
-                sub == XINPUT_SECURITY_SUBCLASS -> RANK_NONE
-                else -> RANK_VENDOR_FALLBACK
-            }
-        }
+        private fun UsbInterface.facts(): UsbInterfaceFacts = UsbInterfaceFacts(interfaceClass, interfaceSubclass, interfaceProtocol)
 
         private fun interruptInOutOf(intf: UsbInterface): Pair<UsbEndpoint, UsbEndpoint?>? {
             var epIn: UsbEndpoint? = null
@@ -619,7 +573,7 @@ class UsbGamepadManager
             var bestRank = RANK_NONE
             for (i in 0 until device.interfaceCount) {
                 val intf = device.getInterface(i)
-                val rank = gameInterfaceRank(intf)
+                val rank = gameInterfaceRank(intf.facts())
                 if (rank <= bestRank) continue
                 val pair = interruptInOutOf(intf) ?: continue
                 best = Triple(intf, pair.first, pair.second)
@@ -637,25 +591,6 @@ class UsbGamepadManager
             const val TAG = "UsbGamepadManager"
             const val ACTION_USB_PERMISSION = "com.tinkernorth.dish.USB_PERMISSION"
             const val TRANSITION_TIMEOUT_MS = 4000L
-
-            const val XINPUT_SUBCLASS = 0x5D
-            const val XINPUT_PROTOCOL = 0x01
-            const val XINPUT_AUX_PROTOCOL = 0x02
-            const val XINPUT_AUDIO_PROTOCOL = 0x03
-            const val XINPUT_SECURITY_SUBCLASS = 0xFD
-            const val GIP_SUBCLASS = 0x47
-            const val GIP_PROTOCOL = 0xD0
-
-            const val HID_BOOT_SUBCLASS = 0x01
-            const val HID_KEYBOARD_PROTOCOL = 0x01
-            const val HID_MOUSE_PROTOCOL = 0x02
-
-            const val RANK_NONE = 0
-            const val RANK_HID_BOOT = 1
-            const val RANK_VENDOR_FALLBACK = 2
-            const val RANK_HID = 3
-            const val RANK_GIP = 4
-            const val RANK_XINPUT = 5
         }
     }
 

@@ -110,4 +110,14 @@ class MicLevelProbeTest {
         assertEquals(0.5f, meter(0.0316f), 0.01f)
         assertTrue(meter(0.1f) > meter(0.01f))
     }
+
+    @Test
+    fun `an empty window levels as silence`() {
+        assertEquals(MicProbeReading.Level(rms = 0f, peak = 0f), level(ShortArray(0)))
+    }
+
+    @Test
+    fun `a full-scale window peaks at one`() {
+        assertEquals(1f, level(shortArrayOf(Short.MIN_VALUE, 0, 0, 0)).peak)
+    }
 }

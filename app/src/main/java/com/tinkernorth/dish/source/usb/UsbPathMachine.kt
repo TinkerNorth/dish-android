@@ -138,6 +138,9 @@ data class Reduction(
 
 private fun stay(c: UsbController): Reduction = Reduction(c, emptyList())
 
+// The phases in which the registry holds the framework device against its grace reaper.
+private val HELD_PHASES = java.util.EnumSet.of(UsbPhase.Claiming, UsbPhase.AwaitingFramework, UsbPhase.RestoreStuck, UsbPhase.NeedsReplug)
+
 // A fresh Direct attempt: clear any stale failure, hold the framework, claim.
 private fun startClaim(c: UsbController): Reduction =
     Reduction(
@@ -153,13 +156,8 @@ fun reduce(
         val effects =
             buildList {
                 c.syntheticId?.let { add(UsbEffect.RemoveSynthetic(it)) }
-                if (c.phase == UsbPhase.Claiming ||
-                    c.phase == UsbPhase.AwaitingFramework ||
-                    c.phase == UsbPhase.RestoreStuck ||
-                    c.phase == UsbPhase.NeedsReplug
-                ) {
-                    add(UsbEffect.EndHold)
-                }
+                val isHeldPhase = c.phase in HELD_PHASES
+                if (isHeldPhase) add(UsbEffect.EndHold)
             }
         return Reduction(null, effects)
     }
@@ -236,11 +234,8 @@ private fun reduceClaiming(
                     listOf(UsbEffect.StartTimeout),
                 )
             } else {
-                // Either the open/claim was rejected without ever stealing the interface (the framework
-                // slot is still live), or this model never re-enumerates as a framework gamepad, so there
-                // is nothing to wait for; drop straight back to Standard and say why Direct didn't happen.
-                // Persist Standard too, or the failed pick is silently re-attempted on every reconnect
-                // (mirrors the permission-denied path).
+                // Nothing to wait for: the interface was never stolen, or this model never re-enumerates
+                // as a framework gamepad. Standard is persisted so the failed pick is not retried on every plug.
                 Reduction(
                     c.copy(phase = UsbPhase.Routed, desired = PathChoice.Standard, syntheticId = null, failure = event.reason),
                     buildList {
@@ -264,8 +259,6 @@ private fun reduceDirect(
         is UsbEvent.Choose ->
             if (event.choice == PathChoice.Standard) {
                 if (c.frameworkExpected) {
-                    // Release the interface but keep the synthetic as a held placeholder while the framework
-                    // device comes back; if it doesn't we stop in RestoreStuck and let the user choose.
                     Reduction(
                         c.copy(phase = UsbPhase.AwaitingFramework, userInitiated = event.userInitiated, failure = null),
                         listOf(UsbEffect.Release, UsbEffect.StartTimeout),
@@ -328,8 +321,6 @@ private fun reduceAwaiting(
         }
         is UsbEvent.Timeout ->
             if (c.syntheticId != null) {
-                // Return-to-Standard never re-enumerated. Don't silently re-claim Direct under the user;
-                // surface the stuck state with a live toggle so they decide.
                 Reduction(
                     c.copy(phase = UsbPhase.RestoreStuck),
                     listOf(UsbEffect.MarkRestoreStuck, UsbEffect.Notify(UsbNotice.RestoreFailed)),
@@ -365,8 +356,6 @@ private fun reduceRestoreStuck(
                         c.copy(desired = PathChoice.Direct, userInitiated = event.userInitiated),
                         listOf(UsbEffect.Reclaim),
                     )
-                // Try waiting for the framework once more (rarely succeeds without a replug, but it's
-                // the user's call now).
                 PathChoice.Standard ->
                     Reduction(
                         c.copy(phase = UsbPhase.AwaitingFramework, userInitiated = event.userInitiated),

@@ -138,7 +138,6 @@ class PhysicalBatteryMappingTest {
 
     @Test
     fun `every mapped sample is accepted by the validator`() {
-        val validator = BatteryValidator()
         val cases =
             listOf(
                 Triple(true, 0f, ANDROID_STATUS_DISCHARGING),
@@ -150,7 +149,7 @@ class PhysicalBatteryMappingTest {
         for ((present, cap, status) in cases) {
             val sample = controllerSample(present, cap, status)!!
             var emitted = false
-            validator.publish(sample) { emitted = true }
+            publishBatterySample(sample) { emitted = true }
             org.junit.Assert.assertTrue(emitted)
         }
     }

@@ -36,11 +36,15 @@ enum class WifiBand {
     ;
 
     companion object {
+        private val BAND_2_4_GHZ_MHZ = 2400..2500
+        private val BAND_5_GHZ_MHZ = 4900..5899
+        private val BAND_6_GHZ_MHZ = 5925..7125
+
         fun fromFrequencyMhz(frequencyMhz: Int): WifiBand =
             when (frequencyMhz) {
-                in 2400..2500 -> GHZ_2_4
-                in 4900..5899 -> GHZ_5
-                in 5925..7125 -> GHZ_6
+                in BAND_2_4_GHZ_MHZ -> GHZ_2_4
+                in BAND_5_GHZ_MHZ -> GHZ_5
+                in BAND_6_GHZ_MHZ -> GHZ_6
                 else -> UNKNOWN
             }
     }

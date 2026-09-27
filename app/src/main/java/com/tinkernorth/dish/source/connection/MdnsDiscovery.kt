@@ -113,10 +113,10 @@ internal fun mdnsServiceToServer(
     return DiscoveredServer(
         name = serviceName.ifEmpty { ip },
         ip = ip,
-        udpPort = mdnsTxtInt(txt, "udp") ?: srvPort.takeIf { it > 0 } ?: MDNS_DEFAULT_UDP,
-        pairPort = mdnsTxtInt(txt, "pair") ?: MDNS_DEFAULT_PAIR,
-        httpPort = mdnsTxtInt(txt, "http") ?: MDNS_DEFAULT_HTTP,
-        machineId = mdnsTxtString(txt, "mid").orEmpty(),
+        udpPort = mdnsTxtInt(txt, TXT_UDP) ?: srvPort.takeIf { it > 0 } ?: MDNS_DEFAULT_UDP,
+        pairPort = mdnsTxtInt(txt, TXT_PAIR) ?: MDNS_DEFAULT_PAIR,
+        httpPort = mdnsTxtInt(txt, TXT_HTTP) ?: MDNS_DEFAULT_HTTP,
+        machineId = mdnsTxtString(txt, TXT_MACHINE_ID).orEmpty(),
         source = DiscoverySource.MDNS,
     )
 }
@@ -130,3 +130,9 @@ internal fun mdnsTxtString(
     txt: Map<String, ByteArray?>,
     key: String,
 ): String? = txt[key]?.let { String(it).trim() }?.takeIf { it.isNotEmpty() }
+
+// The TXT record keys a satellite advertises (satellite docs/contract.md §discovery).
+private const val TXT_UDP = "udp"
+private const val TXT_PAIR = "pair"
+private const val TXT_HTTP = "http"
+private const val TXT_MACHINE_ID = "mid"

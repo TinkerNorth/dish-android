@@ -147,4 +147,38 @@ class SatelliteHostFeaturesStoreTest {
         assertNull(store.featuresFor("sat-A"))
         assertEquals(HostFeatureSet.SATELLITE_DEFAULT, store.featuresFor("sat-B"))
     }
+
+    @Test
+    fun `noteProtocolVersion seeds an unknown host from the default`() {
+        store.noteProtocolVersion("sat-A", 3)
+
+        assertEquals(HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = 3), store.featuresFor("sat-A"))
+    }
+
+    @Test
+    fun `noteProtocolVersion updates a known host in place`() {
+        store.setFeatures("sat-A", features)
+
+        store.noteProtocolVersion("sat-A", 3)
+
+        assertEquals(features.copy(protocolVersion = 3), store.featuresFor("sat-A"))
+    }
+
+    @Test
+    fun `noteProtocolVersion ignores an invalid version`() {
+        store.noteProtocolVersion("sat-A", 0)
+        store.noteProtocolVersion("sat-A", -1)
+
+        assertNull(store.featuresFor("sat-A"))
+    }
+
+    @Test
+    fun `an unchanged protocol version writes nothing`() {
+        store.setFeatures("sat-A", features.copy(protocolVersion = 3))
+        val before = store.state.value
+
+        store.noteProtocolVersion("sat-A", 3)
+
+        assertSame(before, store.state.value)
+    }
 }

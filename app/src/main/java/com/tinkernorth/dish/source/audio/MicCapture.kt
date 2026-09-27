@@ -174,18 +174,7 @@ class AudioRecordMicSource
             private val record: AudioRecord,
             override val voiceProcessed: Boolean,
         ) : MicCaptureSession {
-            override fun read(out: ShortArray): Int {
-                var filled = 0
-                // Blocking reads normally return the whole request, but the contract only
-                // guarantees "up to"; loop so a short read becomes a complete window instead of a
-                // packet the far end has to guess at.
-                while (filled < out.size) {
-                    val n = record.read(out, filled, out.size - filled)
-                    if (n <= 0) return filled
-                    filled += n
-                }
-                return filled
-            }
+            override fun read(out: ShortArray): Int = readWholeWindow({ buf, offset, count -> record.read(buf, offset, count) }, out)
 
             override fun close() {
                 // stop() throws if the recorder already died under us; release() still has to run.
@@ -203,3 +192,19 @@ class AudioRecordMicSource
             const val BUFFERED_FRAMES = 4
         }
     }
+
+// Blocking reads normally return the whole request, but the contract only guarantees "up to": a
+// short read is retried so the window is whole, and a recorder that stops answering yields the
+// partial count rather than a packet the far end has to guess at.
+internal fun readWholeWindow(
+    read: (buffer: ShortArray, offset: Int, count: Int) -> Int,
+    out: ShortArray,
+): Int {
+    var filled = 0
+    while (filled < out.size) {
+        val n = read(out, filled, out.size - filled)
+        if (n <= 0) return filled
+        filled += n
+    }
+    return filled
+}

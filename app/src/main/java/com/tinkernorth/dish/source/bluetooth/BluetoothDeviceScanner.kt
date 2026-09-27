@@ -138,7 +138,6 @@ class BluetoothDeviceScanner(
         val mac = device.address ?: return
         val name = nameOf(device)
         synchronized(lock) {
-            // Drop broadcasts delivered after stop(): a stale receiver must not resurrect state.
             if (receiver == null) return
             // Bonded entries already carry the richer paired label; don't downgrade them.
             if (byMac[mac]?.bonded == true) return

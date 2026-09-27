@@ -11,6 +11,7 @@ import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.net.Inet4Address
+import java.net.InetAddress
 import java.util.concurrent.Executor
 import kotlin.coroutines.resume
 
@@ -74,11 +75,15 @@ suspend fun resolveNsdService(
  */
 fun hostAddress(info: NsdServiceInfo): String? =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-        val addresses = info.hostAddresses
-        (addresses.firstOrNull { it is Inet4Address } ?: addresses.firstOrNull())?.hostAddress
+        preferIpv4(info.hostAddresses)
     } else {
         legacyHostAddress(info)
     }
+
+internal fun preferIpv4(addresses: List<InetAddress>): String? {
+    val ipv4 = addresses.firstOrNull { it is Inet4Address }
+    return (ipv4 ?: addresses.firstOrNull())?.hostAddress
+}
 
 // API 34 resolves through a registered callback: the first update carries the host, and
 // the registration is dropped as soon as it has answered (or the caller gave up).

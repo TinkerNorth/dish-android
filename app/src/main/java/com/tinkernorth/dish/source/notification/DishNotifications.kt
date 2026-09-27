@@ -335,7 +335,7 @@ internal class MaterialSnackbarRenderer(
     }
 }
 
-private fun durationForMs(durationMs: Long): Int =
+internal fun durationForMs(durationMs: Long): Int =
     when {
         durationMs == DishNotification.DURATION_PERSISTENT -> Snackbar.LENGTH_INDEFINITE
         durationMs >= DishNotification.DURATION_LONG -> Snackbar.LENGTH_LONG

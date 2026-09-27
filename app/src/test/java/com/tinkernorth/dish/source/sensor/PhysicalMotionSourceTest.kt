@@ -34,7 +34,7 @@ class PhysicalMotionSourceTest {
     @Test
     fun `zero gyro maps to zero`() {
         val s =
-            PhysicalMotionSource.convertControllerSample(
+            convertControllerSample(
                 gyroX = 0f,
                 gyroY = 0f,
                 gyroZ = 0f,
@@ -51,7 +51,7 @@ class PhysicalMotionSourceTest {
     fun `gyro full scale maps to int16 max`() {
         val fullScaleRad = Math.toRadians(2000.0).toFloat()
         val s =
-            PhysicalMotionSource.convertControllerSample(
+            convertControllerSample(
                 gyroX = fullScaleRad,
                 gyroY = 0f,
                 gyroZ = 0f,
@@ -68,7 +68,7 @@ class PhysicalMotionSourceTest {
         val gy = Math.toRadians(-600.0).toFloat()
         val gz = Math.toRadians(1000.0).toFloat()
         val s =
-            PhysicalMotionSource.convertControllerSample(
+            convertControllerSample(
                 gyroX = gx,
                 gyroY = gy,
                 gyroZ = gz,
@@ -87,7 +87,7 @@ class PhysicalMotionSourceTest {
     @Test
     fun `accel triple passes through already-scaled`() {
         val s =
-            PhysicalMotionSource.convertControllerSample(
+            convertControllerSample(
                 gyroX = 0f,
                 gyroY = 0f,
                 gyroZ = 0f,
@@ -107,21 +107,21 @@ class PhysicalMotionSourceTest {
         val conn = fakeConn()
         val reachable = mapOf("9" to conn)
         val caps = mapOf("9" to caps(gyro = true, userMotion = true))
-        assertEquals(reachable, PhysicalMotionSource.filterByCapability(reachable, caps))
+        assertEquals(reachable, filterByCapability(reachable, caps))
     }
 
     @Test
     fun `filterByCapability drops a reachable slot whose pad has NO gyro`() {
         val reachable = mapOf("9" to fakeConn())
         val caps = mapOf("9" to caps(gyro = false, userMotion = true))
-        assertTrue(PhysicalMotionSource.filterByCapability(reachable, caps).isEmpty())
+        assertTrue(filterByCapability(reachable, caps).isEmpty())
     }
 
     @Test
     fun `filterByCapability drops a slot the user has toggled motion off for`() {
         val reachable = mapOf("9" to fakeConn())
         val caps = mapOf("9" to caps(gyro = true, userMotion = false))
-        assertTrue(PhysicalMotionSource.filterByCapability(reachable, caps).isEmpty())
+        assertTrue(filterByCapability(reachable, caps).isEmpty())
     }
 
     @Test
@@ -129,7 +129,7 @@ class PhysicalMotionSourceTest {
         // Startup race: reachability emits before the capability composer. Treat unknown as no-motion (safe).
         val reachable = mapOf("9" to fakeConn())
         val caps = emptyMap<String, SlotCapabilities>()
-        assertTrue(PhysicalMotionSource.filterByCapability(reachable, caps).isEmpty())
+        assertTrue(filterByCapability(reachable, caps).isEmpty())
     }
 
     @Test
@@ -139,28 +139,28 @@ class PhysicalMotionSourceTest {
         val conn = fakeConn()
         val reachable = mapOf("9" to conn)
         val caps = mapOf("9" to caps(gyro = true, userMotion = true))
-        assertEquals(reachable, PhysicalMotionSource.filterByCapability(reachable, caps))
+        assertEquals(reachable, filterByCapability(reachable, caps))
     }
 
     @Test
     fun `shouldEmitGyro returns true when the pad has no accelerometer`() {
         // Short-circuit: alternative is an indefinitely silent gyro stream when accel cache stays zero forever.
-        assertTrue(PhysicalMotionSource.shouldEmitGyro(hasAccelSensor = false, accelSeen = false))
+        assertTrue(shouldEmitGyro(hasAccelSensor = false, accelSeen = false))
     }
 
     @Test
     fun `shouldEmitGyro returns false on the first gyro before accel has reported`() {
-        assertFalse(PhysicalMotionSource.shouldEmitGyro(hasAccelSensor = true, accelSeen = false))
+        assertFalse(shouldEmitGyro(hasAccelSensor = true, accelSeen = false))
     }
 
     @Test
     fun `shouldEmitGyro returns true once accel has reported`() {
-        assertTrue(PhysicalMotionSource.shouldEmitGyro(hasAccelSensor = true, accelSeen = true))
+        assertTrue(shouldEmitGyro(hasAccelSensor = true, accelSeen = true))
     }
 
     @Test
     fun `shouldEmitGyro accel-sensor-absent path ignores accelSeen for safety`() {
-        assertTrue(PhysicalMotionSource.shouldEmitGyro(hasAccelSensor = false, accelSeen = true))
+        assertTrue(shouldEmitGyro(hasAccelSensor = false, accelSeen = true))
     }
 
     @Test
@@ -173,7 +173,7 @@ class PhysicalMotionSourceTest {
                 "A" to caps(gyro = true, userMotion = true),
                 "B" to caps(gyro = true, userMotion = false),
             )
-        val result = PhysicalMotionSource.filterByCapability(reachable, caps)
+        val result = filterByCapability(reachable, caps)
         assertEquals(mapOf("A" to connA), result)
     }
 
@@ -181,7 +181,7 @@ class PhysicalMotionSourceTest {
     fun `gyro beyond full scale clamps to the int16 range`() {
         val overRad = Math.toRadians(9000.0).toFloat()
         val s =
-            PhysicalMotionSource.convertControllerSample(
+            convertControllerSample(
                 gyroX = overRad,
                 gyroY = -overRad,
                 gyroZ = 0f,

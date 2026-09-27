@@ -16,7 +16,7 @@ class BluetoothPermissionBannerStore
     constructor(
         @ApplicationContext context: Context,
     ) : AbstractStateSource<Boolean>(
-            initialState = readInitial(context),
+            initialState = readBannerDismissed(context),
         ) {
         private val prefs: SharedPreferences =
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -29,10 +29,10 @@ class BluetoothPermissionBannerStore
         companion object {
             const val PREFS_NAME = "user_preferences"
             const val KEY_BANNER_DISMISSED = "bt_permission_banner_dismissed"
-
-            private fun readInitial(context: Context): Boolean =
-                context
-                    .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                    .getBoolean(KEY_BANNER_DISMISSED, false)
         }
     }
+
+private fun readBannerDismissed(context: Context): Boolean =
+    context
+        .getSharedPreferences(BluetoothPermissionBannerStore.PREFS_NAME, Context.MODE_PRIVATE)
+        .getBoolean(BluetoothPermissionBannerStore.KEY_BANNER_DISMISSED, false)

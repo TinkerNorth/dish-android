@@ -17,6 +17,10 @@ import com.tinkernorth.dish.core.net.DISH_PROTOCOL_CURRENT
 import com.tinkernorth.dish.core.net.DISH_PROTOCOL_MIN
 import com.tinkernorth.dish.core.net.DiscoveryGateway
 import com.tinkernorth.dish.core.net.HttpReply
+import com.tinkernorth.dish.core.net.PAIRING_KEY_BYTES
+import com.tinkernorth.dish.core.net.PAIRING_KEY_HEX_LEN
+import com.tinkernorth.dish.core.net.SESSION_SALT_BYTES
+import com.tinkernorth.dish.core.net.TOKEN_BYTES
 import com.tinkernorth.dish.core.net.deriveSessionKey
 import com.tinkernorth.dish.core.net.dishProtocolSpeakFor
 import com.tinkernorth.dish.core.net.hexToBytes
@@ -47,6 +51,8 @@ import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
+
+private const val EVENT_BUFFER = 8
 
 // USER_INITIATED surfaces failures; the silent intents rely on the row chip for feedback.
 enum class ConnectIntent { USER_INITIATED, AUTO_RECONNECT, RETRY_AFTER_DEATH }
@@ -109,7 +115,7 @@ class SatelliteConnectionManager
         private val _events =
             MutableSharedFlow<ConnectionEvent>(
                 replay = 0,
-                extraBufferCapacity = 8,
+                extraBufferCapacity = EVENT_BUFFER,
                 onBufferOverflow = BufferOverflow.DROP_OLDEST,
             )
         val events: SharedFlow<ConnectionEvent> = _events.asSharedFlow()
@@ -208,7 +214,9 @@ class SatelliteConnectionManager
         ): Int? {
             val token = runCatching { hexToBytes(tokenHex) }.getOrNull()
             val salt = runCatching { hexToBytes(saltHex) }.getOrNull()
-            if (token == null || token.size != 4 || salt == null || salt.size != 8) return null
+            val tokenIsWhole = token != null && token.size == TOKEN_BYTES
+            val saltIsWhole = salt != null && salt.size == SESSION_SALT_BYTES
+            if (!tokenIsWhole || !saltIsWhole) return null
             val sessionKey = deriveSessionKey(pairingKey, salt, token)
             val handle = controllerRepo.openSocket(server.ip, server.udpPort)
             if (handle < 0) return null
@@ -226,32 +234,34 @@ class SatelliteConnectionManager
             proof: String,
             descriptors: List<ControllerDescriptor>,
         ): NegotiatedPut? {
-            var speak = versionToSpeak(id) ?: return null
-            val putOnce: suspend (Int) -> HttpReply? = { version ->
-                runCatching {
-                    discoveryRepo.putSession(
-                        server.ip,
-                        server.httpPort,
-                        deviceId,
-                        deviceName,
-                        proof,
-                        ControllerDescriptor.arrayJson(descriptors),
-                        conn.wantsMouseControl(),
-                        version,
-                    )
-                }.getOrNull()
-            }
-            var reply = putOnce(speak)
-            if (reply?.status == HTTP_CONFLICT) {
-                val retryWith = protocolRetryVersion(reply.body)
-                if (retryWith != null) {
-                    speak = retryWith
-                    noteNegotiated(id, retryWith)
-                    reply = putOnce(retryWith)
-                }
-            }
-            return NegotiatedPut(reply, speak)
+            val offered = versionToSpeak(id) ?: return null
+            val firstReply = putSessionAt(conn, server, proof, descriptors, offered)
+            val retryWith = firstReply?.takeIf { it.status == HTTP_CONFLICT }?.let { protocolRetryVersion(it.body) }
+            if (retryWith == null) return NegotiatedPut(firstReply, offered)
+            noteNegotiated(id, retryWith)
+            val retryReply = putSessionAt(conn, server, proof, descriptors, retryWith)
+            return NegotiatedPut(retryReply, retryWith)
         }
+
+        private suspend fun putSessionAt(
+            conn: SatelliteConnection,
+            server: DiscoveredServer,
+            proof: String,
+            descriptors: List<ControllerDescriptor>,
+            version: Int,
+        ): HttpReply? =
+            runCatching {
+                discoveryRepo.putSession(
+                    server.ip,
+                    server.httpPort,
+                    deviceId,
+                    deviceName,
+                    proof,
+                    ControllerDescriptor.arrayJson(descriptors),
+                    conn.wantsMouseControl(),
+                    version,
+                )
+            }.getOrNull()
 
         // One pair round-trip at the version we'd speak, retried once when the 409
         // echoes a version this client also speaks. Callers keep their reply-shape
@@ -371,7 +381,6 @@ class SatelliteConnectionManager
             conn.updateServer(server)
             conn.markConnecting()
             scope.launch {
-                // Skip pair handshake if we have a pairing key. Failure surfaces as unreachable, not bogus PIN dialog.
                 if (store.satelliteSharedKey(id) != null) {
                     openSession(conn, server, intent)
                 } else {
@@ -558,8 +567,8 @@ class SatelliteConnectionManager
 
         private fun credentialsFor(id: String): Credentials? {
             val keyHex = store.satelliteSharedKey(id) ?: return null
-            val key = if (keyHex.length == 64) runCatching { hexToBytes(keyHex) }.getOrNull() else null
-            if (key == null || key.size != 32) return null
+            val key = if (keyHex.length == PAIRING_KEY_HEX_LEN) runCatching { hexToBytes(keyHex) }.getOrNull() else null
+            if (key == null || key.size != PAIRING_KEY_BYTES) return null
             return Credentials(key, hmacProof(key, deviceId))
         }
 
@@ -655,26 +664,33 @@ class SatelliteConnectionManager
                     mouseControlGranted = resp.hostFeatures.mouseControl.granted,
                 ),
                 SatelliteConnection.SessionCallbacks(
-                    onDead = {
-                        disconnect(conn.id)
-                        scheduleRetry(conn, server, ConnectIntent.RETRY_AFTER_DEATH)
-                    },
+                    onDead = { onSessionDead(conn, server) },
                     onClosedByServer = { reason -> handleServerClose(conn, server, reason) },
                     onReconcileNeeded = { scope.launch(ioDispatcher) { reconcile(conn, server) } },
                     onRekeyNeeded = { scope.launch(ioDispatcher) { rekey(conn, server) } },
-                    onApplyFailures = { failures ->
-                        scope.launch {
-                            _events.emit(
-                                ConnectionEvent.Error(
-                                    "Couldn't apply controller on ${server.name}: " +
-                                        failures.joinToString { "#${it.ctrlIdx}: ${it.result}" },
-                                ),
-                            )
-                        }
-                    },
+                    onApplyFailures = { failures -> reportApplyFailures(server.name, failures) },
                 ),
             )
             convergeSlotChangesSinceSnapshot(id, conn, descriptors)
+        }
+
+        // Heartbeat death: the tuple is torn down at once and the silent backoff owns the return.
+        private fun onSessionDead(
+            conn: SatelliteConnection,
+            server: DiscoveredServer,
+        ) {
+            disconnect(conn.id)
+            scheduleRetry(conn, server, ConnectIntent.RETRY_AFTER_DEATH)
+        }
+
+        private fun reportApplyFailures(
+            serverName: String,
+            failures: List<ControllerApplyDto>,
+        ) {
+            val detail = failures.joinToString { "#${it.ctrlIdx}: ${it.result}" }
+            scope.launch {
+                _events.emit(ConnectionEvent.Error("Couldn't apply controller on $serverName: $detail"))
+            }
         }
 
         private suspend fun convergeSlotChangesSinceSnapshot(
@@ -866,16 +882,7 @@ class SatelliteConnectionManager
         ) {
             val conn = live.conn
             conn.adoptEpoch(epoch)
-            conn.applyResults(listOf(result), onApplyFailures = { failures ->
-                scope.launch {
-                    _events.emit(
-                        ConnectionEvent.Error(
-                            "Couldn't apply controller on ${live.server.name}: " +
-                                failures.joinToString { "#${it.ctrlIdx}: ${it.result}" },
-                        ),
-                    )
-                }
-            })
+            conn.applyResults(listOf(result), onApplyFailures = { failures -> reportApplyFailures(live.server.name, failures) })
             if (conn.wantsMouseControl() != conn.mouseControlGranted) {
                 // The toggle changed the session-level desire, but the grant is
                 // only computed at session PUT (contract §hostFeatures).
@@ -981,18 +988,19 @@ class SatelliteConnectionManager
             _connections.update { it - id }
         }
 
-        // ── Prefs ─────────────────────────────────────────────────────────────
-
         private fun getOrCreateDeviceId(): String {
-            val p = context.getSharedPreferences("satellite", Context.MODE_PRIVATE)
-            return p.getString("deviceId", null) ?: java.util.UUID
+            val p = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            return p.getString(KEY_DEVICE_ID, null) ?: java.util.UUID
                 .randomUUID()
                 .toString()
                 .replace("-", "")
-                .also { p.edit { putString("deviceId", it) } }
+                .also { p.edit { putString(KEY_DEVICE_ID, it) } }
         }
 
         companion object {
+            private const val PREFS_NAME = "satellite"
+            private const val KEY_DEVICE_ID = "deviceId"
+
             private const val DISC_PORT = 9879
             private const val DISC_TIMEOUT_MS = 4000
 

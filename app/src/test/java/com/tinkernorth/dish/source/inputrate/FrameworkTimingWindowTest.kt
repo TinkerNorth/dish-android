@@ -3,7 +3,9 @@
 package com.tinkernorth.dish.source.inputrate
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FrameworkTimingWindowTest {
@@ -67,5 +69,18 @@ class FrameworkTimingWindowTest {
         store.disarm()
         store.record(1, 16, 17)
         assertEquals(1, store.summary(1)?.samples)
+    }
+
+    @Test
+    fun `an extra disarm cannot leave the store armed-negative`() {
+        val store = FrameworkInputTimingStore()
+        store.arm()
+        store.disarm()
+        store.disarm()
+        assertFalse(store.enabled)
+
+        store.arm()
+
+        assertTrue(store.enabled)
     }
 }

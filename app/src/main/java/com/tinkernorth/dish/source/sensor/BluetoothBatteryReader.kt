@@ -11,13 +11,12 @@ import android.util.Log
 class BluetoothBatteryReader(
     private val context: Context,
 ) {
-    private var batteryLevelMethod: java.lang.reflect.Method? = null
-
-    @Volatile private var resolved = false
+    // The hidden getBatteryLevel is looked up once per reader; a ROM without it reads null forever.
+    private val batteryLevelMethod: java.lang.reflect.Method? by lazy(::resolveBatteryLevelMethod)
 
     fun readLevel(inputDeviceName: String): Int? {
         val device = bondedDeviceNamed(inputDeviceName) ?: return null
-        val method = batteryLevelMethod() ?: return null
+        val method = batteryLevelMethod ?: return null
         return try {
             val raw = method.invoke(device) as? Int ?: return null
             raw.takeIf { it in 0..100 }
@@ -61,29 +60,25 @@ class BluetoothBatteryReader(
 
     private fun adapter(): BluetoothAdapter? = context.getSystemService(BluetoothManager::class.java)?.adapter
 
-    private fun batteryLevelMethod(): java.lang.reflect.Method? {
-        if (resolved) return batteryLevelMethod
-        batteryLevelMethod =
-            try {
-                BluetoothDevice::class.java.getMethod("getBatteryLevel")
-            } catch (e: NoSuchMethodException) {
-                Log.d(TAG, "getBatteryLevel not present on this ROM: ${e.message}")
-                null
-            }
-        resolved = true
-        return batteryLevelMethod
-    }
-
-    companion object {
-        private const val TAG = "BluetoothBatteryReader"
-
-        fun matchBondedDeviceName(
-            inputDeviceName: String,
-            bondedNames: Collection<String>,
-        ): String? {
-            val target = inputDeviceName.trim()
-            if (target.isEmpty()) return null
-            return bondedNames.firstOrNull { it.trim().equals(target, ignoreCase = true) }
+    private fun resolveBatteryLevelMethod(): java.lang.reflect.Method? =
+        try {
+            BluetoothDevice::class.java.getMethod("getBatteryLevel")
+        } catch (e: NoSuchMethodException) {
+            Log.d(TAG, "getBatteryLevel not present on this ROM: ${e.message}")
+            null
         }
+
+    private companion object {
+        const val TAG = "BluetoothBatteryReader"
     }
+}
+
+// The framework names a pad the way the bonded list does, give or take case and padding.
+internal fun matchBondedDeviceName(
+    inputDeviceName: String,
+    bondedNames: Collection<String>,
+): String? {
+    val target = inputDeviceName.trim()
+    if (target.isEmpty()) return null
+    return bondedNames.firstOrNull { it.trim().equals(target, ignoreCase = true) }
 }

@@ -13,11 +13,8 @@ class SatelliteHostFeaturesStore
     constructor() : AbstractStateSource<Map<String, HostFeatureSet>>(emptyMap()) {
         fun featuresFor(connectionId: String): HostFeatureSet? = state.value[connectionId]
 
-        // The catalog is the richer read and wins, with ONE exception: it has no `audio`
-        // fields to win with (those live on the capabilities probe, since they are the only
-        // runtime-switched host facts and the catalog is cached on version + locale). So a
-        // catalog write carries the probed audio verdict forward rather than erasing it —
-        // both directions, since a catalog that cannot speak for one cannot speak for either.
+        // The catalog is the richer read and wins, except for the audio verdict it has no fields
+        // for: that stays with the capabilities probe, so a catalog write carries it forward.
         fun setFeatures(
             connectionId: String,
             features: HostFeatureSet,
@@ -65,12 +62,8 @@ class SatelliteHostFeaturesStore
             }
         }
 
-        // The capabilities probe is the only document carrying the audio verdict, and a
-        // cached catalog may already have published this host, so setIfAbsent would drop it.
-        // Merged like noteProtocolVersion instead, and an unchanged PAIR writes nothing, so
-        // probing an old satellite never conjures an entry. Both directions ride one write
-        // because one document reports both: two setState calls would publish a host with
-        // the mic already moved and the speaker not, and every collector would see it.
+        // Merged like noteProtocolVersion, and both directions ride one write because one document
+        // reports both: two writes would publish a host with the mic moved and the speaker not.
         fun noteControllerAudio(
             connectionId: String,
             mic: Boolean,

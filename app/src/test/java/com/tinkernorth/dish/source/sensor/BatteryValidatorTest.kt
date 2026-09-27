@@ -14,46 +14,40 @@ class BatteryValidatorTest {
 
     @Test
     fun `first sample is emitted`() {
-        val v = BatteryValidator()
-        assertTrue(v.publish(BatterySample(75, BatteryValidator.STATUS_DISCHARGING), emit))
+        assertTrue(publishBatterySample(BatterySample(75, BatteryValidator.STATUS_DISCHARGING), emit))
         assertEquals(1, emitted.size)
         assertEquals(75, emitted[0].level)
     }
 
     @Test
     fun `every sample is forwarded, including unchanged ones`() {
-        // 30 s heartbeat: coalescing identical samples would prevent self-heal after a dropped UDP packet.
-        val v = BatteryValidator()
         val s = BatterySample(100, BatteryValidator.STATUS_WIRED)
-        assertTrue(v.publish(s, emit))
-        assertTrue(v.publish(s, emit))
-        assertTrue(v.publish(s, emit))
+        assertTrue(publishBatterySample(s, emit))
+        assertTrue(publishBatterySample(s, emit))
+        assertTrue(publishBatterySample(s, emit))
         assertEquals(3, emitted.size)
     }
 
     @Test
     fun `level change is forwarded`() {
-        val v = BatteryValidator()
-        v.publish(BatterySample(75, BatteryValidator.STATUS_DISCHARGING), emit)
-        assertTrue(v.publish(BatterySample(74, BatteryValidator.STATUS_DISCHARGING), emit))
-        assertTrue(v.publish(BatterySample(73, BatteryValidator.STATUS_DISCHARGING), emit))
+        publishBatterySample(BatterySample(75, BatteryValidator.STATUS_DISCHARGING), emit)
+        assertTrue(publishBatterySample(BatterySample(74, BatteryValidator.STATUS_DISCHARGING), emit))
+        assertTrue(publishBatterySample(BatterySample(73, BatteryValidator.STATUS_DISCHARGING), emit))
         assertEquals(3, emitted.size)
     }
 
     @Test
     fun `status change at the same level is forwarded`() {
-        val v = BatteryValidator()
-        v.publish(BatterySample(80, BatteryValidator.STATUS_DISCHARGING), emit)
-        assertTrue(v.publish(BatterySample(80, BatteryValidator.STATUS_CHARGING), emit))
+        publishBatterySample(BatterySample(80, BatteryValidator.STATUS_DISCHARGING), emit)
+        assertTrue(publishBatterySample(BatterySample(80, BatteryValidator.STATUS_CHARGING), emit))
         assertEquals(2, emitted.size)
         assertEquals(BatteryValidator.STATUS_CHARGING, emitted[1].status)
     }
 
     @Test
     fun `0xFF level is accepted as the unknown sentinel`() {
-        val v = BatteryValidator()
         assertTrue(
-            v.publish(
+            publishBatterySample(
                 BatterySample(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_CHARGING),
                 emit,
             ),
@@ -63,24 +57,21 @@ class BatteryValidatorTest {
 
     @Test
     fun `bogus level above 100 is rejected`() {
-        val v = BatteryValidator()
-        assertFalse(v.publish(BatterySample(101, BatteryValidator.STATUS_DISCHARGING), emit))
-        assertFalse(v.publish(BatterySample(254, BatteryValidator.STATUS_DISCHARGING), emit))
+        assertFalse(publishBatterySample(BatterySample(101, BatteryValidator.STATUS_DISCHARGING), emit))
+        assertFalse(publishBatterySample(BatterySample(254, BatteryValidator.STATUS_DISCHARGING), emit))
         assertEquals(0, emitted.size)
     }
 
     @Test
     fun `negative level is rejected`() {
-        val v = BatteryValidator()
-        assertFalse(v.publish(BatterySample(-1, BatteryValidator.STATUS_DISCHARGING), emit))
+        assertFalse(publishBatterySample(BatterySample(-1, BatteryValidator.STATUS_DISCHARGING), emit))
         assertEquals(0, emitted.size)
     }
 
     @Test
     fun `status outside the documented set is rejected`() {
-        val v = BatteryValidator()
-        assertFalse(v.publish(BatterySample(50, BatteryValidator.STATUS_MAX + 1), emit))
-        assertFalse(v.publish(BatterySample(50, -1), emit))
+        assertFalse(publishBatterySample(BatterySample(50, BatteryValidator.STATUS_MAX + 1), emit))
+        assertFalse(publishBatterySample(BatterySample(50, -1), emit))
         assertEquals(0, emitted.size)
     }
 
@@ -94,5 +85,6 @@ class BatteryValidatorTest {
         assertEquals(3, BatteryValidator.STATUS_FULL)
         assertEquals(4, BatteryValidator.STATUS_WIRED)
         assertEquals(30, BatteryValidator.REPORT_INTERVAL_SECONDS)
+        assertEquals(30_000L, BatteryValidator.REPORT_INTERVAL_MS)
     }
 }

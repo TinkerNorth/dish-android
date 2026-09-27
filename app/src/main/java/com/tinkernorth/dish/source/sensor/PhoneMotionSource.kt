@@ -94,7 +94,6 @@ class PhoneMotionSource(
     fun stop() {
         if (!started) return
         started = false
-        // Cancel tick BEFORE releasing the handler thread it posts to.
         stallTickRunnable?.let { stallTickHandler?.removeCallbacks(it) }
         stallTickRunnable = null
         stallTickHandler = null
@@ -160,21 +159,18 @@ class PhoneMotionSource(
     }
 
     private fun scheduleStallTick(handler: android.os.Handler) {
-        val tick =
-            Runnable {
-                if (!started) return@Runnable
-                val gap = nowMs() - lastGyroMonoMs
-                val next =
-                    if (lastGyroMonoMs == 0L || gap > STALL_WINDOW_MS) {
-                        MotionStreamState.Stalled
-                    } else {
-                        MotionStreamState.Streaming
-                    }
-                if (state.value != next) setState(next)
-                scheduleStallTick(handler)
-            }
+        val tick = Runnable { stallTick(handler) }
         stallTickRunnable = tick
         handler.postDelayed(tick, STALL_TICK_MS)
+    }
+
+    // One stall check: a gyro that has gone quiet reads Stalled until it reports again, and a
+    // tick that outlived stop() neither publishes nor re-arms.
+    internal fun stallTick(handler: android.os.Handler) {
+        if (!started) return
+        val next = deriveMotionStreamState(gyro != null, started, lastGyroMonoMs, nowMs())
+        if (state.value != next) setState(next)
+        scheduleStallTick(handler)
     }
 
     companion object {
@@ -186,21 +182,21 @@ class PhoneMotionSource(
         const val STALL_WINDOW_MS = 1500L
 
         const val STALL_TICK_MS = 500L
-
-        internal fun deriveState(
-            gyroPresent: Boolean,
-            started: Boolean,
-            lastGyroMonoMs: Long,
-            nowMonoMs: Long,
-        ): MotionStreamState =
-            when {
-                !gyroPresent -> MotionStreamState.Disabled
-                !started -> MotionStreamState.Stopped
-                lastGyroMonoMs == 0L -> MotionStreamState.Stalled
-                nowMonoMs - lastGyroMonoMs > STALL_WINDOW_MS -> MotionStreamState.Stalled
-                else -> MotionStreamState.Streaming
-            }
     }
 }
+
+internal fun deriveMotionStreamState(
+    gyroPresent: Boolean,
+    started: Boolean,
+    lastGyroMonoMs: Long,
+    nowMonoMs: Long,
+): MotionStreamState =
+    when {
+        !gyroPresent -> MotionStreamState.Disabled
+        !started -> MotionStreamState.Stopped
+        lastGyroMonoMs == 0L -> MotionStreamState.Stalled
+        nowMonoMs - lastGyroMonoMs > PhoneMotionSource.STALL_WINDOW_MS -> MotionStreamState.Stalled
+        else -> MotionStreamState.Streaming
+    }
 
 enum class MotionStreamState { Disabled, Stopped, Streaming, Stalled }

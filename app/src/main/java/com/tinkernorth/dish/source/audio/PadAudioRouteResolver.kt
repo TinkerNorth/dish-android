@@ -104,7 +104,7 @@ class PadAudioRouteResolver
             val ports =
                 manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).toList() +
                     manager.getDevices(AudioManager.GET_DEVICES_INPUTS).toList()
-            return ports.filter { isPluggedUsb(it.type) }.map {
+            return ports.filter { isPluggedUsbType(it.type, Build.VERSION.SDK_INT) }.map {
                 UsbAudioEndpoint(
                     deviceId = it.id,
                     productName = it.productName?.toString(),
@@ -115,13 +115,18 @@ class PadAudioRouteResolver
             }
         }
 
-        // TYPE_USB_ACCESSORY is this phone in accessory mode (a host driving US), not a pad we can
-        // route to, so it is deliberately absent. TYPE_USB_HEADSET is a 26+ classification.
-        private fun isPluggedUsb(type: Int): Boolean =
-            type == AudioDeviceInfo.TYPE_USB_DEVICE ||
-                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && type == AudioDeviceInfo.TYPE_USB_HEADSET)
-
         private companion object {
             const val TAG = "PadAudioRoutes"
         }
     }
+
+// TYPE_USB_ACCESSORY is this phone in accessory mode (a host driving US), not a pad we can route
+// to, so it is deliberately absent. TYPE_USB_HEADSET is a 26+ classification.
+internal fun isPluggedUsbType(
+    type: Int,
+    sdkInt: Int,
+): Boolean {
+    val isUsbDevice = type == AudioDeviceInfo.TYPE_USB_DEVICE
+    val isUsbHeadset = sdkInt >= Build.VERSION_CODES.O && type == AudioDeviceInfo.TYPE_USB_HEADSET
+    return isUsbDevice || isUsbHeadset
+}

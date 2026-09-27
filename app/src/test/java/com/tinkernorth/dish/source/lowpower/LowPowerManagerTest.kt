@@ -308,4 +308,44 @@ class LowPowerManagerTest {
         lpm.onLockStateChanged(active = true, streaming = true)
         verify { dimBody.visibility = View.VISIBLE }
     }
+
+    @Test
+    fun `a lock while already counting down does not restart the timer`() {
+        val inactivityHandler = mockk<Handler>(relaxed = true)
+        setPrivateField("inactivityHandler", inactivityHandler)
+        setStateDirect(LowPowerManager.State.COUNTDOWN)
+
+        lpm.onLockStateChanged(active = true)
+
+        verify(exactly = 0) { inactivityHandler.postDelayed(any(), any()) }
+        assertEquals(LowPowerManager.State.COUNTDOWN, lpm.state.value)
+    }
+
+    @Test
+    fun `a lock while already dimmed does not re-arm or reset`() {
+        val inactivityHandler = mockk<Handler>(relaxed = true)
+        setPrivateField("inactivityHandler", inactivityHandler)
+        setStateDirect(LowPowerManager.State.ACTIVE)
+
+        lpm.onLockStateChanged(active = true)
+
+        verify(exactly = 0) { inactivityHandler.postDelayed(any(), any()) }
+        assertEquals(LowPowerManager.State.ACTIVE, lpm.state.value)
+    }
+
+    @Test
+    fun `losing the lock cancels from any state`() {
+        val inactivityHandler = mockk<Handler>(relaxed = true)
+        val clockHandler = mockk<Handler>(relaxed = true)
+        setPrivateField("inactivityHandler", inactivityHandler)
+        setPrivateField("clockHandler", clockHandler)
+        for (state in LowPowerManager.State.entries) {
+            setStateDirect(state)
+
+            lpm.onLockStateChanged(active = false)
+
+            assertEquals("from $state", LowPowerManager.State.IDLE, lpm.state.value)
+        }
+        verify(atLeast = 3) { inactivityHandler.removeCallbacks(any()) }
+    }
 }

@@ -272,4 +272,21 @@ class MoonlightSessionFailureTest {
             assertEquals(1, manager.get(remembered.id)?.padCount)
             verify(exactly = 0) { gateway.getHttps(match { it.contains("/launch") }, any()) }
         }
+
+    @Test
+    fun `a paired host with no apps reports it instead of launching`() =
+        runTest(dispatcher) {
+            every { store.get(remembered.id) } returns remembered.copy(lastAppId = "", lastAppName = "")
+            every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply("""<root status_code="200"></root>""")
+            val seen = mutableListOf<MoonlightConnectionEvent>()
+            val collector = collectEvents(seen)
+
+            bindOnePad()
+
+            val error = seen.filterIsInstance<MoonlightConnectionEvent.Error>().single()
+            assertEquals("No apps available on PC.", error.message)
+            verify(exactly = 0) { gateway.getHttps(match { it.contains("/launch") }, any()) }
+            assertEquals(MoonlightSessionState.Idle, manager.get(remembered.id)?.state?.value)
+            collector.cancel()
+        }
 }

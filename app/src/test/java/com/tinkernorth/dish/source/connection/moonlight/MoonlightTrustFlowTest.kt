@@ -616,4 +616,13 @@ class MoonlightTrustFlowTest {
         // Anything longer than this is a subscription, not a scan.
         const val MAX_SCAN_MS = 10_000
     }
+
+    @Test
+    fun `remembering interest in an unknown host writes nothing`() =
+        runTest(dispatcher) {
+            manager.rememberInterest("moonlight:uid:ghost")
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertTrue(rows.isEmpty())
+        }
 }

@@ -261,8 +261,6 @@ class MoonlightConnection(
         rightY: Int,
     ) {
         val live = session ?: return
-        // Cache the frame so a touchpad-click edge (which arrives on the touch
-        // stream, not the pad report) can replay it with the click bit merged.
         val frame = PadFrame(buttons, leftTrigger, rightTrigger, leftX, leftY, rightX, rightY)
         lastPadFrames[controllerNumber] = frame
         if (controllerNumber in 0 until MAX_PADS) sentByNumber.incrementAndGet(controllerNumber)

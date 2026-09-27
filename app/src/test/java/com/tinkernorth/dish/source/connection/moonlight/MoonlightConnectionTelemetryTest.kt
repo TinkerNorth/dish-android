@@ -18,10 +18,13 @@ import com.tinkernorth.dish.core.net.moonlight.TOUCH_EVENT_DOWN
 import com.tinkernorth.dish.core.net.moonlight.TOUCH_EVENT_UP
 import com.tinkernorth.dish.source.connection.TouchpadReport
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
+import io.mockk.runs
 import io.mockk.verify
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -236,5 +239,57 @@ class MoonlightConnectionTelemetryTest {
                 rightStickY = 0,
             )
         }
+    }
+
+    private fun clickReport(pressed: Boolean) =
+        TouchpadReport(
+            finger0Active = false,
+            finger1Active = false,
+            buttonPressed = pressed,
+            rightPressed = false,
+            middlePressed = false,
+            finger0TrackingId = 0,
+            finger0X = 0,
+            finger0Y = 0,
+            finger1TrackingId = 0,
+            finger1X = 0,
+            finger1Y = 0,
+            eventTimeMs = 0L,
+            scrollDelta = 0,
+        )
+
+    // The click edge itself replays the cached frame with the bit set, once; the pad that takes the
+    // number afterwards reports without it.
+    @Test
+    fun `a released pad's click latch does not leak onto the next pad at that number`() {
+        val buttons = mutableListOf<Int>()
+        every { session.sendControllerState(any(), any(), capture(buttons), any(), any(), any(), any(), any(), any()) } just runs
+        conn.sendControllerState(0, buttons = 0, leftTrigger = 0, rightTrigger = 0, leftX = 0, leftY = 0, rightX = 0, rightY = 0)
+        conn.sendTouchpad("slot-a", clickReport(pressed = true))
+        conn.releasePad("slot-a")
+
+        conn.acquirePad("slot-b", PLAYSTATION, 0xFF, 0x10FFFF)
+        conn.sendControllerState(0, buttons = 0, leftTrigger = 0, rightTrigger = 0, leftX = 0, leftY = 0, rightX = 0, rightY = 0)
+
+        assertEquals(1, buttons.count { it == BTN_TOUCHPAD })
+        assertEquals(0, buttons.last())
+    }
+
+    @Test
+    fun `reportsSentFor counts only that controller's reports`() {
+        conn.sendControllerState(0, buttons = 0, leftTrigger = 0, rightTrigger = 0, leftX = 0, leftY = 0, rightX = 0, rightY = 0)
+        conn.sendControllerState(0, buttons = 0, leftTrigger = 0, rightTrigger = 0, leftX = 0, leftY = 0, rightX = 0, rightY = 0)
+
+        assertEquals(2L, conn.reportsSentFor(0))
+        assertEquals(0L, conn.reportsSentFor(1))
+        assertEquals(0L, conn.reportsSentFor(9))
+        assertEquals(0L, conn.reportsSentFor(-1))
+    }
+
+    @Test
+    fun `markLaunching on a live session is ignored`() {
+        conn.markLaunching()
+
+        assertEquals(MoonlightSessionState.Live, conn.state.value)
     }
 }

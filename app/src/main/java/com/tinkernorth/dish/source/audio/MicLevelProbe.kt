@@ -29,13 +29,8 @@ private const val FLOOR_DB = -60f
 
 internal fun level(window: ShortArray): MicProbeReading.Level {
     if (window.isEmpty()) return MicProbeReading.Level(rms = 0f, peak = 0f)
-    var peak = 0
-    var sumSquares = 0.0
-    for (s in window) {
-        val v = s.toInt()
-        if (abs(v) > peak) peak = abs(v)
-        sumSquares += v.toDouble() * v
-    }
+    val peak = window.maxOf { abs(it.toInt()) }
+    val sumSquares = window.sumOf { it.toDouble() * it }
     val scale = -Short.MIN_VALUE.toFloat()
     return MicProbeReading.Level(
         rms = (sqrt(sumSquares / window.size) / scale).toFloat(),

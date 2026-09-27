@@ -201,39 +201,39 @@ class PhysicalMotionSource
             return PadListener(deviceId, slotId, sensorManager, gyro, accel, handler)
         }
 
-        companion object {
-            private const val TAG = "PhysicalMotionSource"
-
-            internal fun shouldEmitGyro(
-                hasAccelSensor: Boolean,
-                accelSeen: Boolean,
-            ): Boolean = !hasAccelSensor || accelSeen
-
-            internal fun filterByCapability(
-                reachable: Map<String, TelemetrySink>,
-                caps: Map<String, SlotCapabilities>,
-            ): Map<String, TelemetrySink> =
-                reachable.filterKeys { slotId ->
-                    val cap = caps[slotId] ?: return@filterKeys false
-                    cap.inputOk(Feature.MOTION) && cap.userWants(Feature.MOTION)
-                }
-
-            // Identity axis remap: controller IMU body frame already matches wire convention.
-            fun convertControllerSample(
-                gyroX: Float,
-                gyroY: Float,
-                gyroZ: Float,
-                accelX: Short,
-                accelY: Short,
-                accelZ: Short,
-            ): MotionRateLimiter.MotionSample =
-                MotionRateLimiter.MotionSample(
-                    gyroX = gyroRadToWire(gyroX),
-                    gyroY = gyroRadToWire(gyroY),
-                    gyroZ = gyroRadToWire(gyroZ),
-                    accelX = accelX,
-                    accelY = accelY,
-                    accelZ = accelZ,
-                )
+        private companion object {
+            const val TAG = "PhysicalMotionSource"
         }
     }
+
+internal fun shouldEmitGyro(
+    hasAccelSensor: Boolean,
+    accelSeen: Boolean,
+): Boolean = !hasAccelSensor || accelSeen
+
+internal fun filterByCapability(
+    reachable: Map<String, TelemetrySink>,
+    caps: Map<String, SlotCapabilities>,
+): Map<String, TelemetrySink> =
+    reachable.filterKeys { slotId ->
+        val cap = caps[slotId] ?: return@filterKeys false
+        cap.inputOk(Feature.MOTION) && cap.userWants(Feature.MOTION)
+    }
+
+// Identity axis remap: controller IMU body frame already matches wire convention.
+internal fun convertControllerSample(
+    gyroX: Float,
+    gyroY: Float,
+    gyroZ: Float,
+    accelX: Short,
+    accelY: Short,
+    accelZ: Short,
+): MotionRateLimiter.MotionSample =
+    MotionRateLimiter.MotionSample(
+        gyroX = gyroRadToWire(gyroX),
+        gyroY = gyroRadToWire(gyroY),
+        gyroZ = gyroRadToWire(gyroZ),
+        accelX = accelX,
+        accelY = accelY,
+        accelZ = accelZ,
+    )
