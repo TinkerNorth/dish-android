@@ -11,29 +11,13 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
-import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
-import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.net.DishProtocolCompat
 import com.tinkernorth.dish.databinding.RowConnectionBinding
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.ui.common.setLoading
 import com.tinkernorth.dish.ui.common.statusChipText
-
-sealed interface SatelliteRow {
-    data class Known(
-        val summary: ConnectionSummary,
-        val compat: DishProtocolCompat = DishProtocolCompat.UNKNOWN,
-    ) : SatelliteRow
-
-    data class Discovered(
-        val server: DiscoveredServer,
-    ) : SatelliteRow
-
-    data class Empty(
-        val message: String,
-    ) : SatelliteRow
-}
+import com.tinkernorth.dish.ui.main.compatPillParts
 
 interface SatelliteRowListener {
     fun onConnect(row: SatelliteRow)
@@ -102,16 +86,14 @@ class SatelliteListAdapter(
             paintCompat(row.compat)
         }
 
-        // The primary button offers whatever the link state leaves to do: a live link
-        // disconnects, a stale one repairs, and a connecting one only shows its spinner.
         private fun bindPrimaryAction(row: SatelliteRow.Known) {
             val c = row.summary
-            when (c.live) {
-                LinkState.Connected, LinkState.Unstable -> {
+            when (primaryActionFor(c.live)) {
+                RowAction.DISCONNECT -> {
                     b.btnRowAction.setLoading(false, "", ctx.getString(R.string.action_disconnect))
                     b.btnRowAction.setOnClickListener { listener.onDisconnect(c.id) }
                 }
-                LinkState.Connecting -> {
+                RowAction.CONNECTING -> {
                     b.btnRowAction.setLoading(
                         true,
                         ctx.getString(R.string.chip_status_connecting),
@@ -119,11 +101,11 @@ class SatelliteListAdapter(
                     )
                     b.btnRowAction.setOnClickListener(null)
                 }
-                LinkState.Stale -> {
+                RowAction.REPAIR -> {
                     b.btnRowAction.setLoading(false, "", ctx.getString(R.string.action_repair_short))
                     b.btnRowAction.setOnClickListener { listener.onRepair(c.id) }
                 }
-                LinkState.Saved, LinkState.Ready, LinkState.Found -> {
+                RowAction.CONNECT -> {
                     b.btnRowAction.setLoading(false, "", ctx.getString(R.string.action_connect))
                     b.btnRowAction.setOnClickListener { listener.onConnect(row) }
                 }
@@ -137,25 +119,16 @@ class SatelliteListAdapter(
         }
 
         private fun paintCompat(compat: DishProtocolCompat) {
-            val spec =
-                when (compat) {
-                    DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE ->
-                        Triple(R.string.chip_satellite_update_available, R.drawable.bg_binding_pill_warn, R.color.colorTertiary)
-                    DishProtocolCompat.SATELLITE_UPDATE_REQUIRED ->
-                        Triple(R.string.chip_satellite_update_required, R.drawable.bg_binding_pill_error, R.color.colorError)
-                    DishProtocolCompat.APP_UPDATE_REQUIRED ->
-                        Triple(R.string.chip_app_update_required, R.drawable.bg_binding_pill_error, R.color.colorError)
-                    DishProtocolCompat.UNKNOWN, DishProtocolCompat.CURRENT -> null
-                }
-            if (spec == null) {
+            val parts = compatPillParts(compat)
+            if (parts == null) {
                 b.tvRowUpdate.visibility = View.GONE
                 return
             }
-            val (text, background, color) = spec
+            val (text, tone) = parts
             b.tvRowUpdate.visibility = View.VISIBLE
             b.tvRowUpdate.setText(text)
-            b.tvRowUpdate.setBackgroundResource(background)
-            b.tvRowUpdate.setTextColor(ctx.getColor(color))
+            b.tvRowUpdate.setBackgroundResource(tone.background)
+            b.tvRowUpdate.setTextColor(ctx.getColor(tone.foreground))
         }
 
         private fun bindDiscovered(row: SatelliteRow.Discovered) {

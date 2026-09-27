@@ -84,6 +84,36 @@ class StickHealthTest {
         assertNull(envelope(samples).circularityError)
     }
 
+    @Test
+    fun `a rim of zero magnitude gives no verdict`() {
+        val seen = BooleanArray(16) { true }
+        assertNull(circularityError(FloatArray(16), seen))
+    }
+
+    @Test
+    fun `the worst rail is the one the stick struggles to reach`() {
+        val e = Envelope(minX = -0.9f, maxX = 0.95f, minY = -0.7f, maxY = 0.92f, circularityError = null)
+        assertEquals(0.7f, worstReach(e), 1e-6f)
+    }
+
+    @Test
+    fun `a rail never reached in its own direction floors the reach at zero`() {
+        val e = Envelope(minX = 0.1f, maxX = 0.95f, minY = -0.7f, maxY = 0.92f, circularityError = null)
+        assertEquals(0f, worstReach(e), 1e-6f)
+    }
+
+    @Test
+    fun `a running capture counts whole seconds rounded up`() {
+        assertEquals(CaptureTick.Counting(3), captureTick(CaptureKind.DRIFT, leftMs = 2500L))
+        assertEquals(CaptureTick.Counting(1), captureTick(CaptureKind.RANGE, leftMs = 1L))
+    }
+
+    @Test
+    fun `a capture that ran out finishes as the kind it was`() {
+        assertEquals(CaptureTick.Finished(CaptureKind.DRIFT), captureTick(CaptureKind.DRIFT, leftMs = 0L))
+        assertEquals(CaptureTick.Finished(CaptureKind.RANGE), captureTick(CaptureKind.RANGE, leftMs = -40L))
+    }
+
     private fun circle(
         degrees: Double,
         radius: Float,

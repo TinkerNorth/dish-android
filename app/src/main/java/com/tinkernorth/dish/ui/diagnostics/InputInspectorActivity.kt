@@ -20,6 +20,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.databinding.ActivityInputInspectorBinding
+import com.tinkernorth.dish.databinding.InspectorAudioRowBinding
 import com.tinkernorth.dish.databinding.InspectorTestRowBinding
 import com.tinkernorth.dish.source.store.MIC_LED_OFF
 import com.tinkernorth.dish.source.store.MIC_LED_ON
@@ -51,21 +52,23 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
 
     private val deviceId: Int? get() = viewModel.deviceId
 
-    private enum class Capture { NONE, DRIFT, RANGE }
-
-    private var capture = Capture.NONE
+    private var capture: CaptureKind? = null
     private var captureEndsAtMs = 0L
     private val leftSamples = mutableListOf<StickSample>()
     private val rightSamples = mutableListOf<StickSample>()
 
     private val micPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            viewModel.refreshMicPermission()
-            when {
-                granted -> viewModel.startMicTest()
-                !shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) -> showMicPermissionBlocked()
-            }
+        registerForActivityResult(ActivityResultContracts.RequestPermission(), ::onMicPermissionResult)
+
+    // Android stops prompting after the second refusal, so a denial with no rationale left to
+    // show is the one the user can only undo in Settings.
+    private fun onMicPermissionResult(granted: Boolean) {
+        viewModel.refreshMicPermission()
+        when {
+            granted -> viewModel.startMicTest()
+            !shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) -> showMicPermissionBlocked()
         }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -102,8 +105,8 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
     }
 
     private fun wireStickCaptures() {
-        binding.btnDriftTest.setOnClickListener { startCapture(Capture.DRIFT, DRIFT_CAPTURE_MS) }
-        binding.btnRangeTest.setOnClickListener { startCapture(Capture.RANGE, RANGE_CAPTURE_MS) }
+        binding.btnDriftTest.setOnClickListener { startCapture(CaptureKind.DRIFT, DRIFT_CAPTURE_MS) }
+        binding.btnRangeTest.setOnClickListener { startCapture(CaptureKind.RANGE, RANGE_CAPTURE_MS) }
     }
 
     private fun observeViewModel() {
@@ -256,28 +259,37 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
     private fun renderMicTest(ui: MicTestUi) {
         val row = binding.rowMic
         when (ui) {
-            MicTestUi.Idle -> {
-                row.btnAudioAction.setText(R.string.inspector_mic_test)
-                row.barAudioLevel.visibility = View.GONE
-                row.tvAudioStatus.text = ""
-            }
-            is MicTestUi.Running -> {
-                row.btnAudioAction.setText(R.string.inspector_mic_stop)
-                row.barAudioLevel.visibility = View.VISIBLE
-                row.barAudioLevel.progress = ui.meterPercent
-                row.tvAudioStatus.text =
-                    if (ui.peakPercent == 0) {
-                        getString(R.string.inspector_mic_listening)
-                    } else {
-                        getString(R.string.inspector_mic_level, ui.meterPercent, ui.peakPercent)
-                    }
-            }
-            MicTestUi.Unavailable -> {
-                row.btnAudioAction.setText(R.string.inspector_mic_test)
-                row.barAudioLevel.visibility = View.GONE
-                row.tvAudioStatus.setText(R.string.inspector_mic_unavailable)
-            }
+            MicTestUi.Idle -> renderMicIdle(row)
+            is MicTestUi.Running -> renderMicRunning(row, ui)
+            MicTestUi.Unavailable -> renderMicUnavailable(row)
         }
+    }
+
+    private fun renderMicIdle(row: InspectorAudioRowBinding) {
+        row.btnAudioAction.setText(R.string.inspector_mic_test)
+        row.barAudioLevel.visibility = View.GONE
+        row.tvAudioStatus.text = ""
+    }
+
+    private fun renderMicRunning(
+        row: InspectorAudioRowBinding,
+        ui: MicTestUi.Running,
+    ) {
+        row.btnAudioAction.setText(R.string.inspector_mic_stop)
+        row.barAudioLevel.visibility = View.VISIBLE
+        row.barAudioLevel.progress = ui.meterPercent
+        row.tvAudioStatus.text =
+            if (ui.peakPercent == 0) {
+                getString(R.string.inspector_mic_listening)
+            } else {
+                getString(R.string.inspector_mic_level, ui.meterPercent, ui.peakPercent)
+            }
+    }
+
+    private fun renderMicUnavailable(row: InspectorAudioRowBinding) {
+        row.btnAudioAction.setText(R.string.inspector_mic_test)
+        row.barAudioLevel.visibility = View.GONE
+        row.tvAudioStatus.setText(R.string.inspector_mic_unavailable)
     }
 
     private fun renderSpeakerTest(ui: SpeakerTestUi) {
@@ -332,9 +344,9 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
 
     private fun tick() {
         val id = deviceId ?: return
-        val snapshot = InputSnapshot.parse(json, physicalInputNative.deviceStateJson(id)) ?: return
+        val snapshot = parseInputSnapshot(json, physicalInputNative.deviceStateJson(id)) ?: return
         renderLive(snapshot)
-        if (capture != Capture.NONE) tickCapture(snapshot)
+        capture?.let { tickCapture(it, snapshot) }
     }
 
     private fun renderLive(s: InputSnapshot) {
@@ -382,7 +394,7 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
     }
 
     private fun startCapture(
-        kind: Capture,
+        kind: CaptureKind,
         durationMs: Long,
     ) {
         capture = kind
@@ -390,25 +402,33 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         leftSamples.clear()
         rightSamples.clear()
         binding.tvTestResult.text = ""
-        if (kind == Capture.RANGE) {
+        if (kind == CaptureKind.RANGE) {
             binding.plotLeftStick.startTrail()
             binding.plotRightStick.startTrail()
         }
     }
 
-    private fun tickCapture(s: InputSnapshot) {
+    private fun tickCapture(
+        kind: CaptureKind,
+        s: InputSnapshot,
+    ) {
         leftSamples += s.leftSample()
         rightSamples += s.rightSample()
-        val leftMs = captureEndsAtMs - SystemClock.elapsedRealtime()
-        if (leftMs > 0) {
-            binding.tvTestResult.text = getString(R.string.inspector_capturing, (leftMs / 1000 + 1).toInt())
-            return
+        when (val tick = captureTick(kind, captureEndsAtMs - SystemClock.elapsedRealtime())) {
+            is CaptureTick.Counting -> binding.tvTestResult.text = getString(R.string.inspector_capturing, tick.secondsLeft)
+            is CaptureTick.Finished -> finishCapture(tick.kind)
         }
-        val kind = capture
-        capture = Capture.NONE
+    }
+
+    private fun finishCapture(kind: CaptureKind) {
+        capture = null
         binding.plotLeftStick.stopTrail()
         binding.plotRightStick.stopTrail()
-        binding.tvTestResult.text = if (kind == Capture.DRIFT) driftResult() else rangeResult()
+        binding.tvTestResult.text =
+            when (kind) {
+                CaptureKind.DRIFT -> driftResult()
+                CaptureKind.RANGE -> rangeResult()
+            }
     }
 
     private fun driftResult(): String {
@@ -438,9 +458,6 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
             right.circularityError?.let { percent(it) } ?: getString(R.string.inspector_na),
         )
     }
-
-    // The rail the stick struggles to reach is the one that matters in game.
-    private fun worstReach(e: Envelope): Float = minOf(-e.minX, e.maxX, -e.minY, e.maxY).coerceAtLeast(0f)
 
     private fun percent(fraction: Float): String = getString(R.string.inspector_percent, (fraction * 100).roundToInt())
 

@@ -100,6 +100,24 @@ class DiagnosticsViewModelTest {
         }
 
     @Test
+    fun `the latency panel carries the overview rows beside the probe state`() =
+        runTest(dispatcher.scheduler) {
+            val vm = viewModel()
+            val job = launch { vm.latencyPanel.collect {} }
+            dispatcher.scheduler.runCurrent()
+
+            val off = vm.latencyPanel.value
+            assertEquals(DiagnosticsViewModel.LatencyUi.Off, off.ui)
+            assertEquals(DiagnosticsViewModel.Overview.EMPTY.latencyRows, off.rows)
+
+            profilingEnabled.value = true
+            dispatcher.scheduler.runCurrent()
+
+            assertTrue(vm.latencyPanel.value.ui is DiagnosticsViewModel.LatencyUi.Stats)
+            job.cancel()
+        }
+
+    @Test
     fun `turning profiling off mid-run disarms the probe`() =
         runTest(dispatcher.scheduler) {
             profilingEnabled.value = true

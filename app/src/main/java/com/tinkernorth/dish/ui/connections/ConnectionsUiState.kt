@@ -6,8 +6,59 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.HostFeatureSet
+import com.tinkernorth.dish.core.net.DishProtocolCompat
 import com.tinkernorth.dish.core.net.dishProtocolCompatFor
+import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.source.connection.SatelliteConnection
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
+
+sealed interface SatelliteRow {
+    data class Known(
+        val summary: ConnectionSummary,
+        val compat: DishProtocolCompat = DishProtocolCompat.UNKNOWN,
+    ) : SatelliteRow
+
+    data class Discovered(
+        val server: DiscoveredServer,
+    ) : SatelliteRow
+
+    data class Empty(
+        val message: String,
+    ) : SatelliteRow
+}
+
+data class BtRowUi(
+    val summary: ConnectionSummary,
+    val connectingLabel: String?,
+    val secondaryIsForget: Boolean,
+)
+
+sealed interface BluetoothRow {
+    data class Item(
+        val ui: BtRowUi,
+    ) : BluetoothRow
+
+    data class Empty(
+        val message: String,
+    ) : BluetoothRow
+}
+
+/** Rows for the Moonlight-hosts section, the sibling of [SatelliteRow]. */
+sealed interface MoonlightRow {
+    data class Known(
+        val summary: ConnectionSummary,
+        val trust: MoonlightTrustState,
+        val controllerCount: Int,
+    ) : MoonlightRow
+
+    data class Discovered(
+        val host: MoonlightHost,
+    ) : MoonlightRow
+
+    data class Empty(
+        val message: String,
+    ) : MoonlightRow
+}
 
 data class ConnectionsUiState(
     val satelliteRows: List<SatelliteRow>,

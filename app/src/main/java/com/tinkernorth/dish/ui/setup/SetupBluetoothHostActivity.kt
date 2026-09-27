@@ -86,12 +86,14 @@ class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
 
     private fun observe() {
         observeWhileStarted(viewModel.state) { render(it) }
-        observeWhileStarted(viewModel.events) { event ->
-            when (event) {
-                is SetupBluetoothHostViewModel.Event.RequestDiscoverable -> requestDiscoverable()
-                is SetupBluetoothHostViewModel.Event.Done ->
-                    finishToDashboard(event.hostName, getString(typeTitleRes(event.profile)), event.bound)
-            }
+        observeWhileStarted(viewModel.events) { onEvent(it) }
+    }
+
+    private fun onEvent(event: SetupBluetoothHostViewModel.Event) {
+        when (event) {
+            is SetupBluetoothHostViewModel.Event.RequestDiscoverable -> requestDiscoverable()
+            is SetupBluetoothHostViewModel.Event.Done ->
+                finishToDashboard(event.hostName, getString(btHostTypeCopy(event.profile).titleRes), event.bound)
         }
     }
 
@@ -128,7 +130,7 @@ class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
             row.choiceIcon.setImageResource(R.drawable.ic_pc_monitor)
             row.choiceTitle.text = host.name
             row.choiceBadge.visibility = View.VISIBLE
-            row.choiceBadge.text = getString(typeBadgeRes(host.profile))
+            row.choiceBadge.text = getString(btHostTypeCopy(host.profile).badgeRes)
             row.choiceBody.setText(R.string.setup_bth_host_remembered)
             row.choiceCard.setOnClickListener { viewModel.onHostSelected(host) }
             container.addView(row.root)
@@ -146,13 +148,9 @@ class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
         card: SetupTypeCardBinding,
         profile: GamepadProfile,
     ) {
-        card.typeTitle.setText(typeTitleRes(profile))
-        card.typeGlyph.setImageResource(
-            when (profile) {
-                GamepadProfile.XBOX -> R.drawable.ic_ctrl_xbox
-                GamepadProfile.PLAYSTATION -> R.drawable.ic_ctrl_ds4
-            },
-        )
+        val copy = btHostTypeCopy(profile)
+        card.typeTitle.setText(copy.titleRes)
+        card.typeGlyph.setImageResource(copy.glyphRes)
         card.typeCard.setOnClickListener { viewModel.onTypeChosen(profile) }
     }
 
@@ -170,7 +168,8 @@ class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
 
     private fun renderAdvertising(state: SetupBluetoothHostViewModel.State) {
         val profile = state.advertisingProfile ?: return
-        binding.tvAdvertisingType.text = getString(R.string.setup_bth_advertising_type, getString(typeTitleRes(profile)))
+        binding.tvAdvertisingType.text =
+            getString(R.string.setup_bth_advertising_type, getString(btHostTypeCopy(profile).titleRes))
         binding.tvAdvertisingBody.text = getString(R.string.setup_bth_advertising_steps, profile.sdpName)
         binding.tvDiscoverable.setText(
             if (state.discoverable) R.string.setup_bth_discoverable_on else R.string.setup_bth_discoverable_waiting,
@@ -238,18 +237,6 @@ class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
         onboarding.markWelcomeCompleted()
         nav.finishSetupToDashboard()
     }
-
-    private fun typeTitleRes(profile: GamepadProfile): Int =
-        when (profile) {
-            GamepadProfile.XBOX -> R.string.setup_bth_type_xbox
-            GamepadProfile.PLAYSTATION -> R.string.setup_bth_type_playstation
-        }
-
-    private fun typeBadgeRes(profile: GamepadProfile): Int =
-        when (profile) {
-            GamepadProfile.XBOX -> R.string.setup_bth_badge_xbox
-            GamepadProfile.PLAYSTATION -> R.string.setup_bth_badge_playstation
-        }
 
     private fun visibleIf(condition: Boolean): Int = if (condition) View.VISIBLE else View.GONE
 

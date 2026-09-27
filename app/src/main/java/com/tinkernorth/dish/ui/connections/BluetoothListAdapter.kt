@@ -12,26 +12,9 @@ import androidx.recyclerview.widget.RecyclerView
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
-import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.databinding.RowConnectionBinding
 import com.tinkernorth.dish.ui.common.setLoading
 import com.tinkernorth.dish.ui.common.statusChipText
-
-data class BtRowUi(
-    val summary: ConnectionSummary,
-    val connectingLabel: String?,
-    val secondaryIsForget: Boolean,
-)
-
-sealed interface BluetoothRow {
-    data class Item(
-        val ui: BtRowUi,
-    ) : BluetoothRow
-
-    data class Empty(
-        val message: String,
-    ) : BluetoothRow
-}
 
 interface BluetoothRowListener {
     fun onConnect(id: String)
@@ -91,24 +74,22 @@ class BluetoothListAdapter(
             bindSecondaryAction(ui)
         }
 
-        // The primary button offers whatever the link state leaves to do: a live link
-        // disconnects, a stale one repairs, and a connecting one only shows its spinner.
         private fun bindPrimaryAction(ui: BtRowUi) {
             val c = ui.summary
-            when (c.live) {
-                LinkState.Connected, LinkState.Unstable -> {
+            when (primaryActionFor(c.live)) {
+                RowAction.DISCONNECT -> {
                     b.btnRowAction.setLoading(false, "", ctx.getString(R.string.action_disconnect))
                     b.btnRowAction.setOnClickListener { listener.onDisconnect(c.id) }
                 }
-                LinkState.Connecting -> {
+                RowAction.CONNECTING -> {
                     b.btnRowAction.setLoading(true, ui.connectingLabel.orEmpty(), ctx.getString(R.string.action_connect))
                     b.btnRowAction.setOnClickListener(null)
                 }
-                LinkState.Stale -> {
+                RowAction.REPAIR -> {
                     b.btnRowAction.setLoading(false, "", ctx.getString(R.string.action_repair_short))
                     b.btnRowAction.setOnClickListener { listener.onRepair(c.id) }
                 }
-                LinkState.Saved, LinkState.Ready, LinkState.Found -> {
+                RowAction.CONNECT -> {
                     b.btnRowAction.setLoading(false, "", ctx.getString(R.string.action_connect))
                     b.btnRowAction.setOnClickListener { listener.onConnect(c.id) }
                 }

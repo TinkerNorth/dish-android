@@ -67,11 +67,12 @@ class SetupBluetoothControllerActivity : BaseGamepadHostActivity() {
 
     private fun observe() {
         observeWhileStarted(viewModel.state) { render(it) }
-        observeWhileStarted(viewModel.events) { event ->
-            when (event) {
-                is SetupBluetoothControllerViewModel.Event.Proceed ->
-                    nav.toSetupConnection(INPUT_BLUETOOTH, event.slotId)
-            }
+        observeWhileStarted(viewModel.events) { onEvent(it) }
+    }
+
+    private fun onEvent(event: SetupBluetoothControllerViewModel.Event) {
+        when (event) {
+            is SetupBluetoothControllerViewModel.Event.Proceed -> nav.toSetupConnection(INPUT_BLUETOOTH, event.slotId)
         }
     }
 

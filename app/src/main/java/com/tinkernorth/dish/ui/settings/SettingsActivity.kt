@@ -88,14 +88,6 @@ class SettingsActivity : BaseGamepadHostActivity() {
         themePreferenceStore.setMode(mode)
     }
 
-    private fun themeModeForChip(chipId: Int?): ThemeMode? =
-        when (chipId) {
-            R.id.chipThemeLight -> ThemeMode.LIGHT
-            R.id.chipThemeDark -> ThemeMode.DARK
-            R.id.chipThemeSystem -> ThemeMode.SYSTEM
-            else -> null
-        }
-
     private fun bindDiagnosticsSection() {
         binding.cardRowDiagnostics.cardRowIcon.setImageResource(R.drawable.ic_bug)
         binding.cardRowDiagnostics.cardRowTitle.setText(R.string.settings_diagnostics_title)
@@ -124,11 +116,7 @@ class SettingsActivity : BaseGamepadHostActivity() {
         binding.cardOpenSourceLicenses.setOnClickListener { nav.toLicenses() }
     }
 
-    private fun privacyPolicyHost(): String =
-        getString(R.string.url_privacy_policy)
-            .removePrefix("https://")
-            .removePrefix("http://")
-            .removeSuffix("/")
+    private fun privacyPolicyHost(): String = hostOf(getString(R.string.url_privacy_policy))
 
     private fun bindCrashReportingSwitch() {
         // Observe-then-bind: opposite order would re-write the persisted preference on the first frame.
@@ -196,13 +184,7 @@ class SettingsActivity : BaseGamepadHostActivity() {
     }
 
     private fun chooseChip(mode: ThemeMode) {
-        val chipId =
-            when (mode) {
-                ThemeMode.LIGHT -> R.id.chipThemeLight
-                ThemeMode.DARK -> R.id.chipThemeDark
-                ThemeMode.SYSTEM -> R.id.chipThemeSystem
-            }
-        binding.chipGroupTheme.check(chipId)
+        binding.chipGroupTheme.check(chipForThemeMode(mode))
     }
 
     private fun formatVersion(): String = "${BuildConfig.VERSION_NAME} · build ${BuildConfig.VERSION_CODE}"

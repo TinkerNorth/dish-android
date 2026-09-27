@@ -14,12 +14,17 @@ import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
+import com.tinkernorth.dish.source.store.StickTestHistoryStore
+import com.tinkernorth.dish.source.store.StickTestRecord
+import com.tinkernorth.dish.source.system.WifiLink
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+
+private const val NINTENDO_VID = 0x057E
 
 class DiagnosticsMappersTest {
     private fun device(
@@ -183,6 +188,81 @@ class DiagnosticsMappersTest {
         assertNull(host.slots.single().slotIndex)
         assertNull(host.telemetry)
         assertNull(host.features)
+    }
+
+    private fun stateOf(device: PhysicalGamepadRegistry.Device): ControllerDiagState =
+        controllerDiags(world(devices = listOf(device)), touchpadMode).single { it.slotId == device.id.toString() }.state
+
+    @Test
+    fun `a pad needing a replug outranks a transition`() {
+        val device = device(3, "Pad").copy(needsReplug = true, transitioning = true, disconnectingTimeLeftSec = 2)
+        assertEquals(ControllerDiagState.NEEDS_REPLUG, stateOf(device))
+    }
+
+    @Test
+    fun `a restore-stuck or transitioning pad reads transitioning over disconnecting`() {
+        assertEquals(ControllerDiagState.TRANSITIONING, stateOf(device(3, "Pad").copy(restoreStuck = true, disconnectingTimeLeftSec = 2)))
+        assertEquals(ControllerDiagState.TRANSITIONING, stateOf(device(3, "Pad").copy(transitioning = true)))
+    }
+
+    @Test
+    fun `a pad counting down its disconnect reads disconnecting`() {
+        assertEquals(ControllerDiagState.DISCONNECTING, stateOf(device(3, "Pad").copy(disconnectingTimeLeftSec = 2)))
+    }
+
+    @Test
+    fun `a synthetic pad reports no quirks while its framework twin does`() {
+        val quirky = device(9, "Pro Controller", vid = NINTENDO_VID, pid = 0x2009)
+        val synthetic = quirky.copy(id = -9, isUsbSynthetic = true)
+        assertEquals(0, padFacts(synthetic, world()).quirkBits)
+        assertTrue(padFacts(quirky, world()).quirkBits != 0)
+    }
+
+    @Test
+    fun `stick history is looked up by the model key`() {
+        val device = device(3, "DualSense")
+        val record = StickTestRecord(driftAtMs = 5L, driftLeft = 0.1f)
+        val key = StickTestHistoryStore.keyFor(device.vendorId, device.productId, device.name)
+        val w = world().copy(pads = PadWorld(stickHistory = mapOf(key to record)))
+        assertEquals(record, padFacts(device, w).stickHistory)
+        assertNull(padFacts(device.copy(productId = 0x0DF2), w).stickHistory)
+    }
+
+    @Test
+    fun `no capabilities means no functions`() {
+        assertTrue(functionsOf(null).isEmpty())
+    }
+
+    private fun withWifi(
+        w: DiagnosticsWorld,
+        ipv4: String?,
+    ): DiagnosticsWorld =
+        w.copy(
+            radios =
+                RadioFacts.NONE.copy(
+                    wifi = WifiLink(rssiDbm = -50, linkSpeedMbps = 100, frequencyMhz = 5200, ipv4 = ipv4, prefixLength = 24),
+                ),
+        )
+
+    @Test
+    fun `a Bluetooth host has no subnet verdict`() {
+        val w = withWifi(world(), "192.168.1.10")
+        assertNull(sameSubnet(w, summary("bt", ConnectionKind.BLUETOOTH, emptyList())))
+    }
+
+    @Test
+    fun `a host is not judged without a wifi link or without an address in its detail`() {
+        val satellite = summary("sat", ConnectionKind.SATELLITE, emptyList()).copy(detail = "192.168.1.5:9876")
+        assertNull(sameSubnet(world(), satellite))
+        assertNull(sameSubnet(withWifi(world(), "192.168.1.10"), satellite.copy(detail = "no address here")))
+    }
+
+    @Test
+    fun `a host on the phone's prefix reads same network and one elsewhere does not`() {
+        val w = withWifi(world(), "192.168.1.10")
+        val near = summary("sat", ConnectionKind.SATELLITE, emptyList()).copy(detail = "192.168.1.5:9876")
+        assertEquals(true, sameSubnet(w, near))
+        assertEquals(false, sameSubnet(w, near.copy(detail = "10.0.0.5:9876")))
     }
 
     @Test

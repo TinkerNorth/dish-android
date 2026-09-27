@@ -47,3 +47,18 @@ private fun Context.moonlightNetworkLines(host: HostDiag): List<String> {
             ?: getString(R.string.diagnostics_unknown)
     return listOf(diagKv(R.string.diagnostics_control_round_trip, rtt))
 }
+
+internal fun Context.hostLatencyValue(row: HostLatencyRow): String {
+    val value =
+        when (val figure = hostLatencyFigure(row)) {
+            is HostLatencyFigure.ControlRoundTrip -> getString(R.string.diagnostics_ms_whole, figure.ms)
+            is HostLatencyFigure.OneWay ->
+                getString(
+                    R.string.diagnostics_ms_approx_window,
+                    figure.ms,
+                    resources.getQuantityString(R.plurals.diagnostics_last_pings, figure.samples, figure.samples),
+                )
+            HostLatencyFigure.Unknown -> getString(R.string.diagnostics_unknown)
+        }
+    return getString(R.string.diagnostics_joined, row.label, value)
+}

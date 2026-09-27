@@ -43,17 +43,15 @@ data class InputSnapshot(
 
     companion object {
         const val AXIS_SCALE = 32768f
-
-        fun parse(
-            json: Json,
-            raw: String,
-        ): InputSnapshot? =
-            if (raw.isEmpty()) {
-                null
-            } else {
-                runCatching { json.decodeFromString(serializer(), raw) }.getOrNull()
-            }
     }
+}
+
+fun parseInputSnapshot(
+    json: Json,
+    raw: String,
+): InputSnapshot? {
+    if (raw.isEmpty()) return null
+    return runCatching { json.decodeFromString(InputSnapshot.serializer(), raw) }.getOrNull()
 }
 
 // Wire XUSB button bits (mirror of gamepad_input.h): what the snapshot's `buttons` mask means.

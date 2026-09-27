@@ -127,3 +127,14 @@ internal fun Context.bluetoothHostLines(host: HostDiag): List<String> {
     lines += diagKv(R.string.diagnostics_reports_sent, (host.bluetooth?.reportsSent ?: 0L).toString())
     return lines
 }
+
+// The host card on the diagnostics overview: transport, link, the satellite's own facts, and
+// one entry per bound slot.
+internal fun Context.hostCardLines(host: HostDiag): List<String> {
+    val lines = mutableListOf<String>()
+    lines += diagKv(R.string.diagnostics_transport, kindLabel(host.kind))
+    lines += diagKv(R.string.diagnostics_link, getString(statusChipTextRes(host.live)))
+    if (host.kind == ConnectionKind.SATELLITE) lines += satelliteHostLines(host)
+    host.slots.forEach { lines += hostSlotLines(host.kind, it, host.btProfile) }
+    return lines
+}

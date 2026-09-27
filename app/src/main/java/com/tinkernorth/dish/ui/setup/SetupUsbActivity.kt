@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.view.View
 import androidx.activity.addCallback
 import androidx.activity.viewModels
-import androidx.annotation.StringRes
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivitySetupUsbBinding
 import com.tinkernorth.dish.databinding.SetupChoiceRowBinding
@@ -47,12 +46,13 @@ class SetupUsbActivity : BaseGamepadHostActivity() {
 
     private fun observe() {
         observeWhileStarted(viewModel.state) { render(it) }
-        observeWhileStarted(viewModel.events) { event ->
-            when (event) {
-                is SetupUsbViewModel.Event.Proceed ->
-                    nav.toSetupConnection(INPUT_USB, event.slotId)
-                is SetupUsbViewModel.Event.Recover -> showRecovery(event.reason)
-            }
+        observeWhileStarted(viewModel.events) { onEvent(it) }
+    }
+
+    private fun onEvent(event: SetupUsbViewModel.Event) {
+        when (event) {
+            is SetupUsbViewModel.Event.Proceed -> nav.toSetupConnection(INPUT_USB, event.slotId)
+            is SetupUsbViewModel.Event.Recover -> showRecovery(event.reason)
         }
     }
 
@@ -115,23 +115,16 @@ class SetupUsbActivity : BaseGamepadHostActivity() {
     // Retry re-runs whichever mode the user is on (Direct from the grant step, Standard otherwise);
     // start over / exit are handled by the dialog.
     private fun showRecovery(reason: DirectClaimFailure?) {
-        val message = reason?.let { getString(reasonText(it)) }
-        show(this, message) {
-            when (viewModel.state.value.stage) {
-                SetupUsbViewModel.Stage.GRANTING -> viewModel.showPrompt()
-                else -> viewModel.chooseStandard()
-            }
-        }
+        val message = reason?.let { getString(directFailureReasonRes(it)) }
+        show(this, message) { retryAfterRecovery() }
     }
 
-    @StringRes
-    private fun reasonText(reason: DirectClaimFailure): Int =
-        when (reason) {
-            DirectClaimFailure.Busy -> R.string.path_reason_busy
-            DirectClaimFailure.InitFailed -> R.string.path_reason_init_failed
-            DirectClaimFailure.PermissionDenied -> R.string.path_reason_permission_denied
-            DirectClaimFailure.Dropped -> R.string.path_needs_replug
+    private fun retryAfterRecovery() {
+        when (viewModel.state.value.stage) {
+            SetupUsbViewModel.Stage.GRANTING -> viewModel.showPrompt()
+            else -> viewModel.chooseStandard()
         }
+    }
 
     private fun visibleIf(condition: Boolean): Int = if (condition) View.VISIBLE else View.GONE
 }

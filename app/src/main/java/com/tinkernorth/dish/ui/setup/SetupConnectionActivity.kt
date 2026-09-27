@@ -11,7 +11,6 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
-import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.LinkTier
 import com.tinkernorth.dish.composer.linkTierFor
 import com.tinkernorth.dish.core.model.DiscoveredServer
@@ -28,6 +27,7 @@ import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.paintTierBadge
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.connections.PairPinDialog
+import com.tinkernorth.dish.ui.connections.pairSubtitleRes
 import com.tinkernorth.dish.ui.main.bindCompat
 import com.tinkernorth.dish.ui.main.chipTextRes
 import dagger.hilt.android.AndroidEntryPoint
@@ -59,17 +59,20 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
     private var onLocalNetworkGranted: (() -> Unit)? = null
 
     private val localNetworkPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            val resume = onLocalNetworkGranted
-            onLocalNetworkGranted = null
-            if (granted) {
-                resume?.invoke()
-            } else {
-                show(this, getString(R.string.setup_conn_local_network_denied)) {
-                    withLocalNetwork(resume ?: { viewModel.startDiscovery() })
-                }
-            }
+        registerForActivityResult(ActivityResultContracts.RequestPermission(), ::onLocalNetworkPermission)
+
+    // A refusal keeps the action the user was after, so Retry on the sheet asks again for it.
+    private fun onLocalNetworkPermission(granted: Boolean) {
+        val resume = onLocalNetworkGranted
+        onLocalNetworkGranted = null
+        if (granted) {
+            resume?.invoke()
+            return
         }
+        show(this, getString(R.string.setup_conn_local_network_denied)) {
+            withLocalNetwork(resume ?: { viewModel.startDiscovery() })
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -123,12 +126,14 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
 
     private fun observe() {
         observeWhileStarted(viewModel.state) { render(it) }
-        observeWhileStarted(viewModel.events) { event ->
-            when (event) {
-                is SetupConnectionViewModel.Event.ShowPairing -> pairing.show(event.server)
-                is SetupConnectionViewModel.Event.Connected -> onConnected(event.hostId)
-                is SetupConnectionViewModel.Event.Error -> onConnectionError(event.message)
-            }
+        observeWhileStarted(viewModel.events) { onEvent(it) }
+    }
+
+    private fun onEvent(event: SetupConnectionViewModel.Event) {
+        when (event) {
+            is SetupConnectionViewModel.Event.ShowPairing -> pairing.show(event.server)
+            is SetupConnectionViewModel.Event.Connected -> onConnected(event.hostId)
+            is SetupConnectionViewModel.Event.Error -> onConnectionError(event.message)
         }
     }
 
@@ -186,21 +191,12 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
         state.hosts.forEach { host ->
             val row = SetupHostRowBinding.inflate(layoutInflater, list, false)
             row.hostName.text = host.name.ifBlank { getString(R.string.setup_conn_host_unnamed) }
-            row.hostStatus.setText(statusFor(host.link))
+            row.hostStatus.setText(hostStatusRes(host.link))
             row.hostUpdatePill.bindCompat(host.compat)
             row.hostCard.setOnClickListener { viewModel.onHostTapped(host.id) }
             list.addView(row.root)
         }
     }
-
-    @StringRes
-    private fun statusFor(link: LinkState): Int =
-        when (link) {
-            LinkState.Connecting -> R.string.setup_conn_status_reconnecting
-            LinkState.Connected, LinkState.Unstable -> R.string.setup_conn_status_connected
-            LinkState.Stale -> R.string.setup_conn_status_needs_pairing
-            LinkState.Ready, LinkState.Found, LinkState.Saved -> R.string.setup_conn_status_ready
-        }
 
     private fun onConnected(hostId: String) {
         pairing.dismiss()
@@ -281,11 +277,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
             viewModel.pairWithPin(target, pin)
         }
 
-        private fun subtitleFor(target: DiscoveredServer): String {
-            val isNamed = target.name.isNotEmpty()
-            if (isNamed) return getString(R.string.pair_dialog_subtitle_named, target.name)
-            return getString(R.string.pair_dialog_subtitle)
-        }
+        private fun subtitleFor(target: DiscoveredServer): String = getString(pairSubtitleRes(target.name), target.name)
 
         // Only the dialog still on screen may clear the fields; a late dismiss from a replaced one
         // must not wipe the new attempt.

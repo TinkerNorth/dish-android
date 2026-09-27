@@ -29,4 +29,16 @@ class StickPlotMappingTest {
         assertEquals(0.5f, stickPlotFractionX(0f), 1e-6f)
         assertEquals(0.5f, stickPlotFractionY(0f), 1e-6f)
     }
+
+    // The touch plot draws the wire direct: MSG_TOUCHPAD is down-positive like the screen.
+    @Test
+    fun `wire min is the left edge and wire max the right`() {
+        assertEquals(0f, touchPlotFraction(-32768), 1e-6f)
+        assertEquals(1f, touchPlotFraction(32767), 1e-6f)
+    }
+
+    @Test
+    fun `a wire zero touch sits at the middle of the surface`() {
+        assertEquals(0.5f, touchPlotFraction(0), 1e-4f)
+    }
 }

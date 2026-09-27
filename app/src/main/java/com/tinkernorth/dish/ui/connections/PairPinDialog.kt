@@ -82,7 +82,7 @@ class PairPinDialog(
 
     private fun submitTypedPin() {
         val pin = binding.etPin.text.toString()
-        if (pin.isEmpty()) {
+        if (!isValidPin(pin)) {
             showError(context.getString(R.string.pair_dialog_error_empty))
             binding.etPin.requestFocus()
             return

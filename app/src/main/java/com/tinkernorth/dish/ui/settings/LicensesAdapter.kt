@@ -30,7 +30,6 @@ class LicensesAdapter(
         position: Int,
     ) {
         val entry = items[position]
-        val ctx = holder.itemView.context
         holder.binding.tvLibraryName.text =
             entry.name?.takeIf { it.isNotBlank() }
                 ?: listOfNotNull(entry.group, entry.artifact).joinToString(":")
@@ -49,17 +48,25 @@ class LicensesAdapter(
         }
 
         val clickUrl = entry.licenses.firstOrNull()?.url ?: entry.url
-        if (!clickUrl.isNullOrBlank()) {
-            holder.itemView.isClickable = true
-            holder.itemView.isFocusable = true
-            holder.itemView.contentDescription =
-                ctx.getString(R.string.licenses_open_external, holder.binding.tvLibraryName.text)
-            holder.itemView.setOnClickListener { onClick(entry) }
-        } else {
-            holder.itemView.isClickable = false
-            holder.itemView.isFocusable = false
-            holder.itemView.setOnClickListener(null)
-        }
+        if (clickUrl.isNullOrBlank()) bindInert(holder) else bindClickable(holder, entry)
+    }
+
+    private fun bindClickable(
+        holder: VH,
+        entry: LicenseEntry,
+    ) {
+        val ctx = holder.itemView.context
+        holder.itemView.isClickable = true
+        holder.itemView.isFocusable = true
+        holder.itemView.contentDescription =
+            ctx.getString(R.string.licenses_open_external, holder.binding.tvLibraryName.text)
+        holder.itemView.setOnClickListener { onClick(entry) }
+    }
+
+    private fun bindInert(holder: VH) {
+        holder.itemView.isClickable = false
+        holder.itemView.isFocusable = false
+        holder.itemView.setOnClickListener(null)
     }
 
     override fun getItemCount(): Int = items.size

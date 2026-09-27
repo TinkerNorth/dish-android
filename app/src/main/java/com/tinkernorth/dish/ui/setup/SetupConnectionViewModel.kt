@@ -34,6 +34,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+private const val EVENT_BUFFER = 4
+
 // Stage 3 destination. Thin orchestration over SatelliteConnectionManager:
 // 3A is a local path pick; 3B drives discovery + the manager's connect/auto-
 // reconnect; 3C reuses PairPinDialog and the manager's pairWithPin/requestApproval.
@@ -96,7 +98,7 @@ class SetupConnectionViewModel
         private val _state = MutableStateFlow(State())
         val state: StateFlow<State> = _state.asStateFlow()
 
-        private val _events = MutableSharedFlow<Event>(extraBufferCapacity = 4)
+        private val _events = MutableSharedFlow<Event>(extraBufferCapacity = EVENT_BUFFER)
         val events: SharedFlow<Event> = _events.asSharedFlow()
 
         // Hosts we've kicked an auto-reconnect for, so a remembered host that
@@ -217,11 +219,8 @@ class SetupConnectionViewModel
                     satellite.connect(host.server, ConnectIntent.AUTO_RECONNECT)
                 }
             }
-            // Promote to configure only for the host the user actually drove
-            // (tapped or paired -> pendingHostId). A background auto-reconnect
-            // going live on its own must not yank the user forward, and
-            // re-entering with a satellite already connected must not skip the
-            // picker entirely.
+            // Only the host the user drove (tapped or paired) hands off; a background reconnect
+            // going live must not yank the user forward.
             val target = hosts.firstOrNull { it.id == pendingHostId && it.link.isLive() }
             if (target != null) {
                 pendingHostId = null

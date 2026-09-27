@@ -20,12 +20,14 @@ fun AppCompatActivity.wireSetupSkip(
 ) {
     val skip = layoutInflater.inflate(R.layout.view_setup_skip_button, toolbar, false)
     toolbar.addView(skip)
-    skip.setOnClickListener {
-        onboarding.markWelcomeCompleted()
-        startActivity(
-            Intent(this, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
-        )
-        finish()
-    }
+    skip.setOnClickListener { skipToDashboard(onboarding) }
+}
+
+private fun AppCompatActivity.skipToDashboard(onboarding: OnboardingPreferenceStore) {
+    onboarding.markWelcomeCompleted()
+    startActivity(
+        Intent(this, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+    )
+    finish()
 }

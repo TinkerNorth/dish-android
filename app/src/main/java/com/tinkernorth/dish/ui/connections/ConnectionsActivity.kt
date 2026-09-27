@@ -16,9 +16,9 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.annotation.StringRes
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -31,8 +31,6 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
-import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.textfield.TextInputLayout
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
@@ -41,7 +39,6 @@ import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.linkTierFor
 import com.tinkernorth.dish.core.input.GamepadProfile
 import com.tinkernorth.dish.core.model.DiscoveredServer
-import com.tinkernorth.dish.core.model.DiscoverySource
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.databinding.ActivityConnectionsBinding
 import com.tinkernorth.dish.repository.ConnectionStore
@@ -79,7 +76,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.util.Locale
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -181,14 +177,13 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     private var addAfterPermission = false
 
-    private var discoverabilityExpiryJob: kotlinx.coroutines.Job? = null
+    private var discoverabilityExpiryJob: Job? = null
 
     // Set before launching the discoverability prompt so the result routes back to the active
     // caller (the new wait-for-host-first flow), bypassing the legacy pendingBtRegistration path.
-    private var onDiscoverableResult: ((granted: Boolean, durationSec: Int) -> Unit)? = null
+    private var discoverableCallback: ((granted: Boolean, durationSec: Int) -> Unit)? = null
 
     private val satellitePairing = SatellitePairing()
-    private val addHostDialogs = AddHostDialogs()
 
     // Nothing the user presses here may end in a shrug: a row whose button does nothing
     // is indistinguishable from a broken app, and used to be exactly that.
@@ -229,52 +224,52 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     private var moonlightPairingJob: Job? = null
 
     private val btPermissionLauncher =
-        registerForActivityResult(
-            ActivityResultContracts.RequestMultiplePermissions(),
-        ) { _ ->
-            btPermissionState.refresh()
-            val continueToAdd = addAfterPermission
-            addAfterPermission = false
-            if (continueToAdd && !btPermissionState.state.value.connectMissing) {
-                showProfilePicker()
-            }
-        }
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { _ -> onBtPermissionResult() }
 
     private val btDiscoverableLauncher =
-        registerForActivityResult(
-            ActivityResultContracts.StartActivityForResult(),
-        ) { result ->
-            val granted = result.resultCode != Activity.RESULT_CANCELED
-            // RESULT_OK for this intent carries the granted duration in seconds; fall back to our request.
-            val durationSec = if (result.resultCode > 0) result.resultCode else DISCOVERABLE_SECONDS
-            val callback = onDiscoverableResult
-            onDiscoverableResult = null
-            if (callback != null) {
-                callback(granted, durationSec)
-                return@registerForActivityResult
-            }
-            val pending = pendingBtRegistration
-            pendingBtRegistration = null
-            if (!granted || pending == null) {
-                notifyDiscoverabilityDenied()
-                return@registerForActivityResult
-            }
-            btRegistry.start(pending.tempId, pending.profile, pending.autoConnectMac)
-            armDiscoverabilityExpiryTimer(pending.tempId)
-        }
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult(), ::onDiscoverableResult)
 
     private val localNetworkPermissionLauncher =
-        registerForActivityResult(
-            ActivityResultContracts.RequestPermission(),
-        ) { granted ->
-            if (granted) {
-                dismissLocalNetworkBanner()
-                satellite.startDiscovery()
-                moonlight.startDiscovery()
-            } else {
-                showLocalNetworkBanner()
-            }
+        registerForActivityResult(ActivityResultContracts.RequestPermission(), ::onLocalNetworkPermission)
+
+    private fun onBtPermissionResult() {
+        btPermissionState.refresh()
+        val continueToAdd = addAfterPermission
+        addAfterPermission = false
+        if (continueToAdd && !btPermissionState.state.value.connectMissing) {
+            showProfilePicker()
         }
+    }
+
+    private fun onDiscoverableResult(result: ActivityResult) {
+        val granted = result.resultCode != Activity.RESULT_CANCELED
+        // RESULT_OK for this intent carries the granted duration in seconds; fall back to our request.
+        val durationSec = if (result.resultCode > 0) result.resultCode else DISCOVERABLE_SECONDS
+        val callback = discoverableCallback
+        discoverableCallback = null
+        if (callback != null) {
+            callback(granted, durationSec)
+            return
+        }
+        val pending = pendingBtRegistration
+        pendingBtRegistration = null
+        if (!granted || pending == null) {
+            notifyDiscoverabilityDenied()
+            return
+        }
+        btRegistry.start(pending.tempId, pending.profile, pending.autoConnectMac)
+        armDiscoverabilityExpiryTimer(pending.tempId)
+    }
+
+    private fun onLocalNetworkPermission(granted: Boolean) {
+        if (granted) {
+            dismissLocalNetworkBanner()
+            satellite.startDiscovery()
+            moonlight.startDiscovery()
+        } else {
+            showLocalNetworkBanner()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -466,7 +461,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 R.string.section_satellites,
                 R.string.action_add,
                 tier = linkTierFor(ConnectionKind.SATELLITE),
-            ) { addHostDialogs.showSatellite() }
+            ) { showAddSatelliteDialog() }
         bluetoothHeader =
             SectionHeaderAdapter(
                 R.drawable.ic_bluetooth,
@@ -480,7 +475,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 R.string.section_moonlight_hosts,
                 R.string.action_add,
                 tier = linkTierFor(ConnectionKind.MOONLIGHT),
-            ) { addHostDialogs.showMoonlight() }
+            ) { showAddMoonlightDialog() }
     }
 
     // Narrow layouts stack every section in one scroller, dividers included.
@@ -523,30 +518,13 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         )
     }
 
-    private fun satelliteEmptyMessage(lastScanAtMs: Long?): String {
-        val lastScan = lastScanAtMs ?: return getString(R.string.discovery_empty_never_scanned)
-        return getString(R.string.discovery_empty_no_results, formatClock(lastScan))
-    }
-
-    private fun btConnectingLabel(id: String): String {
-        val state = btRegistry.state(id)
-        return when {
-            state.registered -> getString(R.string.bt_row_pair_from_host)
-            state.acquiring -> getString(R.string.bt_row_acquiring)
-            else -> getString(R.string.bt_row_waiting)
+    private fun satelliteEmptyMessage(lastScanAtMs: Long?): String =
+        when (val copy = discoveryEmptyCopy(lastScanAtMs)) {
+            DiscoveryEmptyCopy.NeverScanned -> getString(R.string.discovery_empty_never_scanned)
+            is DiscoveryEmptyCopy.NoResultsAt -> getString(R.string.discovery_empty_no_results, copy.clock)
         }
-    }
 
-    private fun formatClock(epochMs: Long): String {
-        val cal = java.util.Calendar.getInstance()
-        cal.timeInMillis = epochMs
-        return String.format(
-            java.util.Locale.ROOT,
-            "%02d:%02d",
-            cal.get(java.util.Calendar.HOUR_OF_DAY),
-            cal.get(java.util.Calendar.MINUTE),
-        )
-    }
+    private fun btConnectingLabel(id: String): String = getString(btConnectingLabelRes(btRegistry.state(id)))
 
     private fun confirmForgetBt(
         id: String,
@@ -555,13 +533,18 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.dialog_forget_bt_title, entry.name))
             .setMessage(getString(R.string.dialog_forget_bt_message))
-            .setPositiveButton(R.string.dialog_forget_bt_positive) { _, _ ->
-                commitForgetBt(id)
-                openBluetoothDeviceDetails(entry.mac)
-            }.setNegativeButton(R.string.dialog_forget_bt_negative) { _, _ ->
-                commitForgetBt(id)
-            }.setNeutralButton(R.string.action_cancel, null)
+            .setPositiveButton(R.string.dialog_forget_bt_positive) { _, _ -> forgetBtAndOpenDetails(id, entry.mac) }
+            .setNegativeButton(R.string.dialog_forget_bt_negative) { _, _ -> commitForgetBt(id) }
+            .setNeutralButton(R.string.action_cancel, null)
             .show()
+    }
+
+    private fun forgetBtAndOpenDetails(
+        id: String,
+        mac: String,
+    ) {
+        commitForgetBt(id)
+        openBluetoothDeviceDetails(mac)
     }
 
     private fun commitForgetBt(id: String) {
@@ -576,8 +559,8 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             return
         }
         val deepLink =
-            Intent("android.settings.BLUETOOTH_DEVICE_DETAILS_SETTINGS").apply {
-                putExtra("device_address", mac)
+            Intent(ACTION_BT_DEVICE_DETAILS).apply {
+                putExtra(EXTRA_DEVICE_ADDRESS, mac)
                 data = "bt-mac:$mac".toUri()
             }
         runCatching { startActivity(deepLink) }
@@ -620,21 +603,30 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             return
         }
         val tempId = "bt-pending-${System.currentTimeMillis()}"
-        requestDiscoverable { granted, durationSec ->
-            val discoverableUntilMs =
-                if (granted) {
-                    btRegistry.start(tempId, profile, autoConnectMac = null)
-                    armDiscoverabilityExpiryTimer(tempId)
-                    System.currentTimeMillis() + durationSec * 1000L
-                } else {
-                    null
-                }
-            showDevicePicker(profile, tempId, discoverableUntilMs)
-        }
+        requestDiscoverable { granted, durationSec -> onPickerDiscoverable(profile, tempId, granted, durationSec) }
+    }
+
+    // A granted prompt starts advertising before the picker opens, so the countdown it shows is
+    // already running; a refused one opens the picker with its wait button live instead.
+    private fun onPickerDiscoverable(
+        profile: GamepadProfile,
+        tempId: String,
+        granted: Boolean,
+        durationSec: Int,
+    ) {
+        val discoverableUntilMs =
+            if (granted) {
+                btRegistry.start(tempId, profile, autoConnectMac = null)
+                armDiscoverabilityExpiryTimer(tempId)
+                System.currentTimeMillis() + durationSec * MS_PER_SECOND
+            } else {
+                null
+            }
+        showDevicePicker(profile, tempId, discoverableUntilMs)
     }
 
     private fun requestDiscoverable(onResult: (granted: Boolean, durationSec: Int) -> Unit) {
-        onDiscoverableResult = onResult
+        discoverableCallback = onResult
         val intent =
             Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).apply {
                 putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, DISCOVERABLE_SECONDS)
@@ -685,11 +677,14 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                     launch { dismissOnConnect() }
                 }
             dialog.setOnDismissListener { job.cancel() }
-            dialog.setOnShowListener {
-                refreshWaitButton()
-                dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener { onWaitForHostClicked() }
-            }
+            dialog.setOnShowListener { onWaitDialogShown() }
             dialog.show()
+        }
+
+        // The neutral button is wired after show() so it can be pressed without closing the dialog.
+        private fun onWaitDialogShown() {
+            refreshWaitButton()
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener { onWaitForHostClicked() }
         }
 
         private fun connectedIds(): Set<String> {
@@ -697,11 +692,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             return slots.filterValues { it.connected }.keys
         }
 
-        private fun remainingSeconds(): Int {
-            val until = discoverableUntilMs ?: return 0
-            val remainingMs = until - System.currentTimeMillis()
-            return (remainingMs / 1000L).toInt().coerceAtLeast(0)
-        }
+        private fun remainingSeconds(): Int = secondsLeft(discoverableUntilMs, System.currentTimeMillis())
 
         private fun refreshWaitButton() {
             val button = dialog.getButton(AlertDialog.BUTTON_NEUTRAL) ?: return
@@ -719,7 +710,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             autoConnectMac: String?,
             durationSec: Int,
         ) {
-            discoverableUntilMs = System.currentTimeMillis() + durationSec * 1000L
+            discoverableUntilMs = System.currentTimeMillis() + durationSec * MS_PER_SECOND
             btRegistry.start(tempId, profile, autoConnectMac)
             armDiscoverabilityExpiryTimer(tempId)
             baselineConnected = connectedIds()
@@ -727,9 +718,14 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         }
 
         private fun onWaitForHostClicked() {
-            requestDiscoverable { granted, durationSec ->
-                if (granted) beginRegistration(autoConnectMac = null, durationSec) else refreshWaitButton()
-            }
+            requestDiscoverable { granted, durationSec -> onWaitDiscoverable(granted, durationSec) }
+        }
+
+        private fun onWaitDiscoverable(
+            granted: Boolean,
+            durationSec: Int,
+        ) {
+            if (granted) beginRegistration(autoConnectMac = null, durationSec) else refreshWaitButton()
         }
 
         private fun onDevicePicked(mac: String) {
@@ -738,13 +734,19 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 dialog.dismiss()
                 return
             }
-            requestDiscoverable { granted, durationSec ->
-                if (granted) {
-                    beginRegistration(mac, durationSec)
-                    dialog.dismiss()
-                } else {
-                    refreshWaitButton()
-                }
+            requestDiscoverable { granted, durationSec -> onDeviceDiscoverable(mac, granted, durationSec) }
+        }
+
+        private fun onDeviceDiscoverable(
+            mac: String,
+            granted: Boolean,
+            durationSec: Int,
+        ) {
+            if (granted) {
+                beginRegistration(mac, durationSec)
+                dialog.dismiss()
+            } else {
+                refreshWaitButton()
             }
         }
 
@@ -926,10 +928,10 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     private fun applyBtAdapterBanner(state: BluetoothAdapterState) {
         btAdapterBannerId?.let { notifications.dismiss(it) }
         btAdapterBannerId =
-            when (state) {
-                BluetoothAdapterState.ON -> null
-                BluetoothAdapterState.UNSUPPORTED -> showBtUnsupportedBanner()
-                BluetoothAdapterState.OFF -> showBtOffBanner()
+            when (btAdapterBannerFor(state)) {
+                null -> null
+                BtAdapterBanner.UNSUPPORTED -> showBtUnsupportedBanner()
+                BtAdapterBanner.OFF -> showBtOffBanner()
             }
     }
 
@@ -957,135 +959,6 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             key = "bt-adapter-off",
             durationMs = DishNotification.DURATION_PERSISTENT,
         )
-
-    // The two dialogs that add a host by typing its address. Both keep themselves open on a
-    // field the user still has to fix, which is the one thing they share and the reason they
-    // sit together rather than on the Activity.
-    private class AddSatelliteFields(
-        view: View,
-    ) {
-        val hostLayout: TextInputLayout = view.findViewById(R.id.tilSatelliteHost)
-        val httpsLayout: TextInputLayout = view.findViewById(R.id.tilSatelliteHttpsPort)
-        val udpLayout: TextInputLayout = view.findViewById(R.id.tilSatelliteUdpPort)
-        val hostField: TextInputEditText = view.findViewById(R.id.etSatelliteHost)
-        val httpsField: TextInputEditText = view.findViewById(R.id.etSatelliteHttpsPort)
-        val udpField: TextInputEditText = view.findViewById(R.id.etSatelliteUdpPort)
-    }
-
-    private class TypedSatellite(
-        val host: String,
-        val httpsPort: Int,
-        val udpPort: Int,
-    )
-
-    private inner class AddHostDialogs {
-        fun showSatellite() {
-            val view = layoutInflater.inflate(R.layout.dialog_add_satellite, null)
-            val fields = AddSatelliteFields(view)
-            // Port fields parse back through toIntOrNull, so the defaults are written in ASCII digits.
-            fields.httpsField.setText(String.format(Locale.ROOT, "%d", DEFAULT_HTTPS_PORT))
-            fields.udpField.setText(String.format(Locale.ROOT, "%d", DEFAULT_UDP_PORT))
-
-            val dialog =
-                MaterialAlertDialogBuilder(this@ConnectionsActivity)
-                    .setTitle(R.string.action_add_custom_satellite)
-                    .setView(view)
-                    .setPositiveButton(R.string.action_connect, null)
-                    .setNegativeButton(R.string.action_cancel, null)
-                    .create()
-            // The positive button is wired after show() so a failed validation keeps the dialog open.
-            dialog.setOnShowListener {
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                    if (connectToTypedSatellite(fields)) dialog.dismiss()
-                }
-            }
-            dialog.show()
-        }
-
-        // Null means the fields were marked with what is still missing. Every field is marked in the
-        // same pass rather than stopping at the first, so one attempt shows everything to fix.
-        private fun readTypedSatellite(fields: AddSatelliteFields): TypedSatellite? {
-            val host =
-                fields.hostField.text
-                    ?.toString()
-                    ?.trim()
-                    .orEmpty()
-            val httpsPort = parsePort(fields.httpsField)
-            val udpPort = parsePort(fields.udpField)
-
-            fields.hostLayout.error = if (host.isEmpty()) getString(R.string.add_satellite_error_host) else null
-            fields.httpsLayout.error = if (httpsPort == null) getString(R.string.add_satellite_error_port) else null
-            fields.udpLayout.error = if (udpPort == null) getString(R.string.add_satellite_error_port) else null
-
-            if (host.isEmpty() || httpsPort == null || udpPort == null) return null
-            return TypedSatellite(host, httpsPort, udpPort)
-        }
-
-        /** Answers whether the typed host was accepted, and so whether the dialog may close. */
-        private fun connectToTypedSatellite(fields: AddSatelliteFields): Boolean {
-            val typed = readTypedSatellite(fields) ?: return false
-            // A typed address has no mDNS name behind it, so it stands in for its own label until
-            // the satellite answers with one.
-            satellite.connect(
-                DiscoveredServer(
-                    name = typed.host,
-                    ip = typed.host,
-                    udpPort = typed.udpPort,
-                    pairPort = typed.httpsPort,
-                    httpPort = typed.httpsPort,
-                    source = DiscoverySource.MANUAL,
-                ),
-            )
-            return true
-        }
-
-        fun showMoonlight() {
-            val view = layoutInflater.inflate(R.layout.dialog_add_moonlight, null)
-            val layout = view.findViewById<TextInputLayout>(R.id.tilMoonlightHost)
-            val input = view.findViewById<TextInputEditText>(R.id.etMoonlightHost)
-            val dialog =
-                MaterialAlertDialogBuilder(this@ConnectionsActivity)
-                    .setTitle(R.string.action_add_moonlight_host)
-                    .setView(view)
-                    .setPositiveButton(R.string.action_add, null)
-                    .setNegativeButton(R.string.action_cancel, null)
-                    .create()
-            // The positive button is wired after show() so a failed validation keeps the dialog open.
-            dialog.setOnShowListener {
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                    if (addTypedMoonlightHost(input, layout)) dialog.dismiss()
-                }
-            }
-            dialog.show()
-        }
-
-        /** Answers whether the dialog may close: a blank address keeps it open, marked. */
-        private fun addTypedMoonlightHost(
-            input: TextInputEditText,
-            layout: TextInputLayout,
-        ): Boolean {
-            val address =
-                input.text
-                    ?.toString()
-                    ?.trim()
-                    .orEmpty()
-            if (address.isEmpty()) {
-                layout.error = getString(R.string.add_moonlight_error_host)
-                return false
-            }
-            moonlight.addManualHost(address)
-            return true
-        }
-
-        private fun parsePort(field: TextInputEditText): Int? {
-            val port =
-                field.text
-                    ?.toString()
-                    ?.trim()
-                    ?.toIntOrNull() ?: return null
-            return if (port in 1..MAX_PORT) port else null
-        }
-    }
 
     // The satellite PIN exchange: one dialog at a time and the server it belongs to, kept together
     // so the Activity does not carry either.
@@ -1163,11 +1036,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             satellite.pairWithPin(target, pin)
         }
 
-        private fun subtitleFor(target: DiscoveredServer): String {
-            val isNamed = target.name.isNotEmpty()
-            if (isNamed) return getString(R.string.pair_dialog_subtitle_named, target.name)
-            return getString(R.string.pair_dialog_subtitle)
-        }
+        private fun subtitleFor(target: DiscoveredServer): String = getString(pairSubtitleRes(target.name), target.name)
 
         // Only the dialog still on screen may clear the fields; a late dismiss from a replaced one
         // must not wipe the new attempt.
@@ -1187,10 +1056,10 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         fun applyNetwork(state: NetworkState) {
             networkBannerId?.let { notifications.dismiss(it) }
             networkBannerId =
-                when (state) {
-                    NetworkState.WIFI -> null
-                    NetworkState.NONE -> showNoNetwork()
-                    NetworkState.CELLULAR -> showCellularOnly()
+                when (networkBannerFor(state)) {
+                    null -> null
+                    NetworkBanner.NO_NETWORK -> showNoNetwork()
+                    NetworkBanner.CELLULAR_ONLY -> showCellularOnly()
                 }
         }
 
@@ -1230,29 +1099,16 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 durationMs = DishNotification.DURATION_PERSISTENT,
             )
 
-        @StringRes
-        private fun staleTitleRes(reason: BtStaleReason): Int =
-            when (reason) {
-                BtStaleReason.KEY_MISSING -> R.string.notif_bt_key_missing_title
-                BtStaleReason.BOND_REMOVED -> R.string.notif_bt_bond_removed_title
-            }
-
-        @StringRes
-        private fun staleBodyRes(reason: BtStaleReason): Int =
-            when (reason) {
-                BtStaleReason.KEY_MISSING -> R.string.notif_bt_key_missing_body
-                BtStaleReason.BOND_REMOVED -> R.string.notif_bt_bond_removed_body
-            }
-
         private fun showStaleBt(
             id: String,
             reason: BtStaleReason,
             entry: RememberedBt,
-        ): Long =
-            notifications.warn(
+        ): Long {
+            val copy = staleBtCopy(reason)
+            return notifications.warn(
                 glyph = R.drawable.ic_bluetooth_off,
-                title = getString(staleTitleRes(reason), entry.name),
-                body = getString(staleBodyRes(reason)),
+                title = getString(copy.titleRes, entry.name),
+                body = getString(copy.bodyRes),
                 action =
                     DishNotification.Action(
                         label = getString(R.string.action_open_settings),
@@ -1260,6 +1116,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 key = "bt-stale:$id",
                 durationMs = DishNotification.DURATION_PERSISTENT,
             )
+        }
     }
 
     // One snackbar with its own state, kept together so ConnectionsActivity does not carry the
@@ -1301,7 +1158,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         }
 
         private fun show(variant: BluetoothPermissionBannerVariant) {
-            val copy = copyFor(variant)
+            val copy = btPermissionBannerCopy(variant)
             val bar =
                 dishSnackbar(
                     binding.root,
@@ -1316,29 +1173,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             snackbar = bar
             bar.show()
         }
-
-        private fun copyFor(variant: BluetoothPermissionBannerVariant): BtPermissionBannerCopy =
-            when (variant) {
-                BluetoothPermissionBannerVariant.CONNECT ->
-                    BtPermissionBannerCopy(
-                        DishNotification.Severity.WARN,
-                        R.string.notif_bt_permission_title,
-                        R.string.notif_bt_permission_body,
-                    )
-                BluetoothPermissionBannerVariant.SCAN ->
-                    BtPermissionBannerCopy(
-                        DishNotification.Severity.INFO,
-                        R.string.notif_bt_scan_permission_title,
-                        R.string.notif_bt_scan_permission_body,
-                    )
-            }
     }
-
-    private data class BtPermissionBannerCopy(
-        val severity: DishNotification.Severity,
-        val titleRes: Int,
-        val bodyRes: Int,
-    )
 
     private fun ensureLocalNetworkThenDiscover(userInitiated: Boolean = false) {
         if (isGranted(this)) {
@@ -1389,7 +1224,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         discoverabilityExpiryJob?.cancel()
         discoverabilityExpiryJob =
             lifecycleScope.launch {
-                kotlinx.coroutines.delay(DISCOVERABLE_SECONDS * 1000L)
+                delay(DISCOVERABLE_SECONDS * MS_PER_SECOND)
                 // The slot re-keys from the temp id to bt:<mac> on connect, so check the live
                 // session (single BT host at a time), not just connId.
                 val slots = btRegistry.states.value.values
@@ -1452,9 +1287,11 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
         private const val TAG = "ConnectionsActivity"
         private const val DISCOVERABLE_SECONDS = 120
+        private const val MS_PER_SECOND = 1000L
         private const val COUNTDOWN_TICK_MS = 500L
-        private const val DEFAULT_HTTPS_PORT = 9443
-        private const val DEFAULT_UDP_PORT = 9876
-        private const val MAX_PORT = 65535
+
+        // Hidden platform intent: the device-details screen has no public action or extra constant.
+        private const val ACTION_BT_DEVICE_DETAILS = "android.settings.BLUETOOTH_DEVICE_DETAILS_SETTINGS"
+        private const val EXTRA_DEVICE_ADDRESS = "device_address"
     }
 }

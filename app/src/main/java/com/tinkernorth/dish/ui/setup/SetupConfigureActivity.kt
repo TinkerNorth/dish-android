@@ -2,11 +2,11 @@
 
 package com.tinkernorth.dish.ui.setup
 
+import android.content.Context
 import android.os.Bundle
 import android.view.View
 import androidx.activity.addCallback
 import androidx.activity.viewModels
-import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
@@ -38,6 +38,7 @@ import com.tinkernorth.dish.ui.main.BindingSnapshot
 import com.tinkernorth.dish.ui.main.ConfigUiState
 import com.tinkernorth.dish.ui.main.ConfigureBindingsViewModel
 import com.tinkernorth.dish.ui.main.MoonlightAction
+import com.tinkernorth.dish.ui.main.StringLookup
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import com.tinkernorth.dish.ui.main.bindCompat
 import com.tinkernorth.dish.ui.main.bindMoonlightSession
@@ -56,6 +57,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     private lateinit var binding: ActivitySetupConfigureBinding
     private val nav by lazy { DishNavigator(this) }
     private val viewModel: ConfigureBindingsViewModel by viewModels()
+    private val strings = ContextStrings(this)
 
     private var step = Step.TYPE
     private var current = ConfigUiState()
@@ -111,11 +113,13 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     }
 
     private fun observe() {
-        observeWhileStarted(viewModel.ui) { state ->
-            current = state
-            if (state.loaded) render(state)
-        }
+        observeWhileStarted(viewModel.ui) { onUiState(it) }
         observeWhileStarted(viewModel.applyState) { renderApplyState(it) }
+    }
+
+    private fun onUiState(state: ConfigUiState) {
+        current = state
+        if (state.loaded) render(state)
     }
 
     private fun render(state: ConfigUiState) {
@@ -153,11 +157,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     }
 
     private fun typeSubtitleFor(state: ConfigUiState): String =
-        when {
-            state.isMoonlightHost -> getString(R.string.ml_type_caption, state.selectedHost?.label.orEmpty())
-            state.isBluetoothHost -> getString(R.string.setup_cfg_type_locked_subtitle)
-            else -> getString(R.string.setup_cfg_type_subtitle)
-        }
+        getString(typeSubtitleRes(state.selectedHost?.kind), state.selectedHost?.label.orEmpty())
 
     private fun padTypeCards() =
         listOf(
@@ -332,7 +332,8 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
 
         val container = binding.reviewContainer
         container.removeAllViews()
-        reviewNodes(state, snapshot).forEach { node ->
+        val nodes = reviewGraph(reviewInputFor(state, snapshot), reviewModelFor(state), strings)
+        nodes.forEach { node ->
             val card = SetupReviewCardBinding.inflate(layoutInflater, container, false)
             card.reviewIcon.setImageResource(node.icon)
             card.reviewKind.setText(node.kind)
@@ -345,230 +346,40 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         }
     }
 
-    private fun reviewNodes(
+    private fun reviewModelFor(state: ConfigUiState): ReviewModel =
+        reviewModelFor(
+            caps = state.capabilities,
+            motionOn = state.draft?.motionOn == true,
+            rumbleOn = state.draft?.rumbleOn == true,
+            micOn = state.draft?.micOn == true,
+            speakerOn = state.draft?.speakerOn == true,
+        )
+
+    private fun reviewInputFor(
         state: ConfigUiState,
         snapshot: BindingSnapshot,
-    ): List<ReviewNode> {
-        val caps = state.capabilities
-        // Routing is derived, not picked, and the two surfaces coexist: the emulated pad's
-        // touchpad streams by default and the mouse surface flips the slot over while open,
-        // so the summary shows every pointer flow the path can carry.
-        val padMode = caps.isAvailable(Feature.TOUCHPAD)
-        val mouseMode = caps.isAvailable(Feature.MOUSE)
-        val model =
-            ReviewModel(
-                motionOn = caps.isAvailable(Feature.MOTION) && state.draft?.motionOn == true,
-                touchpadOn = padMode || mouseMode,
-                mouseMode = mouseMode,
-                padMode = padMode,
-                // Rumble flows back only where the path carries it (no Bluetooth return channel,
-                // no phone fallback for a motorless physical pad); the user's toggle gates it,
-                // and trigger rumble follows it.
-                rumbleOn = caps.isAvailable(Feature.RUMBLE) && state.draft?.rumbleOn == true,
-                batteryOn = caps.isAvailable(Feature.BATTERY),
-                triggerRumbleOn = caps.isAvailable(Feature.TRIGGER_RUMBLE) && state.draft?.rumbleOn == true,
-                lightbar = caps.isAvailable(Feature.LIGHTBAR),
-                triggerEffects = caps.isAvailable(Feature.TRIGGER_EFFECTS),
-                playerLeds = caps.isAvailable(Feature.PLAYER_LEDS),
-                // The pad's own endpoints: the microphone rides up with the input's other
-                // sources, its speaker comes back with the rest of the feedback. Both
-                // follow their toggles, which is why they read the draft like rumble does.
-                micOn = caps.isAvailable(Feature.MIC) && state.draft?.micOn == true,
-                speakerOn = caps.isAvailable(Feature.SPEAKER) && state.draft?.speakerOn == true,
-            )
-        return inputNodes(state, snapshot, model) + destinationNodes(state, model)
-    }
-
-    // The phone is always one "virtual controller": when it IS the input, the
-    // on-screen pad and its touch surface (mouse/touchpad) merge into a single
-    // node; when a connected controller is the input, the phone's touch surface is
-    // still shown as its own whole virtual-controller input.
-    // Everything the host can push back at this pad, in a fixed order; the
-    // input's gets and the emulated pad's sends are the same list by definition.
-    private fun feedbackFlows(model: ReviewModel): List<ReviewFlow> =
-        buildList {
-            if (model.rumbleOn) add(ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble))
-            if (model.triggerRumbleOn) add(ReviewFlow(R.drawable.ic_trigger_rumble, R.string.setup_cap_trigger_rumble))
-            if (model.lightbar) add(ReviewFlow(R.drawable.ic_lightbar, R.string.setup_cap_lightbar))
-            if (model.triggerEffects) add(ReviewFlow(R.drawable.ic_trigger_effects, R.string.setup_cap_trigger_effects))
-            if (model.playerLeds) add(ReviewFlow(R.drawable.ic_player_leds, R.string.setup_cap_player_leds))
-            if (model.speakerOn) add(ReviewFlow(R.drawable.ic_speaker, R.string.setup_cap_speaker))
-        }
-
-    private fun inputNodes(
-        state: ConfigUiState,
-        snapshot: BindingSnapshot,
-        model: ReviewModel,
-    ): List<ReviewNode> {
-        val gamepad = ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller)
-        val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
-        val battery = ReviewFlow(R.drawable.ic_battery, R.string.setup_cap_battery)
-        val mic = ReviewFlow(R.drawable.ic_mic, R.string.setup_cap_mic)
-        val pointerFlows =
-            buildList {
-                if (model.padMode) add(ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad))
-                if (model.mouseMode) add(ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse))
-            }
-        val gets = feedbackFlows(model)
-        val virtual =
-            ReviewNode(
-                kind = R.string.binding_label_input,
-                icon = R.drawable.ic_gamepad_virtual,
-                name = getString(R.string.default_virtual_controller_name),
-                sublabel = getString(R.string.binding_link_onscreen),
-                sends = pointerFlows,
-                gets = emptyList(),
-            )
-
-        if (snapshot.link == BindingLink.ONSCREEN) {
-            return listOf(
-                virtual.copy(
-                    sends =
-                        buildList {
-                            add(gamepad)
-                            if (model.motionOn) add(motion)
-                            addAll(pointerFlows)
-                            if (model.batteryOn) add(battery)
-                            if (model.micOn) add(mic)
-                        },
-                    gets = gets,
-                ),
-            )
-        }
-        val controller =
-            ReviewNode(
-                kind = R.string.binding_label_input,
-                icon = snapshot.link.iconRes(),
-                name = snapshot.name,
-                sublabel = inputLink(state, snapshot).first,
-                sends =
-                    buildList {
-                        add(gamepad)
-                        if (model.motionOn) add(motion)
-                        if (model.batteryOn) add(battery)
-                        if (model.micOn) add(mic)
-                        if (state.inputUnknown) add(ReviewFlow(R.drawable.ic_help, R.string.setup_cap_unknown))
-                    },
-                gets = gets,
-            )
-        return if (model.touchpadOn) listOf(controller, virtual) else listOf(controller)
-    }
-
-    private fun destinationNodes(
-        state: ConfigUiState,
-        model: ReviewModel,
-    ): List<ReviewNode> {
-        val gamepad = ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller)
-        val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
-        val rumble = ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble)
-        val rumbleBack = if (model.rumbleOn) listOf(rumble) else emptyList()
-        if (state.isBluetoothHost) {
-            return listOf(
-                ReviewNode(
-                    kind = R.string.binding_label_destination,
-                    icon = R.drawable.ic_bluetooth,
-                    name = state.selectedHost?.label.orEmpty(),
-                    sublabel = getString(R.string.setup_cfg_dest_bluetooth),
-                    sends = rumbleBack,
-                    gets = listOf(gamepad),
-                ),
-            )
-        }
-        if (state.isMoonlightHost) return moonlightDestinationNodes(state, model)
-        // Satellite injects the mouse itself; the virtual pad it creates carries the
-        // gamepad, motion, DS4 touchpad, and the rumble it sends back.
-        val mouse = ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse)
-        val touchpad = ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad)
-        return listOf(
-            ReviewNode(
-                kind = R.string.binding_label_destination,
-                icon = R.drawable.ic_satellite,
-                name = state.selectedHost?.label.orEmpty(),
-                sublabel = getString(R.string.setup_cfg_dest_satellite),
-                sends = emptyList(),
-                gets = if (model.mouseMode) listOf(mouse) else emptyList(),
-                compat = state.draft?.hostId?.let { state.hostCompat[it] } ?: DishProtocolCompat.UNKNOWN,
-            ),
-            ReviewNode(
-                kind = R.string.binding_label_destination,
-                icon = R.drawable.ic_gamepad,
-                name = viewModel.typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX),
-                sublabel = getString(R.string.setup_cfg_virtual_sublabel),
-                sends = feedbackFlows(model),
-                gets =
-                    buildList {
-                        add(gamepad)
-                        if (model.motionOn) add(motion)
-                        if (model.padMode) add(touchpad)
-                        if (model.batteryOn) add(ReviewFlow(R.drawable.ic_battery, R.string.setup_cap_battery))
-                        if (model.micOn) add(ReviewFlow(R.drawable.ic_mic, R.string.setup_cap_mic))
-                    },
-            ),
+    ): ReviewInput =
+        ReviewInput(
+            onScreenInput = snapshot.link == BindingLink.ONSCREEN,
+            inputName = snapshot.name,
+            inputIcon = snapshot.link.iconRes(),
+            inputLinkLabel = inputLinkLabel(state, snapshot),
+            inputUnknown = state.inputUnknown,
+            hostKind = state.selectedHost?.kind ?: ConnectionKind.SATELLITE,
+            hostLabel = state.selectedHost?.label.orEmpty(),
+            hostCompat = state.draft?.hostId?.let { state.hostCompat[it] } ?: DishProtocolCompat.UNKNOWN,
+            padTypeLabel = padTypeLabelFor(state),
+            moonlightAddress = viewModel.moonlightAddress(state.draft?.hostId.orEmpty()),
         )
-    }
 
-    // The host runs an emulated pad of its own, so it reads like the satellite pair: the
-    // PC itself (which also takes the mouse, straight over the control stream), then the
-    // controller it plugs in for us and the feedback that comes back.
-    private fun moonlightDestinationNodes(
-        state: ConfigUiState,
-        model: ReviewModel,
-    ): List<ReviewNode> {
-        val gamepad = ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller)
-        val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
-        val touchpad = ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad)
-        val mouse = ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse)
-        val stored = state.draft?.type ?: AUTO
-        return listOf(
-            ReviewNode(
-                kind = R.string.binding_label_destination,
-                icon = R.drawable.ic_pc_monitor,
-                name = state.selectedHost?.label.orEmpty(),
-                sublabel = getString(R.string.ml_dest_sublabel, viewModel.moonlightAddress(state.draft?.hostId.orEmpty())),
-                sends = emptyList(),
-                gets = if (model.mouseMode) listOf(mouse) else emptyList(),
-            ),
-            ReviewNode(
-                kind = R.string.binding_label_destination,
-                icon = R.drawable.ic_gamepad,
-                name = getString(moonlightTypeLabelRes(viewModel.moonlightResolvedType(stored))),
-                sublabel = getString(R.string.setup_cfg_virtual_sublabel),
-                sends = feedbackFlows(model),
-                gets =
-                    buildList {
-                        add(gamepad)
-                        if (model.motionOn) add(motion)
-                        if (model.padMode) add(touchpad)
-                        if (model.batteryOn) add(ReviewFlow(R.drawable.ic_battery, R.string.setup_cap_battery))
-                    },
-            ),
-        )
-    }
-
-    private data class ReviewModel(
-        val motionOn: Boolean,
-        val touchpadOn: Boolean,
-        val mouseMode: Boolean,
-        val padMode: Boolean,
-        val rumbleOn: Boolean,
-        val batteryOn: Boolean,
-        val triggerRumbleOn: Boolean,
-        val lightbar: Boolean,
-        val triggerEffects: Boolean,
-        val playerLeds: Boolean,
-        val micOn: Boolean,
-        val speakerOn: Boolean,
-    )
-
-    private data class ReviewNode(
-        @StringRes val kind: Int,
-        @DrawableRes val icon: Int,
-        val name: String,
-        val sublabel: String,
-        val sends: List<ReviewFlow>,
-        val gets: List<ReviewFlow>,
-        val compat: DishProtocolCompat = DishProtocolCompat.UNKNOWN,
-    )
+    // The Moonlight type table is the host emulator's, resolved here so Auto names the type it
+    // will really send; every other host reads the satellite catalog's label.
+    private fun padTypeLabelFor(state: ConfigUiState): String =
+        if (state.isMoonlightHost) {
+            getString(moonlightTypeLabelRes(viewModel.moonlightResolvedType(state.draft?.type ?: AUTO)))
+        } else {
+            viewModel.typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX)
+        }
 
     private fun renderApplyState(state: ApplyState) {
         when (state) {
@@ -650,19 +461,19 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         if (current.loaded) render(current)
     }
 
-    private fun inputLink(
+    private fun inputLinkLabel(
         state: ConfigUiState,
         snapshot: BindingSnapshot,
-    ): Pair<String, Int> =
+    ): String =
         when (snapshot.link) {
             BindingLink.USB ->
                 if (state.draft?.directOn == true) {
-                    getString(R.string.setup_cfg_link_usb_direct) to R.drawable.ic_bolt
+                    getString(R.string.setup_cfg_link_usb_direct)
                 } else {
-                    getString(R.string.setup_cfg_link_usb_standard) to R.drawable.ic_usb
+                    getString(R.string.setup_cfg_link_usb_standard)
                 }
-            BindingLink.BLUETOOTH -> getString(R.string.binding_link_bluetooth) to R.drawable.ic_bluetooth
-            BindingLink.ONSCREEN -> getString(R.string.binding_link_onscreen) to R.drawable.ic_gamepad_virtual
+            BindingLink.BLUETOOTH -> getString(R.string.binding_link_bluetooth)
+            BindingLink.ONSCREEN -> getString(R.string.binding_link_onscreen)
         }
 
     // A Direct claim swaps the framework id for a synthetic one, so the slot id
@@ -677,4 +488,15 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     }
 
     private fun visibleIf(condition: Boolean): Int = if (condition) View.VISIBLE else View.GONE
+}
+
+// The graph chooses its own format arguments, so the screen fills a string without knowing which
+// node it is drawing; this is the Context end of that seam.
+private class ContextStrings(
+    private val ctx: Context,
+) : StringLookup {
+    override fun format(
+        @StringRes res: Int,
+        vararg args: Any,
+    ): String = ctx.getString(res, *args)
 }

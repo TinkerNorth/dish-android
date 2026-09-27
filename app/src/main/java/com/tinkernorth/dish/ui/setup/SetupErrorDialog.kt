@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.ui.setup
 
 import android.app.Activity
+import android.content.DialogInterface
 import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -20,12 +21,18 @@ fun show(
     MaterialAlertDialogBuilder(activity)
         .setMessage(message ?: activity.getString(R.string.setup_error_body))
         .setCancelable(false)
-        .setPositiveButton(R.string.setup_error_retry) { dialog, _ ->
-            dialog.dismiss()
-            onRetry()
-        }.setNeutralButton(R.string.setup_error_start_over) { _, _ -> startOver(activity) }
+        .setPositiveButton(R.string.setup_error_retry) { dialog, _ -> dismissAndRetry(dialog, onRetry) }
+        .setNeutralButton(R.string.setup_error_start_over) { _, _ -> startOver(activity) }
         .setNegativeButton(R.string.setup_error_exit) { _, _ -> exitToDashboard(activity) }
         .show()
+}
+
+private fun dismissAndRetry(
+    dialog: DialogInterface,
+    onRetry: () -> Unit,
+) {
+    dialog.dismiss()
+    onRetry()
 }
 
 // SetupInputActivity sits at the root of the flow's task, so CLEAR_TOP rewinds

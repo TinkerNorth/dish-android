@@ -30,6 +30,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+private const val EVENT_BUFFER = 4
+
 // Stage 3 Bluetooth host (design 5H). The phone advertises itself as a gamepad
 // to a PC, so this wizard owns a BluetoothGamepadRegistry session rather than a
 // claim: it commits the controller type the PC will see (locked per host, since
@@ -89,7 +91,7 @@ class SetupBluetoothHostViewModel
         private val _state = MutableStateFlow(State(hasGyro = motion.hasGyro))
         val state: StateFlow<State> = _state.asStateFlow()
 
-        private val _events = MutableSharedFlow<Event>(extraBufferCapacity = 4)
+        private val _events = MutableSharedFlow<Event>(extraBufferCapacity = EVENT_BUFFER)
         val events: SharedFlow<Event> = _events.asSharedFlow()
 
         // The connId currently driving the registry session (transient until the
@@ -200,11 +202,8 @@ class SetupBluetoothHostViewModel
         private fun onRegistryStates(states: Map<String, BluetoothGamepadRegistry.SlotState>) {
             if (proceeded) return
             val active = activeConnId ?: return
-            // A freshly-paired session starts under a transient id; the registry
-            // rewrites it to "bt:<mac>" on bond. Match our active key, else the
-            // newly-connected key that wasn't already bonded when we started. Gate on
-            // CONNECTED only: the HID app registers the instant we start (long before
-            // the PC bonds), and proceeding on that flashes past the advertising step.
+            // The registry re-keys a fresh session from its transient id to "bt:<mac>" on bond, so
+            // the match is our key or a newly connected one that was not live when we started.
             val entry =
                 states.entries.firstOrNull { it.key == active && it.value.connected }
                     ?: states.entries.firstOrNull { it.value.connected && it.key !in baselineLiveKeys }
@@ -212,9 +211,6 @@ class SetupBluetoothHostViewModel
             val profile = _state.value.advertisingProfile ?: return
             proceeded = true
             activeConnId = entry.key
-            // Bind the chosen input to this host so its state drives the advertised
-            // pad; a Bluetooth host needs no further configuration. Binding fails
-            // only if the chosen controller vanished during the bond wait.
             val bound = hub.bind(slotId, entry.key, typeFor(profile))
             emitDone(entry.value.connectedName ?: entry.key, profile, bound)
         }
@@ -247,9 +243,8 @@ class SetupBluetoothHostViewModel
             activeConnId = null
         }
 
+        // A finished wizard leaves the live session to the dashboard; an abandoned one takes it down.
         override fun onCleared() {
-            // Don't keep advertising once the wizard goes away unless we already
-            // bonded and finished (the dashboard owns the live session from here).
             if (!proceeded) stopActive()
         }
 

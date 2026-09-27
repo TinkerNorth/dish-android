@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.ui.diagnostics
 
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.math.roundToInt
@@ -28,21 +29,23 @@ private const val RIM_THRESHOLD = 0.5f
 // never completed the circle and a number would be noise.
 private const val MIN_COVERED_BUCKETS = 12
 
+private const val DEADZONE_HEADROOM = 1.5f
+private const val DEADZONE_MIN = 0.04f
+private const val DEADZONE_MAX = 0.30f
+private const val PERCENT = 100
+private const val MS_PER_SECOND = 1000L
+
 /** Mean resting offset magnitude; the stick was supposed to be untouched. */
 internal fun drift(samples: List<StickSample>): Float {
     if (samples.isEmpty()) return 0f
-    var sum = 0f
-    for (s in samples) sum += s.magnitude
+    val sum = samples.fold(0f) { acc, s -> acc + s.magnitude }
     return sum / samples.size
 }
 
-// 1.5x headroom over the observed drift so noise peaks above the mean stay inside;
-// floored at 4% (sensor noise on a healthy stick) and capped at 30% (beyond that the
-// stick is faulty and hiding it would eat real input).
 internal fun suggestedDeadzone(drift: Float): Float {
-    val suggested = drift * 1.5f
-    val clamped = suggested.coerceIn(0.04f, 0.30f)
-    return (clamped * 100).roundToInt() / 100f
+    val suggested = drift * DEADZONE_HEADROOM
+    val clamped = suggested.coerceIn(DEADZONE_MIN, DEADZONE_MAX)
+    return (clamped * PERCENT).roundToInt() / PERCENT.toFloat()
 }
 
 internal data class Envelope(
@@ -74,35 +77,48 @@ private class RimBuckets {
 
 internal fun envelope(samples: List<StickSample>): Envelope {
     val rim = RimBuckets()
-    var minX = 0f
-    var maxX = 0f
-    var minY = 0f
-    var maxY = 0f
-    for (s in samples) {
-        if (s.x < minX) minX = s.x
-        if (s.x > maxX) maxX = s.x
-        if (s.y < minY) minY = s.y
-        if (s.y > maxY) maxY = s.y
-        rim.add(s)
-    }
+    samples.forEach(rim::add)
+    val minX = samples.fold(0f) { acc, s -> minOf(acc, s.x) }
+    val maxX = samples.fold(0f) { acc, s -> maxOf(acc, s.x) }
+    val minY = samples.fold(0f) { acc, s -> minOf(acc, s.y) }
+    val maxY = samples.fold(0f) { acc, s -> maxOf(acc, s.y) }
     return Envelope(minX, maxX, minY, maxY, circularityError(rim.max, rim.seen))
 }
 
-private fun circularityError(
+internal fun circularityError(
     bucketMax: FloatArray,
     bucketSeen: BooleanArray,
 ): Float? {
     val covered = bucketSeen.count { it }
     if (covered < MIN_COVERED_BUCKETS) return null
-    var sum = 0f
-    for (i in bucketMax.indices) if (bucketSeen[i]) sum += bucketMax[i]
-    val mean = sum / covered
+    val seenMaxima = bucketMax.filterIndexed { i, _ -> bucketSeen[i] }
+    val mean = seenMaxima.sum() / covered
     if (mean <= 0f) return null
-    var worst = 0f
-    for (i in bucketMax.indices) {
-        if (!bucketSeen[i]) continue
-        val deviation = kotlin.math.abs(bucketMax[i] - mean)
-        if (deviation > worst) worst = deviation
-    }
+    val worst = seenMaxima.maxOf { abs(it - mean) }
     return worst / mean
+}
+
+// The rail the stick struggles to reach is the one that matters in game.
+internal fun worstReach(e: Envelope): Float = minOf(-e.minX, e.maxX, -e.minY, e.maxY).coerceAtLeast(0f)
+
+internal enum class CaptureKind { DRIFT, RANGE }
+
+internal sealed interface CaptureTick {
+    data class Counting(
+        val secondsLeft: Int,
+    ) : CaptureTick
+
+    data class Finished(
+        val kind: CaptureKind,
+    ) : CaptureTick
+}
+
+// A capture still running shows the whole seconds left, rounded up so it never reads zero
+// while samples are still being taken; one that ran out finishes as the kind it was.
+internal fun captureTick(
+    kind: CaptureKind,
+    leftMs: Long,
+): CaptureTick {
+    if (leftMs > 0) return CaptureTick.Counting((leftMs / MS_PER_SECOND + 1).toInt())
+    return CaptureTick.Finished(kind)
 }
