@@ -3,107 +3,149 @@
 
 package com.tinkernorth.dish.core.net.moonlight
 
+import com.tinkernorth.dish.core.net.bytesToHex
+import com.tinkernorth.dish.core.net.hexToBytes
 import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.fail
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import javax.crypto.AEADBadTagException
 
+/**
+ * Pinned against Wolf's captured control-stream vectors (tests/testControl.cpp).
+ * Any drift here is a cross-end Moonlight protocol break, not a refactor.
+ */
 class MoonlightControlSealTest {
-    private val gcmKey = ByteArray(16) { 0x01.toByte() }
+    private val rikey = hexToBytes("edf04a215c4fbea20934120c8480d855")
+    private val anotherSessionsRikey = hexToBytes("00112233445566778899aabbccddeeff")
 
-    /**
-     * Seal one control-stream payload: returns tag(16) || ciphertext, keyed by
-     * [gcmKey] (the 16-byte rikey) with the IV derived from [seq]. Matches
-     * Wolf's ControlEncryptedPacket body layout (control-specs.adoc): the tag
-     * precedes the ciphertext on the wire.
-     */
     @Test
-    fun controlSealAndOpen_RoundTrip() {
-        val seq = 12345
-        val plaintext = "Hello Moonlight".toByteArray()
-
-        val sealed = controlSeal(gcmKey, seq, plaintext)
-        val opened = controlOpen(gcmKey, seq, sealed)
-        assertArrayEquals(plaintext, opened)
+    fun `controlSeal matches Wolf's captured GCM packet body`() {
+        // testControl.cpp "30 bytes": key EDF0..D855, seq 0, payload 020302000000.
+        val sealed = controlSeal(rikey, seq = 0, plaintext = hexToBytes("020302000000"))
+        assertEquals(WOLF_TAG_HEX + WOLF_CIPHERTEXT_HEX, bytesToHex(sealed))
     }
 
-    /**
-     * The control-stream GCM IV: sixteen zero bytes with the LOW BYTE of [seq]
-     * in byte 0, and nothing else.
-     *
-     * ONLY THE LOW BYTE, however wrong that looks. The host builds the same IV
-     * with `std::array<std::uint8_t, 16> iv_data = {0}; iv_data[0] = seq;`
-     * (Wolf control.hpp encrypt_packet and decrypt_packet), where assigning a
-     * u32 into a u8 element drops the top three bytes. The packet header still
-     * carries the full 32-bit sequence, so only the IV wraps. Writing all four
-     * bytes here, as this used to, agrees with the host for the first 256
-     * packets and disagrees forever after: a live Sunshine host accepted 256
-     * sealed control packets and answered the 257th with "Failed to verify tag",
-     * then ended the session. At two packets a second that is a session that
-     * dies after about two minutes, every time, which is exactly why it hid
-     * behind the faults that used to end the session in six.
-     *
-     * The IV therefore repeats every 256 packets on one session key. That is the
-     * protocol's property and not a choice available to a client that wants to
-     * interoperate. What limits it is that the key is the rikey, minted fresh
-     * for every /launch and never reused across sessions.
-     */
     @Test
-    fun controlSealAndOpen_SeqWrapAround() {
-        // Test seq 255
-        val seq255 = 255
-        val plaintext1 = "Packet 255".toByteArray()
-        val sealed1 = controlSeal(gcmKey, seq255, plaintext1)
-        val opened1 = controlOpen(gcmKey, seq255, sealed1)
-        assertArrayEquals("Failed at 255", plaintext1, opened1)
-
-        // Test seq 256 (should wrap low byte to 0)
-        val seq256 = 256
-        val plaintext2 = "Packet 256".toByteArray()
-        val sealed2 = controlSeal(gcmKey, seq256, plaintext2)
-        val opened2 = controlOpen(gcmKey, seq256, sealed2)
-        assertArrayEquals("Failed at 256", plaintext2, opened2)
+    fun `controlSeal frames the tag ahead of the ciphertext`() {
+        val sealed = bytesToHex(controlSeal(rikey, seq = 0, plaintext = hexToBytes("020302000000")))
+        val tagHexLength = GCM_TAG_LEN * 2
+        assertEquals(WOLF_TAG_HEX, sealed.substring(0, tagHexLength))
+        assertEquals(WOLF_CIPHERTEXT_HEX, sealed.substring(tagHexLength))
     }
 
-    /**
-     * Verifies that a packet sealed with one key cannot be opened with another.
-     */
     @Test
-    fun controlSealAndOpen_DifferentKeys() {
-        val key1 = ByteArray(16) { 0x01.toByte() }
-        val key2 = ByteArray(16) { 0x02.toByte() }
-        val seq = 100
-        val plaintext = "Secret Data".toByteArray()
+    fun `controlSeal grows the payload by exactly the tag`() {
+        val plaintext = "six bytes and more".toByteArray()
+        val sealed = controlSeal(rikey, seq = 1, plaintext = plaintext)
+        assertEquals(plaintext.size + GCM_TAG_LEN, sealed.size)
+    }
 
-        val sealed1 = controlSeal(key1, seq, plaintext)
+    @Test
+    fun `controlOpen reverses controlSeal across evolving seq`() {
+        for (seq in intArrayOf(0, 1, 2, 6, 255, 256, 70000)) {
+            val plaintext = "ping-$seq".toByteArray()
+            val sealed = controlSeal(rikey, seq, plaintext)
+            assertArrayEquals("seq $seq", plaintext, controlOpen(rikey, seq, sealed))
+        }
+    }
 
-        // Trying to open with key2 should fail
-        try {
-            controlOpen(key2, seq, sealed1)
-            fail("Should have failed due to key mismatch")
-        } catch (e: AEADBadTagException) {
-            // Success
+    @Test
+    fun `controlOpen accepts a bare tag as an empty plaintext`() {
+        val sealed = controlSeal(rikey, seq = 9, plaintext = ByteArray(0))
+        assertEquals(GCM_TAG_LEN, sealed.size)
+        assertEquals(0, controlOpen(rikey, seq = 9, tagThenCiphertext = sealed).size)
+    }
+
+    @Test
+    fun `controlOpen rejects a payload shorter than the tag before touching the cipher`() {
+        val shorterThanATag = ByteArray(GCM_TAG_LEN - 1)
+        assertThrows(IllegalArgumentException::class.java) {
+            controlOpen(rikey, seq = 0, tagThenCiphertext = shorterThanATag)
+        }
+    }
+
+    @Test
+    fun `controlOpen rejects a tampered ciphertext byte`() {
+        val sealed = controlSeal(rikey, seq = 3, plaintext = "secret".toByteArray())
+        val lastCiphertextByte = sealed.size - 1
+        sealed[lastCiphertextByte] = flipLowBit(sealed[lastCiphertextByte])
+        assertThrows(AEADBadTagException::class.java) {
+            controlOpen(rikey, seq = 3, tagThenCiphertext = sealed)
+        }
+    }
+
+    @Test
+    fun `controlOpen rejects a tampered tag byte`() {
+        val sealed = controlSeal(rikey, seq = 3, plaintext = "secret".toByteArray())
+        sealed[0] = flipLowBit(sealed[0])
+        assertThrows(AEADBadTagException::class.java) {
+            controlOpen(rikey, seq = 3, tagThenCiphertext = sealed)
+        }
+    }
+
+    @Test
+    fun `controlOpen rejects the wrong seq (IV mismatch)`() {
+        val sealed = controlSeal(rikey, seq = 4, plaintext = "hello".toByteArray())
+        assertThrows(AEADBadTagException::class.java) {
+            controlOpen(rikey, seq = 5, tagThenCiphertext = sealed)
+        }
+    }
+
+    @Test
+    fun `controlOpen rejects a packet sealed under another session's rikey`() {
+        val sealed = controlSeal(rikey, seq = 4, plaintext = "hello".toByteArray())
+        assertThrows(AEADBadTagException::class.java) {
+            controlOpen(anotherSessionsRikey, seq = 4, tagThenCiphertext = sealed)
         }
     }
 
     /**
-     * Verifies that a packet sealed with one sequence number cannot be
-     * opened with a different sequence number (IV mismatch).
+     * The host derives the IV from the LOW BYTE of the sequence number alone
+     * (Wolf control.hpp assigns a u32 seq into a u8 array element). A client
+     * that uses the whole 32 bits agrees for 256 packets and then diverges: a
+     * live Sunshine host accepted 256 sealed control packets and answered the
+     * 257th with "Failed to verify tag", ending the session about two minutes
+     * in. These tests pin the wrap so that can never come back.
      */
     @Test
-    fun verifySequenceIntegrity() {
-        val seq1 = 100
-        val seq2 = 101
-        val plaintext = "Integrity Test".toByteArray()
+    fun `the control IV wraps every 256 packets, as the host's does`() {
+        val plaintext = "keepalive".toByteArray()
+        assertEquals(
+            bytesToHex(controlSeal(rikey, seq = 0, plaintext = plaintext)),
+            bytesToHex(controlSeal(rikey, seq = 256, plaintext = plaintext)),
+        )
+        assertEquals(
+            bytesToHex(controlSeal(rikey, seq = 7, plaintext = plaintext)),
+            bytesToHex(controlSeal(rikey, seq = 0x0A0B0C07, plaintext = plaintext)),
+        )
+    }
 
-        val sealed1 = controlSeal(gcmKey, seq1, plaintext)
+    @Test
+    fun `a packet sealed past the wrap opens under the seq that shares its low byte`() {
+        val sealed = controlSeal(rikey, seq = 256, plaintext = "wrapped".toByteArray())
+        assertArrayEquals("wrapped".toByteArray(), controlOpen(rikey, seq = 0, tagThenCiphertext = sealed))
+    }
 
-        try {
-            // Attempting to open seq1's payload with seq2's identifier
-            controlOpen(gcmKey, seq2, sealed1)
-            fail("Should have failed due to sequence mismatch")
-        } catch (e: AEADBadTagException) {
-            // Success - integrity maintained
-        }
+    @Test
+    fun `a packet sealed past the wrap still opens under its own seq`() {
+        val sealed = controlSeal(rikey, seq = 257, plaintext = "past the wrap".toByteArray())
+        assertEquals("past the wrap", String(controlOpen(rikey, seq = 257, tagThenCiphertext = sealed)))
+    }
+
+    @Test
+    fun `the last seq before the wrap and the first after it seal differently`() {
+        val plaintext = "edge".toByteArray()
+        val at255 = bytesToHex(controlSeal(rikey, seq = 255, plaintext = plaintext))
+        val at256 = bytesToHex(controlSeal(rikey, seq = 256, plaintext = plaintext))
+        assertNotEquals(at255, at256)
+    }
+
+    private fun flipLowBit(byte: Byte): Byte = (byte.toInt() xor 0x01).toByte()
+
+    private companion object {
+        const val WOLF_TAG_HEX = "bf0eb6da10e47c702ec8644eb87d9cf7"
+        const val WOLF_CIPHERTEXT_HEX = "b6fac9ff75ca"
     }
 }

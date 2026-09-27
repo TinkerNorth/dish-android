@@ -149,4 +149,105 @@ class MoonlightRtspTest {
         assertTrue(sdp.startsWith("v=0\r\n"))
         assertTrue(sdp.endsWith("t=0 0\r\n"))
     }
+
+    @Test
+    fun `parses a reply framed with bare LF`() {
+        val response = parseResponse("RTSP/1.0 200 OK\nCSeq: 4\nTransport: server_port=47999\n\n")!!
+        assertEquals(200, response.statusCode)
+        assertEquals(4, response.cseq)
+        assertEquals(47999, response.serverPort())
+    }
+
+    @Test
+    fun `parses the payload after the blank line, with its line endings normalized to LF`() {
+        val sdp = "v=0\r\na=fmtp:97 surround-params=21101\r\n"
+        val response = parseResponse("RTSP/1.0 200 OK\r\nCSeq: 2\r\nContent-Type: application/sdp\r\n\r\n$sdp")!!
+        assertEquals(sdp.replace("\r\n", "\n"), response.payload)
+        assertEquals("application/sdp", response.options["Content-Type"])
+    }
+
+    @Test
+    fun `a reply without a blank line has an empty payload`() {
+        val response = parseResponse("RTSP/1.0 200 OK\r\nCSeq: 2\r\n")!!
+        assertEquals("", response.payload)
+        assertEquals(2, response.cseq)
+    }
+
+    @Test
+    fun `rejects a status line without a numeric code`() {
+        assertNull(parseResponse("RTSP/1.0 OK\r\nCSeq: 1\r\n\r\n"))
+        assertNull(parseResponse("RTSP/1.0\r\nCSeq: 1\r\n\r\n"))
+    }
+
+    @Test
+    fun `a status line without a message reads as an empty message`() {
+        val response = parseResponse("RTSP/1.0 200\r\nCSeq: 1\r\n\r\n")!!
+        assertEquals(200, response.statusCode)
+        assertEquals("", response.statusMessage)
+    }
+
+    @Test
+    fun `skips a header line with no colon`() {
+        val response = parseResponse("RTSP/1.0 200 OK\r\nthis line has no separator\r\nCSeq: 6\r\n\r\n")!!
+        assertEquals(6, response.cseq)
+        assertTrue(response.options.isEmpty())
+    }
+
+    @Test
+    fun `a non-numeric CSeq keeps the previous value`() {
+        val response = parseResponse("RTSP/1.0 200 OK\r\nCSeq: 6\r\ncseq: later\r\n\r\n")!!
+        assertEquals(6, response.cseq)
+    }
+
+    @Test
+    fun `serverPort is null when the transport names no port`() {
+        val noPort = parseResponse("RTSP/1.0 200 OK\r\nCSeq: 4\r\nTransport: unicast\r\n\r\n")!!
+        assertNull(noPort.serverPort())
+        val notDigits = parseResponse("RTSP/1.0 200 OK\r\nCSeq: 4\r\nTransport: server_port=x\r\n\r\n")!!
+        assertNull(notDigits.serverPort())
+    }
+
+    @Test
+    fun `serverPort stops at the first non-digit`() {
+        val response = parseResponse("RTSP/1.0 200 OK\r\nCSeq: 4\r\nTransport: server_port=48000-48001\r\n\r\n")!!
+        assertEquals(48000, response.serverPort())
+    }
+
+    @Test
+    fun `a non-numeric connect token reads as absent`() {
+        val response = parseResponse("RTSP/1.0 200 OK\r\nCSeq: 5\r\nX-SS-Connect-Data: nope\r\n\r\n")!!
+        assertNull(response.enetConnectData())
+    }
+
+    @Test
+    fun `a blank ping payload reads as absent`() {
+        val response = parseResponse("RTSP/1.0 200 OK\r\nCSeq: 3\r\nX-SS-Ping-Payload:   \r\n\r\n")!!
+        assertNull(response.pingPayload())
+    }
+
+    @Test
+    fun `ok covers the whole 2xx range and nothing else`() {
+        assertTrue(parseResponse("RTSP/1.0 299 Whatever\r\n\r\n")!!.ok)
+        assertTrue(!parseResponse("RTSP/1.0 300 Moved\r\n\r\n")!!.ok)
+        assertTrue(!parseResponse("RTSP/1.0 199 Early\r\n\r\n")!!.ok)
+    }
+
+    @Test
+    fun `DESCRIBE asks for sdp`() {
+        val encoded = describe("rtsp://host:48010", cseq = 2).encode()
+        assertEquals(
+            "DESCRIBE rtsp://host:48010 RTSP/1.0\r\n" +
+                "CSeq: 2\r\n" +
+                "X-GS-ClientVersion: 14\r\n" +
+                "Accept: application/sdp\r\n" +
+                "\r\n",
+            encoded,
+        )
+    }
+
+    @Test
+    fun `PLAY names the session`() {
+        val encoded = play("rtsp://host:48010", cseq = 6).encode()
+        assertEquals("PLAY rtsp://host:48010 RTSP/1.0\r\nCSeq: 6\r\nSession: DEADBEEFCAFE\r\n\r\n", encoded)
+    }
 }

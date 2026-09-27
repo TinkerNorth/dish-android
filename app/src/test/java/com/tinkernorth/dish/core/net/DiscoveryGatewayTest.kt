@@ -111,4 +111,36 @@ class DiscoveryGatewayTest {
             DiscoveryGateway.pinId(satelliteId = "satellite:mid:abc", ip = "10.0.0.7"),
         )
     }
+
+    @Test
+    fun serverHeardOnBothPathsKeepsTheMdnsFields() {
+        val fromBroadcast = DiscoveredServer(name = "Old name", ip = "10.0.0.9", udpPort = 9876, machineId = "mid-1")
+        val fromMdns = DiscoveredServer(name = "New name", ip = "10.0.0.10", udpPort = 9877, machineId = "mid-1")
+        val merged = DiscoveryGateway.mergeDiscovered(broadcast = listOf(fromBroadcast), mdns = listOf(fromMdns))
+        val row = merged.single()
+        assertEquals(DiscoverySource.BOTH, row.source)
+        assertEquals("New name", row.name)
+        assertEquals("10.0.0.10", row.ip)
+        assertEquals(9877, row.udpPort)
+    }
+
+    @Test
+    fun duplicateBroadcastKeysCollapseToTheLastRow() {
+        val first = DiscoveredServer(name = "Sat", ip = "10.0.0.1", machineId = "mid-1")
+        val second = DiscoveredServer(name = "Sat", ip = "10.0.0.2", machineId = "mid-1")
+        val merged = DiscoveryGateway.mergeDiscovered(broadcast = listOf(first, second), mdns = emptyList())
+        assertEquals(1, merged.size)
+        assertEquals("10.0.0.2", merged.single().ip)
+        assertEquals(DiscoverySource.BROADCAST, merged.single().source)
+    }
+
+    @Test
+    fun theSameHostWithoutAMachineIdIsKeyedOnItsAddress() {
+        val merged =
+            DiscoveryGateway.mergeDiscovered(
+                broadcast = listOf(server("Sat", "10.0.0.9")),
+                mdns = listOf(server("Sat", "10.0.0.10")),
+            )
+        assertEquals(2, merged.size)
+    }
 }

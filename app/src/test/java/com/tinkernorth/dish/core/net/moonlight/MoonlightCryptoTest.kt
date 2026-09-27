@@ -6,10 +6,9 @@ package com.tinkernorth.dish.core.net.moonlight
 import com.tinkernorth.dish.core.net.bytesToHex
 import com.tinkernorth.dish.core.net.hexToBytes
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertThrows
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import javax.crypto.AEADBadTagException
 
 /**
  * Pinned against Wolf's captured session vectors (tests/testCrypto.cpp,
@@ -34,73 +33,6 @@ class MoonlightCryptoTest {
     }
 
     @Test
-    fun `controlSeal matches Wolf's captured GCM packet body`() {
-        // testControl.cpp "30 bytes": key EDF0..D855, seq 0, payload 020302000000.
-        val key = hexToBytes("edf04a215c4fbea20934120c8480d855")
-        val sealed = controlSeal(key, seq = 0, plaintext = hexToBytes("020302000000"))
-        // tag(16) || ciphertext(6).
-        assertEquals("bf0eb6da10e47c702ec8644eb87d9cf7b6fac9ff75ca", bytesToHex(sealed))
-    }
-
-    @Test
-    fun `controlOpen reverses controlSeal across evolving seq`() {
-        val key = hexToBytes("edf04a215c4fbea20934120c8480d855")
-        for (seq in intArrayOf(0, 1, 2, 6, 255, 256, 70000)) {
-            val plaintext = "ping-$seq".toByteArray()
-            val sealed = controlSeal(key, seq, plaintext)
-            assertEquals(plaintext.toList(), controlOpen(key, seq, sealed).toList())
-        }
-    }
-
-    @Test
-    fun `controlOpen rejects a tampered payload`() {
-        val key = hexToBytes("edf04a215c4fbea20934120c8480d855")
-        val sealed = controlSeal(key, seq = 3, plaintext = "secret".toByteArray())
-        sealed[sealed.size - 1] = (sealed[sealed.size - 1].toInt() xor 0x01).toByte()
-        assertThrows(AEADBadTagException::class.java) {
-            controlOpen(key, seq = 3, tagThenCiphertext = sealed)
-        }
-    }
-
-    @Test
-    fun `controlOpen rejects the wrong seq (IV mismatch)`() {
-        val key = hexToBytes("edf04a215c4fbea20934120c8480d855")
-        val sealed = controlSeal(key, seq = 4, plaintext = "hello".toByteArray())
-        assertThrows(AEADBadTagException::class.java) {
-            controlOpen(key, seq = 5, tagThenCiphertext = sealed)
-        }
-    }
-
-    /**
-     * The host derives the IV from the LOW BYTE of the sequence number alone
-     * (Wolf control.hpp assigns a u32 seq into a u8 array element). A client
-     * that uses the whole 32 bits agrees for 256 packets and then diverges: a
-     * live Sunshine host accepted 256 sealed control packets and answered the
-     * 257th with "Failed to verify tag", ending the session about two minutes
-     * in. These two tests pin the wrap so that can never come back.
-     */
-    @Test
-    fun `the control IV wraps every 256 packets, as the host's does`() {
-        val key = hexToBytes("edf04a215c4fbea20934120c8480d855")
-        val plaintext = "keepalive".toByteArray()
-        assertEquals(
-            bytesToHex(controlSeal(key, seq = 0, plaintext = plaintext)),
-            bytesToHex(controlSeal(key, seq = 256, plaintext = plaintext)),
-        )
-        assertEquals(
-            bytesToHex(controlSeal(key, seq = 7, plaintext = plaintext)),
-            bytesToHex(controlSeal(key, seq = 0x0A0B0C07, plaintext = plaintext)),
-        )
-    }
-
-    @Test
-    fun `a packet sealed past the wrap still opens`() {
-        val key = hexToBytes("edf04a215c4fbea20934120c8480d855")
-        val sealed = controlSeal(key, seq = 257, plaintext = "past the wrap".toByteArray())
-        assertEquals("past the wrap", String(controlOpen(key, seq = 257, tagThenCiphertext = sealed)))
-    }
-
-    @Test
     fun `RSA sign and verify round-trip with a generated key`() {
         val kp =
             java.security.KeyPairGenerator
@@ -110,7 +42,7 @@ class MoonlightCryptoTest {
         val data = "pairing-secret".toByteArray()
         val sig = signRsaSha256(kp.private, data)
         assertTrue(verifyRsaSha256(kp.public, data, sig))
-        assertTrue(!verifyRsaSha256(kp.public, "other".toByteArray(), sig))
+        assertFalse(verifyRsaSha256(kp.public, "other".toByteArray(), sig))
     }
 
     @Test

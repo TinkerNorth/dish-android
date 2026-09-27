@@ -195,4 +195,86 @@ class MoonlightXmlTest {
         val hostname = parseServerInfo(xml)?.hostname
         assertFalse("leaked the file into the parsed document", hostname.orEmpty().contains("TOP-SECRET"))
     }
+
+    @Test
+    fun `an app without an id is skipped and the rest are kept`() {
+        val xml =
+            """<root status_code="200">
+                 <App><AppTitle>No Id</AppTitle></App>
+                 <App><AppTitle>Desktop</AppTitle><ID>7</ID></App>
+               </root>"""
+        assertEquals(listOf(MoonlightApp("7", "Desktop", hdrSupported = false)), parseAppList(xml))
+    }
+
+    @Test
+    fun `an app without a title or hdr flag parses with an empty title and no hdr`() {
+        val apps = parseAppList("""<root><App><ID>7</ID></App></root>""")
+        assertEquals(listOf(MoonlightApp("7", "", hdrSupported = false)), apps)
+    }
+
+    @Test
+    fun `a non-numeric status code reads as success`() {
+        assertTrue(parseStatus("""<root status_code="ok"></root>""")!!.ok)
+    }
+
+    @Test
+    fun `busy follows either a running game or a busy state`() {
+        val gameOnly = parseServerInfo("""<root><currentgame>5</currentgame><state>SUNSHINE_SERVER_FREE</state></root>""")!!
+        val stateOnly = parseServerInfo("""<root><currentgame>0</currentgame><state>SUNSHINE_SERVER_BUSY</state></root>""")!!
+        val neither = parseServerInfo("""<root><currentgame>0</currentgame><state>SUNSHINE_SERVER_FREE</state></root>""")!!
+        assertTrue(gameOnly.busy)
+        assertTrue(stateOnly.busy)
+        assertFalse(neither.busy)
+    }
+
+    @Test
+    fun `serverinfo fields absent from the reply read as their defaults`() {
+        val info = parseServerInfo("<root></root>")!!
+        assertEquals("", info.hostname)
+        assertEquals("", info.uniqueId)
+        assertEquals(0, info.pairStatus)
+        assertEquals(0, info.currentGame)
+        assertEquals("", info.state)
+        assertNull(info.httpsPort)
+        assertNull(info.externalPort)
+        assertNull(info.mac)
+        assertNull(info.localIp)
+        assertNull(info.appVersion)
+        assertNull(info.gfeVersion)
+        assertFalse(info.paired)
+        assertFalse(info.busy)
+    }
+
+    @Test
+    fun `an empty element reads as absent`() {
+        val info = parseServerInfo("<root><mac></mac><LocalIP>   </LocalIP></root>")!!
+        assertNull(info.mac)
+        assertNull(info.localIp)
+    }
+
+    @Test
+    fun `a non-numeric port reads as absent`() {
+        assertNull(parseServerInfo("<root><HttpsPort>lots</HttpsPort></root>")!!.httpsPort)
+    }
+
+    @Test
+    fun `a pair reply carries whichever phase field the host sent`() {
+        val phase2 = parsePairReply("""<root><paired>1</paired><challengeresponse>ab12</challengeresponse></root>""")!!
+        val phase3 = parsePairReply("""<root><paired>1</paired><pairingsecret>cd34</pairingsecret></root>""")!!
+        assertEquals("ab12", phase2.challengeResponse)
+        assertNull(phase2.pairingSecret)
+        assertEquals("cd34", phase3.pairingSecret)
+        assertNull(phase3.challengeResponse)
+        assertNull(phase3.statusMessage)
+    }
+
+    @Test
+    fun `a pair reply without a paired element is not paired`() {
+        assertFalse(parsePairReply("<root></root>")!!.paired)
+    }
+
+    @Test
+    fun `a status with a resume value other than one is not resumable`() {
+        assertFalse(parseStatus("""<root status_code="400"><resume>2</resume></root>""")!!.resume)
+    }
 }

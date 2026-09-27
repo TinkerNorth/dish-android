@@ -98,4 +98,44 @@ class MoonlightEventDecoderTest {
                 .array()
         assertNull(decodeMoonlightEvent(bytes))
     }
+
+    @Test
+    fun `decodes TERMINATION with its big-endian reason`() {
+        val reasonBigEndian = byteArrayOf(0x00, 0x00, 0x01, 0x02)
+        val event = decodeMoonlightEvent(plaintext(CTRL_TERMINATION, reasonBigEndian))
+        assertEquals(MoonlightEvent.Termination(0x0102), event)
+    }
+
+    @Test
+    fun `a truncated TERMINATION returns null`() {
+        assertNull(decodeMoonlightEvent(plaintext(CTRL_TERMINATION, ByteArray(3))))
+    }
+
+    @Test
+    fun `a truncated RUMBLE_DATA returns null`() {
+        assertNull(decodeMoonlightEvent(plaintext(EVENT_RUMBLE_DATA, ByteArray(9))))
+    }
+
+    @Test
+    fun `a truncated RUMBLE_TRIGGERS returns null`() {
+        assertNull(decodeMoonlightEvent(plaintext(EVENT_RUMBLE_TRIGGERS, ByteArray(5))))
+    }
+
+    @Test
+    fun `a truncated MOTION_EVENT returns null`() {
+        assertNull(decodeMoonlightEvent(plaintext(EVENT_MOTION, ByteArray(4))))
+    }
+
+    @Test
+    fun `an exact-length body decodes and trailing bytes are ignored`() {
+        val exact = decodeMoonlightEvent(plaintext(EVENT_RUMBLE_TRIGGERS, le(3, 1, 2)))
+        val padded = decodeMoonlightEvent(plaintext(EVENT_RUMBLE_TRIGGERS, le(3, 1, 2, 0x7777)))
+        assertEquals(MoonlightEvent.RumbleTriggers(3, 1, 2), exact)
+        assertEquals(exact, padded)
+    }
+
+    @Test
+    fun `the header alone decodes an unknown type without a body`() {
+        assertEquals(MoonlightEvent.Unknown(0x0300), decodeMoonlightEvent(plaintext(0x0300, ByteArray(0))))
+    }
 }

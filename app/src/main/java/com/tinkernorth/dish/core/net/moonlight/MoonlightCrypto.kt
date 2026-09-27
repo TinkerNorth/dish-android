@@ -24,9 +24,6 @@ import javax.crypto.spec.SecretKeySpec
 private const val AES_KEY_LEN = 16
 const val GCM_TAG_LEN = 16
 
-// The control stream IV is 16 bytes: the little-endian seq in the low bytes,
-// the rest zero (Wolf control.hpp decrypt_packet / encrypt_packet).
-
 private val secureRandom = SecureRandom()
 
 fun randomBytes(length: Int): ByteArray = ByteArray(length).also { secureRandom.nextBytes(it) }

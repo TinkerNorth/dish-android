@@ -4,6 +4,7 @@
 package com.tinkernorth.dish.core.net.moonlight
 
 import com.tinkernorth.dish.core.net.bytesToHex
+import com.tinkernorth.dish.core.net.hexToBytes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -73,6 +74,71 @@ class MoonlightPairingTest {
         pairing.onPhase2(response)
         // onPhase3 is where the server-authentication check fails on a wrong key.
         assertFalse(pairing.onPhase3(server.clientHashResponse(pairing.phase3Params("dish-uid").getValue("serverchallengeresp"))))
+    }
+
+    @Test
+    fun `phase 1 names the phrase and carries the client cert as hex`() {
+        val p1 = newPairing("0451").phase1Params("dish-uid")
+        assertEquals("roth", p1["devicename"])
+        assertEquals("1", p1["updateState"])
+        assertEquals("getservercert", p1["phrase"])
+        assertEquals("dish-uid", p1["uniqueid"])
+        assertEquals(bytesToHex(clientIdentity.certificatePem.toByteArray(Charsets.US_ASCII)), p1["clientcert"])
+    }
+
+    @Test
+    fun `phase 5 asks for the pairchallenge phrase`() {
+        assertEquals(mapOf("phrase" to "pairchallenge", "uniqueid" to "dish-uid"), newPairing("0451").phase5Params("dish-uid"))
+    }
+
+    @Test
+    fun `onPhase2 refuses a challenge response too short to hold the hash and the challenge`() {
+        val pairing = newPairing("0451")
+        val twoBlocksOnly = bytesToHex(ByteArray(32))
+        assertFalse(pairing.onPhase2(twoBlocksOnly))
+    }
+
+    @Test
+    fun `onPhase3 refuses a pairing secret too short to carry a signature`() {
+        val pairing = newPairing("0451")
+        val secretWithoutASignature = bytesToHex(ByteArray(16 + 63))
+        assertFalse(pairing.onPhase3(secretWithoutASignature))
+    }
+
+    @Test
+    fun `onPhase3 refuses a server that cannot sign its own secret`() {
+        val pin = "0451"
+        val server = newServer(pin)
+        val pairing = newPairing(pin)
+        pairing.onPhase1(server.getServerCert(pairing.phase1Params("dish-uid").getValue("salt")))
+        assertTrue(pairing.onPhase2(server.challengeResponse(pairing.phase2Params("dish-uid").getValue("clientchallenge"))))
+        val honest = server.clientHashResponse(pairing.phase3Params("dish-uid").getValue("serverchallengeresp"))
+        val forgedSignature = flipLastByte(honest)
+        assertFalse(pairing.onPhase3(forgedSignature))
+    }
+
+    @Test
+    fun `onPhase3 refuses a server whose secret does not match the hash it committed to`() {
+        val pin = "0451"
+        val server = newServer(pin)
+        val pairing = newPairing(pin)
+        pairing.onPhase1(server.getServerCert(pairing.phase1Params("dish-uid").getValue("salt")))
+        assertTrue(pairing.onPhase2(server.challengeResponse(pairing.phase2Params("dish-uid").getValue("clientchallenge"))))
+        val honest = server.clientHashResponse(pairing.phase3Params("dish-uid").getValue("serverchallengeresp"))
+        val swappedSecret = flipFirstByte(honest)
+        assertFalse(pairing.onPhase3(swappedSecret))
+    }
+
+    private fun flipLastByte(hex: String): String {
+        val bytes = hexToBytes(hex)
+        bytes[bytes.size - 1] = (bytes[bytes.size - 1].toInt() xor 0x01).toByte()
+        return bytesToHex(bytes)
+    }
+
+    private fun flipFirstByte(hex: String): String {
+        val bytes = hexToBytes(hex)
+        bytes[0] = (bytes[0].toInt() xor 0x01).toByte()
+        return bytesToHex(bytes)
     }
 
     private companion object {
