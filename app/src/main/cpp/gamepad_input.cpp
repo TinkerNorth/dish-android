@@ -13,8 +13,11 @@ namespace {
 
 constexpr float AXIS_MAX = 32767.f;
 constexpr float AXIS_MIN = -32768.f;
+constexpr float INVERTED_AXIS_MAX = -AXIS_MAX;
 constexpr float TRIGGER_MAX = 255.f;
 constexpr float TRIGGER_MIN = 0.f;
+constexpr float HAT_THRESHOLD = 0.5f;
+constexpr int64_t NS_PER_MS = 1000000;
 
 } // namespace
 
@@ -135,14 +138,20 @@ bool applySwitchLayoutKey(DeviceState& s, const int32_t androidKeycode, const bo
     return true;
 }
 
+bool isStandardLeftTriggerKey(const int32_t androidKeycode) {
+    return androidKeycode == KC_BUTTON_L2 || androidKeycode == KC_BUTTON_7;
+}
+
+bool isStandardRightTriggerKey(const int32_t androidKeycode) {
+    return androidKeycode == KC_BUTTON_R2 || androidKeycode == KC_BUTTON_8;
+}
+
 bool applyStandardKey(DeviceState& s, const int32_t androidKeycode, const bool down) {
-    const bool isLeftTrigger = androidKeycode == KC_BUTTON_L2 || androidKeycode == KC_BUTTON_7;
-    if (isLeftTrigger) {
+    if (isStandardLeftTriggerKey(androidKeycode)) {
         setLeftTriggerFromKey(s, down);
         return true;
     }
-    const bool isRightTrigger = androidKeycode == KC_BUTTON_R2 || androidKeycode == KC_BUTTON_8;
-    if (isRightTrigger) {
+    if (isStandardRightTriggerKey(androidKeycode)) {
         setRightTriggerFromKey(s, down);
         return true;
     }
@@ -153,6 +162,29 @@ bool applyStandardKey(DeviceState& s, const int32_t androidKeycode, const bool d
 
     setButtonBit(s, xusbBit, down);
     return true;
+}
+
+bool standardLayoutConsumesKey(const int32_t androidKeycode) {
+    const bool isATriggerKey =
+        isStandardLeftTriggerKey(androidKeycode) || isStandardRightTriggerKey(androidKeycode);
+    const bool isAMappedButton = keycodeToXusb(androidKeycode) != NO_XUSB_BIT;
+    return isATriggerKey || isAMappedButton;
+}
+
+uint16_t hatAxesToDpadBits(const float hatX, const float hatY) {
+    uint16_t bits = 0;
+    if (hatX < -HAT_THRESHOLD) bits |= XUSB_DPAD_LEFT;
+    if (hatX > HAT_THRESHOLD) bits |= XUSB_DPAD_RIGHT;
+    if (hatY < -HAT_THRESHOLD) bits |= XUSB_DPAD_UP;
+    if (hatY > HAT_THRESHOLD) bits |= XUSB_DPAD_DOWN;
+    return bits;
+}
+
+bool isTouchpadEdge(const TouchpadState& last, const TouchpadState& cur) {
+    const bool contactChanged = cur.f0Active != last.f0Active || cur.f1Active != last.f1Active;
+    const bool clickChanged = cur.clickDown != last.clickDown;
+    const bool trackingIdChanged = cur.f0Id != last.f0Id || cur.f1Id != last.f1Id;
+    return contactChanged || clickChanged || trackingIdChanged;
 }
 
 } // namespace
@@ -170,6 +202,12 @@ bool switchLayoutConsumesKey(const int32_t androidKeycode) {
     const bool isZr = androidKeycode == KC_BUTTON_R1;
     const bool isMappedButton = switchLayoutKeycodeToXusb(androidKeycode) != NO_XUSB_BIT;
     return isZl || isZr || isMappedButton;
+}
+
+bool consumesKey(const int32_t androidKeycode, const uint8_t quirk) {
+    const bool usesSwitchLayout = (quirk & QUIRK_SWITCH_LAYOUT) != 0;
+    if (usesSwitchLayout) return switchLayoutConsumesKey(androidKeycode);
+    return standardLayoutConsumesKey(androidKeycode);
 }
 
 uint16_t applyButtonQuirk(const uint16_t xusbBit, const uint8_t quirk) {
@@ -192,21 +230,19 @@ bool applyKey(DeviceState& s, const int32_t androidKeycode, const bool down) {
     return applyStandardKey(s, androidKeycode, down);
 }
 
-void applyAxes(DeviceState& s, float x, float y, float z, float rz, float leftTrigger,
-               float rightTrigger, float hatX, float hatY) {
-    s.sLX = scaleAxis(deadzone(x, s.flatX), 32767.f);
-    s.sLY = scaleAxis(deadzone(y, s.flatY), -32767.f);
-    s.sRX = scaleAxis(deadzone(z, s.flatZ), 32767.f);
-    s.sRY = scaleAxis(deadzone(rz, s.flatRZ), -32767.f);
+void applyAxes(DeviceState& s, const float x, const float y, const float z, const float rz,
+               const float leftTrigger, const float rightTrigger, const float hatX,
+               const float hatY) {
+    s.sLX = scaleAxis(deadzone(x, s.flatX), AXIS_MAX);
+    s.sLY = scaleAxis(deadzone(y, s.flatY), INVERTED_AXIS_MAX);
+    s.sRX = scaleAxis(deadzone(z, s.flatZ), AXIS_MAX);
+    s.sRY = scaleAxis(deadzone(rz, s.flatRZ), INVERTED_AXIS_MAX);
 
-    if (!s.ltFromKey) s.bLT = scaleTrigger(leftTrigger, 255.f);
-    if (!s.rtFromKey) s.bRT = scaleTrigger(rightTrigger, 255.f);
+    if (!s.ltFromKey) s.bLT = scaleTrigger(leftTrigger, TRIGGER_MAX);
+    if (!s.rtFromKey) s.bRT = scaleTrigger(rightTrigger, TRIGGER_MAX);
 
-    s.wButtons = static_cast<uint16_t>(s.wButtons & ~XUSB_DPAD_MASK);
-    if (hatX < -0.5f) s.wButtons = static_cast<uint16_t>(s.wButtons | XUSB_DPAD_LEFT);
-    if (hatX > 0.5f) s.wButtons = static_cast<uint16_t>(s.wButtons | XUSB_DPAD_RIGHT);
-    if (hatY < -0.5f) s.wButtons = static_cast<uint16_t>(s.wButtons | XUSB_DPAD_UP);
-    if (hatY > 0.5f) s.wButtons = static_cast<uint16_t>(s.wButtons | XUSB_DPAD_DOWN);
+    const uint16_t withoutDpad = static_cast<uint16_t>(s.wButtons & ~XUSB_DPAD_MASK);
+    s.wButtons = static_cast<uint16_t>(withoutDpad | hatAxesToDpadBits(hatX, hatY));
 }
 
 void resetState(DeviceState& s) {
@@ -219,11 +255,13 @@ void resetState(DeviceState& s) {
 }
 
 bool consumePublishIfChanged(DeviceState& s) {
-    if (s.everPublished && s.lastWButtons == s.wButtons && s.lastBLT == s.bLT &&
-        s.lastBRT == s.bRT && s.lastSLX == s.sLX && s.lastSLY == s.sLY && s.lastSRX == s.sRX &&
-        s.lastSRY == s.sRY) {
-        return false;
-    }
+    const bool sameButtons = s.lastWButtons == s.wButtons;
+    const bool sameTriggers = s.lastBLT == s.bLT && s.lastBRT == s.bRT;
+    const bool sameLeftStick = s.lastSLX == s.sLX && s.lastSLY == s.sLY;
+    const bool sameRightStick = s.lastSRX == s.sRX && s.lastSRY == s.sRY;
+    const bool sameReport = sameButtons && sameTriggers && sameLeftStick && sameRightStick;
+    const bool isUnchanged = s.everPublished && sameReport;
+    if (isUnchanged) return false;
     s.lastWButtons = s.wButtons;
     s.lastBLT = s.bLT;
     s.lastBRT = s.bRT;
@@ -246,8 +284,8 @@ void resetPublishLatch(DeviceState& s) {
     s.lastSRY = 0;
 }
 
-size_t formatDeviceStateJson(const DeviceState& s, char* buf, size_t cap) {
-    int n = snprintf(
+size_t formatDeviceStateJson(const DeviceState& s, char* buf, const size_t cap) {
+    const int n = snprintf(
         buf, cap,
         "{\"buttons\":%u,\"lt\":%u,\"rt\":%u,\"lx\":%d,\"ly\":%d,\"rx\":%d,\"ry\":%d,"
         "\"motionValid\":%s,\"gx\":%d,\"gy\":%d,\"gz\":%d,\"ax\":%d,\"ay\":%d,\"az\":%d,"
@@ -259,35 +297,46 @@ size_t formatDeviceStateJson(const DeviceState& s, char* buf, size_t cap) {
         s.touch0Active ? "true" : "false", (unsigned)s.touch0Id, (int)s.touch0X, (int)s.touch0Y,
         s.touch1Active ? "true" : "false", (unsigned)s.touch1Id, (int)s.touch1X, (int)s.touch1Y,
         s.touchClick ? "true" : "false");
-    if (n < 0 || (size_t)n >= cap) return 0;
-    return (size_t)n;
+    const bool fits = n >= 0 && (size_t)n < cap;
+    return fits ? (size_t)n : 0;
 }
 
 bool operator==(const TouchpadState& a, const TouchpadState& b) {
-    return a.f0Active == b.f0Active && a.f1Active == b.f1Active && a.clickDown == b.clickDown &&
-           a.f0Id == b.f0Id && a.f1Id == b.f1Id && a.f0X == b.f0X && a.f0Y == b.f0Y &&
-           a.f1X == b.f1X && a.f1Y == b.f1Y;
+    const bool sameContacts = a.f0Active == b.f0Active && a.f1Active == b.f1Active;
+    const bool sameClick = a.clickDown == b.clickDown;
+    const bool sameIds = a.f0Id == b.f0Id && a.f1Id == b.f1Id;
+    const bool sameFinger0 = a.f0X == b.f0X && a.f0Y == b.f0Y;
+    const bool sameFinger1 = a.f1X == b.f1X && a.f1Y == b.f1Y;
+    const bool sameTouches = sameContacts && sameIds && sameFinger0 && sameFinger1;
+    return sameTouches && sameClick;
 }
 
-TouchpadSend TouchpadGate::decide(const TouchpadState& cur, int64_t nowNs) {
-    if (cur != last_) {
-        const bool edge = cur.f0Active != last_.f0Active || cur.f1Active != last_.f1Active ||
-                          cur.clickDown != last_.clickDown || cur.f0Id != last_.f0Id ||
-                          cur.f1Id != last_.f1Id;
-        // A skipped move is not lost data: the next report carries fresher coordinates.
-        if (!edge && nowNs - lastSentNs_ < kTouchpadMoveIntervalNs) return TouchpadSend::SKIP;
-        last_ = cur;
-        lastSentNs_ = nowNs;
-        lastEventMs_ = nowNs / 1000000;
-        resendsLeft_ = kTouchpadHealResends;
-        return TouchpadSend::FRESH;
-    }
-    if (resendsLeft_ > 0 && nowNs - lastSentNs_ >= kTouchpadMoveIntervalNs) {
-        resendsLeft_--;
-        lastSentNs_ = nowNs;
-        return TouchpadSend::HEAL;
-    }
-    return TouchpadSend::SKIP;
+TouchpadSend TouchpadGate::decide(const TouchpadState& cur, const int64_t nowNs) {
+    const bool changed = cur != last_;
+    if (changed) return decideOnChange(cur, nowNs);
+    return decideHeal(nowNs);
+}
+
+TouchpadSend TouchpadGate::decideOnChange(const TouchpadState& cur, const int64_t nowNs) {
+    const bool isAnEdge = isTouchpadEdge(last_, cur);
+    const bool isInsideTheMoveInterval = nowNs - lastSentNs_ < kTouchpadMoveIntervalNs;
+    const bool coalesces = !isAnEdge && isInsideTheMoveInterval;
+    if (coalesces) return TouchpadSend::SKIP;
+    last_ = cur;
+    lastSentNs_ = nowNs;
+    lastEventMs_ = nowNs / NS_PER_MS;
+    resendsLeft_ = kTouchpadHealResends;
+    return TouchpadSend::FRESH;
+}
+
+TouchpadSend TouchpadGate::decideHeal(const int64_t nowNs) {
+    const bool hasResendsLeft = resendsLeft_ > 0;
+    const bool theIntervalElapsed = nowNs - lastSentNs_ >= kTouchpadMoveIntervalNs;
+    const bool heals = hasResendsLeft && theIntervalElapsed;
+    if (!heals) return TouchpadSend::SKIP;
+    resendsLeft_--;
+    lastSentNs_ = nowNs;
+    return TouchpadSend::HEAL;
 }
 
 } // namespace gamepad

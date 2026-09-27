@@ -2,6 +2,7 @@
 
 #include "usb_hid_descriptor.h"
 
+#include <algorithm>
 #include <cstddef>
 
 namespace usbhid {
@@ -13,52 +14,101 @@ namespace {
 constexpr size_t kMaxUsages = 16;
 constexpr uint8_t kMaxButtons = 16;
 
-int32_t signExtend(uint32_t v, uint8_t bytes) {
-    if (bytes == 0 || bytes >= 4) return (int32_t)v;
-    uint32_t bits = bytes * 8u;
-    uint32_t signBit = 1u << (bits - 1);
-    if (v & signBit) return (int32_t)(v | ~((1u << bits) - 1u));
+constexpr int64_t kAxisMax = 32767;
+constexpr int64_t kAxisMin = -32768;
+constexpr int64_t kTriggerMax = 255;
+constexpr uint8_t kTriggerFull = 255;
+constexpr uint8_t kBitsPerByte = 8;
+constexpr uint8_t kBitsPerU32 = 32;
+constexpr uint8_t kBytesPerU32 = 4;
+
+// The usage pages and usages this parser maps (USB HID Usage Tables 1.12 §4, §5, §12).
+constexpr uint32_t kUsagePageGenericDesktop = 0x01;
+constexpr uint32_t kUsagePageSimulation = 0x02;
+constexpr uint32_t kUsagePageButton = 0x09;
+constexpr uint32_t kUsageX = 0x30;
+constexpr uint32_t kUsageY = 0x31;
+constexpr uint32_t kUsageZ = 0x32;
+constexpr uint32_t kUsageRx = 0x33;
+constexpr uint32_t kUsageRy = 0x34;
+constexpr uint32_t kUsageRz = 0x35;
+constexpr uint32_t kUsageHatSwitch = 0x39;
+constexpr uint32_t kUsageAccelerator = 0xC4;
+constexpr uint32_t kUsageBrake = 0xC5;
+
+// The item stream (HID 1.11 §6.2.2): a short item's prefix byte packs bSize, bType and bTag; a
+// long item is the 0xFE prefix, a data length, a tag, then that many data bytes.
+constexpr uint8_t kLongItemPrefix = 0xFE;
+constexpr size_t kLongItemHeaderBytes = 2;
+constexpr uint8_t kItemSizeMask = 0x03;
+constexpr uint8_t kItemSizeFourBytes = 3;
+constexpr uint8_t kItemTypeShift = 2;
+constexpr uint8_t kItemTypeMask = 0x03;
+constexpr uint8_t kItemTagShift = 4;
+constexpr uint8_t kItemTagMask = 0x0F;
+constexpr uint8_t kItemTypeMain = 0;
+constexpr uint8_t kItemTypeGlobal = 1;
+constexpr uint8_t kItemTypeLocal = 2;
+constexpr uint8_t kMainInput = 0x8;
+constexpr uint32_t kInputConstantBit = 0x01;
+constexpr uint8_t kGlobalUsagePage = 0x0;
+constexpr uint8_t kGlobalLogicalMin = 0x1;
+constexpr uint8_t kGlobalLogicalMax = 0x2;
+constexpr uint8_t kGlobalReportSize = 0x7;
+constexpr uint8_t kGlobalReportId = 0x8;
+constexpr uint8_t kGlobalReportCount = 0x9;
+constexpr uint8_t kLocalUsage = 0x0;
+constexpr uint8_t kLocalUsageMin = 0x1;
+constexpr uint8_t kLocalUsageMax = 0x2;
+
+int32_t signExtend(const uint32_t v, const uint8_t bytes) {
+    const bool isAlreadyFullWidth = bytes == 0 || bytes >= kBytesPerU32;
+    if (isAlreadyFullWidth) return (int32_t)v;
+    const uint32_t bits = bytes * kBitsPerByte;
+    const uint32_t signBit = 1u << (bits - 1);
+    const bool isNegative = (v & signBit) != 0;
+    if (isNegative) return (int32_t)(v | ~((1u << bits) - 1u));
     return (int32_t)v;
 }
 
-uint32_t extractBits(const uint8_t* d, size_t dlen, uint32_t bitOff, uint8_t bits) {
+uint32_t extractBits(const uint8_t* d, const size_t dlen, const uint32_t bitOff,
+                     const uint8_t bits) {
     uint32_t v = 0;
-    for (uint8_t i = 0; i < bits && i < 32; i++) {
-        uint32_t bi = bitOff + i;
-        if ((size_t)(bi >> 3) >= dlen) break;
-        if ((d[bi >> 3] >> (bi & 7u)) & 1u) v |= (1u << i);
+    for (uint8_t i = 0; i < bits && i < kBitsPerU32; i++) {
+        const uint32_t bi = bitOff + i;
+        const size_t byteIndex = bi / kBitsPerByte;
+        if (byteIndex >= dlen) break;
+        const bool isSet = ((d[byteIndex] >> (bi % kBitsPerByte)) & 1u) != 0;
+        if (isSet) v |= (1u << i);
     }
     return v;
 }
 
-int32_t toSigned(uint32_t raw, uint8_t bits, int32_t logicalMin) {
-    if (logicalMin < 0 && bits > 0 && bits < 32) {
-        uint32_t signBit = 1u << (bits - 1);
-        if (raw & signBit) return (int32_t)(raw | ~((1u << bits) - 1u));
-    }
+int32_t toSigned(const uint32_t raw, const uint8_t bits, const int32_t logicalMin) {
+    const bool isASignedField = logicalMin < 0 && bits > 0 && bits < kBitsPerU32;
+    if (!isASignedField) return (int32_t)raw;
+    const uint32_t signBit = 1u << (bits - 1);
+    const bool isNegative = (raw & signBit) != 0;
+    if (isNegative) return (int32_t)(raw | ~((1u << bits) - 1u));
     return (int32_t)raw;
 }
 
-int16_t scaleAxis16(uint32_t raw, const HidAxis& a, bool invert) {
-    int32_t v = toSigned(raw, a.bitSize, a.logicalMin);
-    int32_t center = (a.logicalMin + a.logicalMax) / 2;
-    int32_t half = (a.logicalMax - a.logicalMin) / 2;
+int16_t scaleAxis16(const uint32_t raw, const HidAxis& a, const bool invert) {
+    const int64_t v = toSigned(raw, a.bitSize, a.logicalMin);
+    const int64_t center = ((int64_t)a.logicalMin + a.logicalMax) / 2;
+    const int64_t half = ((int64_t)a.logicalMax - a.logicalMin) / 2;
     if (half <= 0) return 0;
-    int32_t scaled = (int32_t)((int64_t)(v - center) * 32767 / half);
-    if (invert) scaled = -scaled;
-    if (scaled > 32767) scaled = 32767;
-    if (scaled < -32768) scaled = -32768;
-    return (int16_t)scaled;
+    const int64_t scaled = (v - center) * kAxisMax / half;
+    const int64_t oriented = invert ? -scaled : scaled;
+    return (int16_t)std::clamp(oriented, kAxisMin, kAxisMax);
 }
 
-uint8_t scaleTrig8(uint32_t raw, const HidAxis& a) {
-    int32_t v = toSigned(raw, a.bitSize, a.logicalMin);
-    int32_t span = a.logicalMax - a.logicalMin;
+uint8_t scaleTrig8(const uint32_t raw, const HidAxis& a) {
+    const int64_t v = toSigned(raw, a.bitSize, a.logicalMin);
+    const int64_t span = (int64_t)a.logicalMax - a.logicalMin;
     if (span <= 0) return 0;
-    int32_t scaled = (int32_t)((int64_t)(v - a.logicalMin) * 255 / span);
-    if (scaled < 0) scaled = 0;
-    if (scaled > 255) scaled = 255;
-    return (uint8_t)scaled;
+    const int64_t scaled = (v - a.logicalMin) * kTriggerMax / span;
+    return (uint8_t)std::clamp<int64_t>(scaled, 0, kTriggerMax);
 }
 
 struct ButtonMapping {
@@ -75,8 +125,10 @@ constexpr ButtonMapping STANDARD_BUTTON_MAP[] = {
 };
 
 // Switch-order HID pads declare buttons in usage row Y B A X L R ZL ZR Minus Plus L3 R3 Home
-// Capture, so the mapping is by position. Indices 6 and 7 are ZL/ZR and are absent here: they
-// fold into the triggers in decodeFromLayout instead.
+// Capture, so the mapping is by position. ZL and ZR are absent here: they fold into the triggers
+// in decodeFromLayout instead.
+constexpr uint8_t kSwitchOrderZlIndex = 6;
+constexpr uint8_t kSwitchOrderZrIndex = 7;
 constexpr ButtonMapping SWITCH_ORDER_BUTTON_MAP[] = {
     {0, gamepad::XUSB_X},        {1, gamepad::XUSB_A},      {2, gamepad::XUSB_B},
     {3, gamepad::XUSB_Y},        {4, gamepad::XUSB_LB},     {5, gamepad::XUSB_RB},
@@ -93,14 +145,15 @@ uint16_t bitForDeclaredIndex(const ButtonMapping (&mappings)[N], const uint8_t i
     return 0;
 }
 
-uint16_t buttonBit(uint8_t idx) { return bitForDeclaredIndex(STANDARD_BUTTON_MAP, idx); }
+uint16_t buttonBit(const uint8_t idx) { return bitForDeclaredIndex(STANDARD_BUTTON_MAP, idx); }
 
-uint16_t switchOrderButtonBit(uint8_t idx) {
+uint16_t switchOrderButtonBit(const uint8_t idx) {
     return bitForDeclaredIndex(SWITCH_ORDER_BUTTON_MAP, idx);
 }
 
-void setAxis(HidAxis& a, uint32_t bit, uint32_t size, int32_t lo, int32_t hi) {
-    if (a.present) return; // first declaration of an axis wins
+void setAxis(HidAxis& a, const uint32_t bit, const uint32_t size, const int32_t lo,
+             const int32_t hi) {
+    if (a.present) return;
     a.present = true;
     a.bitOffset = (uint16_t)bit;
     a.bitSize = (uint8_t)size;
@@ -108,52 +161,77 @@ void setAxis(HidAxis& a, uint32_t bit, uint32_t size, int32_t lo, int32_t hi) {
     a.logicalMax = hi;
 }
 
-// Generic Desktop right stick is Z/Rz and triggers are Rx/Ry, matching the convention the
-// fixed-offset fallback already assumes; Simulation Brake/Accelerator also map to the triggers.
-void assignUsage(HidLayout& out, uint32_t page, uint32_t usage, uint32_t bit, uint32_t size,
-                 int32_t lo, int32_t hi) {
-    if (page == 0x01) {
-        switch (usage) {
-        case 0x30:
-            setAxis(out.lx, bit, size, lo, hi);
-            break;
-        case 0x31:
-            setAxis(out.ly, bit, size, lo, hi);
-            break;
-        case 0x32:
-            setAxis(out.rx, bit, size, lo, hi);
-            break;
-        case 0x35:
-            setAxis(out.ry, bit, size, lo, hi);
-            break;
-        case 0x33:
-            setAxis(out.lt, bit, size, lo, hi);
-            break;
-        case 0x34:
-            setAxis(out.rt, bit, size, lo, hi);
-            break;
-        case 0x39:
-            if (!out.hasHat) {
-                out.hasHat = true;
-                out.hatBitOffset = (uint16_t)bit;
-                out.hatBitSize = (uint8_t)size;
-                out.hatLogicalMin = lo;
-                out.hatLogicalMax = hi;
-            }
-            break;
-        default:
-            break;
-        }
-    } else if (page == 0x02) {
-        if (usage == 0xC5)
-            setAxis(out.lt, bit, size, lo, hi);
-        else if (usage == 0xC4)
-            setAxis(out.rt, bit, size, lo, hi);
+void setHat(HidLayout& out, const uint32_t bit, const uint32_t size, const int32_t lo,
+            const int32_t hi) {
+    if (out.hasHat) return;
+    out.hasHat = true;
+    out.hatBitOffset = (uint16_t)bit;
+    out.hatBitSize = (uint8_t)size;
+    out.hatLogicalMin = lo;
+    out.hatLogicalMax = hi;
+}
+
+// Generic Desktop: X/Y the left stick, Z/Rz the right stick and Rx/Ry the triggers, matching the
+// convention the fixed-offset fallback assumes.
+void assignGenericDesktopUsage(HidLayout& out, const uint32_t usage, const uint32_t bit,
+                               const uint32_t size, const int32_t lo, const int32_t hi) {
+    switch (usage) {
+    case kUsageX:
+        setAxis(out.lx, bit, size, lo, hi);
+        break;
+    case kUsageY:
+        setAxis(out.ly, bit, size, lo, hi);
+        break;
+    case kUsageZ:
+        setAxis(out.rx, bit, size, lo, hi);
+        break;
+    case kUsageRz:
+        setAxis(out.ry, bit, size, lo, hi);
+        break;
+    case kUsageRx:
+        setAxis(out.lt, bit, size, lo, hi);
+        break;
+    case kUsageRy:
+        setAxis(out.rt, bit, size, lo, hi);
+        break;
+    case kUsageHatSwitch:
+        setHat(out, bit, size, lo, hi);
+        break;
+    default:
+        break;
     }
 }
 
-// One item off the descriptor stream. A long item (prefix 0xFE) carries no data this parser
-// understands, so it is reported with `skip` set and its payload stepped over.
+void assignSimulationUsage(HidLayout& out, const uint32_t usage, const uint32_t bit,
+                           const uint32_t size, const int32_t lo, const int32_t hi) {
+    switch (usage) {
+    case kUsageBrake:
+        setAxis(out.lt, bit, size, lo, hi);
+        break;
+    case kUsageAccelerator:
+        setAxis(out.rt, bit, size, lo, hi);
+        break;
+    default:
+        break;
+    }
+}
+
+void assignUsage(HidLayout& out, const uint32_t page, const uint32_t usage, const uint32_t bit,
+                 const uint32_t size, const int32_t lo, const int32_t hi) {
+    switch (page) {
+    case kUsagePageGenericDesktop:
+        assignGenericDesktopUsage(out, usage, bit, size, lo, hi);
+        break;
+    case kUsagePageSimulation:
+        assignSimulationUsage(out, usage, bit, size, lo, hi);
+        break;
+    default:
+        break;
+    }
+}
+
+// One item off the descriptor stream. A long item carries no data this parser understands, so it
+// is reported with `skip` set and its payload stepped over.
 struct HidItem {
     uint8_t type;
     uint8_t tag;
@@ -163,8 +241,6 @@ struct HidItem {
     bool truncated;
 };
 
-// A long item carries a payload-length byte, then a tag byte, then that many data bytes. No
-// gamepad descriptor uses one, so it is stepped over whole.
 HidItem readLongItem(const uint8_t* desc, const size_t len, size_t& i) {
     HidItem item = {0, 0, 0, 0, false, false};
     if (i >= len) {
@@ -172,31 +248,32 @@ HidItem readLongItem(const uint8_t* desc, const size_t len, size_t& i) {
         return item;
     }
     const uint8_t payload = desc[i];
-    i += 2u + payload;
+    i += kLongItemHeaderBytes + payload;
     item.skip = true;
     return item;
 }
 
-// A short item packs its data length, type and tag into the prefix byte; bSize 3 means 4 bytes,
-// which is the one size that is not its own encoding.
+// bSize 3 means 4 bytes, the one size that is not its own encoding.
 HidItem readShortItem(const uint8_t* desc, const size_t len, const uint8_t prefix, size_t& i) {
     HidItem item = {0, 0, 0, 0, false, false};
-    const uint8_t bSize = prefix & 0x03u;
-    item.dataLen = bSize == 3 ? 4 : bSize;
-    item.type = (prefix >> 2) & 0x03u;
-    item.tag = (prefix >> 4) & 0x0Fu;
+    const uint8_t bSize = prefix & kItemSizeMask;
+    item.dataLen = bSize == kItemSizeFourBytes ? kBytesPerU32 : bSize;
+    item.type = (prefix >> kItemTypeShift) & kItemTypeMask;
+    item.tag = (prefix >> kItemTagShift) & kItemTagMask;
     if (i + item.dataLen > len) {
         item.truncated = true;
         return item;
     }
-    for (uint8_t k = 0; k < item.dataLen; k++) item.data |= (uint32_t)desc[i + k] << (8u * k);
+    for (uint8_t k = 0; k < item.dataLen; k++) {
+        item.data |= (uint32_t)desc[i + k] << (kBitsPerByte * k);
+    }
     i += item.dataLen;
     return item;
 }
 
 HidItem readHidItem(const uint8_t* desc, const size_t len, size_t& i) {
     const uint8_t prefix = desc[i++];
-    const bool isLongItem = prefix == 0xFE;
+    const bool isLongItem = prefix == kLongItemPrefix;
     if (isLongItem) return readLongItem(desc, len, i);
     return readShortItem(desc, len, prefix, i);
 }
@@ -220,23 +297,23 @@ struct HidParseState {
 
 void applyGlobalItem(const HidItem& item, HidParseState& st) {
     switch (item.tag) {
-    case 0x0:
+    case kGlobalUsagePage:
         st.usagePage = item.data;
         break;
-    case 0x1:
+    case kGlobalLogicalMin:
         st.logMin = signExtend(item.data, item.dataLen);
         break;
-    case 0x2:
+    case kGlobalLogicalMax:
         st.logMax = signExtend(item.data, item.dataLen);
         break;
-    case 0x7:
+    case kGlobalReportSize:
         st.reportSize = item.data;
         break;
-    case 0x8:
+    case kGlobalReportId:
         st.currentReportId = (uint8_t)item.data;
         st.bitCursor = 0;
         break;
-    case 0x9:
+    case kGlobalReportCount:
         st.reportCount = item.data;
         break;
     default:
@@ -246,14 +323,14 @@ void applyGlobalItem(const HidItem& item, HidParseState& st) {
 
 void applyLocalItem(const HidItem& item, HidParseState& st) {
     switch (item.tag) {
-    case 0x0:
+    case kLocalUsage:
         if (st.usageCount < kMaxUsages) st.usages[st.usageCount++] = item.data;
         break;
-    case 0x1:
+    case kLocalUsageMin:
         st.usageMin = item.data;
         st.haveRange = true;
         break;
-    case 0x2:
+    case kLocalUsageMax:
         st.haveRange = true;
         break;
     default:
@@ -265,10 +342,12 @@ void takeButtonField(const HidParseState& st, const uint32_t startBit, HidLayout
     const bool alreadyTaken = out.buttonCount != 0;
     if (alreadyTaken) return;
     out.buttonBitOffset = (uint16_t)startBit;
-    const uint32_t count = st.reportCount > kMaxButtons ? kMaxButtons : st.reportCount;
+    const uint32_t count = std::min<uint32_t>(st.reportCount, kMaxButtons);
     out.buttonCount = (uint8_t)count;
 }
 
+// A usage range names every field; a usage list names the first fields and its last entry stands
+// for the rest.
 void takeAxisFields(const HidParseState& st, const uint32_t startBit, HidLayout& out) {
     for (uint32_t f = 0; f < st.reportCount; f++) {
         uint32_t usage;
@@ -284,13 +363,12 @@ void takeAxisFields(const HidParseState& st, const uint32_t startBit, HidLayout&
     }
 }
 
-// The first non-constant Input item locks the report id this layout describes; later items from a
-// different report are the device's other interfaces and are not ours to read.
+// The first non-constant Input item locks the report id this layout describes.
 void applyInputItem(const HidItem& item, HidParseState& st, HidLayout& out) {
     const uint32_t startBit = st.bitCursor;
     st.bitCursor += st.reportSize * st.reportCount;
 
-    const bool isConstantPadding = (item.data & 0x01u) != 0;
+    const bool isConstantPadding = (item.data & kInputConstantBit) != 0;
     const bool carriesFields = st.reportSize > 0 && st.reportCount > 0;
     if (isConstantPadding || !carriesFields) return;
 
@@ -302,12 +380,13 @@ void applyInputItem(const HidItem& item, HidParseState& st, HidLayout& out) {
     const bool isTheLockedReport = st.currentReportId == st.lockedReportId;
     if (!isTheLockedReport) return;
 
-    const bool isButtonPage = st.usagePage == 0x09;
+    const bool isButtonPage = st.usagePage == kUsagePageButton;
     if (isButtonPage) {
         takeButtonField(st, startBit, out);
         return;
     }
-    const bool isAxisPage = st.usagePage == 0x01 || st.usagePage == 0x02;
+    const bool isAxisPage =
+        st.usagePage == kUsagePageGenericDesktop || st.usagePage == kUsagePageSimulation;
     if (isAxisPage) takeAxisFields(st, startBit, out);
 }
 
@@ -315,6 +394,25 @@ void clearLocalItems(HidParseState& st) {
     st.usageCount = 0;
     st.haveRange = false;
     st.usageMin = 0;
+}
+
+// A Main item consumes whatever the Global and Local items have accumulated and then clears the
+// Local ones; only an Input main item carries fields this parser wants.
+void applyItem(const HidItem& item, HidParseState& st, HidLayout& out) {
+    const bool isMainItem = item.type == kItemTypeMain;
+    if (isMainItem) {
+        const bool isInputItem = item.tag == kMainInput;
+        if (isInputItem) applyInputItem(item, st, out);
+        clearLocalItems(st);
+        return;
+    }
+    const bool isGlobalItem = item.type == kItemTypeGlobal;
+    if (isGlobalItem) {
+        applyGlobalItem(item, st);
+        return;
+    }
+    const bool isLocalItem = item.type == kItemTypeLocal;
+    if (isLocalItem) applyLocalItem(item, st);
 }
 
 // The report-id prefix byte, when the layout says the device sends one.
@@ -349,8 +447,8 @@ uint16_t decodeLayoutHat(const uint8_t* d, const size_t dlen, const HidLayout& L
     const uint32_t raw = extractBits(d, dlen, L.hatBitOffset, L.hatBitSize);
     const int dir = (int)raw - (int)L.hatLogicalMin;
     const int range = (int)L.hatLogicalMax - (int)L.hatLogicalMin;
-    const bool isADirection = dir >= 0 && dir <= range && dir <= 7;
-    if (!isADirection) return 0;
+    const bool isInsideTheDeclaredRange = dir >= 0 && dir <= range;
+    if (!isInsideTheDeclaredRange) return 0;
     return gamepad::hatDirectionBits(dir);
 }
 
@@ -358,7 +456,6 @@ bool layoutButtonIsDown(const uint8_t* d, const size_t dlen, const HidLayout& L,
     return extractBits(d, dlen, (uint32_t)L.buttonBitOffset + i, 1) != 0;
 }
 
-// A Switch-order pad carries ZL and ZR in the button block; they drive the triggers, not buttons.
 uint16_t decodeSwitchOrderButtons(const uint8_t* d, const size_t dlen, const HidLayout& L,
                                   DeviceState& s) {
     uint16_t buttons = 0;
@@ -366,16 +463,16 @@ uint16_t decodeSwitchOrderButtons(const uint8_t* d, const size_t dlen, const Hid
     bool zr = false;
     for (uint8_t i = 0; i < L.buttonCount; i++) {
         if (!layoutButtonIsDown(d, dlen, L, i)) continue;
-        if (i == 6) {
+        if (i == kSwitchOrderZlIndex) {
             zl = true;
-        } else if (i == 7) {
+        } else if (i == kSwitchOrderZrIndex) {
             zr = true;
         } else {
             buttons = (uint16_t)(buttons | switchOrderButtonBit(i));
         }
     }
-    s.bLT = zl ? 255 : 0;
-    s.bRT = zr ? 255 : 0;
+    s.bLT = zl ? kTriggerFull : 0;
+    s.bRT = zr ? kTriggerFull : 0;
     return buttons;
 }
 
@@ -389,26 +486,7 @@ uint16_t decodeStandardButtons(const uint8_t* d, const size_t dlen, const HidLay
 
 } // namespace
 
-// A Main item consumes whatever the Global and Local items have accumulated and then clears the
-// Local ones; only an Input main item carries fields this parser wants.
-void applyItem(const HidItem& item, HidParseState& st, HidLayout& out) {
-    const bool isMainItem = item.type == 0;
-    if (isMainItem) {
-        const bool isInputItem = item.tag == 0x8;
-        if (isInputItem) applyInputItem(item, st, out);
-        clearLocalItems(st);
-        return;
-    }
-    const bool isGlobalItem = item.type == 1;
-    if (isGlobalItem) {
-        applyGlobalItem(item, st);
-        return;
-    }
-    const bool isLocalItem = item.type == 2;
-    if (isLocalItem) applyLocalItem(item, st);
-}
-
-bool parseReportDescriptor(const uint8_t* desc, size_t len, HidLayout& out) {
+bool parseReportDescriptor(const uint8_t* desc, const size_t len, HidLayout& out) {
     out = HidLayout{};
     HidParseState st = {};
 
@@ -420,11 +498,13 @@ bool parseReportDescriptor(const uint8_t* desc, size_t len, HidLayout& out) {
         applyItem(item, st, out);
     }
 
-    out.valid = out.lx.present || out.ly.present || out.buttonCount > 0 || out.hasHat;
+    const bool hasAStick = out.lx.present || out.ly.present;
+    const bool hasButtons = out.buttonCount > 0;
+    out.valid = hasAStick || hasButtons || out.hasHat;
     return out.valid;
 }
 
-bool decodeFromLayout(const uint8_t* buf, size_t len, DeviceState& s, const HidLayout& L) {
+bool decodeFromLayout(const uint8_t* buf, const size_t len, DeviceState& s, const HidLayout& L) {
     if (!L.valid) return false;
     size_t dataStart = 0;
     if (!skipReportIdPrefix(buf, len, L, dataStart)) return false;

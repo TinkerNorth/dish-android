@@ -908,3 +908,155 @@ TEST(MicMuteBit, NoKeycodeCanEverSetIt) {
         EXPECT_EQ(0, switchLayoutKeycodeToXusb(kc) & WBUTTON_MIC_MUTE) << "keycode " << kc;
     }
 }
+
+// ── hatDirectionBits: the eight HID hat directions ──
+
+TEST(HatDirectionBits, EightDirectionsClockwiseFromUp) {
+    EXPECT_EQ(XUSB_DPAD_UP, hatDirectionBits(0));
+    EXPECT_EQ(XUSB_DPAD_UP | XUSB_DPAD_RIGHT, hatDirectionBits(1));
+    EXPECT_EQ(XUSB_DPAD_RIGHT, hatDirectionBits(2));
+    EXPECT_EQ(XUSB_DPAD_DOWN | XUSB_DPAD_RIGHT, hatDirectionBits(3));
+    EXPECT_EQ(XUSB_DPAD_DOWN, hatDirectionBits(4));
+    EXPECT_EQ(XUSB_DPAD_DOWN | XUSB_DPAD_LEFT, hatDirectionBits(5));
+    EXPECT_EQ(XUSB_DPAD_LEFT, hatDirectionBits(6));
+    EXPECT_EQ(XUSB_DPAD_UP | XUSB_DPAD_LEFT, hatDirectionBits(7));
+}
+
+TEST(HatDirectionBits, OutsideTheEightIsCentred) {
+    EXPECT_EQ(0, hatDirectionBits(-1));
+    EXPECT_EQ(0, hatDirectionBits(8));
+    EXPECT_EQ(0, hatDirectionBits(15));
+    EXPECT_EQ(0, hatDirectionBits(255));
+}
+
+// ── applyAxes: the hat threshold, the right-stick deadzone and the held right trigger ──
+
+TEST(ApplyAxes, HatJustInsideHalfIsCentred) {
+    DeviceState s;
+    applyAxes(s, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.5f, 0.f);
+    EXPECT_EQ(0, s.wButtons & XUSB_DPAD_MASK);
+    applyAxes(s, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, -0.5f, 0.f);
+    EXPECT_EQ(0, s.wButtons & XUSB_DPAD_MASK);
+    applyAxes(s, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.5f);
+    EXPECT_EQ(0, s.wButtons & XUSB_DPAD_MASK);
+    applyAxes(s, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, -0.5f);
+    EXPECT_EQ(0, s.wButtons & XUSB_DPAD_MASK);
+}
+
+TEST(ApplyAxes, HatJustPastHalfSetsTheDpadBit) {
+    DeviceState s;
+    applyAxes(s, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.51f, 0.f);
+    EXPECT_EQ(XUSB_DPAD_RIGHT, s.wButtons & XUSB_DPAD_MASK);
+    applyAxes(s, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, -0.51f, 0.f);
+    EXPECT_EQ(XUSB_DPAD_LEFT, s.wButtons & XUSB_DPAD_MASK);
+    applyAxes(s, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.51f);
+    EXPECT_EQ(XUSB_DPAD_DOWN, s.wButtons & XUSB_DPAD_MASK);
+    applyAxes(s, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, -0.51f);
+    EXPECT_EQ(XUSB_DPAD_UP, s.wButtons & XUSB_DPAD_MASK);
+}
+
+TEST(ApplyAxes, LeftStickYDeadzoneUsesFlatY) {
+    DeviceState s;
+    s.flatY = 0.1f;
+    applyAxes(s, 0.f, -0.05f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f);
+    EXPECT_EQ(0, s.sLY);
+    applyAxes(s, 0.f, -0.5f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f);
+    EXPECT_GT(s.sLY, 0);
+}
+
+TEST(ApplyAxes, RightStickDeadzoneUsesFlatZAndFlatRz) {
+    DeviceState s;
+    s.flatZ = 0.2f;
+    s.flatRZ = 0.2f;
+    applyAxes(s, 0.f, 0.f, 0.1f, -0.1f, 0.f, 0.f, 0.f, 0.f);
+    EXPECT_EQ(0, s.sRX);
+    EXPECT_EQ(0, s.sRY);
+    applyAxes(s, 0.f, 0.f, 0.5f, 0.5f, 0.f, 0.f, 0.f, 0.f);
+    EXPECT_GT(s.sRX, 0);
+    EXPECT_LT(s.sRY, 0);
+}
+
+TEST(ApplyAxes, TheRightStickDeadzoneDoesNotGateTheLeftStick) {
+    DeviceState s;
+    s.flatZ = 0.9f;
+    s.flatRZ = 0.9f;
+    applyAxes(s, 0.5f, 0.5f, 0.5f, 0.5f, 0.f, 0.f, 0.f, 0.f);
+    EXPECT_GT(s.sLX, 0);
+    EXPECT_LT(s.sLY, 0);
+    EXPECT_EQ(0, s.sRX);
+    EXPECT_EQ(0, s.sRY);
+}
+
+TEST(ApplyAxes, RtFromKeySuppressesAxisTrigger) {
+    DeviceState s;
+    applyKey(s, KC_BUTTON_R2, true);
+    applyAxes(s, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f);
+    EXPECT_EQ(255, s.bRT);
+    applyKey(s, KC_BUTTON_R2, false);
+    applyAxes(s, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f);
+    EXPECT_EQ(0, s.bRT);
+}
+
+// ── consumesKey: the one key filter both JNI entry points share ──
+
+TEST(ConsumesKey, AcceptsButton7And8AsTriggerKeysOnTheStandardLayout) {
+    EXPECT_TRUE(consumesKey(KC_BUTTON_7, 0));
+    EXPECT_TRUE(consumesKey(KC_BUTTON_8, 0));
+    EXPECT_TRUE(consumesKey(KC_BUTTON_L2, 0));
+    EXPECT_TRUE(consumesKey(KC_BUTTON_R2, 0));
+}
+
+TEST(ConsumesKey, AcceptsEveryKeycodeTheBaseMapKnows) {
+    const int32_t mapped[] = {KC_BUTTON_A,     KC_BUTTON_B,      KC_BUTTON_X,      KC_BUTTON_Y,
+                              KC_BUTTON_L1,    KC_BUTTON_R1,     KC_BUTTON_THUMBL, KC_BUTTON_THUMBR,
+                              KC_BUTTON_START, KC_BUTTON_SELECT, KC_DPAD_UP,       KC_DPAD_DOWN,
+                              KC_DPAD_LEFT,    KC_DPAD_RIGHT,    KC_BUTTON_1,      KC_BUTTON_2,
+                              KC_BUTTON_3,     KC_BUTTON_4,      KC_BUTTON_5,      KC_BUTTON_6,
+                              KC_BUTTON_9,     KC_BUTTON_10,     KC_BUTTON_11,     KC_BUTTON_12};
+    for (int32_t kc : mapped) EXPECT_TRUE(consumesKey(kc, 0)) << kc;
+}
+
+TEST(ConsumesKey, OnTheSwitchLayoutAnswersForItsOwnKeySet) {
+    EXPECT_TRUE(consumesKey(KC_BUTTON_C, QUIRK_SWITCH_LAYOUT));
+    EXPECT_TRUE(consumesKey(KC_BUTTON_Z, QUIRK_SWITCH_LAYOUT));
+    EXPECT_TRUE(consumesKey(KC_BUTTON_MODE, QUIRK_SWITCH_LAYOUT));
+    EXPECT_TRUE(consumesKey(KC_BUTTON_L1, QUIRK_SWITCH_LAYOUT));
+    EXPECT_TRUE(consumesKey(KC_BUTTON_R1, QUIRK_SWITCH_LAYOUT));
+    EXPECT_FALSE(consumesKey(KC_BUTTON_7, QUIRK_SWITCH_LAYOUT));
+    EXPECT_FALSE(consumesKey(KC_BUTTON_8, QUIRK_SWITCH_LAYOUT));
+    EXPECT_FALSE(consumesKey(KC_BUTTON_1, QUIRK_SWITCH_LAYOUT));
+    EXPECT_FALSE(consumesKey(KC_BUTTON_THUMBL, QUIRK_SWITCH_LAYOUT));
+}
+
+TEST(ConsumesKey, RejectsAKeycodeNoLayoutMaps) {
+    EXPECT_FALSE(consumesKey(0, 0));
+    EXPECT_FALSE(consumesKey(4, 0));
+    EXPECT_FALSE(consumesKey(62, 0));
+    EXPECT_FALSE(consumesKey(KC_BUTTON_13, 0));
+    EXPECT_FALSE(consumesKey(KC_BUTTON_16, 0));
+    EXPECT_FALSE(consumesKey(KC_BUTTON_C, 0));
+    EXPECT_FALSE(consumesKey(0, QUIRK_SWITCH_LAYOUT));
+    EXPECT_FALSE(consumesKey(62, QUIRK_SWITCH_LAYOUT));
+    EXPECT_FALSE(consumesKey(KC_BUTTON_13, QUIRK_SWITCH_LAYOUT));
+}
+
+TEST(ConsumesKey, SwapQuirksDoNotChangeWhichKeysAreConsumed) {
+    const uint8_t swaps = (uint8_t)(QUIRK_SWAP_AB | QUIRK_SWAP_XY);
+    EXPECT_TRUE(consumesKey(KC_BUTTON_A, swaps));
+    EXPECT_TRUE(consumesKey(KC_BUTTON_7, swaps));
+    EXPECT_FALSE(consumesKey(KC_BUTTON_C, swaps));
+}
+
+TEST(ConsumesKey, AgreesWithApplyKeyForEveryKeycodeAndLayout) {
+    const uint8_t layouts[] = {0, (uint8_t)(QUIRK_SWAP_AB | QUIRK_SWAP_XY), QUIRK_SWITCH_LAYOUT,
+                               (uint8_t)(QUIRK_SWITCH_LAYOUT | QUIRK_SWAP_AB)};
+    for (uint8_t quirk : layouts) {
+        for (int32_t kc = 0; kc < 320; kc++) {
+            DeviceState s;
+            s.quirk = quirk;
+            const bool applied = applyKey(s, kc, true);
+            EXPECT_EQ(applied, consumesKey(kc, quirk))
+                << "keycode " << kc << " quirk " << (int)quirk;
+        }
+    }
+}

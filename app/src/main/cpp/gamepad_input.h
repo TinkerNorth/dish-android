@@ -97,7 +97,6 @@ struct DeviceState {
     uint8_t bLT = 0, bRT = 0;
     int16_t sLX = 0, sLY = 0, sRX = 0, sRY = 0;
 
-    // While true, ignore axis-side trigger reads so a 0 sample doesn't clobber a held key.
     bool ltFromKey = false, rtFromKey = false;
 
     bool everPublished = false;
@@ -113,8 +112,6 @@ struct DeviceState {
     int16_t gyroX = 0, gyroY = 0, gyroZ = 0;
     int16_t accelX = 0, accelY = 0, accelZ = 0;
 
-    // False when the report carried no touch update (short report, or a DS4 frame
-    // with zero bundled touch packets): the last sent state must persist, not lift.
     bool touchValid = false;
     bool touch0Active = false, touch1Active = false;
     bool touchClick = false;
@@ -123,8 +120,7 @@ struct DeviceState {
 
     // The pad's own charge, for the families whose report carries it (the two Sony pads and
     // the Switch Pro): a percent or usbparsers::PAD_BATTERY_LEVEL_UNKNOWN, and MSG_BATTERY's own
-    // status value. Valid only when the report was long enough to carry the status byte; a
-    // short report leaves the last reading standing rather than reporting unknown.
+    // status value.
     bool batteryValid = false;
     uint8_t batteryLevel = 0xFF;
     uint8_t batteryStatus = 0;
@@ -149,12 +145,8 @@ enum class TouchpadSend : uint8_t {
                // original arrived, or adopt it if that frame was lost on the wire
 };
 
-// Send-on-change gate for the USB-direct touchpad stream. Edges (contact, lift, click, new
-// tracking id) go out immediately because a lost or delayed edge is user-visible; coordinate
-// moves coalesce to the motion cadence since the next report supersedes them anyway. After
-// every change the final state is re-sent kTouchpadHealResends more times: like the overlay's
-// resend burst, this heals a lift frame dropped by plain UDP, which would otherwise leave the
-// receiver holding a phantom finger.
+// Send-on-change gate for the USB-direct touchpad stream. The heal resends exist because plain
+// UDP can drop a lift frame, which would leave the receiver holding a phantom finger.
 constexpr int64_t kTouchpadMoveIntervalNs = 8000000;
 constexpr int kTouchpadHealResends = 2;
 
@@ -167,6 +159,9 @@ class TouchpadGate {
     int64_t lastEventTimeMs() const { return lastEventMs_; }
 
   private:
+    TouchpadSend decideOnChange(const TouchpadState& cur, int64_t nowNs);
+    TouchpadSend decideHeal(int64_t nowNs);
+
     TouchpadState last_{};
     int64_t lastSentNs_ = 0;
     int64_t lastEventMs_ = 0;
@@ -185,6 +180,11 @@ uint16_t switchLayoutKeycodeToXusb(int32_t androidKeycode);
 
 bool switchLayoutConsumesKey(int32_t androidKeycode);
 
+// The key filter every JNI entry point shares: true exactly when applyKey would consume the key
+// under this quirk. Allocation-free; the standard layout counts L2/R2 and BUTTON_7/8 as the
+// trigger keys, the Switch layout answers for its own key set.
+bool consumesKey(int32_t androidKeycode, uint8_t quirk);
+
 uint16_t applyButtonQuirk(uint16_t xusbBit, uint8_t quirk);
 
 bool applyKey(DeviceState& s, int32_t androidKeycode, bool down);
@@ -197,7 +197,6 @@ void resetState(DeviceState& s);
 
 bool consumePublishIfChanged(DeviceState& s);
 
-// A (re)bound target pad is neutral; without re-arming, the on-change latch would never resend.
 void resetPublishLatch(DeviceState& s);
 
 // Serializes the wire-facing view of a DeviceState for the diagnostics inspector. Pure and

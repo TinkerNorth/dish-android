@@ -36,9 +36,8 @@ struct HidLayout {
     bool switchOrderButtons = false;
 };
 
-// Parses a HID report descriptor into the gamepad field map. Pure and defensive: returns false and
-// leaves the layout invalid on malformed input or when nothing gamepad-like is found, so callers
-// fall back to a fixed-offset guess.
+// Parses a HID report descriptor into the gamepad field map. Pure; false leaves the layout invalid
+// and the caller on the fixed-offset guess.
 bool parseReportDescriptor(const uint8_t* desc, size_t len, HidLayout& out);
 
 // Decodes one input report into the XUSB DeviceState using a parsed layout. Pure.

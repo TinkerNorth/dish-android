@@ -419,3 +419,456 @@ TEST(SwitchOrderHid, CombinedReportDecodesAllFields) {
     EXPECT_EQ(0, s.bRT);
     EXPECT_GT(s.sLX, 30000);
 }
+
+// ---- the item stream: long items, first-wins, the caps, signed ranges, later report ids -----
+
+namespace {
+
+// One X axis, with a long item (prefix 0xFE: length byte, tag byte, that many data bytes) sitting
+// in front of its usage. No gamepad descriptor carries one; the parser steps over it whole.
+const uint8_t kLongItemDescriptor[] = {
+    0x05, 0x01,                   // Usage Page (Generic Desktop)
+    0x09, 0x05,                   // Usage (Game Pad)
+    0xA1, 0x01,                   // Collection (Application)
+    0xFE, 0x02, 0x7F, 0xAA, 0xBB, //   Long item: 2 data bytes, tag 0x7F, payload AA BB
+    0x09, 0x30,                   //   Usage (X)
+    0x15, 0x00,                   //   Logical Minimum (0)
+    0x26, 0xFF, 0x00,             //   Logical Maximum (255)
+    0x75, 0x08,                   //   Report Size (8)
+    0x95, 0x01,                   //   Report Count (1)
+    0x81, 0x02,                   //   Input (Data,Var,Abs)
+    0xC0,                         // End Collection
+};
+
+// X axis, then a long-item prefix with nothing behind it.
+const uint8_t kTruncatedLongItemDescriptor[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x05,       // Usage (Game Pad)
+    0xA1, 0x01,       // Collection (Application)
+    0x09, 0x30,       //   Usage (X)
+    0x15, 0x00,       //   Logical Minimum (0)
+    0x26, 0xFF, 0x00, //   Logical Maximum (255)
+    0x75, 0x08,       //   Report Size (8)
+    0x95, 0x01,       //   Report Count (1)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xFE,             //   Long item prefix, cut off
+};
+
+// X axis, then a long item claiming 32 data bytes it does not have, then a button block.
+const uint8_t kOverrunningLongItemDescriptor[] = {
+    0x05, 0x01,             // Usage Page (Generic Desktop)
+    0x09, 0x05,             // Usage (Game Pad)
+    0xA1, 0x01,             // Collection (Application)
+    0x09, 0x30,             //   Usage (X)
+    0x15, 0x00,             //   Logical Minimum (0)
+    0x26, 0xFF, 0x00,       //   Logical Maximum (255)
+    0x75, 0x08,             //   Report Size (8)
+    0x95, 0x01,             //   Report Count (1)
+    0x81, 0x02,             //   Input (Data,Var,Abs)
+    0xFE, 0x20, 0x7F, 0x00, //   Long item: claims 32 data bytes, supplies one
+    0x05, 0x09,             //   Usage Page (Button)
+    0x19, 0x01,             //   Usage Minimum (1)
+    0x29, 0x08,             //   Usage Maximum (8)
+    0x25, 0x01,             //   Logical Maximum (1)
+    0x75, 0x01,             //   Report Size (1)
+    0x95, 0x08,             //   Report Count (8)
+    0x81, 0x02,             //   Input (Data,Var,Abs)
+    0xC0,                   // End Collection
+};
+
+// X axis, then Simulation Controls Brake and Accelerator: {X, brake, accelerator}.
+const uint8_t kSimulationTriggersDescriptor[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x05,       // Usage (Game Pad)
+    0xA1, 0x01,       // Collection (Application)
+    0x09, 0x30,       //   Usage (X)
+    0x15, 0x00,       //   Logical Minimum (0)
+    0x26, 0xFF, 0x00, //   Logical Maximum (255)
+    0x75, 0x08,       //   Report Size (8)
+    0x95, 0x01,       //   Report Count (1)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0x05, 0x02,       //   Usage Page (Simulation Controls)
+    0x09, 0xC5,       //   Usage (Brake)
+    0x09, 0xC4,       //   Usage (Accelerator)
+    0x95, 0x02,       //   Report Count (2)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xC0,             // End Collection
+};
+
+// X, then Generic Desktop Rx and Ry as the trigger pair: {X, Rx, Ry}.
+const uint8_t kRxRyTriggersDescriptor[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x05,       // Usage (Game Pad)
+    0xA1, 0x01,       // Collection (Application)
+    0x09, 0x30,       //   Usage (X)
+    0x09, 0x33,       //   Usage (Rx)
+    0x09, 0x34,       //   Usage (Ry)
+    0x15, 0x00,       //   Logical Minimum (0)
+    0x26, 0xFF, 0x00, //   Logical Maximum (255)
+    0x75, 0x08,       //   Report Size (8)
+    0x95, 0x03,       //   Report Count (3)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xC0,             // End Collection
+};
+
+// The trigger pair alone: nothing a game could steer with.
+const uint8_t kTriggersOnlyDescriptor[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x05,       // Usage (Game Pad)
+    0xA1, 0x01,       // Collection (Application)
+    0x09, 0x33,       //   Usage (Rx)
+    0x09, 0x34,       //   Usage (Ry)
+    0x15, 0x00,       //   Logical Minimum (0)
+    0x26, 0xFF, 0x00, //   Logical Maximum (255)
+    0x75, 0x08,       //   Report Size (8)
+    0x95, 0x02,       //   Report Count (2)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xC0,             // End Collection
+};
+
+// X declared twice, then Y: {X, X again, Y}.
+const uint8_t kAxisDeclaredTwiceDescriptor[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x05,       // Usage (Game Pad)
+    0xA1, 0x01,       // Collection (Application)
+    0x15, 0x00,       //   Logical Minimum (0)
+    0x26, 0xFF, 0x00, //   Logical Maximum (255)
+    0x75, 0x08,       //   Report Size (8)
+    0x95, 0x01,       //   Report Count (1)
+    0x09, 0x30,       //   Usage (X)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0x09, 0x30,       //   Usage (X)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0x09, 0x31,       //   Usage (Y)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xC0,             // End Collection
+};
+
+// Two button blocks of four: buttons 1-4, then buttons 5-8.
+const uint8_t kTwoButtonBlocksDescriptor[] = {
+    0x05, 0x01, // Usage Page (Generic Desktop)
+    0x09, 0x05, // Usage (Game Pad)
+    0xA1, 0x01, // Collection (Application)
+    0x15, 0x00, //   Logical Minimum (0)
+    0x25, 0x01, //   Logical Maximum (1)
+    0x75, 0x01, //   Report Size (1)
+    0x95, 0x04, //   Report Count (4)
+    0x05, 0x09, //   Usage Page (Button)
+    0x19, 0x01, //   Usage Minimum (1)
+    0x29, 0x04, //   Usage Maximum (4)
+    0x81, 0x02, //   Input (Data,Var,Abs)
+    0x19, 0x05, //   Usage Minimum (5)
+    0x29, 0x08, //   Usage Maximum (8)
+    0x81, 0x02, //   Input (Data,Var,Abs)
+    0xC0,       // End Collection
+};
+
+// Twenty buttons in one block.
+const uint8_t kTwentyButtonsDescriptor[] = {
+    0x05, 0x01, // Usage Page (Generic Desktop)
+    0x09, 0x05, // Usage (Game Pad)
+    0xA1, 0x01, // Collection (Application)
+    0x15, 0x00, //   Logical Minimum (0)
+    0x25, 0x01, //   Logical Maximum (1)
+    0x75, 0x01, //   Report Size (1)
+    0x95, 0x14, //   Report Count (20)
+    0x05, 0x09, //   Usage Page (Button)
+    0x19, 0x01, //   Usage Minimum (1)
+    0x29, 0x14, //   Usage Maximum (20)
+    0x81, 0x02, //   Input (Data,Var,Abs)
+    0xC0,       // End Collection
+};
+
+// `listed` Generic Desktop usages this parser does not map (Vx onward), then X as the last one, in
+// front of one Input of `listed + 1` fields.
+std::vector<uint8_t> unmappedUsagesThenX(const uint8_t listed) {
+    std::vector<uint8_t> d = {0x05, 0x01, 0x09, 0x05, 0xA1,
+                              0x01, 0x15, 0x00, 0x26, 0xFF,
+                              0x00, 0x75, 0x08, 0x95, (uint8_t)(listed + 1)};
+    for (uint8_t u = 0; u < listed; u++) {
+        d.push_back(0x09);
+        d.push_back((uint8_t)(0x40 + u)); // Vx, Vy, Vz, Vbrx, Vbry, Vbrz, Vno, ... reserved
+    }
+    d.push_back(0x09);
+    d.push_back(0x30); // Usage (X)
+    d.push_back(0x81);
+    d.push_back(0x02); // Input (Data,Var,Abs)
+    d.push_back(0xC0);
+    return d;
+}
+
+// X and Y listed for a four-field Input, then a button block: {X, Y, ?, ?, buttons}.
+const uint8_t kShortUsageListDescriptor[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x05,       // Usage (Game Pad)
+    0xA1, 0x01,       // Collection (Application)
+    0x15, 0x00,       //   Logical Minimum (0)
+    0x26, 0xFF, 0x00, //   Logical Maximum (255)
+    0x75, 0x08,       //   Report Size (8)
+    0x95, 0x04,       //   Report Count (4)
+    0x09, 0x30,       //   Usage (X)
+    0x09, 0x31,       //   Usage (Y)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0x05, 0x09,       //   Usage Page (Button)
+    0x19, 0x01,       //   Usage Minimum (1)
+    0x29, 0x08,       //   Usage Maximum (8)
+    0x25, 0x01,       //   Logical Maximum (1)
+    0x75, 0x01,       //   Report Size (1)
+    0x95, 0x08,       //   Report Count (8)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xC0,             // End Collection
+};
+
+// One signed 8-bit X axis, -127..127.
+const uint8_t kSignedAxisDescriptor[] = {
+    0x05, 0x01, // Usage Page (Generic Desktop)
+    0x09, 0x05, // Usage (Game Pad)
+    0xA1, 0x01, // Collection (Application)
+    0x09, 0x30, //   Usage (X)
+    0x15, 0x81, //   Logical Minimum (-127)
+    0x25, 0x7F, //   Logical Maximum (127)
+    0x75, 0x08, //   Report Size (8)
+    0x95, 0x01, //   Report Count (1)
+    0x81, 0x02, //   Input (Data,Var,Abs)
+    0xC0,       // End Collection
+};
+
+// One signed 16-bit X axis, -32768..32767, both bounds as two-byte items.
+const uint8_t kSignedWideAxisDescriptor[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x05,       // Usage (Game Pad)
+    0xA1, 0x01,       // Collection (Application)
+    0x09, 0x30,       //   Usage (X)
+    0x16, 0x00, 0x80, //   Logical Minimum (-32768)
+    0x26, 0xFF, 0x7F, //   Logical Maximum (32767)
+    0x75, 0x10,       //   Report Size (16)
+    0x95, 0x01,       //   Report Count (1)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xC0,             // End Collection
+};
+
+// X, then a Simulation Brake trigger over a signed range, -127..127: {X, brake}.
+const uint8_t kSignedTriggerDescriptor[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x05,       // Usage (Game Pad)
+    0xA1, 0x01,       // Collection (Application)
+    0x09, 0x30,       //   Usage (X)
+    0x15, 0x00,       //   Logical Minimum (0)
+    0x26, 0xFF, 0x00, //   Logical Maximum (255)
+    0x75, 0x08,       //   Report Size (8)
+    0x95, 0x01,       //   Report Count (1)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0x05, 0x02,       //   Usage Page (Simulation Controls)
+    0x09, 0xC5,       //   Usage (Brake)
+    0x15, 0x81,       //   Logical Minimum (-127)
+    0x25, 0x7F,       //   Logical Maximum (127)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xC0,             // End Collection
+};
+
+// Report 1 carries X and Y; report 2 carries eight buttons that belong to another interface.
+const uint8_t kTwoReportIdsDescriptor[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x05,       // Usage (Game Pad)
+    0xA1, 0x01,       // Collection (Application)
+    0x85, 0x01,       //   Report ID (1)
+    0x09, 0x30,       //   Usage (X)
+    0x09, 0x31,       //   Usage (Y)
+    0x15, 0x00,       //   Logical Minimum (0)
+    0x26, 0xFF, 0x00, //   Logical Maximum (255)
+    0x75, 0x08,       //   Report Size (8)
+    0x95, 0x02,       //   Report Count (2)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0x85, 0x02,       //   Report ID (2)
+    0x05, 0x09,       //   Usage Page (Button)
+    0x19, 0x01,       //   Usage Minimum (1)
+    0x29, 0x08,       //   Usage Maximum (8)
+    0x25, 0x01,       //   Logical Maximum (1)
+    0x75, 0x01,       //   Report Size (1)
+    0x95, 0x08,       //   Report Count (8)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xC0,             // End Collection
+};
+
+HidLayout parsed(const uint8_t* desc, const size_t len) {
+    HidLayout L;
+    EXPECT_TRUE(parseReportDescriptor(desc, len, L));
+    return L;
+}
+
+DeviceState decoded(const HidLayout& L, const std::vector<uint8_t>& report) {
+    DeviceState s;
+    EXPECT_TRUE(decodeFromLayout(report.data(), report.size(), s, L));
+    return s;
+}
+
+} // namespace
+
+TEST(HidDescriptor, ALongItemIsSteppedOverWhole) {
+    const HidLayout L = parsed(kLongItemDescriptor, sizeof(kLongItemDescriptor));
+    ASSERT_TRUE(L.lx.present);
+    EXPECT_EQ(0, L.lx.bitOffset);
+    EXPECT_EQ(8, L.lx.bitSize);
+    EXPECT_EQ(255, L.lx.logicalMax);
+}
+
+TEST(HidDescriptor, ATruncatedLongItemStopsTheParseAndKeepsWhatCameBefore) {
+    const HidLayout L = parsed(kTruncatedLongItemDescriptor, sizeof(kTruncatedLongItemDescriptor));
+    EXPECT_TRUE(L.lx.present);
+}
+
+TEST(HidDescriptor, ALongItemThatOverrunsTheDescriptorEndsTheParse) {
+    const HidLayout L =
+        parsed(kOverrunningLongItemDescriptor, sizeof(kOverrunningLongItemDescriptor));
+    EXPECT_TRUE(L.lx.present);
+    EXPECT_EQ(0, L.buttonCount);
+}
+
+TEST(HidDescriptor, SimulationBrakeAndAcceleratorAreTheTriggers) {
+    const HidLayout L =
+        parsed(kSimulationTriggersDescriptor, sizeof(kSimulationTriggersDescriptor));
+    ASSERT_TRUE(L.lt.present);
+    ASSERT_TRUE(L.rt.present);
+    EXPECT_EQ(8, L.lt.bitOffset);
+    EXPECT_EQ(16, L.rt.bitOffset);
+    const DeviceState s = decoded(L, {0x80, 0xFF, 0x00});
+    EXPECT_EQ(255, s.bLT);
+    EXPECT_EQ(0, s.bRT);
+}
+
+TEST(HidDescriptor, RxAndRyAreTheTriggers) {
+    const HidLayout L = parsed(kRxRyTriggersDescriptor, sizeof(kRxRyTriggersDescriptor));
+    ASSERT_TRUE(L.lt.present);
+    ASSERT_TRUE(L.rt.present);
+    EXPECT_EQ(8, L.lt.bitOffset);
+    EXPECT_EQ(16, L.rt.bitOffset);
+    EXPECT_FALSE(L.rx.present);
+    EXPECT_FALSE(L.ry.present);
+    const DeviceState s = decoded(L, {0x80, 0x00, 0xFF});
+    EXPECT_EQ(0, s.bLT);
+    EXPECT_EQ(255, s.bRT);
+}
+
+TEST(HidDescriptor, TriggersAloneAreNotAGamepad) {
+    // A layout is gamepad-like on a stick, a button block or a hat; a pair of triggers with nothing
+    // to steer by is not, so the attach path falls back to the fixed-offset guess instead.
+    HidLayout L;
+    EXPECT_FALSE(
+        parseReportDescriptor(kTriggersOnlyDescriptor, sizeof(kTriggersOnlyDescriptor), L));
+    EXPECT_FALSE(L.valid);
+    EXPECT_TRUE(L.lt.present);
+    EXPECT_TRUE(L.rt.present);
+}
+
+TEST(HidDescriptor, ASecondDeclarationOfAnAxisIsIgnored) {
+    const HidLayout L = parsed(kAxisDeclaredTwiceDescriptor, sizeof(kAxisDeclaredTwiceDescriptor));
+    EXPECT_EQ(0, L.lx.bitOffset);
+    ASSERT_TRUE(L.ly.present);
+    EXPECT_EQ(16, L.ly.bitOffset); // the ignored second X still occupies its byte
+    const DeviceState s = decoded(L, {0xFF, 0x00, 0x00});
+    EXPECT_GT(s.sLX, 30000);
+}
+
+TEST(HidDescriptor, OnlyTheFirstButtonBlockIsTaken) {
+    const HidLayout L = parsed(kTwoButtonBlocksDescriptor, sizeof(kTwoButtonBlocksDescriptor));
+    EXPECT_EQ(0, L.buttonBitOffset);
+    EXPECT_EQ(4, L.buttonCount);
+    const DeviceState s = decoded(L, {0xF1});
+    EXPECT_EQ(XUSB_A, s.wButtons);
+}
+
+TEST(HidDescriptor, MoreThanSixteenButtonsAreCappedAtSixteen) {
+    const HidLayout L = parsed(kTwentyButtonsDescriptor, sizeof(kTwentyButtonsDescriptor));
+    EXPECT_EQ(16, L.buttonCount);
+}
+
+TEST(HidDescriptor, ASeventeenthListedUsageIsDropped) {
+    const std::vector<uint8_t> sixteen = unmappedUsagesThenX(15);
+    const HidLayout fits = parsed(sixteen.data(), sixteen.size());
+    ASSERT_TRUE(fits.lx.present);
+    EXPECT_EQ(15 * 8, fits.lx.bitOffset);
+
+    const std::vector<uint8_t> seventeen = unmappedUsagesThenX(16);
+    HidLayout dropped;
+    EXPECT_FALSE(parseReportDescriptor(seventeen.data(), seventeen.size(), dropped));
+    EXPECT_FALSE(dropped.lx.present);
+}
+
+TEST(HidDescriptor, AShortUsageListMapsItsListedUsagesAndPadsTheRest) {
+    const HidLayout L = parsed(kShortUsageListDescriptor, sizeof(kShortUsageListDescriptor));
+    EXPECT_EQ(0, L.lx.bitOffset);
+    EXPECT_EQ(8, L.ly.bitOffset);
+    EXPECT_FALSE(L.rx.present);
+    EXPECT_FALSE(L.ry.present);
+    EXPECT_EQ(32, L.buttonBitOffset);
+    EXPECT_EQ(8, L.buttonCount);
+}
+
+TEST(HidDescriptor, ASignedEightBitAxisCentresAtZero) {
+    const HidLayout L = parsed(kSignedAxisDescriptor, sizeof(kSignedAxisDescriptor));
+    EXPECT_EQ(-127, L.lx.logicalMin);
+    EXPECT_EQ(0, decoded(L, {0x00}).sLX);
+    EXPECT_EQ(32767, decoded(L, {0x7F}).sLX);
+    EXPECT_EQ(-32767, decoded(L, {0x81}).sLX);
+}
+
+TEST(HidDescriptor, ATwoByteNegativeLogicalMinimumSignExtends) {
+    const HidLayout L = parsed(kSignedWideAxisDescriptor, sizeof(kSignedWideAxisDescriptor));
+    EXPECT_EQ(-32768, L.lx.logicalMin);
+    EXPECT_EQ(32767, L.lx.logicalMax);
+    EXPECT_EQ(0, decoded(L, {0x00, 0x00}).sLX);
+    EXPECT_EQ(32767, decoded(L, {0xFF, 0x7F}).sLX);
+    EXPECT_EQ(-32768, decoded(L, {0x00, 0x80}).sLX);
+}
+
+TEST(HidDescriptor, ATriggerWithANegativeRangeScalesFromItsMinimum) {
+    const HidLayout L = parsed(kSignedTriggerDescriptor, sizeof(kSignedTriggerDescriptor));
+    ASSERT_TRUE(L.lt.present);
+    EXPECT_EQ(-127, L.lt.logicalMin);
+    EXPECT_EQ(0, decoded(L, {0x80, 0x81}).bLT);
+    EXPECT_EQ(127, decoded(L, {0x80, 0x00}).bLT);
+    EXPECT_EQ(255, decoded(L, {0x80, 0x7F}).bLT);
+}
+
+TEST(HidDescriptor, FieldsOfALaterReportIdAreNotOurs) {
+    const HidLayout L = parsed(kTwoReportIdsDescriptor, sizeof(kTwoReportIdsDescriptor));
+    EXPECT_EQ(1, L.reportId);
+    EXPECT_TRUE(L.lx.present);
+    EXPECT_TRUE(L.ly.present);
+    EXPECT_EQ(0, L.buttonCount);
+
+    const DeviceState ours = decoded(L, {0x01, 0xFF, 0x80});
+    EXPECT_GT(ours.sLX, 30000);
+    DeviceState theirs;
+    const std::vector<uint8_t> otherReport = {0x02, 0xFF};
+    EXPECT_FALSE(decodeFromLayout(otherReport.data(), otherReport.size(), theirs, L));
+}
+
+namespace {
+
+// A 32-bit X axis whose declared range is only 0..100: a raw value far outside it has to clamp
+// to the rail, not wrap through the narrowing.
+const uint8_t kWideFieldNarrowRangeDescriptor[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x05,       // Usage (Game Pad)
+    0xA1, 0x01,       // Collection (Application)
+    0x09, 0x30,       //   Usage (X)
+    0x15, 0x00,       //   Logical Minimum (0)
+    0x26, 0x64, 0x00, //   Logical Maximum (100)
+    0x75, 0x20,       //   Report Size (32)
+    0x95, 0x01,       //   Report Count (1)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xC0,             // End Collection
+};
+
+} // namespace
+
+TEST(HidDescriptor, AWideFieldBeyondItsDeclaredRangeClampsToTheRail) {
+    const HidLayout L =
+        parsed(kWideFieldNarrowRangeDescriptor, sizeof(kWideFieldNarrowRangeDescriptor));
+    ASSERT_TRUE(L.lx.present);
+    EXPECT_EQ(100, L.lx.logicalMax);
+    EXPECT_EQ(32767, decoded(L, {0x64, 0x00, 0x00, 0x00}).sLX);
+    EXPECT_EQ(32767, decoded(L, {0xFF, 0xFF, 0xFF, 0x7F}).sLX);
+    EXPECT_EQ(-32768, decoded(L, {0x00, 0x00, 0x00, 0x80}).sLX);
+}

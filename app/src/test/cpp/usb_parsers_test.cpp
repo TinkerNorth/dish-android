@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
 using gamepad::DeviceState;
@@ -1756,4 +1757,516 @@ TEST(Battery, FamiliesWithoutAChargeInTheReportLeaveItUntouched) {
     EXPECT_FALSE(s.batteryValid);
     EXPECT_EQ(usbparsers::PAD_BATTERY_LEVEL_UNKNOWN, s.batteryLevel);
     EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_UNKNOWN, s.batteryStatus);
+}
+
+// ---- every button bit, per family ----------------------------------------------------------
+
+namespace {
+
+struct BitCase {
+    uint8_t bit;
+    uint16_t expected;
+};
+
+// Xbox 360 wired input report: type 0x00, length 0x14, no buttons, sticks at rest.
+std::vector<uint8_t> x360Report() {
+    std::vector<uint8_t> r(20, 0);
+    r[1] = 0x14;
+    return r;
+}
+
+// Stadia report 0x03 with centred sticks and a neutral hat.
+std::vector<uint8_t> stadiaReport() {
+    std::vector<uint8_t> r(11, 0);
+    r[0] = 0x03;
+    r[1] = r[2] = r[3] = r[4] = 128;
+    r[7] = 0x08;
+    return r;
+}
+
+// The fixed-offset generic HID shape: four centred stick bytes, then hat/buttons, then buttons.
+std::vector<uint8_t> hidFallbackReport() {
+    std::vector<uint8_t> r(7, 0);
+    r[0] = r[1] = r[2] = r[3] = 128;
+    r[4] = 0x08;
+    return r;
+}
+
+DeviceState decodeFresh(const Parser p, const std::vector<uint8_t>& r) {
+    DeviceState s;
+    ParserState st;
+    EXPECT_TRUE(decodeReport(p, r.data(), r.size(), s, &st));
+    return s;
+}
+
+// Decodes `r` once per case with `keep | c.bit` in byte `at`, expecting exactly `c.expected`.
+void expectEachBitAlone(const Parser p, std::vector<uint8_t> r, const size_t at, const uint8_t keep,
+                        const std::vector<BitCase>& cases) {
+    for (const BitCase& c : cases) {
+        r[at] = (uint8_t)(keep | c.bit);
+        const DeviceState s = decodeFresh(p, r);
+        EXPECT_EQ(c.expected, s.wButtons) << "byte " << at << " bit " << (int)c.bit;
+    }
+}
+
+// Every hat value a nibble can hold: the eight directions, then centred.
+void expectHatNibbleFoldsIntoTheDpad(const Parser p, std::vector<uint8_t> r, const size_t at) {
+    for (uint8_t hat = 0; hat < 16; hat++) {
+        r[at] = (uint8_t)((r[at] & 0xF0) | hat);
+        const DeviceState s = decodeFresh(p, r);
+        EXPECT_EQ(gamepad::hatDirectionBits(hat), s.wButtons) << "hat " << (int)hat;
+    }
+}
+
+} // namespace
+
+TEST(Xbox360Decode, EveryButtonBitMapsToItsXusbBit) {
+    expectEachBitAlone(Parser::XINPUT_360, x360Report(), 2, 0x00,
+                       {{0x01, XUSB_DPAD_UP},
+                        {0x02, XUSB_DPAD_DOWN},
+                        {0x04, XUSB_DPAD_LEFT},
+                        {0x08, XUSB_DPAD_RIGHT},
+                        {0x10, XUSB_START},
+                        {0x20, XUSB_BACK},
+                        {0x40, XUSB_THUMB_L},
+                        {0x80, XUSB_THUMB_R}});
+    expectEachBitAlone(Parser::XINPUT_360, x360Report(), 3, 0x00,
+                       {{0x01, XUSB_LB},
+                        {0x02, XUSB_RB},
+                        {0x04, XUSB_GUIDE},
+                        {0x10, XUSB_A},
+                        {0x20, XUSB_B},
+                        {0x40, XUSB_X},
+                        {0x80, XUSB_Y}});
+}
+
+TEST(Xbox360Decode, TriggersAreRawBytesAndSticksAreLittleEndian) {
+    auto r = x360Report();
+    r[4] = 0x7F;
+    r[5] = 0xFF;
+    setLe16(r, 6, -32768);
+    setLe16(r, 8, 32767);
+    setLe16(r, 10, -1);
+    setLe16(r, 12, 1);
+    const DeviceState s = decodeFresh(Parser::XINPUT_360, r);
+    EXPECT_EQ(127, s.bLT);
+    EXPECT_EQ(255, s.bRT);
+    EXPECT_EQ(-32768, s.sLX);
+    EXPECT_EQ(32767, s.sLY);
+    EXPECT_EQ(-1, s.sRX);
+    EXPECT_EQ(1, s.sRY);
+}
+
+TEST(Xbox360Decode, ShortOrNonInputReportsAreRejected) {
+    DeviceState s;
+    ParserState st;
+    auto tooShort = x360Report();
+    tooShort.resize(13);
+    EXPECT_FALSE(decodeReport(Parser::XINPUT_360, tooShort.data(), tooShort.size(), s, &st));
+    auto wrongType = x360Report();
+    wrongType[0] = 0x01;
+    EXPECT_FALSE(decodeReport(Parser::XINPUT_360, wrongType.data(), wrongType.size(), s, &st));
+}
+
+TEST(XboxGip, EveryButtonBitMapsToItsXusbBit) {
+    expectEachBitAlone(Parser::XBOX_ONE_GIP, gipMain(), 4, 0x00,
+                       {{0x04, XUSB_START},
+                        {0x08, XUSB_BACK},
+                        {0x10, XUSB_A},
+                        {0x20, XUSB_B},
+                        {0x40, XUSB_X},
+                        {0x80, XUSB_Y}});
+    expectEachBitAlone(Parser::XBOX_ONE_GIP, gipMain(), 5, 0x00,
+                       {{0x01, XUSB_DPAD_UP},
+                        {0x02, XUSB_DPAD_DOWN},
+                        {0x04, XUSB_DPAD_LEFT},
+                        {0x08, XUSB_DPAD_RIGHT},
+                        {0x10, XUSB_LB},
+                        {0x20, XUSB_RB},
+                        {0x40, XUSB_THUMB_L},
+                        {0x80, XUSB_THUMB_R}});
+}
+
+TEST(XboxGip, TenBitTriggersScaleToEightBits) {
+    auto r = gipMain();
+    setLe16(r, 6, 1023);
+    setLe16(r, 8, 512);
+    const DeviceState s = decodeFresh(Parser::XBOX_ONE_GIP, r);
+    EXPECT_EQ(255, s.bLT);
+    EXPECT_EQ(127, s.bRT);
+}
+
+TEST(XboxGip, ATriggerAboveTenBitsSaturates) {
+    auto r = gipMain();
+    r[6] = 0xFF;
+    r[7] = 0xFF;
+    const DeviceState s = decodeFresh(Parser::XBOX_ONE_GIP, r);
+    EXPECT_EQ(255, s.bLT);
+    EXPECT_EQ(0, s.bRT);
+}
+
+TEST(XboxGip, RightStickReadsLittleEndianAtFourteen) {
+    auto r = gipMain();
+    setLe16(r, 12, -2);
+    setLe16(r, 14, -1234);
+    setLe16(r, 16, 4321);
+    const DeviceState s = decodeFresh(Parser::XBOX_ONE_GIP, r);
+    EXPECT_EQ(-2, s.sLY);
+    EXPECT_EQ(-1234, s.sRX);
+    EXPECT_EQ(4321, s.sRY);
+}
+
+TEST(XboxGip, ShortMainReportIsRejected) {
+    ParserState st;
+    DeviceState s;
+    auto r = gipMain();
+    r.resize(17);
+    EXPECT_FALSE(decodeXbox(r, s, st));
+}
+
+TEST(PsDecode, FaceRowMapsToXinputPositions) {
+    expectEachBitAlone(Parser::DUALSHOCK4, psReport(10, 5), 5, 0x08,
+                       {{0x10, XUSB_X}, {0x20, XUSB_A}, {0x40, XUSB_B}, {0x80, XUSB_Y}});
+}
+
+TEST(PsDecode, ShoulderByteMapsBumpersMenusAndSticks) {
+    expectEachBitAlone(Parser::DUALSHOCK4, psReport(10, 5), 6, 0x00,
+                       {{0x01, XUSB_LB},
+                        {0x02, XUSB_RB},
+                        {0x10, XUSB_BACK},
+                        {0x20, XUSB_START},
+                        {0x40, XUSB_THUMB_L},
+                        {0x80, XUSB_THUMB_R}});
+}
+
+TEST(PsDecode, HatDiagonalsSetTwoDpadBits) {
+    expectHatNibbleFoldsIntoTheDpad(Parser::DUALSHOCK4, psReport(10, 5), 5);
+}
+
+TEST(PsDecode, DualSenseButtonBytesSitAtEightAndNine) {
+    expectEachBitAlone(Parser::DUALSENSE, psReport(11, 8), 8, 0x08,
+                       {{0x20, XUSB_A}, {0x80, XUSB_Y}});
+    expectEachBitAlone(Parser::DUALSENSE, psReport(11, 8), 9, 0x00,
+                       {{0x02, XUSB_RB}, {0x40, XUSB_THUMB_L}});
+    expectHatNibbleFoldsIntoTheDpad(Parser::DUALSENSE, psReport(11, 8), 8);
+}
+
+TEST(PsDecode, WrongReportIdIsRejected) {
+    DeviceState s;
+    ParserState st;
+    auto ds4 = psReport(10, 5);
+    ds4[0] = 0x02;
+    EXPECT_FALSE(decodeReport(Parser::DUALSHOCK4, ds4.data(), ds4.size(), s, &st));
+    auto ds5 = psReport(11, 8);
+    ds5[0] = 0x02;
+    EXPECT_FALSE(decodeReport(Parser::DUALSENSE, ds5.data(), ds5.size(), s, &st));
+}
+
+// ---- Switch Pro: buttons, digital triggers and the auto-ranged sticks ------------------------
+
+namespace {
+
+constexpr uint16_t kSwitchCentre = 2048;
+constexpr uint16_t kSwitchDeadzone = 320;
+constexpr uint16_t kSwitchRawMax = 4095;
+constexpr uint16_t kSwitchSeedReach = 1000;
+
+// Packs the four 12-bit stick values the way report 0x30 lays them out: two axes per three bytes.
+void setSwitchSticks(std::vector<uint8_t>& r, const uint16_t lx, const uint16_t ly,
+                     const uint16_t rx, const uint16_t ry) {
+    r[6] = (uint8_t)(lx & 0xFF);
+    r[7] = (uint8_t)(((lx >> 8) & 0x0F) | ((ly & 0x0F) << 4));
+    r[8] = (uint8_t)(ly >> 4);
+    r[9] = (uint8_t)(rx & 0xFF);
+    r[10] = (uint8_t)(((rx >> 8) & 0x0F) | ((ry & 0x0F) << 4));
+    r[11] = (uint8_t)(ry >> 4);
+}
+
+DeviceState decodeSwitchSticks(ParserState& st, const uint16_t lx, const uint16_t ly,
+                               const uint16_t rx, const uint16_t ry) {
+    auto r = switchReport(12);
+    setSwitchSticks(r, lx, ly, rx, ry);
+    DeviceState s;
+    EXPECT_TRUE(decodeReport(Parser::SWITCH_PRO_USB, r.data(), r.size(), s, &st));
+    return s;
+}
+
+} // namespace
+
+TEST(SwitchProDecode, ButtonsMapByPhysicalPosition) {
+    expectEachBitAlone(
+        Parser::SWITCH_PRO_USB, switchReport(12), 3, 0x00,
+        {{0x01, XUSB_X}, {0x02, XUSB_Y}, {0x04, XUSB_A}, {0x08, XUSB_B}, {0x40, XUSB_RB}});
+    expectEachBitAlone(
+        Parser::SWITCH_PRO_USB, switchReport(12), 4, 0x00,
+        {{0x01, XUSB_BACK}, {0x02, XUSB_START}, {0x04, XUSB_THUMB_R}, {0x08, XUSB_THUMB_L}});
+    expectEachBitAlone(Parser::SWITCH_PRO_USB, switchReport(12), 5, 0x00,
+                       {{0x01, XUSB_DPAD_DOWN},
+                        {0x02, XUSB_DPAD_UP},
+                        {0x04, XUSB_DPAD_RIGHT},
+                        {0x08, XUSB_DPAD_LEFT},
+                        {0x40, XUSB_LB}});
+}
+
+TEST(SwitchProDecode, ZlZrAreDigitalTriggers) {
+    auto r = switchReport(12);
+    r[5] = 0x80;
+    DeviceState zl = decodeFresh(Parser::SWITCH_PRO_USB, r);
+    EXPECT_EQ(255, zl.bLT);
+    EXPECT_EQ(0, zl.bRT);
+    EXPECT_EQ(0, zl.wButtons);
+
+    r[5] = 0x00;
+    r[3] = 0x80;
+    DeviceState zr = decodeFresh(Parser::SWITCH_PRO_USB, r);
+    EXPECT_EQ(0, zr.bLT);
+    EXPECT_EQ(255, zr.bRT);
+    EXPECT_EQ(0, zr.wButtons);
+
+    r[3] = 0x00;
+    DeviceState released = decodeFresh(Parser::SWITCH_PRO_USB, r);
+    EXPECT_EQ(0, released.bLT);
+    EXPECT_EQ(0, released.bRT);
+}
+
+TEST(SwitchProDecode, WrongReportIdOrShortReportIsRejected) {
+    DeviceState s;
+    ParserState st;
+    auto wrongId = switchReport(12);
+    wrongId[0] = 0x21;
+    EXPECT_FALSE(decodeReport(Parser::SWITCH_PRO_USB, wrongId.data(), wrongId.size(), s, &st));
+    auto tooShort = switchReport(11);
+    EXPECT_FALSE(decodeReport(Parser::SWITCH_PRO_USB, tooShort.data(), tooShort.size(), s, &st));
+}
+
+TEST(SwitchProSticks, TwelveBitPackingUnpacksBothAxes) {
+    ParserState st;
+    const DeviceState s = decodeSwitchSticks(st, kSwitchRawMax, 0, kSwitchCentre, kSwitchRawMax);
+    EXPECT_EQ(32767, s.sLX);
+    EXPECT_EQ(-32768, s.sLY);
+    EXPECT_EQ(0, s.sRX);
+    EXPECT_EQ(32767, s.sRY);
+}
+
+TEST(SwitchProSticks, RestingOffsetInsideTheDeadzoneReadsCentre) {
+    ParserState st;
+    const DeviceState s =
+        decodeSwitchSticks(st, kSwitchCentre + kSwitchDeadzone, kSwitchCentre - kSwitchDeadzone,
+                           kSwitchCentre, kSwitchCentre + kSwitchDeadzone + 1);
+    EXPECT_EQ(0, s.sLX);
+    EXPECT_EQ(0, s.sLY);
+    EXPECT_EQ(0, s.sRX);
+    // One count past the deadzone against the seed reach: 1 * 32767 / 1000.
+    EXPECT_EQ(32, s.sRY);
+}
+
+TEST(SwitchProSticks, ALearnedReachStretchesToTheRail) {
+    ParserState st;
+    const uint16_t partial = kSwitchCentre + kSwitchDeadzone + 500;
+    // Untaught: 500 counts against the 1000-count seed.
+    EXPECT_EQ(16383,
+              decodeSwitchSticks(st, partial, kSwitchCentre, kSwitchCentre, kSwitchCentre).sLX);
+    // The full throw teaches the side its reach (4095 - 2048 - 320 = 1727) and hits the rail.
+    EXPECT_EQ(
+        32767,
+        decodeSwitchSticks(st, kSwitchRawMax, kSwitchCentre, kSwitchCentre, kSwitchCentre).sLX);
+    EXPECT_EQ(1727, st.lx.posReach);
+    // The same 500 counts now read against the learned reach.
+    EXPECT_EQ(9486,
+              decodeSwitchSticks(st, partial, kSwitchCentre, kSwitchCentre, kSwitchCentre).sLX);
+}
+
+TEST(SwitchProSticks, EachSideLearnsItsOwnReach) {
+    ParserState st;
+    EXPECT_EQ(
+        32767,
+        decodeSwitchSticks(st, kSwitchRawMax, kSwitchCentre, kSwitchCentre, kSwitchCentre).sLX);
+    EXPECT_EQ(1727, st.lx.posReach);
+    EXPECT_EQ(kSwitchSeedReach, st.lx.negReach);
+    // The pull side still scales against its own untaught seed...
+    EXPECT_EQ(-16384, decodeSwitchSticks(st, kSwitchCentre - kSwitchDeadzone - 500, kSwitchCentre,
+                                         kSwitchCentre, kSwitchCentre)
+                          .sLX);
+    // ...and the other axes were never touched by the left X sweep.
+    EXPECT_EQ(kSwitchSeedReach, st.ly.posReach);
+    EXPECT_EQ(kSwitchSeedReach, st.rx.posReach);
+    EXPECT_EQ(kSwitchSeedReach, st.ry.posReach);
+}
+
+// ---- Stadia --------------------------------------------------------------------------------
+
+TEST(StadiaDecode, FaceButtonsMapByPosition) {
+    expectEachBitAlone(Parser::STADIA, stadiaReport(), 8, 0x00,
+                       {{0x40, XUSB_A},
+                        {0x20, XUSB_B},
+                        {0x10, XUSB_X},
+                        {0x08, XUSB_Y},
+                        {0x04, XUSB_LB},
+                        {0x02, XUSB_RB}});
+}
+
+TEST(StadiaDecode, SystemByteMapsStartBackAndStickClicks) {
+    expectEachBitAlone(
+        Parser::STADIA, stadiaReport(), 9, 0x00,
+        {{0x80, XUSB_START}, {0x40, XUSB_BACK}, {0x20, XUSB_THUMB_L}, {0x10, XUSB_THUMB_R}});
+}
+
+TEST(StadiaDecode, HatNibbleFoldsIntoTheDpad) {
+    expectHatNibbleFoldsIntoTheDpad(Parser::STADIA, stadiaReport(), 7);
+}
+
+TEST(StadiaDecode, TriggersAndSticksDecode) {
+    auto r = stadiaReport();
+    r[1] = 0xFF;
+    r[2] = 0x00;
+    r[3] = 0x00;
+    r[4] = 0xFF;
+    r[5] = 0x80;
+    r[6] = 0xFF;
+    const DeviceState s = decodeFresh(Parser::STADIA, r);
+    EXPECT_EQ(32639, s.sLX);
+    EXPECT_EQ(32767, s.sLY);
+    EXPECT_EQ(-32768, s.sRX);
+    EXPECT_EQ(-32639, s.sRY);
+    EXPECT_EQ(128, s.bLT);
+    EXPECT_EQ(255, s.bRT);
+}
+
+TEST(StadiaDecode, WrongReportIdOrShortReportIsRejected) {
+    DeviceState s;
+    ParserState st;
+    auto wrongId = stadiaReport();
+    wrongId[0] = 0x01;
+    EXPECT_FALSE(decodeReport(Parser::STADIA, wrongId.data(), wrongId.size(), s, &st));
+    auto tooShort = stadiaReport();
+    tooShort.resize(10);
+    EXPECT_FALSE(decodeReport(Parser::STADIA, tooShort.data(), tooShort.size(), s, &st));
+}
+
+// ---- generic HID: the fixed-offset fallback when no descriptor parsed ------------------------
+
+TEST(GenericHidDecode, FixedOffsetFallbackDecodesSticksButtonsAndHat) {
+    auto r = hidFallbackReport();
+    r[0] = 0xFF;
+    r[1] = 0x00;
+    r[4] = 0x12;
+    r[5] = 0x01;
+    DeviceState s;
+    ParserState st; // no descriptor parsed: hidLayout stays invalid
+    ASSERT_TRUE(decodeReport(Parser::GENERIC_HID_GAMEPAD, r.data(), r.size(), s, &st));
+    EXPECT_EQ(32639, s.sLX);
+    EXPECT_EQ(32767, s.sLY);
+    EXPECT_EQ(0, s.sRX);
+    EXPECT_EQ(0, s.sRY);
+    EXPECT_EQ(XUSB_A | XUSB_LB | XUSB_DPAD_RIGHT, s.wButtons);
+
+    DeviceState stateless;
+    ASSERT_TRUE(decodeReport(Parser::GENERIC_HID_GAMEPAD, r.data(), r.size(), stateless, nullptr));
+    EXPECT_EQ(s.wButtons, stateless.wButtons);
+    EXPECT_EQ(s.sLX, stateless.sLX);
+}
+
+TEST(GenericHidDecode, EveryFallbackButtonBitMapsToItsXusbBit) {
+    expectEachBitAlone(Parser::GENERIC_HID_GAMEPAD, hidFallbackReport(), 4, 0x08,
+                       {{0x10, XUSB_A}, {0x20, XUSB_B}, {0x40, XUSB_X}, {0x80, XUSB_Y}});
+    expectEachBitAlone(Parser::GENERIC_HID_GAMEPAD, hidFallbackReport(), 5, 0x00,
+                       {{0x01, XUSB_LB},
+                        {0x02, XUSB_RB},
+                        {0x04, XUSB_BACK},
+                        {0x08, XUSB_START},
+                        {0x10, XUSB_THUMB_L},
+                        {0x20, XUSB_THUMB_R}});
+}
+
+TEST(GenericHidDecode, TheFallbackHatNibbleFoldsIntoTheDpad) {
+    expectHatNibbleFoldsIntoTheDpad(Parser::GENERIC_HID_GAMEPAD, hidFallbackReport(), 4);
+}
+
+TEST(GenericHidDecode, Bits6And7OfByte5AreTheTriggers) {
+    auto r = hidFallbackReport();
+    r[5] = 0x40;
+    DeviceState lt = decodeFresh(Parser::GENERIC_HID_GAMEPAD, r);
+    EXPECT_EQ(255, lt.bLT);
+    EXPECT_EQ(0, lt.bRT);
+    EXPECT_EQ(0, lt.wButtons);
+    r[5] = 0x80;
+    DeviceState rt = decodeFresh(Parser::GENERIC_HID_GAMEPAD, r);
+    EXPECT_EQ(0, rt.bLT);
+    EXPECT_EQ(255, rt.bRT);
+    r[5] = 0xC0;
+    DeviceState both = decodeFresh(Parser::GENERIC_HID_GAMEPAD, r);
+    EXPECT_EQ(255, both.bLT);
+    EXPECT_EQ(255, both.bRT);
+}
+
+TEST(GenericHidDecode, ShortReportIsRejected) {
+    DeviceState s;
+    ParserState st;
+    auto r = hidFallbackReport();
+    r.resize(6);
+    EXPECT_FALSE(decodeReport(Parser::GENERIC_HID_GAMEPAD, r.data(), r.size(), s, &st));
+    EXPECT_FALSE(decodeReport(Parser::GENERIC_HID_GAMEPAD, r.data(), r.size(), s, nullptr));
+    r.resize(7);
+    EXPECT_TRUE(decodeReport(Parser::GENERIC_HID_GAMEPAD, r.data(), r.size(), s, &st));
+}
+
+// ---- odds and ends the byte-exact pins left out --------------------------------------------
+
+TEST(Rumble, SwitchProMidAmplitudePicksTheNearestLowerCode) {
+    // 0x8000 lands at amplitude 501 of 1003, between the 387 and 650 codes: the lower one wins.
+    uint8_t out[64];
+    ASSERT_EQ(10u, buildRumbleReport(Parser::SWITCH_PRO_USB, 0x8000, 0, 0, out, sizeof(out)));
+    EXPECT_EQ(0x00, out[2]);
+    EXPECT_EQ(0x71, out[3]);
+    EXPECT_EQ(0x40, out[4]);
+    EXPECT_EQ(0x5C, out[5]);
+}
+
+TEST(Rumble, SwitchProLowAmplitudeCodeCarriesItsHighByte) {
+    // Amplitude 10 is the one code whose low word has a high byte (0x8040), so it is the code
+    // that proves the two halves land in the right bytes.
+    uint8_t out[64];
+    ASSERT_EQ(10u, buildRumbleReport(Parser::SWITCH_PRO_USB, 0, 654, 0, out, sizeof(out)));
+    EXPECT_EQ(0x00, out[6]);
+    EXPECT_EQ(0x03, out[7]);
+    EXPECT_EQ(0xC0, out[8]);
+    EXPECT_EQ(0x40, out[9]);
+}
+
+TEST(TouchDecode, RawBeyondTheSurfaceClampsToTheEdge) {
+    auto ds4 = ds4Report();
+    ds4[33] = 1;
+    writeTouchPoint(ds4.data() + 35, true, 1, 4095, 4095);
+    DeviceState s{};
+    ASSERT_TRUE(decodeReport(Parser::DUALSHOCK4, ds4.data(), ds4.size(), s, nullptr));
+    EXPECT_EQ(32767, s.touch0X);
+    EXPECT_EQ(32767, s.touch0Y);
+
+    auto ds5 = dualSenseReport();
+    writeTouchPoint(ds5.data() + 33, true, 1, 4095, 4095);
+    DeviceState s5{};
+    ASSERT_TRUE(decodeReport(Parser::DUALSENSE, ds5.data(), ds5.size(), s5, nullptr));
+    EXPECT_EQ(32767, s5.touch0X);
+    EXPECT_EQ(32767, s5.touch0Y);
+}
+
+TEST(ParserName, EveryParserHasADistinctNonEmptyName) {
+    const Parser all[] = {Parser::NONE,
+                          Parser::XINPUT_360,
+                          Parser::XBOX_ONE_GIP,
+                          Parser::DUALSHOCK4,
+                          Parser::DUALSENSE,
+                          Parser::SWITCH_PRO_USB,
+                          Parser::STADIA,
+                          Parser::GENERIC_HID_GAMEPAD,
+                          Parser::XINPUT_360_WIRELESS,
+                          Parser::STEAM_CONTROLLER};
+    for (const Parser a : all) {
+        ASSERT_NE(nullptr, usbparsers::parserName(a));
+        EXPECT_GT(strlen(usbparsers::parserName(a)), 0u);
+        for (const Parser b : all) {
+            if (a == b) continue;
+            EXPECT_STRNE(usbparsers::parserName(a), usbparsers::parserName(b));
+        }
+    }
 }

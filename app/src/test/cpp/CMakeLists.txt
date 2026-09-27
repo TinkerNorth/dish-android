@@ -1,7 +1,6 @@
-# Host build for the pure gamepad-input layer. Replaces the JVM-side
-# GamepadInputProcessorTest that was deleted when the processor moved into
-# C++; without this target the keycode/deadzone/state-machine logic would
-# have no test coverage at all.
+# Host build for the host-testable JNI split (docs/architecture.md "Host-testable C++ split"):
+# one googletest target per pure layer, so the keycode/deadzone/state-machine logic, the wire
+# layouts, the USB decoders and the audio path are all provable without a device.
 #
 # Driven by Gradle's :app:nativeTest task, not the AGP NDK build. Run
 # manually:  cmake -S app/src/test/cpp -B build/native-test
@@ -44,8 +43,8 @@ target_include_directories(gamepad_input_test PRIVATE "${SATELLITE_CPP}")
 target_compile_options(gamepad_input_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(gamepad_input_test PRIVATE GTest::gtest_main)
 
-# Pure wire-encoder unit tests: no Android / JNI dependency, just the LE
-# byte-layout pins for MSG_MOTION (0x000A) and MSG_BATTERY (0x000B).
+# Pure wire-encoder unit tests: no Android / JNI dependency, just the byte-layout pins for every
+# inner payload wire_encoders.h encodes or decodes, and the datagram ceilings.
 add_executable(wire_encoders_test
     wire_encoders_test.cpp
 )
@@ -102,6 +101,16 @@ target_include_directories(heartbeat_thread_test PRIVATE "${SATELLITE_CPP}")
 target_compile_options(heartbeat_thread_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(heartbeat_thread_test PRIVATE GTest::gtest_main Threads::Threads)
 
+# The opt-in hot-path bench: std-only, so its windows, percentiles and the ping policy the
+# heartbeat thread asks are provable without a device.
+add_executable(hotpath_latency_test
+    hotpath_latency_test.cpp
+    "${SATELLITE_CPP}/hotpath_latency.cpp"
+)
+target_include_directories(hotpath_latency_test PRIVATE "${SATELLITE_CPP}")
+target_compile_options(hotpath_latency_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_link_libraries(hotpath_latency_test PRIVATE GTest::gtest_main Threads::Threads)
+
 # The libopus wrapper, round-tripped through real encoders and decoders. Needs
 # the codec, so it fetches the same pinned release the app builds against (see
 # src/main/cpp/CMakeLists.txt): testing the settings against a different libopus
@@ -144,4 +153,5 @@ gtest_discover_tests(usb_hid_descriptor_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(send_counter_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(audio_jitter_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(heartbeat_thread_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(hotpath_latency_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(audio_codec_test DISCOVERY_MODE PRE_TEST)

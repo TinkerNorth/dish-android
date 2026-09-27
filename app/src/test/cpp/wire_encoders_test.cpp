@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 #include "wire_encoders.h"
+#include "usb_parsers.h"
 
 #include <gtest/gtest.h>
 
@@ -421,4 +422,85 @@ TEST(DecodeMicLedPayload, OnlyTheThreeKnownStatesAreValid) {
     EXPECT_TRUE(dish_wire::micLedStateValid(dish_wire::MIC_LED_STATE_PULSE));
     EXPECT_FALSE(dish_wire::micLedStateValid(3));
     EXPECT_FALSE(dish_wire::micLedStateValid(0xFF));
+}
+
+// ---- payload sizes (contract §Messages) -----------------------------------
+
+TEST(PayloadSizes, MatchTheContract) {
+    // One name per inner payload, so the encoders, the send path's buffers and the receive arms
+    // all size themselves from the same place.
+    EXPECT_EQ(dish_wire::MOTION_PAYLOAD_BYTES, 17u);
+    EXPECT_EQ(dish_wire::BATTERY_PAYLOAD_BYTES, 3u);
+    EXPECT_EQ(dish_wire::TOUCHPAD_V1_PAYLOAD_BYTES, 16u);
+    EXPECT_EQ(dish_wire::TOUCHPAD_V2_PAYLOAD_BYTES, 19u);
+    EXPECT_EQ(dish_wire::LIGHTBAR_PAYLOAD_BYTES, 4u);
+    EXPECT_EQ(dish_wire::PLAYER_LEDS_PAYLOAD_BYTES, 2u);
+    EXPECT_EQ(dish_wire::RUMBLE_PAYLOAD_BYTES, 7u);
+    EXPECT_EQ(dish_wire::HEARTBEAT_ACK_ENRICHED_BYTES, 6u);
+    EXPECT_EQ(dish_wire::MIC_LED_PAYLOAD_BYTES, 2u);
+}
+
+TEST(PayloadSizes, EachEncoderWritesExactlyItsPayload) {
+    // A guard byte past each payload must survive the encode: the send path sizes its stack
+    // buffer from the constant and nothing else.
+    constexpr uint8_t kGuard = 0xCC;
+    uint8_t motion[dish_wire::MOTION_PAYLOAD_BYTES + 1];
+    for (uint8_t& b : motion) b = kGuard;
+    dish_wire::encodeMotionPayload(motion, 1, -1, -1, -1, -1, -1, -1, 0xFFFFFFFFu);
+    EXPECT_EQ(motion[dish_wire::MOTION_PAYLOAD_BYTES], kGuard);
+    EXPECT_EQ(motion[dish_wire::MOTION_PAYLOAD_BYTES - 1], 0xFF);
+
+    uint8_t battery[dish_wire::BATTERY_PAYLOAD_BYTES + 1];
+    for (uint8_t& b : battery) b = kGuard;
+    dish_wire::encodeBatteryPayload(battery, 1, 2, 3);
+    EXPECT_EQ(battery[dish_wire::BATTERY_PAYLOAD_BYTES], kGuard);
+    EXPECT_EQ(battery[dish_wire::BATTERY_PAYLOAD_BYTES - 1], 3);
+
+    uint8_t v1[dish_wire::TOUCHPAD_V1_PAYLOAD_BYTES + 1];
+    for (uint8_t& b : v1) b = kGuard;
+    dish_wire::encodeTouchpadPayloadV1(v1, 1, true, true, true, 1, -1, -1, 1, -1, -1, 0xFFFFFFFFu);
+    EXPECT_EQ(v1[dish_wire::TOUCHPAD_V1_PAYLOAD_BYTES], kGuard);
+    EXPECT_EQ(v1[dish_wire::TOUCHPAD_V1_PAYLOAD_BYTES - 1], 0xFF);
+
+    uint8_t v2[dish_wire::TOUCHPAD_V2_PAYLOAD_BYTES + 1];
+    for (uint8_t& b : v2) b = kGuard;
+    dish_wire::encodeTouchpadPayloadV2(v2, 1, true, true, true, true, true, 1, -1, -1, 1, -1, -1,
+                                       0xFFFFFFFFu, -1);
+    EXPECT_EQ(v2[dish_wire::TOUCHPAD_V2_PAYLOAD_BYTES], kGuard);
+    EXPECT_EQ(v2[dish_wire::TOUCHPAD_V2_PAYLOAD_BYTES - 1], 0xFF);
+}
+
+TEST(TriggerEffectsPayload, IsTwoElevenByteBlocks) {
+    // The receive arm expects ctrlIdx plus exactly the two DualSense effect blocks the USB writer
+    // replays, so the two headers have to agree on the block length.
+    EXPECT_EQ(dish_wire::TRIGGER_EFFECTS_PAYLOAD_BYTES, 22);
+    EXPECT_EQ(dish_wire::TRIGGER_EFFECTS_PAYLOAD_BYTES, 2 * usbparsers::TRIGGER_EFFECT_BLOCK_LEN);
+}
+
+TEST(TouchpadFlags, MatchTheContract) {
+    // 0x04 is the click in v1 and the middle button in v2; only the names tell them apart.
+    EXPECT_EQ(dish_wire::TOUCHPAD_FLAG_F0, 0x01);
+    EXPECT_EQ(dish_wire::TOUCHPAD_FLAG_F1, 0x02);
+    EXPECT_EQ(dish_wire::TOUCHPAD_V1_FLAG_BUTTON, 0x04);
+    EXPECT_EQ(dish_wire::TOUCHPAD_BUTTON_LEFT, 0x01);
+    EXPECT_EQ(dish_wire::TOUCHPAD_BUTTON_RIGHT, 0x02);
+    EXPECT_EQ(dish_wire::TOUCHPAD_BUTTON_MIDDLE, 0x04);
+}
+
+// ---- MSG_PLAYER_LEDS --------------------------------------------------------
+
+TEST(DecodePlayerLedsPayload, CtrlIdxThenMask) {
+    const uint8_t in[2] = {3, 0x1F};
+    const dish_wire::PlayerLedsPayload leds = dish_wire::decodePlayerLedsPayload(in);
+    EXPECT_EQ(leds.ctrlIdx, 3);
+    EXPECT_EQ(leds.ledMask, 0x1F);
+}
+
+TEST(DecodePlayerLedsPayload, FullByteRangePassesThroughUnmasked) {
+    // The mask is the pad family's business (five LEDs on a DualSense, four on a Switch Pro);
+    // the wire decoder hands every bit over.
+    const uint8_t in[2] = {0xFF, 0xFF};
+    const dish_wire::PlayerLedsPayload leds = dish_wire::decodePlayerLedsPayload(in);
+    EXPECT_EQ(leds.ctrlIdx, 0xFF);
+    EXPECT_EQ(leds.ledMask, 0xFF);
 }
