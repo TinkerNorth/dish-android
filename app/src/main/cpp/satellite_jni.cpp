@@ -780,7 +780,7 @@ static void publishMotionToBridge(const SlotBinding& binding, const MotionSample
 static void publishMotionToSatellite(const SlotBinding& binding, const MotionSample& m) {
     auto session = getSession(binding.sessionHandle);
     if (!session) return;
-    uint8_t payload[17];
+    uint8_t payload[dish_wire::MOTION_PAYLOAD_BYTES];
     session->motionByCtrl[binding.controllerIndex & CTRL_INDEX_MASK].fetch_add(
         1, std::memory_order_relaxed);
     dish_wire::encodeMotionPayload(payload, (uint8_t)(binding.controllerIndex & 0xFF), m.gyro[0],
@@ -830,18 +830,18 @@ static void publishTouchToBridge(const SlotBinding& binding, const gamepad::Touc
 static void sendTouchpadFrame(Session& session, const uint8_t idx, const gamepad::TouchpadState& t,
                               const bool rightPressed, const bool middlePressed,
                               const uint32_t eventTimeMs, const int16_t scrollDelta) {
-    uint8_t payload[19];
+    uint8_t payload[dish_wire::TOUCHPAD_V2_PAYLOAD_BYTES];
     const bool isProtocol2 = session.protocolVersion.load() >= PROTOCOL_VERSION_TOUCHPAD_V2;
     if (isProtocol2) {
         dish_wire::encodeTouchpadPayloadV2(payload, idx, t.f0Active, t.f1Active, t.clickDown,
                                            rightPressed, middlePressed, t.f0Id, t.f0X, t.f0Y,
                                            t.f1Id, t.f1X, t.f1Y, eventTimeMs, scrollDelta);
-        sendEncrypted(&session, MSG_TOUCHPAD, payload, 19);
+        sendEncrypted(&session, MSG_TOUCHPAD, payload, dish_wire::TOUCHPAD_V2_PAYLOAD_BYTES);
         return;
     }
     dish_wire::encodeTouchpadPayloadV1(payload, idx, t.f0Active, t.f1Active, t.clickDown, t.f0Id,
                                        t.f0X, t.f0Y, t.f1Id, t.f1X, t.f1Y, eventTimeMs);
-    sendEncrypted(&session, MSG_TOUCHPAD, payload, 16);
+    sendEncrypted(&session, MSG_TOUCHPAD, payload, dish_wire::TOUCHPAD_V1_PAYLOAD_BYTES);
 }
 
 // A pad's own trackpad carries no mouse buttons and no wheel.
@@ -887,22 +887,13 @@ static uint8_t quirkFor(const int32_t deviceId) {
     return it->second.quirk;
 }
 
-// A pad on the Switch layout answers for its own key set. Every other pad takes the standard map
-// plus the two trigger keycodes, which applyKey turns into analogue values rather than bits.
-static bool isMappedGamepadKey(const int32_t keyCode, const uint8_t quirk) {
-    const bool isSwitchLayout = (quirk & gamepad::QUIRK_SWITCH_LAYOUT) != 0;
-    if (isSwitchLayout) return gamepad::switchLayoutConsumesKey(keyCode);
-    const bool isTriggerKey = keyCode == AKEYCODE_BUTTON_L2 || keyCode == AKEYCODE_BUTTON_R2;
-    return isTriggerKey || gamepad::keycodeToXusb(keyCode) != 0;
-}
-
 static bool gamepadKeyFilter(const GameActivityKeyEvent* ev) {
     if (!isGamepadSource(ev->source)) return false;
     const int32_t kc = ev->keyCode;
     const int32_t deviceId = ev->deviceId;
 
     std::lock_guard<std::mutex> lock(g_devicesMtx);
-    if (!isMappedGamepadKey(kc, quirkFor(deviceId))) return false;
+    if (!gamepad::consumesKey(kc, quirkFor(deviceId))) return false;
 
     const int32_t action = ev->action;
     const bool isEdge = action == AKEY_EVENT_ACTION_DOWN || action == AKEY_EVENT_ACTION_UP;
@@ -1266,7 +1257,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendM
     jshort accelX, jshort accelY, jshort accelZ, jint timestampDeltaUs) {
     auto s = getSession(handle);
     if (!s) return;
-    uint8_t payload[17];
+    uint8_t payload[dish_wire::MOTION_PAYLOAD_BYTES];
     dish_wire::encodeMotionPayload(payload, (uint8_t)(controllerIndex & 0xFF), (int16_t)gyroX,
                                    (int16_t)gyroY, (int16_t)gyroZ, (int16_t)accelX, (int16_t)accelY,
                                    (int16_t)accelZ, (uint32_t)timestampDeltaUs);
@@ -1278,7 +1269,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendB
     JNIEnv*, jobject, jint handle, jint controllerIndex, jint level, jint status) {
     auto s = getSession(handle);
     if (!s) return;
-    uint8_t payload[3];
+    uint8_t payload[dish_wire::BATTERY_PAYLOAD_BYTES];
     dish_wire::encodeBatteryPayload(payload, (uint8_t)(controllerIndex & 0xFF),
                                     (uint8_t)(level & 0xFF), (uint8_t)(status & 0xFF));
     sendEncrypted(s.get(), MSG_BATTERY, payload, sizeof(payload));
@@ -1708,13 +1699,8 @@ Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_processGamepadKeyEvent(
     // Source bits are unreliable; gate on the mapped-keycode check instead.
     std::lock_guard<std::mutex> lock(g_devicesMtx);
     auto it = g_devices.find(deviceId);
-    uint8_t quirk = it != g_devices.end() ? it->second.quirk : 0;
-    bool isMappedKey = (quirk & gamepad::QUIRK_SWITCH_LAYOUT)
-                           ? gamepad::switchLayoutConsumesKey(keyCode)
-                           : (keyCode == AKEYCODE_BUTTON_L2 || keyCode == AKEYCODE_BUTTON_R2 ||
-                              keyCode == AKEYCODE_BUTTON_7 || keyCode == AKEYCODE_BUTTON_8) ||
-                                 gamepad::keycodeToXusb(keyCode) != 0;
-    if (!isMappedKey) return JNI_FALSE;
+    const uint8_t quirk = it != g_devices.end() ? it->second.quirk : 0;
+    if (!gamepad::consumesKey(keyCode, quirk)) return JNI_FALSE;
     if (action != AKEY_EVENT_ACTION_DOWN && action != AKEY_EVENT_ACTION_UP) return JNI_FALSE;
     g_frameworkEventCounts[deviceId]++;
     auto& state = g_devices[deviceId];
