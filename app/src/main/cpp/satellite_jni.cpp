@@ -79,6 +79,9 @@ static constexpr uint16_t MSG_HAPTIC_AUDIO = 0x0015;
 static constexpr int AUDIO_LANE_SPEAKER = 0;
 static constexpr int AUDIO_LANE_HAPTICS = 1;
 
+// Protocol 2 carries the pointer frame (mouse buttons and wheel) in MSG_TOUCHPAD.
+static constexpr int32_t PROTOCOL_VERSION_TOUCHPAD_V2 = 2;
+
 // Nonce direction byte: the two directions of one session key never share a
 // nonce (contract §Crypto).
 static constexpr uint8_t CRYPTO_DIR_CLIENT_TO_SERVER = 0x00;
@@ -96,6 +99,12 @@ struct XUSB_REPORT {
 };
 #pragma pack(pop)
 static_assert(sizeof(XUSB_REPORT) == 12, "XUSB_REPORT must be 12 bytes");
+
+// A session addresses its pads by a 4-bit controller index (contract §Session).
+static constexpr int MAX_CONTROLLERS = 16;
+static constexpr int CTRL_INDEX_MASK = MAX_CONTROLLERS - 1;
+// MSG_GAMEPAD_DATA: one slot byte then the wire XUSB report.
+static constexpr size_t GAMEPAD_PAYLOAD_BYTES = 1 + sizeof(XUSB_REPORT);
 
 // One bound controller's audio working set: the outbound mic encoder with its
 // wrapping wire sequence, and the inbound speaker pair (reorder window feeding
@@ -145,8 +154,8 @@ struct Session {
     std::atomic<int8_t> activeControllerCount{-1};
 
     hotpath::RttStats rtt;
-    std::atomic<uint32_t> sentByCtrl[16] = {};
-    std::atomic<uint32_t> motionByCtrl[16] = {};
+    std::atomic<uint32_t> sentByCtrl[MAX_CONTROLLERS] = {};
+    std::atomic<uint32_t> motionByCtrl[MAX_CONTROLLERS] = {};
 
     // Negotiated at session PUT; picks which MSG_TOUCHPAD frame this session encodes.
     std::atomic<int32_t> protocolVersion{1};
@@ -564,23 +573,33 @@ static inline float axisCur(const GameActivityMotionEvent* ev, int axis) {
     return ev->pointers[0].axisValues[axis];
 }
 
+static XUSB_REPORT xusbReportOf(const DeviceState& s) {
+    XUSB_REPORT r{};
+    r.wButtons = s.wButtons;
+    r.bLeftTrigger = s.bLT;
+    r.bRightTrigger = s.bRT;
+    r.sThumbLX = s.sLX;
+    r.sThumbLY = s.sLY;
+    r.sThumbRX = s.sRX;
+    r.sThumbRY = s.sRY;
+    return r;
+}
+
 // The satellite takes the pad state as a wire XUSB report, straight out of the stack: one slot
 // byte then the report, no allocation on the per-packet path.
+static void sendGamepadReport(Session& session, const int controllerIndex,
+                              const XUSB_REPORT& report) {
+    uint8_t payload[GAMEPAD_PAYLOAD_BYTES];
+    payload[0] = (uint8_t)(controllerIndex & 0xFF);
+    memcpy(payload + 1, &report, sizeof(report));
+    sendEncrypted(&session, MSG_GAMEPAD_DATA, payload, sizeof(payload));
+    session.sentByCtrl[controllerIndex & CTRL_INDEX_MASK].fetch_add(1, std::memory_order_relaxed);
+}
+
 static void publishGamepadToSatellite(const SlotBinding& binding, const DeviceState& s) {
     auto session = getSession(binding.sessionHandle);
     if (!session) return;
-    uint8_t payload[1 + sizeof(XUSB_REPORT)];
-    payload[0] = (uint8_t)(binding.controllerIndex & 0xFF);
-    XUSB_REPORT* r = (XUSB_REPORT*)(payload + 1);
-    r->wButtons = s.wButtons;
-    r->bLeftTrigger = s.bLT;
-    r->bRightTrigger = s.bRT;
-    r->sThumbLX = s.sLX;
-    r->sThumbLY = s.sLY;
-    r->sThumbRX = s.sRX;
-    r->sThumbRY = s.sRY;
-    sendEncrypted(session.get(), MSG_GAMEPAD_DATA, payload, sizeof(payload));
-    session->sentByCtrl[binding.controllerIndex & 15].fetch_add(1, std::memory_order_relaxed);
+    sendGamepadReport(*session, binding.controllerIndex, xusbReportOf(s));
     hotpath::markGamepadSent(); // stage-1 end: the URB-driven packet has left sendto()
 }
 
@@ -737,39 +756,57 @@ void applyPadMicMute(int32_t deviceId, bool muted) {
     g_bridgeQueueCv.notify_one();
 }
 
+struct MotionSample {
+    int16_t gyro[3];
+    int16_t accel[3];
+    uint32_t timestampDeltaUs;
+};
+
+// Kotlin translates to CONTROLLER_MOTION and drops samples the host never asked for (MOTION_EVENT
+// gate), so this stays fire-and-forget.
+static void publishMotionToBridge(const SlotBinding& binding, const MotionSample& m) {
+    if (binding.bridgeConnectionId.empty()) return;
+    BridgeReport r{};
+    r.kind = SLOT_MOONLIGHT;
+    r.payload = BridgeReport::MOTION;
+    r.connectionId = binding.bridgeConnectionId;
+    r.controllerNumber = binding.controllerIndex;
+    memcpy(r.gyro, m.gyro, sizeof(r.gyro));
+    memcpy(r.accel, m.accel, sizeof(r.accel));
+    r.timestampDeltaUs = m.timestampDeltaUs;
+    enqueueBridgeReport(std::move(r));
+}
+
+static void publishMotionToSatellite(const SlotBinding& binding, const MotionSample& m) {
+    auto session = getSession(binding.sessionHandle);
+    if (!session) return;
+    uint8_t payload[17];
+    session->motionByCtrl[binding.controllerIndex & CTRL_INDEX_MASK].fetch_add(
+        1, std::memory_order_relaxed);
+    dish_wire::encodeMotionPayload(payload, (uint8_t)(binding.controllerIndex & 0xFF), m.gyro[0],
+                                   m.gyro[1], m.gyro[2], m.accel[0], m.accel[1], m.accel[2],
+                                   m.timestampDeltaUs);
+    sendEncrypted(session.get(), MSG_MOTION, payload, sizeof(payload));
+}
+
 void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyroZ, int16_t accelX,
                     int16_t accelY, int16_t accelZ, uint32_t timestampDeltaUs) {
+    const MotionSample sample{{gyroX, gyroY, gyroZ}, {accelX, accelY, accelZ}, timestampDeltaUs};
     std::lock_guard<std::mutex> lock(g_slotsMtx);
     auto it = g_slots.find(deviceId);
     if (it == g_slots.end()) return;
     const SlotBinding& binding = it->second;
-    if (binding.kind == SLOT_MOONLIGHT) {
-        // Kotlin translates to CONTROLLER_MOTION and drops samples the host
-        // never asked for (MOTION_EVENT gate), so this stays fire-and-forget.
-        if (binding.bridgeConnectionId.empty()) return;
-        BridgeReport r{};
-        r.kind = SLOT_MOONLIGHT;
-        r.payload = BridgeReport::MOTION;
-        r.connectionId = binding.bridgeConnectionId;
-        r.controllerNumber = binding.controllerIndex;
-        r.gyro[0] = gyroX;
-        r.gyro[1] = gyroY;
-        r.gyro[2] = gyroZ;
-        r.accel[0] = accelX;
-        r.accel[1] = accelY;
-        r.accel[2] = accelZ;
-        r.timestampDeltaUs = timestampDeltaUs;
-        enqueueBridgeReport(std::move(r));
+    switch (binding.kind) {
+    case SLOT_MOONLIGHT:
+        publishMotionToBridge(binding, sample);
+        return;
+    case SLOT_SATELLITE:
+        publishMotionToSatellite(binding, sample);
+        return;
+    case SLOT_BLUETOOTH:
+    case SLOT_NONE:
         return;
     }
-    if (binding.kind != SLOT_SATELLITE) return;
-    auto session = getSession(binding.sessionHandle);
-    if (!session) return;
-    uint8_t payload[17];
-    session->motionByCtrl[binding.controllerIndex & 15].fetch_add(1, std::memory_order_relaxed);
-    dish_wire::encodeMotionPayload(payload, (uint8_t)(binding.controllerIndex & 0xFF), gyroX, gyroY,
-                                   gyroZ, accelX, accelY, accelZ, timestampDeltaUs);
-    sendEncrypted(session.get(), MSG_MOTION, payload, sizeof(payload));
 }
 
 // The Bluetooth HID descriptor is a plain gamepad, so touch has nowhere to go on that
@@ -788,24 +825,32 @@ static void publishTouchToBridge(const SlotBinding& binding, const gamepad::Touc
     enqueueBridgeReport(std::move(r));
 }
 
-// Protocol 2 widened the payload to 19 bytes; a protocol 1 satellite still gets the 16-byte form.
-static void publishTouchToSatellite(const SlotBinding& binding, const gamepad::TouchpadState& t,
-                                    const uint32_t eventTimeMs) {
-    auto session = getSession(binding.sessionHandle);
-    if (!session) return;
+// Protocol 2 widened the payload to 19 bytes with the mouse buttons and the wheel; a protocol 1
+// satellite still gets the 16-byte form, which has neither, so those fields are dropped for it.
+static void sendTouchpadFrame(Session& session, const uint8_t idx, const gamepad::TouchpadState& t,
+                              const bool rightPressed, const bool middlePressed,
+                              const uint32_t eventTimeMs, const int16_t scrollDelta) {
     uint8_t payload[19];
-    const uint8_t idx = (uint8_t)(binding.controllerIndex & 0xFF);
-    const bool isProtocol2 = session->protocolVersion.load() >= 2;
+    const bool isProtocol2 = session.protocolVersion.load() >= PROTOCOL_VERSION_TOUCHPAD_V2;
     if (isProtocol2) {
-        dish_wire::encodeTouchpadPayloadV2(payload, idx, t.f0Active, t.f1Active, t.clickDown, false,
-                                           false, t.f0Id, t.f0X, t.f0Y, t.f1Id, t.f1X, t.f1Y,
-                                           eventTimeMs, 0);
-        sendEncrypted(session.get(), MSG_TOUCHPAD, payload, 19);
+        dish_wire::encodeTouchpadPayloadV2(payload, idx, t.f0Active, t.f1Active, t.clickDown,
+                                           rightPressed, middlePressed, t.f0Id, t.f0X, t.f0Y,
+                                           t.f1Id, t.f1X, t.f1Y, eventTimeMs, scrollDelta);
+        sendEncrypted(&session, MSG_TOUCHPAD, payload, 19);
         return;
     }
     dish_wire::encodeTouchpadPayloadV1(payload, idx, t.f0Active, t.f1Active, t.clickDown, t.f0Id,
                                        t.f0X, t.f0Y, t.f1Id, t.f1X, t.f1Y, eventTimeMs);
-    sendEncrypted(session.get(), MSG_TOUCHPAD, payload, 16);
+    sendEncrypted(&session, MSG_TOUCHPAD, payload, 16);
+}
+
+// A pad's own trackpad carries no mouse buttons and no wheel.
+static void publishTouchToSatellite(const SlotBinding& binding, const gamepad::TouchpadState& t,
+                                    const uint32_t eventTimeMs) {
+    auto session = getSession(binding.sessionHandle);
+    if (!session) return;
+    const uint8_t idx = (uint8_t)(binding.controllerIndex & 0xFF);
+    sendTouchpadFrame(*session, idx, t, false, false, eventTimeMs, 0);
 }
 
 void applyUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_t eventTimeMs) {
@@ -877,19 +922,33 @@ static float pickLargerMagnitude(const float a, const float b) {
     return std::fabs(a) >= std::fabs(b) ? a : b;
 }
 
+// One joystick sample as Android reports it, before the right-stick and trigger axes are reduced
+// to the pair the pad is actually driving.
+struct JoystickSample {
+    float x, y, z, rz, rx, ry;
+    float hatX, hatY;
+    float lTrigger, rTrigger, brake, gas;
+};
+
+static void applyJoystickSample(gamepad::DeviceState& state, const JoystickSample& sample) {
+    const float rightX = pickLargerMagnitude(sample.z, sample.rx);
+    const float rightY = pickLargerMagnitude(sample.rz, sample.ry);
+    const float lt = std::max(sample.lTrigger, sample.brake);
+    const float rt = std::max(sample.rTrigger, sample.gas);
+    gamepad::applyAxes(state, sample.x, sample.y, rightX, rightY, lt, rt, sample.hatX, sample.hatY);
+}
+
 // Latest sample wins: historicals are intermediate states the next apply overwrites anyway.
 static void applyMotionAxes(const GameActivityMotionEvent* ev, gamepad::DeviceState& state) {
-    const float rightX =
-        pickLargerMagnitude(axisCur(ev, AMOTION_EVENT_AXIS_Z), axisCur(ev, AMOTION_EVENT_AXIS_RX));
-    const float rightY =
-        pickLargerMagnitude(axisCur(ev, AMOTION_EVENT_AXIS_RZ), axisCur(ev, AMOTION_EVENT_AXIS_RY));
-    const float lt =
-        std::max(axisCur(ev, AMOTION_EVENT_AXIS_LTRIGGER), axisCur(ev, AMOTION_EVENT_AXIS_BRAKE));
-    const float rt =
-        std::max(axisCur(ev, AMOTION_EVENT_AXIS_RTRIGGER), axisCur(ev, AMOTION_EVENT_AXIS_GAS));
-    gamepad::applyAxes(state, axisCur(ev, AMOTION_EVENT_AXIS_X), axisCur(ev, AMOTION_EVENT_AXIS_Y),
-                       rightX, rightY, lt, rt, axisCur(ev, AMOTION_EVENT_AXIS_HAT_X),
-                       axisCur(ev, AMOTION_EVENT_AXIS_HAT_Y));
+    const JoystickSample sample{
+        axisCur(ev, AMOTION_EVENT_AXIS_X),        axisCur(ev, AMOTION_EVENT_AXIS_Y),
+        axisCur(ev, AMOTION_EVENT_AXIS_Z),        axisCur(ev, AMOTION_EVENT_AXIS_RZ),
+        axisCur(ev, AMOTION_EVENT_AXIS_RX),       axisCur(ev, AMOTION_EVENT_AXIS_RY),
+        axisCur(ev, AMOTION_EVENT_AXIS_HAT_X),    axisCur(ev, AMOTION_EVENT_AXIS_HAT_Y),
+        axisCur(ev, AMOTION_EVENT_AXIS_LTRIGGER), axisCur(ev, AMOTION_EVENT_AXIS_RTRIGGER),
+        axisCur(ev, AMOTION_EVENT_AXIS_BRAKE),    axisCur(ev, AMOTION_EVENT_AXIS_GAS),
+    };
+    applyJoystickSample(state, sample);
 }
 
 static bool gamepadMotionFilter(const GameActivityMotionEvent* ev) {
@@ -1071,14 +1130,14 @@ void android_main(struct android_app* app) {
 extern "C" {
 
 static std::once_flag g_sodiumInit;
-static void ensureSodiumInit() {
-    std::call_once(g_sodiumInit, []() {
-        if (sodium_init() < 0)
-            LOGE("sodium_init() failed!");
-        else
-            LOGI("libsodium initialized");
-    });
+static void initSodium() {
+    if (sodium_init() < 0) {
+        LOGE("sodium_init() failed!");
+        return;
+    }
+    LOGI("libsodium initialized");
 }
+static void ensureSodiumInit() { std::call_once(g_sodiumInit, initSodium); }
 
 JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_openSocket(JNIEnv* env,
                                                                                    jobject,
@@ -1191,18 +1250,15 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendR
     jint sLY, jint sRX, jint sRY) {
     auto s = getSession(handle);
     if (!s) return;
-    uint8_t payload[13];
-    payload[0] = (uint8_t)(controllerIndex & 0xFF);
-    XUSB_REPORT* r = (XUSB_REPORT*)(payload + 1);
-    r->wButtons = (uint16_t)(wB & 0xFFFF);
-    r->bLeftTrigger = (uint8_t)(bLT & 0xFF);
-    r->bRightTrigger = (uint8_t)(bRT & 0xFF);
-    r->sThumbLX = (int16_t)sLX;
-    r->sThumbLY = (int16_t)sLY;
-    r->sThumbRX = (int16_t)sRX;
-    r->sThumbRY = (int16_t)sRY;
-    sendEncrypted(s.get(), MSG_GAMEPAD_DATA, payload, 13);
-    s->sentByCtrl[controllerIndex & 15].fetch_add(1, std::memory_order_relaxed);
+    XUSB_REPORT report{};
+    report.wButtons = (uint16_t)(wB & 0xFFFF);
+    report.bLeftTrigger = (uint8_t)(bLT & 0xFF);
+    report.bRightTrigger = (uint8_t)(bRT & 0xFF);
+    report.sThumbLX = (int16_t)sLX;
+    report.sThumbLY = (int16_t)sLY;
+    report.sThumbRX = (int16_t)sRX;
+    report.sThumbRY = (int16_t)sRY;
+    sendGamepadReport(*s, controllerIndex, report);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendMotion(
@@ -1215,7 +1271,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendM
                                    (int16_t)gyroY, (int16_t)gyroZ, (int16_t)accelX, (int16_t)accelY,
                                    (int16_t)accelZ, (uint32_t)timestampDeltaUs);
     sendEncrypted(s.get(), MSG_MOTION, payload, sizeof(payload));
-    s->motionByCtrl[controllerIndex & 15].fetch_add(1, std::memory_order_relaxed);
+    s->motionByCtrl[controllerIndex & CTRL_INDEX_MASK].fetch_add(1, std::memory_order_relaxed);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendBattery(
@@ -1235,25 +1291,19 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendT
     jshort scrollDelta) {
     auto s = getSession(handle);
     if (!s) return;
-    uint8_t payload[19];
+    gamepad::TouchpadState t;
+    t.f0Active = f0Active == JNI_TRUE;
+    t.f1Active = f1Active == JNI_TRUE;
+    t.clickDown = buttonPressed == JNI_TRUE;
+    t.f0Id = (uint8_t)(f0TrackingId & 0xFF);
+    t.f1Id = (uint8_t)(f1TrackingId & 0xFF);
+    t.f0X = (int16_t)f0x;
+    t.f0Y = (int16_t)f0y;
+    t.f1X = (int16_t)f1x;
+    t.f1Y = (int16_t)f1y;
     const uint8_t idx = (uint8_t)(controllerIndex & 0xFF);
-    if (s->protocolVersion.load() >= 2) {
-        dish_wire::encodeTouchpadPayloadV2(
-            payload, idx, f0Active == JNI_TRUE, f1Active == JNI_TRUE, buttonPressed == JNI_TRUE,
-            rightPressed == JNI_TRUE, middlePressed == JNI_TRUE, (uint8_t)(f0TrackingId & 0xFF),
-            (int16_t)f0x, (int16_t)f0y, (uint8_t)(f1TrackingId & 0xFF), (int16_t)f1x, (int16_t)f1y,
-            (uint32_t)(eventTimeMs & 0xFFFFFFFFLL), (int16_t)scrollDelta);
-        sendEncrypted(s.get(), MSG_TOUCHPAD, payload, 19);
-    } else {
-        // v1 has no mouse buttons and no wheel; the overlay never offers them on a v1
-        // session, so dropping the fields here loses nothing.
-        dish_wire::encodeTouchpadPayloadV1(
-            payload, idx, f0Active == JNI_TRUE, f1Active == JNI_TRUE, buttonPressed == JNI_TRUE,
-            (uint8_t)(f0TrackingId & 0xFF), (int16_t)f0x, (int16_t)f0y,
-            (uint8_t)(f1TrackingId & 0xFF), (int16_t)f1x, (int16_t)f1y,
-            (uint32_t)(eventTimeMs & 0xFFFFFFFFLL));
-        sendEncrypted(s.get(), MSG_TOUCHPAD, payload, 16);
-    }
+    sendTouchpadFrame(*s, idx, t, rightPressed == JNI_TRUE, middlePressed == JNI_TRUE,
+                      (uint32_t)(eventTimeMs & 0xFFFFFFFFLL), (int16_t)scrollDelta);
 }
 
 // One 20 ms mono window straight from AudioRecord: encode it and put it on the
@@ -1680,7 +1730,7 @@ Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_processGamepadMotionEvent(
     jfloat rz, jfloat rx, jfloat ry, jfloat hatX, jfloat hatY, jfloat lTrigger, jfloat rTrigger,
     jfloat brake, jfloat gas) {
     if ((source & AINPUT_SOURCE_JOYSTICK) != AINPUT_SOURCE_JOYSTICK) return JNI_FALSE;
-    int32_t maskedAction = action & AMOTION_EVENT_ACTION_MASK;
+    const int32_t maskedAction = action & AMOTION_EVENT_ACTION_MASK;
     std::lock_guard<std::mutex> lock(g_devicesMtx);
     auto& state = g_devices[deviceId];
     if (maskedAction == AMOTION_EVENT_ACTION_CANCEL) {
@@ -1690,12 +1740,8 @@ Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_processGamepadMotionEvent(
     }
     if (maskedAction != AMOTION_EVENT_ACTION_MOVE) return JNI_TRUE;
     g_frameworkEventCounts[deviceId]++;
-    // Right-stick layout varies (Z/RZ vs RX/RY); pick the larger-magnitude pair.
-    float rightX = std::fabs(z) >= std::fabs(rx) ? z : rx;
-    float rightY = std::fabs(rz) >= std::fabs(ry) ? rz : ry;
-    float lt = std::max(lTrigger, brake);
-    float rt = std::max(rTrigger, gas);
-    gamepad::applyAxes(state, x, y, rightX, rightY, lt, rt, hatX, hatY);
+    const JoystickSample sample{x, y, z, rz, rx, ry, hatX, hatY, lTrigger, rTrigger, brake, gas};
+    applyJoystickSample(state, sample);
     publishIfChanged(deviceId, state);
     return JNI_TRUE;
 }
@@ -1709,18 +1755,25 @@ Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_releaseAllPhysicalReports(
     }
 }
 
+// A bridge method that is missing degrades to a silent bridge rather than a pending exception:
+// the miss is logged once here and cleared.
+static jmethodID resolveStaticMethod(JNIEnv* env, const jclass cls, const char* owner,
+                                     const char* name, const char* signature) {
+    const jmethodID method = env->GetStaticMethodID(cls, name, signature);
+    if (method != nullptr) return method;
+    LOGE("%s.%s not found", owner, name);
+    env->ExceptionClear();
+    return nullptr;
+}
+
 // Class registration cannot live in JNI_OnLoad: FindClass there uses the system loader, not the
 // app's.
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_hotpath_input_BluetoothGamepadBridge_nativeInstall(
     JNIEnv* env, jclass bridgeCls) {
     if (g_btBridgeClass == nullptr) { g_btBridgeClass = (jclass)env->NewGlobalRef(bridgeCls); }
     if (g_btDispatchMethod == nullptr) {
-        g_btDispatchMethod = env->GetStaticMethodID(g_btBridgeClass, "dispatchReport",
-                                                    "(Ljava/lang/String;IIIIIII)V");
-        if (g_btDispatchMethod == nullptr) {
-            LOGE("BluetoothGamepadBridge.dispatchReport not found");
-            env->ExceptionClear();
-        }
+        g_btDispatchMethod = resolveStaticMethod(env, g_btBridgeClass, "BluetoothGamepadBridge",
+                                                 "dispatchReport", "(Ljava/lang/String;IIIIIII)V");
     }
     startBridgeDispatchThread();
 }
@@ -1731,28 +1784,19 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_hotpath_input_MoonlightGamepadB
         g_moonlightBridgeClass = (jclass)env->NewGlobalRef(bridgeCls);
     }
     if (g_moonlightDispatchMethod == nullptr) {
-        g_moonlightDispatchMethod = env->GetStaticMethodID(g_moonlightBridgeClass, "dispatchReport",
-                                                           "(Ljava/lang/String;IIIIIIII)V");
-        if (g_moonlightDispatchMethod == nullptr) {
-            LOGE("MoonlightGamepadBridge.dispatchReport not found");
-            env->ExceptionClear();
-        }
+        g_moonlightDispatchMethod =
+            resolveStaticMethod(env, g_moonlightBridgeClass, "MoonlightGamepadBridge",
+                                "dispatchReport", "(Ljava/lang/String;IIIIIIII)V");
     }
     if (g_moonlightMotionMethod == nullptr) {
-        g_moonlightMotionMethod = env->GetStaticMethodID(g_moonlightBridgeClass, "dispatchMotion",
-                                                         "(Ljava/lang/String;IIIIIIII)V");
-        if (g_moonlightMotionMethod == nullptr) {
-            LOGE("MoonlightGamepadBridge.dispatchMotion not found");
-            env->ExceptionClear();
-        }
+        g_moonlightMotionMethod =
+            resolveStaticMethod(env, g_moonlightBridgeClass, "MoonlightGamepadBridge",
+                                "dispatchMotion", "(Ljava/lang/String;IIIIIIII)V");
     }
     if (g_moonlightTouchMethod == nullptr) {
-        g_moonlightTouchMethod = env->GetStaticMethodID(g_moonlightBridgeClass, "dispatchTouch",
-                                                        "(Ljava/lang/String;IZIIIZIIIZ)V");
-        if (g_moonlightTouchMethod == nullptr) {
-            LOGE("MoonlightGamepadBridge.dispatchTouch not found");
-            env->ExceptionClear();
-        }
+        g_moonlightTouchMethod =
+            resolveStaticMethod(env, g_moonlightBridgeClass, "MoonlightGamepadBridge",
+                                "dispatchTouch", "(Ljava/lang/String;IZIIIZIIIZ)V");
     }
     startBridgeDispatchThread();
 }
@@ -1763,12 +1807,8 @@ Java_com_tinkernorth_dish_hotpath_input_RumbleBridge_nativeInstall(JNIEnv* env, 
         g_rumbleBridgeClass = (jclass)env->NewGlobalRef(bridgeCls);
     }
     if (g_rumbleDispatchMethod == nullptr) {
-        g_rumbleDispatchMethod =
-            env->GetStaticMethodID(g_rumbleBridgeClass, "dispatchRumble", "(IIIII)V");
-        if (g_rumbleDispatchMethod == nullptr) {
-            LOGE("RumbleBridge.dispatchRumble not found");
-            env->ExceptionClear();
-        }
+        g_rumbleDispatchMethod = resolveStaticMethod(env, g_rumbleBridgeClass, "RumbleBridge",
+                                                     "dispatchRumble", "(IIIII)V");
     }
 }
 
@@ -1843,36 +1883,20 @@ Java_com_tinkernorth_dish_hotpath_input_FeedbackBridge_nativeInstall(JNIEnv* env
         g_feedbackBridgeClass = (jclass)env->NewGlobalRef(cls);
     }
     if (g_feedbackLightbarMethod == nullptr) {
-        g_feedbackLightbarMethod =
-            env->GetStaticMethodID(g_feedbackBridgeClass, "dispatchLightbar", "(IIIII)V");
-        if (g_feedbackLightbarMethod == nullptr) {
-            LOGE("FeedbackBridge.dispatchLightbar not found");
-            env->ExceptionClear();
-        }
+        g_feedbackLightbarMethod = resolveStaticMethod(env, g_feedbackBridgeClass, "FeedbackBridge",
+                                                       "dispatchLightbar", "(IIIII)V");
     }
     if (g_feedbackTriggerEffectsMethod == nullptr) {
-        g_feedbackTriggerEffectsMethod =
-            env->GetStaticMethodID(g_feedbackBridgeClass, "dispatchTriggerEffects", "(II[B)V");
-        if (g_feedbackTriggerEffectsMethod == nullptr) {
-            LOGE("FeedbackBridge.dispatchTriggerEffects not found");
-            env->ExceptionClear();
-        }
+        g_feedbackTriggerEffectsMethod = resolveStaticMethod(
+            env, g_feedbackBridgeClass, "FeedbackBridge", "dispatchTriggerEffects", "(II[B)V");
     }
     if (g_feedbackPlayerLedsMethod == nullptr) {
-        g_feedbackPlayerLedsMethod =
-            env->GetStaticMethodID(g_feedbackBridgeClass, "dispatchPlayerLeds", "(III)V");
-        if (g_feedbackPlayerLedsMethod == nullptr) {
-            LOGE("FeedbackBridge.dispatchPlayerLeds not found");
-            env->ExceptionClear();
-        }
+        g_feedbackPlayerLedsMethod = resolveStaticMethod(
+            env, g_feedbackBridgeClass, "FeedbackBridge", "dispatchPlayerLeds", "(III)V");
     }
     if (g_feedbackMicLedMethod == nullptr) {
-        g_feedbackMicLedMethod =
-            env->GetStaticMethodID(g_feedbackBridgeClass, "dispatchMicLed", "(III)V");
-        if (g_feedbackMicLedMethod == nullptr) {
-            LOGE("FeedbackBridge.dispatchMicLed not found");
-            env->ExceptionClear();
-        }
+        g_feedbackMicLedMethod = resolveStaticMethod(env, g_feedbackBridgeClass, "FeedbackBridge",
+                                                     "dispatchMicLed", "(III)V");
     }
 }
 
@@ -1883,12 +1907,8 @@ JNIEXPORT void JNICALL
 Java_com_tinkernorth_dish_hotpath_input_MicMuteBridge_nativeInstall(JNIEnv* env, jclass cls) {
     if (g_micMuteBridgeClass == nullptr) { g_micMuteBridgeClass = (jclass)env->NewGlobalRef(cls); }
     if (g_micMutePadMethod == nullptr) {
-        g_micMutePadMethod =
-            env->GetStaticMethodID(g_micMuteBridgeClass, "dispatchPadMicMute", "(IZ)V");
-        if (g_micMutePadMethod == nullptr) {
-            LOGE("MicMuteBridge.dispatchPadMicMute not found");
-            env->ExceptionClear();
-        }
+        g_micMutePadMethod = resolveStaticMethod(env, g_micMuteBridgeClass, "MicMuteBridge",
+                                                 "dispatchPadMicMute", "(IZ)V");
     }
     startBridgeDispatchThread();
 }
@@ -1904,11 +1924,8 @@ Java_com_tinkernorth_dish_hotpath_audio_SpeakerAudioBridge_nativeInstall(JNIEnv*
     }
     if (g_speakerAudioFrameMethod == nullptr) {
         g_speakerAudioFrameMethod =
-            env->GetStaticMethodID(g_speakerAudioBridgeClass, "dispatchAudioFrame", "(III[SZ)V");
-        if (g_speakerAudioFrameMethod == nullptr) {
-            LOGE("SpeakerAudioBridge.dispatchAudioFrame not found");
-            env->ExceptionClear();
-        }
+            resolveStaticMethod(env, g_speakerAudioBridgeClass, "SpeakerAudioBridge",
+                                "dispatchAudioFrame", "(III[SZ)V");
     }
     startAudioDispatchThread();
 }
@@ -1960,12 +1977,18 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_i
                : JNI_FALSE;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasImu(
-    JNIEnv*, jobject, jint vid, jint pid) {
+// Every model predicate reads the same way: look the pad up; an unknown model has nothing.
+static jboolean modelPredicate(const jint vid, const jint pid,
+                               bool (*const predicate)(usbparsers::Parser)) {
     const usbparsers::KnownDevice* k =
         usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
     if (!k) return JNI_FALSE;
-    return usbparsers::parserHasImu(k->parser) ? JNI_TRUE : JNI_FALSE;
+    return predicate(k->parser) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasImu(
+    JNIEnv*, jobject, jint vid, jint pid) {
+    return modelPredicate(vid, pid, usbparsers::parserHasImu);
 }
 
 JNIEXPORT jboolean JNICALL
@@ -1980,70 +2003,46 @@ Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelExpectsFrameworkGamepad
 
 JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasRumble(
     JNIEnv*, jobject, jint vid, jint pid) {
-    const usbparsers::KnownDevice* k =
-        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
-    if (!k) return JNI_FALSE;
-    return usbparsers::parserHasRumble(k->parser) ? JNI_TRUE : JNI_FALSE;
+    return modelPredicate(vid, pid, usbparsers::parserHasRumble);
 }
 
 JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasLightbar(
     JNIEnv*, jobject, jint vid, jint pid) {
-    const usbparsers::KnownDevice* k =
-        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
-    if (!k) return JNI_FALSE;
-    return usbparsers::parserHasLightbar(k->parser) ? JNI_TRUE : JNI_FALSE;
+    return modelPredicate(vid, pid, usbparsers::parserHasLightbar);
 }
 
 JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasPlayerLeds(
     JNIEnv*, jobject, jint vid, jint pid) {
-    const usbparsers::KnownDevice* k =
-        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
-    if (!k) return JNI_FALSE;
-    return usbparsers::parserHasPlayerLeds(k->parser) ? JNI_TRUE : JNI_FALSE;
+    return modelPredicate(vid, pid, usbparsers::parserHasPlayerLeds);
 }
 
 JNIEXPORT jboolean JNICALL
 Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasTriggerEffects(JNIEnv*, jobject,
                                                                            jint vid, jint pid) {
-    const usbparsers::KnownDevice* k =
-        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
-    if (!k) return JNI_FALSE;
-    return usbparsers::parserHasTriggerEffects(k->parser) ? JNI_TRUE : JNI_FALSE;
+    return modelPredicate(vid, pid, usbparsers::parserHasTriggerEffects);
 }
 
 JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasHapticLanes(
     JNIEnv*, jobject, jint vid, jint pid) {
-    const usbparsers::KnownDevice* k =
-        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
-    if (!k) return JNI_FALSE;
-    return usbparsers::parserHasHapticLanes(k->parser) ? JNI_TRUE : JNI_FALSE;
+    return modelPredicate(vid, pid, usbparsers::parserHasHapticLanes);
 }
 
 JNIEXPORT jboolean JNICALL
 Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasTriggerRumble(JNIEnv*, jobject,
                                                                           jint vid, jint pid) {
-    const usbparsers::KnownDevice* k =
-        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
-    if (!k) return JNI_FALSE;
-    return usbparsers::parserHasTriggerRumble(k->parser) ? JNI_TRUE : JNI_FALSE;
+    return modelPredicate(vid, pid, usbparsers::parserHasTriggerRumble);
 }
 
 JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasTouchpad(
     JNIEnv*, jobject, jint vid, jint pid) {
-    const usbparsers::KnownDevice* k =
-        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
-    if (!k) return JNI_FALSE;
-    return usbparsers::parserHasTouchpad(k->parser) ? JNI_TRUE : JNI_FALSE;
+    return modelPredicate(vid, pid, usbparsers::parserHasTouchpad);
 }
 
 JNIEXPORT jboolean JNICALL
 Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelFrameworkRumbleUnreliable(JNIEnv*, jobject,
                                                                                    jint vid,
                                                                                    jint pid) {
-    const usbparsers::KnownDevice* k =
-        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
-    if (!k) return JNI_FALSE;
-    return usbparsers::parserFrameworkRumbleUnreliable(k->parser) ? JNI_TRUE : JNI_FALSE;
+    return modelPredicate(vid, pid, usbparsers::parserFrameworkRumbleUnreliable);
 }
 
 JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_getDeviceUrbCount(
@@ -2088,14 +2087,15 @@ JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_getS
     JNIEnv*, jobject, jint handle, jint controllerIndex) {
     auto s = getSession(handle);
     if (!s) return 0;
-    return (jlong)s->sentByCtrl[controllerIndex & 15].load(std::memory_order_relaxed);
+    return (jlong)s->sentByCtrl[controllerIndex & CTRL_INDEX_MASK].load(std::memory_order_relaxed);
 }
 
 JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_getSlotMotionCount(
     JNIEnv*, jobject, jint handle, jint controllerIndex) {
     auto s = getSession(handle);
     if (!s) return 0;
-    return (jlong)s->motionByCtrl[controllerIndex & 15].load(std::memory_order_relaxed);
+    return (jlong)s->motionByCtrl[controllerIndex & CTRL_INDEX_MASK].load(
+        std::memory_order_relaxed);
 }
 
 // Opt-in hot-path latency benchmark (stage 1 USB-direct + stage 2 heartbeat RTT).
