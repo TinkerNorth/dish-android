@@ -94,14 +94,16 @@ class MoonlightSessionService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
-    // One line for the first host, because the notification has room for one: a session with no
-    // pads yet is still starting, and no host at all is idle.
     private fun bodyFor(hostIds: Set<String>): String {
         val primary = hostIds.firstOrNull()
-        val label = primary?.let { hub.summary(it)?.label } ?: return getString(R.string.ml_service_body_idle)
-        val pads = primary.let { moonlight.get(it)?.padCount } ?: 0
-        if (pads > 0) return resources.getQuantityString(R.plurals.ml_service_body, pads, pads, label)
-        return getString(R.string.ml_service_body_starting, label)
+        val label = primary?.let { hub.summary(it)?.label }
+        val pads = primary?.let { moonlight.get(it)?.padCount } ?: 0
+        return when (val body = moonlightServiceBodyFor(label, pads)) {
+            MoonlightServiceBody.Idle -> getString(R.string.ml_service_body_idle)
+            is MoonlightServiceBody.Starting -> getString(R.string.ml_service_body_starting, body.hostLabel)
+            is MoonlightServiceBody.Pads ->
+                resources.getQuantityString(R.plurals.ml_service_body, body.padCount, body.padCount, body.hostLabel)
+        }
     }
 
     private fun build(hostIds: Set<String>): Notification {
@@ -144,7 +146,7 @@ class MoonlightSessionService : Service() {
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
                 .apply { acquire(WAKE_LOCK_TIMEOUT_MS) }
         val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        wifiLock = wifi.createWifiLock(wifiLockMode(), WIFI_LOCK_TAG).apply { acquire() }
+        wifiLock = wifi.createWifiLock(wifiLockMode(Build.VERSION.SDK_INT), WIFI_LOCK_TAG).apply { acquire() }
     }
 
     private fun releaseLocks() {

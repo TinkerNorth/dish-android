@@ -49,11 +49,8 @@ internal fun resolve(
     )
 
 internal fun catalogTypeCapabilities(catalogType: CatalogTypeDto): CapabilitySet {
-    // GAMEPAD is intrinsic to every pad; MOUSE/KEYBOARD are host-injected so the
-    // type layer passes them through (the host layer gates them). BATTERY and
-    // TRIGGER_RUMBLE have no catalog slug (battery is always accepted, trigger
-    // rumble is transport-gated), so they pass here too. The rest come
-    // from the catalog's per-type feature flags.
+    // GAMEPAD, MOUSE, KEYBOARD, BATTERY and TRIGGER_RUMBLE have no catalog slug to read: the host
+    // and transport layers gate them, so the type layer passes them through.
     val out =
         mutableSetOf(
             Feature.GAMEPAD,

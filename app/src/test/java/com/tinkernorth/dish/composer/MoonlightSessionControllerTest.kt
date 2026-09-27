@@ -366,4 +366,102 @@ class MoonlightSessionControllerTest {
             conn.dispatchFeedback(MoonlightEvent.MotionRequest(controllerNumber = 0, reportRateHz = 0, motionType = 2))
             org.junit.Assert.assertFalse(conn.motionWanted("pad-a"))
         }
+
+    private fun liveConnection(): MoonlightConnection =
+        MoonlightConnection(
+            id = "moonlight:uid:abc",
+            host = MoonlightHost(name = "PC", address = "10.0.0.5", uniqueId = "abc"),
+            scope = TestScope(dispatcher),
+            ioDispatcher = dispatcher,
+        )
+
+    @Test
+    fun `feedback for an unassigned controller number is dropped`() =
+        runTest(dispatcher) {
+            val conn = liveConnection()
+            conn.acquirePad("pad-a", XBOX, 0x03, 0xFFFF)
+            every { moonlight.connections } returns MutableStateFlow(mapOf(conn.id to conn))
+            controller()
+            dispatcher.scheduler.advanceUntilIdle()
+
+            conn.dispatchFeedback(MoonlightEvent.Rumble(controllerNumber = 3, lowFrequency = 65535, highFrequency = 1000))
+
+            verify(exactly = 0) { rumble.dispatchToSlot(any(), any(), any(), any()) }
+        }
+
+    @Test
+    fun `termination and unknown events reach no router`() =
+        runTest(dispatcher) {
+            val conn = liveConnection()
+            conn.acquirePad("pad-a", XBOX, 0x07, 0xFFFF)
+            every { moonlight.connections } returns MutableStateFlow(mapOf(conn.id to conn))
+            controller()
+            dispatcher.scheduler.advanceUntilIdle()
+
+            conn.dispatchFeedback(MoonlightEvent.Termination(reason = 0))
+            conn.dispatchFeedback(MoonlightEvent.Unknown(type = 0x0200))
+
+            verify(exactly = 0) { rumble.dispatchToSlot(any(), any(), any(), any()) }
+            verify(exactly = 0) { feedback.dispatchTriggerRumbleToSlot(any(), any(), any()) }
+            verify(exactly = 0) { feedback.dispatchLightbarToSlot(any(), any(), any(), any()) }
+        }
+
+    @Test
+    fun `a refused service start still converges the session`() =
+        runTest(dispatcher) {
+            every { context.startService(any()) } throws IllegalStateException("background start refused")
+            connections.value = listOf(summary("moonlight:pc"))
+            bindings.value = mapOf("1" to "moonlight:pc")
+
+            controller().onStart(owner)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            verify(exactly = 1) { moonlight.applyDesired(match { pads -> pads.getValue("moonlight:pc").size == 1 }) }
+        }
+
+    @Test
+    fun `a refused service start is retried on the next emission`() =
+        runTest(dispatcher) {
+            every { context.startService(any()) } throws IllegalStateException("background start refused") andThen null
+            connections.value = listOf(summary("moonlight:pc"))
+            bindings.value = mapOf("1" to "moonlight:pc")
+            controller().onStart(owner)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            bindings.value = mapOf("1" to "moonlight:pc", "2" to "moonlight:pc")
+            dispatcher.scheduler.advanceUntilIdle()
+
+            verify(exactly = 2) { context.startService(any()) }
+        }
+
+    @Test
+    fun `a binding change after onStop still converges the session`() =
+        runTest(dispatcher) {
+            connections.value = listOf(summary("moonlight:pc"))
+            bindings.value = mapOf("1" to "moonlight:pc")
+            val controller = controller()
+            controller.onStart(owner)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            controller.onStop(owner)
+            bindings.value = emptyMap()
+            dispatcher.scheduler.advanceUntilIdle()
+
+            verify(exactly = 1) { moonlight.applyDesired(match { pads -> pads.values.none { it.isNotEmpty() } }) }
+            verify(exactly = 1) { context.stopService(any()) }
+        }
+
+    @Test
+    fun `onStart twice keeps one collector and starts one service`() =
+        runTest(dispatcher) {
+            connections.value = listOf(summary("moonlight:pc"))
+            bindings.value = mapOf("1" to "moonlight:pc")
+            val controller = controller()
+
+            controller.onStart(owner)
+            controller.onStart(owner)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            verify(exactly = 1) { context.startService(any()) }
+        }
 }

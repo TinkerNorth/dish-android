@@ -54,9 +54,11 @@ class SpeakerPlayoutComposerTest {
             every { this@mockk.slots } returns this@SpeakerPlayoutComposerTest.slots
         }
 
+    private val satConnections = MutableStateFlow(mapOf(CONN to connection))
+
     private val satellite =
         mockk<SatelliteConnectionManager> {
-            every { this@mockk.connections } returns MutableStateFlow(mapOf(CONN to connection))
+            every { this@mockk.connections } returns satConnections
         }
 
     private val routing = MapSlotAudioRoutes(routeTable, padRoutes)
@@ -159,6 +161,20 @@ class SpeakerPlayoutComposerTest {
             padRoutes[SLOT] = PadAudioRoute(microphone = false, speaker = true, playbackDeviceId = PAD_ENDPOINT)
             routeTable.value = mapOf(vidPidKey(0x054C, 0x0CE6) to padRoutes[SLOT]!!)
             assertEquals(PAD_ENDPOINT, voice()!!.playbackDeviceId)
+        }
+
+    @Test
+    fun `a binding whose session object is gone opens no output`() =
+        runTest(scope.testScheduler) {
+            satConnections.value = emptyMap()
+            assertTrue(plan().voices.isEmpty())
+        }
+
+    @Test
+    fun `a slot the session has not declared opens no output`() =
+        runTest(scope.testScheduler) {
+            slots.value = emptyMap()
+            assertTrue(plan().voices.isEmpty())
         }
 
     private companion object {

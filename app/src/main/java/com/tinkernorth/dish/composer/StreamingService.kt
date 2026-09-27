@@ -9,12 +9,10 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.annotation.DrawableRes
-import androidx.annotation.RequiresApi
 import androidx.annotation.StringRes
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -61,14 +59,6 @@ class StreamingService : Service() {
     // another startForeground call, so this is what tells us when one is due.
     private var micTypeHeld = false
 
-    private data class ServiceSnapshot(
-        val streamingSlots: Int,
-        val connections: List<ConnectionSummary>,
-        val directClaims: Int,
-        val micArmed: Boolean,
-        val micState: MicIndicatorState,
-    )
-
     override fun onCreate() {
         super.onCreate()
         liveness.markLive()
@@ -90,7 +80,7 @@ class StreamingService : Service() {
             usbGamepadManager.controllers,
             micCapture.state,
         ) { count, conns, controllers, plan ->
-            ServiceSnapshot(count, conns, controllers.directClaimCount(), plan.arming, micIndicatorStateOf(plan))
+            StreamingSnapshot(count, conns, controllers.directClaimCount(), plan.arming, micIndicatorStateOf(plan))
         }.onEach(::refresh)
             .launchIn(wakeStateScope())
 
@@ -122,12 +112,9 @@ class StreamingService : Service() {
     }
 
     private fun stopAllSessions() {
-        hub.connections.value
-            .filter { it.kind == ConnectionKind.SATELLITE && it.live == LinkState.Connected }
-            .forEach { satellite.disconnect(it.id) }
-        hub.connections.value
-            .filter { it.kind == ConnectionKind.BLUETOOTH && it.live == LinkState.Connected }
-            .forEach { btRegistry.stop(it.id) }
+        val sessions = sessionsToStop(hub.connections.value)
+        sessions.satelliteIds.forEach(satellite::disconnect)
+        sessions.bluetoothIds.forEach(btRegistry::stop)
     }
 
     private fun startForegroundInitial(): Boolean {
@@ -141,23 +128,22 @@ class StreamingService : Service() {
         return startInForeground(notification, plan.arming)
     }
 
-    private fun refresh(snapshot: ServiceSnapshot) {
-        if (snapshot.streamingSlots <= 0 && snapshot.directClaims <= 0) {
-            // Belt-and-braces against out-of-order emissions so notification never reads "0 streaming".
-            stopSelf()
-            return
+    private fun refresh(snapshot: StreamingSnapshot) {
+        when (refreshActionFor(snapshot, micTypeHeld)) {
+            RefreshAction.STOP -> stopSelf()
+            RefreshAction.REDECLARE -> startInForeground(notificationFor(snapshot), snapshot.micArmed)
+            RefreshAction.NOTIFY -> postNotification(notificationFor(snapshot))
         }
-        val primary =
-            snapshot.connections
-                .firstOrNull { it.live == LinkState.Connected }
-                ?.label
-        val notification = build(count = snapshot.streamingSlots, primaryLabel = primary, micState = snapshot.micState)
-        if (snapshot.micArmed != micTypeHeld) {
-            // The microphone type is only ever held while a mic-enabled binding is streaming, so
-            // arming and disarming both mean re-declaring the service. Nothing else here does.
-            startInForeground(notification, snapshot.micArmed)
-            return
-        }
+    }
+
+    private fun notificationFor(snapshot: StreamingSnapshot): Notification =
+        build(
+            count = snapshot.streamingSlots,
+            primaryLabel = primaryLabelFor(snapshot.connections),
+            micState = snapshot.micState,
+        )
+
+    private fun postNotification(notification: Notification) {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(NOTIFICATION_ID, notification)
     }
@@ -189,10 +175,10 @@ class StreamingService : Service() {
             )
         val hostLabel = primaryLabel ?: getString(R.string.satellite_fallback_name)
         val body =
-            if (count > 0) {
-                resources.getQuantityString(R.plurals.streaming_notification_body, count, count, hostLabel)
-            } else {
-                getString(R.string.streaming_notification_body_usb_hold)
+            when (streamingBodyKind(count)) {
+                StreamingBodyKind.STREAMING ->
+                    resources.getQuantityString(R.plurals.streaming_notification_body, count, count, hostLabel)
+                StreamingBodyKind.USB_HOLD -> getString(R.string.streaming_notification_body_usb_hold)
             }
         val builder =
             NotificationCompat
@@ -252,9 +238,7 @@ class StreamingService : Service() {
         micArmed: Boolean,
     ): Boolean =
         try {
-            if (!declareForeground(notification, micArmed) && micArmed) {
-                declareForeground(notification, micArmed = false)
-            }
+            declareFirstGranted(notification, foregroundDeclarationsFor(micArmed))
             true
         } catch (e: IllegalStateException) {
             // A background-initiated FGS start can be refused on Android 12+; stop instead of crashing.
@@ -264,13 +248,27 @@ class StreamingService : Service() {
             false
         }
 
+    private fun declareFirstGranted(
+        notification: Notification,
+        declarations: List<ForegroundDeclaration>,
+    ) {
+        for (declaration in declarations) {
+            if (declareForeground(notification, declaration.micArmed)) return
+        }
+    }
+
     /** Returns false when the requested type set was denied; throws only for a refused start. */
     private fun declareForeground(
         notification: Notification,
         micArmed: Boolean,
     ): Boolean =
         try {
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, foregroundServiceTypesForThisApi(micArmed))
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                notification,
+                foregroundServiceTypesForThisApi(Build.VERSION.SDK_INT, micArmed),
+            )
             micTypeHeld = micArmed
             true
         } catch (e: SecurityException) {
@@ -333,8 +331,6 @@ internal enum class ServiceStep {
 
 internal fun serviceStepsFor(command: StreamingCommand): List<ServiceStep> =
     when (command) {
-        // Stop means all of it: release held Direct claims too, so each pad gets its
-        // device-side restore instead of staying captured by a process about to idle out.
         StreamingCommand.STOP_ALL -> listOf(ServiceStep.STOP_SESSIONS, ServiceStep.RELEASE_DIRECT, ServiceStep.STOP_SELF)
         // The notification's mute action, so the shade works outside the app: the same
         // all-armed-slots toggle the in-app chip lands. The plan change flows back through
@@ -371,29 +367,4 @@ internal fun micNotificationUiFor(state: MicIndicatorState): MicNotificationUi? 
                 actionRes = R.string.mic_action_unmute,
                 actionIconRes = R.drawable.ic_mic,
             )
-    }
-
-/**
- * The service types this session is entitled to hold. CONNECTED_DEVICE is what the session IS and
- * is always present; MICROPHONE appears exactly while a mic-enabled binding is streaming, because
- * a foreground service claiming a microphone type it is not using is a microphone the user cannot
- * account for.
- *
- * Deliberately keyed on ARMED and not on delivering: a mute is a moment-to-moment control, and
- * dropping the type on every toggle would risk not getting it back, since a while-in-use type can
- * only start while the app is in the foreground. Muted still means zero packets, enforced where it
- * belongs, in the capture engine.
- */
-@RequiresApi(Build.VERSION_CODES.R)
-internal fun foregroundServiceTypes(micArmed: Boolean): Int =
-    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
-        if (micArmed) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
-
-// Typed foreground services arrived in 29 with the connected-device type and gained the
-// microphone type in 30; below 29 ServiceCompat ignores the value, so 0 is that API's "none".
-private fun foregroundServiceTypesForThisApi(micArmed: Boolean): Int =
-    when {
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> foregroundServiceTypes(micArmed)
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-        else -> 0
     }

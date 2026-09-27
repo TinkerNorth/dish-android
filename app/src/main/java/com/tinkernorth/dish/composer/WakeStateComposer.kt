@@ -26,13 +26,14 @@ class WakeStateComposer
         private val hub: ConnectionCoordinator,
         scope: CoroutineScope,
     ) : AbstractComposer<WakeState>(scope, WakeState.Idle) {
-        override fun upstream(): Flow<WakeState> =
-            combine(hub.bindings, hub.connections) { bindings, conns ->
-                val byId = conns.associateBy { it.id }
-                val count =
-                    bindings.values.count { cid ->
-                        byId[cid]?.live == LinkState.Connected
-                    }
-                WakeState(streamingSlotCount = count, shouldKeepScreenOn = count > 0)
-            }.distinctUntilChanged()
+        override fun upstream(): Flow<WakeState> = combine(hub.bindings, hub.connections, ::wakeStateFor).distinctUntilChanged()
     }
+
+internal fun wakeStateFor(
+    bindings: Map<String, String>,
+    conns: List<ConnectionSummary>,
+): WakeState {
+    val byId = conns.associateBy { it.id }
+    val count = bindings.values.count { cid -> byId[cid]?.live == LinkState.Connected }
+    return WakeState(streamingSlotCount = count, shouldKeepScreenOn = count > 0)
+}

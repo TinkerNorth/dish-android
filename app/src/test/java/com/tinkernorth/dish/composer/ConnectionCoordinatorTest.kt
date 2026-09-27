@@ -13,8 +13,11 @@ import com.tinkernorth.dish.source.connection.ConnectIntent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.store.ControllerTypeStore
+import com.tinkernorth.dish.source.store.SlotBindingStore
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.spyk
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -109,13 +112,10 @@ class ConnectionCoordinatorTest {
         return ctx
     }
 
-    private fun buildHub(): ConnectionCoordinator {
-        val bindingStore =
-            com.tinkernorth.dish.source.store
-                .SlotBindingStore()
-        val typeStore =
-            com.tinkernorth.dish.source.store
-                .ControllerTypeStore()
+    private fun buildHub(
+        bindingStore: SlotBindingStore = SlotBindingStore(),
+        typeStore: ControllerTypeStore = ControllerTypeStore(),
+    ): ConnectionCoordinator {
         val composer =
             ConnectionsComposer(
                 context = fakeStringContext(),
@@ -1035,5 +1035,186 @@ class ConnectionCoordinatorTest {
         scope.testScheduler.runCurrent()
 
         assertEquals(emptyMap<String, String>(), hub.bindings.value)
+    }
+
+    private fun rememberedSatellite(id: String) =
+        RememberedSatellite(id = id, name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3)
+
+    @Test
+    fun `a nameless satellite is labelled by its ip`() {
+        satEntriesFlow.value =
+            listOf(RememberedSatellite(id = "s:1", name = "", ip = "10.0.0.1", udpPort = 1, pairPort = 2, httpPort = 3))
+        val hub = buildHub()
+
+        assertEquals(
+            "10.0.0.1",
+            hub.connections.value
+                .first { it.id == "s:1" }
+                .label,
+        )
+    }
+
+    @Test
+    fun `a nameless bt host is labelled by its mac`() {
+        btEntriesFlow.value = listOf(RememberedBt(id = "bt:AA", name = "", mac = "AA:BB", profileName = "Xbox"))
+        val hub = buildHub()
+
+        assertEquals(
+            "AA:BB",
+            hub.connections.value
+                .first { it.id == "bt:AA" }
+                .label,
+        )
+    }
+
+    @Test
+    fun `transient bt detail shows the connected name`() {
+        btStatesFlow.value =
+            mapOf(
+                "bt-pending-1" to
+                    BluetoothGamepadRegistry.SlotState(profileName = "Xbox", connected = true, connectedName = "Living room PC"),
+            )
+        val hub = buildHub()
+
+        assertEquals(
+            "Living room PC",
+            hub.connections.value
+                .first { it.id == "bt-pending-1" }
+                .detail,
+        )
+    }
+
+    @Test
+    fun `an idle transient bt slot reads idle`() {
+        btStatesFlow.value = mapOf("bt-pending-1" to BluetoothGamepadRegistry.SlotState(profileName = "Xbox"))
+        val hub = buildHub()
+
+        val transient = hub.connections.value.first { it.id == "bt-pending-1" }
+        assertEquals("Idle", transient.detail)
+        assertEquals(LinkState.Saved, transient.live)
+    }
+
+    @Test
+    fun `a transient bt slot without a profile gets the default label`() {
+        btStatesFlow.value = mapOf("bt-pending-1" to BluetoothGamepadRegistry.SlotState(acquiring = true))
+        val hub = buildHub()
+
+        val transient = hub.connections.value.first { it.id == "bt-pending-1" }
+        assertEquals("Bluetooth gamepad", transient.label)
+        assertNull(transient.btProfile)
+    }
+
+    @Test
+    fun `an auto-reconnecting bt host shows CONNECTING`() {
+        btEntriesFlow.value = listOf(RememberedBt(id = "bt:X", name = "Xbox", mac = "X", profileName = "Xbox"))
+        btStatesFlow.value = mapOf("bt:X" to BluetoothGamepadRegistry.SlotState(autoReconnecting = true))
+        val hub = buildHub()
+
+        assertEquals(
+            LinkState.Connecting,
+            hub.connections.value
+                .first { it.id == "bt:X" }
+                .live,
+        )
+    }
+
+    @Test
+    fun `migrateSlotBinding to the same id writes nothing`() {
+        val bindingStore = spyk(SlotBindingStore())
+        val typeStore = spyk(ControllerTypeStore())
+        satEntriesFlow.value = listOf(rememberedSatellite("s:1"))
+        val hub = buildHub(bindingStore, typeStore)
+        hub.bind("slot-A", "s:1", CONTROLLER_TYPE_PLAYSTATION)
+
+        hub.migrateSlotBinding("slot-A", "slot-A")
+
+        verify(exactly = 0) { bindingStore.migrate(any(), any()) }
+        verify(exactly = 1) { typeStore.setType(any(), any(), any()) }
+        verify(exactly = 0) { typeStore.clear(any(), any()) }
+    }
+
+    @Test
+    fun `migrateSlotBinding without a stored type moves only the binding`() {
+        val typeStore = spyk(ControllerTypeStore())
+        btEntriesFlow.value = listOf(RememberedBt(id = "bt:X", name = "Xbox", mac = "X", profileName = "Xbox"))
+        val hub = buildHub(typeStore = typeStore)
+        hub.bind("slot-A", "bt:X", CONTROLLER_TYPE_XBOX)
+
+        hub.migrateSlotBinding("slot-A", "slot-B")
+
+        assertEquals(mapOf("slot-B" to "bt:X"), hub.bindings.value)
+        verify(exactly = 0) { typeStore.setType(any(), any(), any()) }
+        verify(exactly = 0) { typeStore.clear(any(), any()) }
+    }
+
+    @Test
+    fun `setSatelliteControllerType with the current type writes nothing`() {
+        val typeStore = spyk(ControllerTypeStore())
+        satEntriesFlow.value = listOf(rememberedSatellite("s:1"))
+        val hub = buildHub(typeStore = typeStore)
+        hub.bind("slot-A", "s:1", CONTROLLER_TYPE_PLAYSTATION)
+
+        hub.setSatelliteControllerType("s:1", "slot-A", CONTROLLER_TYPE_PLAYSTATION)
+
+        verify(exactly = 1) { typeStore.setType(any(), any(), any()) }
+    }
+
+    @Test
+    fun `boundConnection resolves a bound slot to its summary`() {
+        satEntriesFlow.value = listOf(rememberedSatellite("s:1"))
+        val hub = buildHub()
+        hub.bind("slot-A", "s:1", CONTROLLER_TYPE_XBOX)
+
+        assertEquals("s:1", hub.boundConnection("slot-A")?.id)
+    }
+
+    @Test
+    fun `boundConnection is null for an unbound slot`() {
+        satEntriesFlow.value = listOf(rememberedSatellite("s:1"))
+        val hub = buildHub()
+
+        assertNull(hub.boundConnection("slot-A"))
+    }
+
+    @Test
+    fun `boundConnection is null when the bound id has no summary`() {
+        val hub = buildHub()
+        hub.bind("slot-A", "s:ghost", CONTROLLER_TYPE_XBOX)
+
+        assertNull(hub.boundConnection("slot-A"))
+    }
+
+    @Test
+    fun `autoReconnectAll skips bt while an acquire is in flight`() {
+        btEntriesFlow.value = listOf(RememberedBt(id = "bt:A", name = "A", mac = "A", profileName = "XBOX"))
+        every { bt.state("bt:A") } returns BluetoothGamepadRegistry.SlotState(autoReconnecting = true)
+        val hub = buildHub()
+
+        hub.autoReconnectAll()
+
+        verify(exactly = 0) { bt.tryAutoReconnect(any()) }
+    }
+
+    @Test
+    fun `autoReconnectAll skips bt while a remembered host is connected`() {
+        btEntriesFlow.value = listOf(RememberedBt(id = "bt:A", name = "A", mac = "A", profileName = "XBOX"))
+        every { bt.state("bt:A") } returns BluetoothGamepadRegistry.SlotState(connected = true)
+        val hub = buildHub()
+
+        hub.autoReconnectAll()
+
+        verify(exactly = 0) { bt.tryAutoReconnect(any()) }
+    }
+
+    @Test
+    fun `rebinding to the same connection only updates the type`() {
+        satEntriesFlow.value = listOf(rememberedSatellite("s:1"))
+        val hub = buildHub()
+        hub.bind("slot-A", "s:1", CONTROLLER_TYPE_XBOX)
+
+        hub.bind("slot-A", "s:1", CONTROLLER_TYPE_PLAYSTATION)
+
+        assertEquals(mapOf("slot-A" to "s:1"), hub.bindings.value)
+        assertEquals(CONTROLLER_TYPE_PLAYSTATION, hub.satTypes.value["s:1" to "slot-A"])
     }
 }

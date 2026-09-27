@@ -9,6 +9,7 @@ import com.tinkernorth.dish.source.audio.SlotAudioRoutes
 import com.tinkernorth.dish.source.audio.SpeakerPlayoutPlan
 import com.tinkernorth.dish.source.audio.SpeakerSlotInput
 import com.tinkernorth.dish.source.audio.speakerPlayoutPlanFor
+import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -58,39 +59,36 @@ class SpeakerPlayoutComposer
                         routing.changes,
                         slotsTrigger,
                     ) { bindings, summaries, caps, _, _ ->
-                        val summariesById = summaries.associateBy { it.id }
-                        val slots =
-                            bindings.map { (slotId, connId) ->
-                                val conn = conns[connId]
-                                val binding = conn?.slots?.value?.get(slotId)
-                                SpeakerSlotInput(
-                                    slotId = slotId,
-                                    sessionHandle = conn?.handle ?: NO_HANDLE,
-                                    // Unregistered means the descriptor has not applied, so the
-                                    // emulated pad does not exist yet and no host can be sending
-                                    // it audio; holding a track open for it would be waste.
-                                    controllerIndex =
-                                        binding?.takeIf { it.registered }?.controllerIndex ?: NO_INDEX,
-                                    streaming = streaming(summariesById[connId]),
-                                    speakerEnabled = Feature.SPEAKER in (caps[slotId] ?: SlotCapabilities.NONE).live,
-                                    playbackDeviceId = routing.forSlot(slotId).playbackDeviceId,
-                                    hapticEnabled = Feature.HAPTIC_AUDIO in (caps[slotId] ?: SlotCapabilities.NONE).live,
-                                    playbackChannels = routing.forSlot(slotId).playbackChannels,
-                                )
-                            }
-                        speakerPlayoutPlanFor(slots)
+                        speakerPlayoutPlanFor(speakerSlotInputsFor(bindings, summaries, caps, conns))
                     }
                 }.distinctUntilChanged()
 
-        // Only a satellite carries controller audio at all: the Moonlight control protocol has no
-        // speaker channel and a Bluetooth HID gamepad has no audio endpoints to be. Unstable counts
-        // as streaming for the same reason the gamepad reports keep flowing over it: the link is up,
-        // it is just noisy, and tearing down an audio track on a blip would cost more than the
-        // frames the blip drops.
-        private fun streaming(summary: ConnectionSummary?): Boolean =
-            summary != null &&
-                summary.kind == ConnectionKind.SATELLITE &&
-                (summary.live == LinkState.Connected || summary.live == LinkState.Unstable)
+        private fun speakerSlotInputsFor(
+            bindings: Map<String, String>,
+            summaries: List<ConnectionSummary>,
+            caps: Map<String, SlotCapabilities>,
+            conns: Map<String, SatelliteConnection>,
+        ): List<SpeakerSlotInput> {
+            val summariesById = summaries.associateBy { it.id }
+            return bindings.map { (slotId, connId) ->
+                val conn = conns[connId]
+                val binding = conn?.slots?.value?.get(slotId)
+                val live = (caps[slotId] ?: SlotCapabilities.NONE).live
+                val route = routing.forSlot(slotId)
+                SpeakerSlotInput(
+                    slotId = slotId,
+                    sessionHandle = conn?.handle ?: NO_HANDLE,
+                    // Unregistered means the descriptor has not applied, so the emulated pad does
+                    // not exist yet and no host can be sending it audio.
+                    controllerIndex = binding?.takeIf { it.registered }?.controllerIndex ?: NO_INDEX,
+                    streaming = isStreamingSatellite(summariesById[connId]),
+                    speakerEnabled = Feature.SPEAKER in live,
+                    playbackDeviceId = route.playbackDeviceId,
+                    hapticEnabled = Feature.HAPTIC_AUDIO in live,
+                    playbackChannels = route.playbackChannels,
+                )
+            }
+        }
 
         private companion object {
             const val NO_HANDLE = -1

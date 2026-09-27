@@ -101,34 +101,43 @@ class CapabilityComposer
                 hub.connections,
                 slotToggles,
                 hostInputs,
-            ) { devices, bindings, summaries, userToggles, hosts ->
-                val summariesById = summaries.associateBy { it.id }
-                val out = HashMap<String, SlotCapabilities>(devices.size + 1)
+                ::slotCapabilitiesFor,
+            ).distinctUntilChanged()
 
-                out[VIRTUAL_SLOT_ID] =
+        private fun slotCapabilitiesFor(
+            devices: Map<Int, PhysicalGamepadRegistry.Device>,
+            bindings: Map<String, String>,
+            summaries: List<ConnectionSummary>,
+            userToggles: SlotToggles,
+            hosts: HostInputs,
+        ): Map<String, SlotCapabilities> {
+            val summariesById = summaries.associateBy { it.id }
+            val out = HashMap<String, SlotCapabilities>(devices.size + 1)
+
+            out[VIRTUAL_SLOT_ID] =
+                slotFor(
+                    slotId = VIRTUAL_SLOT_ID,
+                    controller = virtualControllerLayer(),
+                    bindings = bindings,
+                    summariesById = summariesById,
+                    userToggles = userToggles,
+                    hosts = hosts,
+                )
+
+            for ((deviceId, device) in devices) {
+                val slotId = deviceId.toString()
+                out[slotId] =
                     slotFor(
-                        slotId = VIRTUAL_SLOT_ID,
-                        controller = virtualControllerLayer(),
+                        slotId = slotId,
+                        controller = deviceControllerLayer(device),
                         bindings = bindings,
                         summariesById = summariesById,
                         userToggles = userToggles,
                         hosts = hosts,
                     )
-
-                for ((deviceId, device) in devices) {
-                    val slotId = deviceId.toString()
-                    out[slotId] =
-                        slotFor(
-                            slotId = slotId,
-                            controller = deviceControllerLayer(device),
-                            bindings = bindings,
-                            summariesById = summariesById,
-                            userToggles = userToggles,
-                            hosts = hosts,
-                        )
-                }
-                out
-            }.distinctUntilChanged()
+            }
+            return out
+        }
 
         /**
          * The per-slot wire projection ([wireCapsFor] plus [touchpadWireMode]), re-derived on
@@ -271,26 +280,7 @@ class CapabilityComposer
                 out += Feature.TOUCHPAD
                 out += Feature.MOUSE
             }
-            if (direct) {
-                // A Direct pad has no framework InputDevice to probe, so everything comes from
-                // the native tables.
-                if (native.modelHasImu(vid, pid)) out += Feature.MOTION
-                if (native.modelHasRumble(vid, pid)) out += Feature.RUMBLE
-                if (native.modelHasLightbar(vid, pid)) out += Feature.LIGHTBAR
-                if (native.modelHasTriggerEffects(vid, pid)) out += Feature.TRIGGER_EFFECTS
-                if (native.modelHasPlayerLeds(vid, pid)) out += Feature.PLAYER_LEDS
-                if (native.modelHasTriggerRumble(vid, pid)) out += Feature.TRIGGER_RUMBLE
-            } else {
-                val framework = frameworkFactsFor(device)
-                if (framework?.hasGyro == true) out += Feature.MOTION
-                if (framework?.hasRumble == true) out += Feature.RUMBLE
-                // The light bar rides the Android lights API, which reaches a uhid pad's LEDs but
-                // not a USB one's (the input service cannot write generic-sysfs LED nodes), so it is
-                // advertised on the Bluetooth transport only. A USB pad's bar comes from Direct.
-                if (device.transport == Transport.Bluetooth && framework?.hasLightbar == true) {
-                    out += Feature.LIGHTBAR
-                }
-            }
+            out += if (direct) directModelFeatures(vid, pid) else frameworkFeatures(device)
             // We claim only the HID interface, so the pad's USB-audio function stays with the
             // OS on either path. That makes the model tables the wrong
             // source here, and the OS route table the right one: a pad whose audio function
@@ -303,6 +293,34 @@ class CapabilityComposer
                 if (audio.haptics) out += Feature.HAPTIC_AUDIO
             }
             return CapabilitySet(out)
+        }
+
+        // A Direct pad has no framework InputDevice to probe, so everything comes from the native tables.
+        private fun directModelFeatures(
+            vid: Int,
+            pid: Int,
+        ): Set<Feature> {
+            val out = mutableSetOf<Feature>()
+            if (native.modelHasImu(vid, pid)) out += Feature.MOTION
+            if (native.modelHasRumble(vid, pid)) out += Feature.RUMBLE
+            if (native.modelHasLightbar(vid, pid)) out += Feature.LIGHTBAR
+            if (native.modelHasTriggerEffects(vid, pid)) out += Feature.TRIGGER_EFFECTS
+            if (native.modelHasPlayerLeds(vid, pid)) out += Feature.PLAYER_LEDS
+            if (native.modelHasTriggerRumble(vid, pid)) out += Feature.TRIGGER_RUMBLE
+            return out
+        }
+
+        private fun frameworkFeatures(device: PhysicalGamepadRegistry.Device): Set<Feature> {
+            val framework = frameworkFactsFor(device)
+            val out = mutableSetOf<Feature>()
+            if (framework?.hasGyro == true) out += Feature.MOTION
+            if (framework?.hasRumble == true) out += Feature.RUMBLE
+            // The light bar rides the Android lights API, which reaches a uhid pad's LEDs but not a
+            // USB one's (the input service cannot write generic-sysfs LED nodes), so it is advertised
+            // on the Bluetooth transport only. A USB pad's bar comes from Direct.
+            val barIsReachable = device.transport == Transport.Bluetooth && framework?.hasLightbar == true
+            if (barIsReachable) out += Feature.LIGHTBAR
+            return out
         }
 
         private fun frameworkFactsFor(device: PhysicalGamepadRegistry.Device): PhysicalGamepadRegistry.FrameworkCaps? =
