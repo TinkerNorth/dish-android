@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.core.net
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class DishProtocolTest {
@@ -55,5 +56,39 @@ class DishProtocolTest {
         for (v in DISH_PROTOCOL_MIN..DISH_PROTOCOL_CURRENT) {
             assertEquals(v, dishProtocolSpeakFor(v))
         }
+    }
+
+    @Test
+    fun `a satellite below the floor this client still speaks must update`() {
+        assertEquals(
+            DishProtocolCompat.SATELLITE_UPDATE_REQUIRED,
+            dishProtocolCompatFor(RAISED_FLOOR - 1, min = RAISED_FLOOR, current = RAISED_CURRENT),
+        )
+    }
+
+    @Test
+    fun `no version is offered to a satellite below the floor`() {
+        assertNull(dishProtocolSpeakFor(RAISED_FLOOR - 1, min = RAISED_FLOOR, current = RAISED_CURRENT))
+    }
+
+    @Test
+    fun `the floor itself is still spoken and only reads as an available update`() {
+        assertEquals(RAISED_FLOOR, dishProtocolSpeakFor(RAISED_FLOOR, min = RAISED_FLOOR, current = RAISED_CURRENT))
+        assertEquals(
+            DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE,
+            dishProtocolCompatFor(RAISED_FLOOR, min = RAISED_FLOOR, current = RAISED_CURRENT),
+        )
+    }
+
+    @Test
+    fun `a non-positive advertisement is unknown even below a raised floor`() {
+        assertEquals(DishProtocolCompat.UNKNOWN, dishProtocolCompatFor(0, min = RAISED_FLOOR, current = RAISED_CURRENT))
+        assertEquals(RAISED_CURRENT, dishProtocolSpeakFor(0, min = RAISED_FLOOR, current = RAISED_CURRENT))
+    }
+
+    private companion object {
+        // A floor above 1, since with the shipped floor of 1 nothing positive can sit below it.
+        const val RAISED_FLOOR = 2
+        const val RAISED_CURRENT = 3
     }
 }

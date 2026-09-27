@@ -32,21 +32,32 @@ enum class DishProtocolCompat {
     APP_UPDATE_REQUIRED,
 }
 
-fun dishProtocolCompatFor(advertised: Int?): DishProtocolCompat =
+// [min] and [current] are the constants above; they are parameters so a test can pin the
+// below-the-floor verdict, which is unreachable while the floor is 1 and every non-positive
+// advertisement reads as unknown first.
+fun dishProtocolCompatFor(
+    advertised: Int?,
+    min: Int = DISH_PROTOCOL_MIN,
+    current: Int = DISH_PROTOCOL_CURRENT,
+): DishProtocolCompat =
     when {
         advertised == null || advertised <= 0 -> DishProtocolCompat.UNKNOWN
-        advertised < DISH_PROTOCOL_MIN -> DishProtocolCompat.SATELLITE_UPDATE_REQUIRED
-        advertised > DISH_PROTOCOL_CURRENT -> DishProtocolCompat.APP_UPDATE_REQUIRED
-        advertised < DISH_PROTOCOL_CURRENT -> DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE
+        advertised < min -> DishProtocolCompat.SATELLITE_UPDATE_REQUIRED
+        advertised > current -> DishProtocolCompat.APP_UPDATE_REQUIRED
+        advertised < current -> DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE
         else -> DishProtocolCompat.CURRENT
     }
 
 // The version to offer a satellite whose advertisement is [advertised]; null when no
 // shared version exists. An unknown satellite gets the current version optimistically, and the
 // 409's `supported` echo settles the real answer in one round trip.
-fun dishProtocolSpeakFor(advertised: Int?): Int? =
+fun dishProtocolSpeakFor(
+    advertised: Int?,
+    min: Int = DISH_PROTOCOL_MIN,
+    current: Int = DISH_PROTOCOL_CURRENT,
+): Int? =
     when {
-        advertised == null || advertised <= 0 -> DISH_PROTOCOL_CURRENT
-        advertised < DISH_PROTOCOL_MIN -> null
-        else -> minOf(advertised, DISH_PROTOCOL_CURRENT)
+        advertised == null || advertised <= 0 -> current
+        advertised < min -> null
+        else -> minOf(advertised, current)
     }
