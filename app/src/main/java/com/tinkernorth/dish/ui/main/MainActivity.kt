@@ -18,6 +18,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.ConcatAdapter
 import com.google.androidgamesdk.GameActivity
+import com.tinkernorth.dish.DishApplication
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
@@ -97,22 +98,26 @@ class MainActivity :
     private var localNetworkRequested = false
 
     private val localNetworkPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) {
-                hub.autoReconnectAll()
-            } else {
-                notifications.warn(
-                    glyph = R.drawable.ic_satellite_off,
-                    title = getString(R.string.notif_local_network_title),
-                    body = getString(R.string.notif_local_network_body),
-                    action =
-                        DishNotification.Action(
-                            label = getString(R.string.action_open),
-                        ) { nav.toConnections() },
-                    key = "local-network-permission",
-                )
-            }
+        registerForActivityResult(ActivityResultContracts.RequestPermission(), ::onLocalNetworkPermission)
+
+    // A grant lets the remembered satellites reconnect; a refusal is said once, with the way
+    // to the connections screen.
+    private fun onLocalNetworkPermission(granted: Boolean) {
+        if (granted) {
+            hub.autoReconnectAll()
+            return
         }
+        notifications.warn(
+            glyph = R.drawable.ic_satellite_off,
+            title = getString(R.string.notif_local_network_title),
+            body = getString(R.string.notif_local_network_body),
+            action =
+                DishNotification.Action(
+                    label = getString(R.string.action_open),
+                ) { nav.toConnections() },
+            key = "local-network-permission",
+        )
+    }
 
     // Held by installSplashScreen()'s keep-on-screen gate; cleared either by the first
     // MainUiState render or the SPLASH_HOLD_MAX_MS fallback so a stalled ViewModel can't pin
@@ -134,24 +139,21 @@ class MainActivity :
         installDashboard()
     }
 
-    // GameActivity loads native code on touch, so the fallback must be chosen before the JNI
-    // surface is hit. Either redirect releases the splash hold at once: this activity is
-    // finishing and the screen it hands off to needs to draw itself.
+    // Either redirect releases the splash hold at once: this activity is finishing and the
+    // screen it hands off to needs to draw itself.
     private fun redirectedAwayFromTheDashboard(): Boolean {
-        if (com.tinkernorth.dish.DishApplication.nativeLoadFailed) {
-            splashHoldUntilFirstRender = false
-            nav.toNativeUnavailable()
-            finish()
-            return true
+        val redirect =
+            dashboardRedirect(
+                nativeLoadFailed = DishApplication.nativeLoadFailed,
+                welcomeCompleted = onboarding.state.value.welcomeCompleted,
+            ) ?: return false
+        splashHoldUntilFirstRender = false
+        when (redirect) {
+            DashboardRedirect.NATIVE_UNAVAILABLE -> nav.toNativeUnavailable()
+            DashboardRedirect.SETUP -> nav.toSetupInput()
         }
-        val needsWelcome = !onboarding.state.value.welcomeCompleted
-        if (needsWelcome) {
-            splashHoldUntilFirstRender = false
-            nav.toSetupInput()
-            finish()
-            return true
-        }
-        return false
+        finish()
+        return true
     }
 
     private fun installDashboard() {
@@ -191,7 +193,7 @@ class MainActivity :
 
     override fun onResume() {
         super.onResume()
-        if (!com.tinkernorth.dish.DishApplication.nativeLoadFailed) {
+        if (!DishApplication.nativeLoadFailed) {
             usbGamepadManager.reconcileForeground()
             ensureLocalNetworkForReconnect()
         }
@@ -290,17 +292,19 @@ class MainActivity :
         binding.tvConnectionsSummary.text = connectionsSummaryText(s)
     }
 
-    // Unstable links are still streaming, so they count as online here just as on the connections
-    // screen. The plural selects on totalCount, and the args order matches %1${'$'}d/%2${'$'}d.
-    private fun connectionsSummaryText(s: MainUiState): String {
-        val liveCount = s.connections.count { it.live.isLiveLink() }
-        val totalCount = s.connections.size
-        return when {
-            liveCount == 0 && totalCount == 0 -> getString(R.string.status_tap_manage)
-            liveCount == 0 -> resources.getQuantityString(R.plurals.status_remembered, totalCount, totalCount)
-            else -> resources.getQuantityString(R.plurals.status_connected_of, totalCount, liveCount, totalCount)
+    private fun connectionsSummaryText(s: MainUiState): String =
+        when (val summary = connectionsSummary(s.connections)) {
+            ConnectionsSummary.TapToManage -> getString(R.string.status_tap_manage)
+            is ConnectionsSummary.Remembered ->
+                resources.getQuantityString(R.plurals.status_remembered, summary.totalCount, summary.totalCount)
+            is ConnectionsSummary.ConnectedOf ->
+                resources.getQuantityString(
+                    R.plurals.status_connected_of,
+                    summary.totalCount,
+                    summary.liveCount,
+                    summary.totalCount,
+                )
         }
-    }
 
     private fun submitSlots(s: MainUiState) {
         controllerAdapter.submitSlots(

@@ -10,6 +10,8 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 
+internal enum class CardActionKind { GAMEPAD, TOUCHPAD, MOUSE, SWITCH_DIRECT, SETUP_WIRED, CONFIGURE, FIND_HOSTS }
+
 internal data class CardActionSpec(
     @DrawableRes val icon: Int,
     @StringRes val label: Int,
@@ -51,14 +53,14 @@ private val CONFIGURE_SPEC =
 private val SETUP_WIRED_SPEC =
     CardActionSpec(R.drawable.ic_usb, R.string.binding_action_use_wired, CardActionKind.SETUP_WIRED)
 
-internal fun computeCardActions(row: ControllerAdapter.Row): CardActions {
+internal fun computeCardActions(row: ControllerRow): CardActions {
     val bound = row.slot.boundStatus ?: return unboundCardActions(row)
     val hasConnection = row.slot.boundConnectionId != null
     if (!hasConnection) return unboundCardActions(row)
     return boundCardActions(row, bound)
 }
 
-private fun unboundCardActions(row: ControllerAdapter.Row): CardActions {
+private fun unboundCardActions(row: ControllerRow): CardActions {
     val filled = mutableListOf<CardActionSpec>()
     if (row.pathCard?.wiredSwitchAvailable == true) filled += SETUP_WIRED_SPEC
 
@@ -70,7 +72,7 @@ private fun unboundCardActions(row: ControllerAdapter.Row): CardActions {
 }
 
 private fun boundCardActions(
-    row: ControllerAdapter.Row,
+    row: ControllerRow,
     bound: ConnectionSummary,
 ): CardActions {
     val filled = mutableListOf<CardActionSpec>()

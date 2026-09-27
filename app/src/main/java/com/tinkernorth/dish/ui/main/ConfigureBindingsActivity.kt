@@ -33,6 +33,7 @@ import com.tinkernorth.dish.databinding.DialogCardListBinding
 import com.tinkernorth.dish.databinding.SetupReviewCardBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
+import com.tinkernorth.dish.ui.common.DIMMED_ALPHA
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
@@ -80,11 +81,13 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
     private fun bindFooterButtons() {
         binding.btnBack.setOnClickListener { finish() }
         binding.btnCancel.setOnClickListener { finish() }
-        binding.btnUnbind.setOnClickListener {
-            viewModel.unbind()
-            finish()
-        }
+        binding.btnUnbind.setOnClickListener { unbindAndFinish() }
         binding.btnApply.setOnClickListener { viewModel.apply() }
+    }
+
+    private fun unbindAndFinish() {
+        viewModel.unbind()
+        finish()
     }
 
     // Re-verify on entering the screen: a Moonlight pairing is remembered trust, and the
@@ -98,24 +101,27 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
     }
 
     private fun observe() {
-        observeWhileStarted(viewModel.ui) { state ->
-            if (state.loaded) renderContent(state)
-            renderBlocker(state)
-        }
+        observeWhileStarted(viewModel.ui, ::renderUi)
         observeWhileStarted(viewModel.applyState) { renderApplyState(it) }
         observeWhileStarted(viewModel.micPermissionRequests) { requestMicPermission() }
     }
 
+    private fun renderUi(state: ConfigUiState) {
+        if (state.loaded) renderContent(state)
+        renderBlocker(state)
+    }
+
     private val micPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            viewModel.refreshMicPermission()
-            // Android stops prompting after the second refusal, so a request that returns denied
-            // with no rationale left to show will never reach the user again. Saying so beats a
-            // row that keeps offering an ask the system silently swallows.
-            if (!granted && !shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)) {
-                showMicPermissionBlocked()
-            }
-        }
+        registerForActivityResult(ActivityResultContracts.RequestPermission(), ::onMicPermissionResult)
+
+    // Android stops prompting after the second refusal, so a request that returns denied
+    // with no rationale left to show will never reach the user again. Saying so beats a
+    // row that keeps offering an ask the system silently swallows.
+    private fun onMicPermissionResult(granted: Boolean) {
+        viewModel.refreshMicPermission()
+        val blocked = !granted && !shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)
+        if (blocked) showMicPermissionBlocked()
+    }
 
     /**
      * Where the RECORD_AUDIO prompt gets launched, from the mic toggle going on or from the row's
@@ -166,7 +172,7 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
         binding.btnApply.text =
             getString(if (snapshot.bound) R.string.binding_activity_apply else R.string.binding_activity_bind)
         binding.btnApply.isEnabled = state.canApply
-        binding.btnApply.alpha = if (state.canApply) 1f else DISABLED_ALPHA
+        binding.btnApply.alpha = if (state.canApply) 1f else DIMMED_ALPHA
         binding.btnUnbind.visibility = if (snapshot.bound) View.VISIBLE else View.GONE
         binding.bottomBar.visibility = if (state.noHosts) View.GONE else View.VISIBLE
 
@@ -425,7 +431,7 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
                 else -> stepB.vStepPending.visibility = View.VISIBLE
             }
             stepB.tvStepLabel.text = step.label
-            stepB.root.alpha = if (i > state.doneCount) 0.5f else 1f
+            stepB.root.alpha = if (i > state.doneCount) DIMMED_ALPHA else 1f
             binding.applySteps.addView(stepB.root)
         }
     }
@@ -569,11 +575,16 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
         bindReviewFlows(card.reviewSendsRow, card.reviewSendsChips, destinationSends(potential))
         bindReviewFlows(card.reviewGetsRow, card.reviewGetsChips, destinationGets(potential))
         card.reviewCard.isClickable = true
-        card.reviewCard.setOnClickListener {
-            viewModel.setHost(host.id)
-            dialog.dismiss()
-        }
+        card.reviewCard.setOnClickListener { pickHost(host.id, dialog) }
         return card.root
+    }
+
+    private fun pickHost(
+        hostId: String,
+        dialog: AlertDialog,
+    ) {
+        viewModel.setHost(hostId)
+        dialog.dismiss()
     }
 
     // One silhouette per destination kind, everywhere the destination is drawn.
@@ -641,11 +652,16 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
                 inputUnknown = state.inputUnknown,
             ),
         )
-        card.typeCard.setOnClickListener {
-            viewModel.setType(option.id)
-            dialog.dismiss()
-        }
+        card.typeCard.setOnClickListener { pickType(option.id, dialog) }
         return card.root
+    }
+
+    private fun pickType(
+        typeId: Int,
+        dialog: AlertDialog,
+    ) {
+        viewModel.setType(typeId)
+        dialog.dismiss()
     }
 
     // Auto is resolved here, on the client: the card shows the rows of the type it will actually
@@ -665,7 +681,5 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
 
     companion object {
         const val EXTRA_SLOT_ID = "extra_slot_id"
-
-        private const val DISABLED_ALPHA = 0.4f
     }
 }

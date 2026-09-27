@@ -11,11 +11,9 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
-import com.tinkernorth.dish.core.net.moonlight.MOUSE_BUTTON_LEFT
-import com.tinkernorth.dish.core.net.moonlight.MOUSE_BUTTON_MIDDLE
-import com.tinkernorth.dish.core.net.moonlight.MOUSE_BUTTON_RIGHT
 import com.tinkernorth.dish.databinding.ActivityMouseOverlayBasicBinding
 import com.tinkernorth.dish.databinding.ActivityMouseOverlayBinding
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.store.MouseSurfaceStore
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.ui.common.HoldButtonView
@@ -65,16 +63,9 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
     private var rightHeld = false
     private var middleHeld = false
 
-    // Moonlight edge tracking: what the host was last told, plus the finger anchor
-    // and the sub-pixel remainders the relative moves accumulate against.
-    private var mlLeftSent = false
-    private var mlRightSent = false
-    private var mlMiddleSent = false
-    private var mlTrackingId = Int.MIN_VALUE
-    private var mlLastX = 0
-    private var mlLastY = 0
-    private var mlRemX = 0f
-    private var mlRemY = 0f
+    // UI-thread only: what the Moonlight host was last told, and the finger anchor the
+    // relative moves accumulate against.
+    private val mouseMover = MoonlightMouseMover()
 
     private var optionsMenu: Menu? = null
     private var currentSummary: ConnectionSummary? = null
@@ -196,21 +187,9 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
         releaseMoonlightButtons()
     }
 
-    // Leaving the surface must never strand a held button on the host.
     private fun releaseMoonlightButtons() {
         val conn = moonlight.get(connectionId) ?: return
-        if (mlLeftSent) {
-            conn.sendMouseButton(false, MOUSE_BUTTON_LEFT)
-            mlLeftSent = false
-        }
-        if (mlRightSent) {
-            conn.sendMouseButton(false, MOUSE_BUTTON_RIGHT)
-            mlRightSent = false
-        }
-        if (mlMiddleSent) {
-            conn.sendMouseButton(false, MOUSE_BUTTON_MIDDLE)
-            mlMiddleSent = false
-        }
+        mouseMover.releaseButtons().forEach { conn.send(it) }
     }
 
     private fun latestFingers(): TouchpadSurfaceView.TouchpadState {
@@ -223,10 +202,12 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
     private fun pulseMiddleClick() {
         middleHeld = true
         report(latestFingers())
-        views.root.postDelayed({
-            middleHeld = false
-            report(latestFingers())
-        }, MIDDLE_CLICK_PULSE_MS)
+        views.root.postDelayed(::releaseMiddleClick, MIDDLE_CLICK_PULSE_MS)
+    }
+
+    private fun releaseMiddleClick() {
+        middleHeld = false
+        report(latestFingers())
     }
 
     private fun report(
@@ -235,25 +216,16 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
     ) {
         inputRateStore.recordScreenSample()
         lastReported = MouseWireState(fingers, leftHeld, rightHeld, middleHeld)
-        val summary = hub.summary(connectionId) ?: return
-        if (!summary.live.isLiveLink()) return
-        when (summary.kind) {
-            ConnectionKind.SATELLITE ->
-                sendMouseReport(fingers, leftHeld, rightHeld, middleHeld, scrollNotches)
-            ConnectionKind.MOONLIGHT ->
-                sendMoonlightMouse(fingers, scrollNotches)
-            else -> Unit
+        when (pointerRouteFor(hub.summary(connectionId))) {
+            PointerRoute.SATELLITE -> sendMouseReport(fingers, leftHeld, rightHeld, middleHeld, scrollNotches)
+            PointerRoute.MOONLIGHT -> sendMoonlightMouse(fingers, scrollNotches)
+            PointerRoute.NONE -> Unit
         }
     }
 
-    // Satellite only: the UDP frames are lossy state, so the pacer re-asserts them.
-    // Moonlight mouse packets are edge events on ENet's reliable channel; replaying
-    // them would replay clicks.
     override fun resendOneIfReady() {
         val state = lastReported ?: return
-        val summary = hub.summary(connectionId) ?: return
-        if (summary.kind != ConnectionKind.SATELLITE) return
-        if (!summary.live.isLiveLink()) return
+        if (!pointerResendAllowed(hub.summary(connectionId))) return
         // The fingers object mutates on the UI thread: copy() is the stable
         // comparison base (a torn read just costs one extra burst). Scroll is an
         // event, never state, so a resend always carries zero scroll.
@@ -285,52 +257,22 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
         paintConnectionMenuItem(optionsMenu?.findItem(R.id.action_connection_info), summary)
     }
 
+    // The mover only learns of a frame the host will hear about: with no connection the
+    // held buttons stay unsent, so the next live frame carries their edges.
     private fun sendMoonlightMouse(
         fingers: TouchpadSurfaceView.TouchpadState,
         scrollNotches: Int,
     ) {
         val conn = moonlight.get(connectionId) ?: return
-        if (leftHeld != mlLeftSent) {
-            conn.sendMouseButton(leftHeld, MOUSE_BUTTON_LEFT)
-            mlLeftSent = leftHeld
+        mouseMover.onFrame(fingers, scrollNotches, leftHeld, rightHeld, middleHeld).forEach { conn.send(it) }
+    }
+
+    private fun MoonlightConnection.send(command: MouseCommand) {
+        when (command) {
+            is MouseCommand.Button -> sendMouseButton(command.down, command.button)
+            is MouseCommand.Scroll -> sendMouseScroll(command.amount)
+            is MouseCommand.MoveRel -> sendMouseMoveRel(command.dx, command.dy)
         }
-        if (rightHeld != mlRightSent) {
-            conn.sendMouseButton(rightHeld, MOUSE_BUTTON_RIGHT)
-            mlRightSent = rightHeld
-        }
-        if (middleHeld != mlMiddleSent) {
-            conn.sendMouseButton(middleHeld, MOUSE_BUTTON_MIDDLE)
-            mlMiddleSent = middleHeld
-        }
-        if (scrollNotches != 0) {
-            conn.sendMouseScroll(
-                (scrollNotches * WHEEL_DELTA_PER_NOTCH)
-                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()),
-            )
-        }
-        if (!fingers.finger0Active) {
-            mlTrackingId = Int.MIN_VALUE
-            return
-        }
-        val x = fingers.finger0X.toInt()
-        val y = fingers.finger0Y.toInt()
-        if (fingers.finger0TrackingId != mlTrackingId) {
-            // A fresh touch anchors here instead of jumping the cursor across the pad.
-            mlTrackingId = fingers.finger0TrackingId
-            mlLastX = x
-            mlLastY = y
-            return
-        }
-        mlRemX += (x - mlLastX) * MOONLIGHT_MOVE_SCALE
-        mlRemY += (y - mlLastY) * MOONLIGHT_MOVE_SCALE
-        mlLastX = x
-        mlLastY = y
-        val dx = mlRemX.toInt()
-        val dy = mlRemY.toInt()
-        if (dx == 0 && dy == 0) return
-        mlRemX -= dx
-        mlRemY -= dy
-        conn.sendMouseMoveRel(dx, dy)
     }
 
     private fun sendMouseReport(
@@ -340,10 +282,7 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
         middle: Boolean,
         scrollNotches: Int,
     ) {
-        val scroll =
-            (scrollNotches * WHEEL_DELTA_PER_NOTCH)
-                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-                .toShort()
+        val scroll = wheelDeltaFor(scrollNotches).toShort()
         satellite.get(connectionId)?.sendTouchpad(
             slotId,
             fingers.toReport(buttonPressed = left, rightPressed = right, middlePressed = middle, scrollDelta = scroll),
@@ -355,11 +294,5 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
         const val EXTRA_CONNECTION_ID = BaseInputOverlayActivity.EXTRA_CONNECTION_ID
 
         private const val MIDDLE_CLICK_PULSE_MS = 70L
-        private const val WHEEL_DELTA_PER_NOTCH = 120
-
-        // One full sweep of the move surface (65535 normalized units) travels this many
-        // host pixels; the float remainders keep slow drags from rounding to nothing.
-        private const val MOONLIGHT_MOVE_PX_PER_SWEEP = 1800f
-        private const val MOONLIGHT_MOVE_SCALE = MOONLIGHT_MOVE_PX_PER_SWEEP / 65535f
     }
 }

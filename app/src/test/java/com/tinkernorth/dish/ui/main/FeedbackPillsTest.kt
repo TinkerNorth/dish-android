@@ -27,7 +27,7 @@ class FeedbackPillsTest {
     }
 
     private fun row(cap: SlotCapabilities) =
-        ControllerAdapter.Row(
+        ControllerRow(
             slot = ControllerSlot(id = "slot", name = "Pad", inputType = SlotInputType.PHYSICAL),
             connections = emptyList(),
             motionCap = cap,

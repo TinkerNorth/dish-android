@@ -87,3 +87,6 @@ private fun linkGuardFor(
         )
     }
 }
+
+// A link blip settles before the scrim appears; every other guard paints instantly.
+internal fun guardWaitsOutBlip(kind: GuardKind): Boolean = kind == GuardKind.RECONNECTING || kind == GuardKind.HOST_LOST

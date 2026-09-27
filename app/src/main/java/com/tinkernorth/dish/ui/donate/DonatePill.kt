@@ -4,14 +4,12 @@ package com.tinkernorth.dish.ui.donate
 
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
-import android.content.Context
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.FrameLayout
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.edit
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
@@ -23,9 +21,6 @@ import com.tinkernorth.dish.ui.common.animationsDisabled
 import com.tinkernorth.dish.ui.common.slidePillIn
 import com.tinkernorth.dish.ui.common.slidePillOut
 
-private const val DONATE_PILL_PREFS = "user_preferences"
-private const val DONATE_PILL_DISMISSED_AT = "donate_pill_dismissed_at"
-private const val DONATE_PILL_DISMISS_WINDOW_MS = 24L * 60L * 60L * 1000L
 private const val HEARTBEAT_SCALE = 1.12f
 
 fun AppCompatActivity.attachDonatePill() {
@@ -66,14 +61,20 @@ private fun placePillBottomEnd(
         marginEnd = baseGap
         bottomMargin = baseGap
     }
-    ViewCompat.setOnApplyWindowInsetsListener(pill) { v, insets ->
-        val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-        v.updateLayoutParams<FrameLayout.LayoutParams> {
-            marginEnd = baseGap + bars.right
-            bottomMargin = baseGap + bars.bottom
-        }
-        insets
+    ViewCompat.setOnApplyWindowInsetsListener(pill) { v, insets -> marginPillForSystemBars(v, insets, baseGap) }
+}
+
+private fun marginPillForSystemBars(
+    pill: View,
+    insets: WindowInsetsCompat,
+    baseGap: Int,
+): WindowInsetsCompat {
+    val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+    pill.updateLayoutParams<FrameLayout.LayoutParams> {
+        marginEnd = baseGap + bars.right
+        bottomMargin = baseGap + bars.bottom
     }
+    return insets
 }
 
 // Checked on every resume rather than once: the tip may be bought on the donate screen this
@@ -98,26 +99,14 @@ private fun AppCompatActivity.wireDonatePill(
     onDismiss: () -> Unit,
 ) {
     pill.setOnClickListener { openDonateScreen() }
-    pill.findViewById<View>(R.id.donatePillDismiss).setOnClickListener {
-        dismissDonatePill(this)
-        onDismiss()
-    }
+    pill.findViewById<View>(R.id.donatePillDismiss).setOnClickListener { dismissAndNotify(onDismiss) }
     slidePillIn(pill)
     startHeartbeat(pill.findViewById(R.id.donatePillHeart))
 }
 
-private fun donatePillDismissed(context: Context): Boolean {
-    val dismissedAt =
-        context
-            .getSharedPreferences(DONATE_PILL_PREFS, Context.MODE_PRIVATE)
-            .getLong(DONATE_PILL_DISMISSED_AT, 0L)
-    return System.currentTimeMillis() - dismissedAt < DONATE_PILL_DISMISS_WINDOW_MS
-}
-
-private fun dismissDonatePill(context: Context) {
-    context
-        .getSharedPreferences(DONATE_PILL_PREFS, Context.MODE_PRIVATE)
-        .edit { putLong(DONATE_PILL_DISMISSED_AT, System.currentTimeMillis()) }
+private fun AppCompatActivity.dismissAndNotify(onDismiss: () -> Unit) {
+    dismissDonatePill(this)
+    onDismiss()
 }
 
 // An infinite animator on a detached view keeps a frame callback alive for nothing, so the

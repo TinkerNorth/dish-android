@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.ui.main
 
+import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
@@ -20,7 +21,7 @@ class MotionIndicatorStateTest {
     fun `gyro present, streaming, connected satellite maps to STREAMING`() {
         assertEquals(
             MotionIndicatorState.STREAMING,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = true,
                 connectionCarriesMotion = true,
@@ -33,7 +34,7 @@ class MotionIndicatorStateTest {
     fun `gyro present but source not started maps to PAUSED`() {
         assertEquals(
             MotionIndicatorState.PAUSED,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = false,
                 connectionCarriesMotion = true,
@@ -46,7 +47,7 @@ class MotionIndicatorStateTest {
     fun `a streaming source over a disconnected satellite reads as PAUSED, not STREAMING`() {
         assertEquals(
             MotionIndicatorState.PAUSED,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = true,
                 connectionCarriesMotion = true,
@@ -68,7 +69,7 @@ class MotionIndicatorStateTest {
                 assertEquals(
                     "streaming=$streaming connected=$connected",
                     expected,
-                    MotionIndicatorState.of(
+                    motionIndicatorStateOf(
                         isAvailable = true,
                         isStreaming = streaming,
                         connectionCarriesMotion = true,
@@ -83,7 +84,7 @@ class MotionIndicatorStateTest {
     fun `bluetooth connection never reads as STREAMING even while source is started`() {
         assertEquals(
             MotionIndicatorState.NOT_FORWARDED,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = true,
                 connectionCarriesMotion = false,
@@ -92,7 +93,7 @@ class MotionIndicatorStateTest {
         )
         assertEquals(
             MotionIndicatorState.NOT_FORWARDED,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = false,
                 connectionCarriesMotion = false,
@@ -109,7 +110,7 @@ class MotionIndicatorStateTest {
                     assertEquals(
                         "isAvailable=false must always be UNAVAILABLE",
                         MotionIndicatorState.UNAVAILABLE,
-                        MotionIndicatorState.of(
+                        motionIndicatorStateOf(
                             isAvailable = false,
                             isStreaming = streaming,
                             connectionCarriesMotion = carries,
@@ -143,8 +144,36 @@ class MotionIndicatorStateTest {
         assertTrue(MotionIndicatorState.STALLED.hasDetail)
         assertTrue(MotionIndicatorState.USER_DISABLED.hasDetail)
         assertTrue(MotionIndicatorState.NO_HOST_SINK.hasDetail)
+        assertTrue(MotionIndicatorState.BACKEND_BROKEN.hasDetail)
         assertFalse(MotionIndicatorState.STREAMING.hasDetail)
         assertFalse(MotionIndicatorState.PAUSED.hasDetail)
+    }
+
+    @Test
+    fun `each limit state explains itself with its own line`() {
+        assertEquals(R.string.motion_unavailable_detail, motionDetailRes(MotionIndicatorState.UNAVAILABLE))
+        assertEquals(R.string.motion_not_forwarded_detail, motionDetailRes(MotionIndicatorState.NOT_FORWARDED))
+        assertEquals(R.string.motion_stalled_detail, motionDetailRes(MotionIndicatorState.STALLED))
+        assertEquals(R.string.motion_user_disabled_detail, motionDetailRes(MotionIndicatorState.USER_DISABLED))
+        assertEquals(R.string.motion_no_host_sink_detail, motionDetailRes(MotionIndicatorState.NO_HOST_SINK))
+        assertEquals(R.string.motion_backend_broken_detail, motionDetailRes(MotionIndicatorState.BACKEND_BROKEN))
+        assertEquals(null, motionDetailRes(MotionIndicatorState.STREAMING))
+        assertEquals(null, motionDetailRes(MotionIndicatorState.PAUSED))
+    }
+
+    // The readout's motion entry reads a rate (or pending) only where the indicator is not
+    // muted; STALLED and PAUSED count as on so they read pending rather than a misleading Off.
+    @Test
+    fun `the readout's motion line is on for streaming, stalled and paused only`() {
+        assertTrue(motionReadoutOn(MotionIndicatorState.STREAMING))
+        assertTrue(motionReadoutOn(MotionIndicatorState.STALLED))
+        assertTrue(motionReadoutOn(MotionIndicatorState.PAUSED))
+        assertFalse(motionReadoutOn(MotionIndicatorState.USER_DISABLED))
+        assertFalse(motionReadoutOn(MotionIndicatorState.NOT_FORWARDED))
+        assertFalse(motionReadoutOn(MotionIndicatorState.NO_HOST_SINK))
+        assertFalse(motionReadoutOn(MotionIndicatorState.BACKEND_BROKEN))
+        assertFalse(motionReadoutOn(MotionIndicatorState.UNAVAILABLE))
+        assertFalse(motionReadoutOn(null))
     }
 
     @Test
@@ -161,7 +190,7 @@ class MotionIndicatorStateTest {
     fun `streaming + connected + stalled maps to STALLED`() {
         assertEquals(
             MotionIndicatorState.STALLED,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = true,
                 connectionCarriesMotion = true,
@@ -175,7 +204,7 @@ class MotionIndicatorStateTest {
     fun `stalled flag is ignored when not streaming (stays PAUSED)`() {
         assertEquals(
             MotionIndicatorState.PAUSED,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = false,
                 connectionCarriesMotion = true,
@@ -189,7 +218,7 @@ class MotionIndicatorStateTest {
     fun `stalled flag is ignored over Bluetooth (stays NOT_FORWARDED)`() {
         assertEquals(
             MotionIndicatorState.NOT_FORWARDED,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = true,
                 connectionCarriesMotion = false,
@@ -203,7 +232,7 @@ class MotionIndicatorStateTest {
     fun `stalled flag is ignored when no gyroscope (stays UNAVAILABLE)`() {
         assertEquals(
             MotionIndicatorState.UNAVAILABLE,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = false,
                 isStreaming = true,
                 connectionCarriesMotion = true,
@@ -227,7 +256,7 @@ class MotionIndicatorStateTest {
     fun `userEnabled=false on a satellite connection maps to USER_DISABLED`() {
         assertEquals(
             MotionIndicatorState.USER_DISABLED,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = false,
                 connectionCarriesMotion = true,
@@ -241,7 +270,7 @@ class MotionIndicatorStateTest {
     fun `USER_DISABLED takes precedence over NOT_FORWARDED`() {
         assertEquals(
             MotionIndicatorState.USER_DISABLED,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = false,
                 connectionCarriesMotion = false,
@@ -255,7 +284,7 @@ class MotionIndicatorStateTest {
     fun `no gyroscope wins over USER_DISABLED`() {
         assertEquals(
             MotionIndicatorState.UNAVAILABLE,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = false,
                 isStreaming = false,
                 connectionCarriesMotion = true,
@@ -269,7 +298,7 @@ class MotionIndicatorStateTest {
     fun `userEnabled=true default keeps existing call sites unchanged`() {
         assertEquals(
             MotionIndicatorState.STREAMING,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = true,
                 connectionCarriesMotion = true,
@@ -282,7 +311,7 @@ class MotionIndicatorStateTest {
     fun `hostHasSinkForType=false on a satellite slot maps to NO_HOST_SINK`() {
         assertEquals(
             MotionIndicatorState.NO_HOST_SINK,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = true,
                 connectionCarriesMotion = true,
@@ -297,7 +326,7 @@ class MotionIndicatorStateTest {
     fun `USER_DISABLED takes precedence over NO_HOST_SINK`() {
         assertEquals(
             MotionIndicatorState.USER_DISABLED,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = false,
                 connectionCarriesMotion = true,
@@ -312,7 +341,7 @@ class MotionIndicatorStateTest {
     fun `NOT_FORWARDED takes precedence over NO_HOST_SINK`() {
         assertEquals(
             MotionIndicatorState.NOT_FORWARDED,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = true,
                 connectionCarriesMotion = false,
@@ -327,7 +356,7 @@ class MotionIndicatorStateTest {
     fun `hostHasSinkForType=true default keeps existing call sites unchanged`() {
         assertEquals(
             MotionIndicatorState.PAUSED,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = false,
                 connectionCarriesMotion = true,
@@ -340,7 +369,7 @@ class MotionIndicatorStateTest {
     fun `BACKEND_BROKEN fires when satellite reports its sink failed`() {
         assertEquals(
             MotionIndicatorState.BACKEND_BROKEN,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = true,
                 connectionCarriesMotion = true,
@@ -356,7 +385,7 @@ class MotionIndicatorStateTest {
     fun `satelliteBackendOk=null stays out of the way`() {
         assertEquals(
             MotionIndicatorState.STREAMING,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = true,
                 connectionCarriesMotion = true,
@@ -372,7 +401,7 @@ class MotionIndicatorStateTest {
     fun `satelliteBackendOk=true is the normal happy-path branch`() {
         assertEquals(
             MotionIndicatorState.STREAMING,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = true,
                 connectionCarriesMotion = true,
@@ -388,7 +417,7 @@ class MotionIndicatorStateTest {
     fun `NO_HOST_SINK outranks BACKEND_BROKEN - the type-level reason is higher-order`() {
         assertEquals(
             MotionIndicatorState.NO_HOST_SINK,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = true,
                 connectionCarriesMotion = true,
@@ -404,7 +433,7 @@ class MotionIndicatorStateTest {
     fun `USER_DISABLED outranks BACKEND_BROKEN - user's choice is the actionable reason`() {
         assertEquals(
             MotionIndicatorState.USER_DISABLED,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = false,
                 connectionCarriesMotion = true,
@@ -420,7 +449,7 @@ class MotionIndicatorStateTest {
     fun `NOT_FORWARDED outranks BACKEND_BROKEN - BT-HID never carried motion in the first place`() {
         assertEquals(
             MotionIndicatorState.NOT_FORWARDED,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = true,
                 connectionCarriesMotion = false,
@@ -436,7 +465,7 @@ class MotionIndicatorStateTest {
     fun `BACKEND_BROKEN outranks STALLED - the receiver's reason beats the source's reason`() {
         assertEquals(
             MotionIndicatorState.BACKEND_BROKEN,
-            MotionIndicatorState.of(
+            motionIndicatorStateOf(
                 isAvailable = true,
                 isStreaming = true,
                 connectionCarriesMotion = true,

@@ -73,7 +73,7 @@ class CardActionsTest {
         connections: List<ConnectionSummary> = listOf(summary()),
         pointer: PointerSlotUi? = null,
         pathCard: PathCard? = null,
-    ) = ControllerAdapter.Row(slot = slot, connections = connections, pointer = pointer, pathCard = pathCard)
+    ) = ControllerRow(slot = slot, connections = connections, pointer = pointer, pathCard = pathCard)
 
     private fun kinds(actions: CardActions): List<CardActionKind> = actions.filled.map { it.kind }
 

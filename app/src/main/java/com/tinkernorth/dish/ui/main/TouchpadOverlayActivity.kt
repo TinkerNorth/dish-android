@@ -8,7 +8,6 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.databinding.ActivityTouchpadOverlayBinding
 import com.tinkernorth.dish.ui.common.TouchpadSurfaceView
@@ -69,10 +68,7 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
             motionOn = null,
         ) { binding.overlayToolbar.subtitle = it }
 
-        binding.btnPadClick.onHeldChanged = { held ->
-            clickHeld = held
-            report(latestFrame())
-        }
+        binding.btnPadClick.onHeldChanged = ::onPadClickHeld
         binding.touchpadMovePad.clickWhenTouched = false
         binding.touchpadMovePad.label = getString(R.string.touchpad_pad_move_label)
         binding.touchpadMovePad.hint = getString(R.string.touchpad_pad_move_hint)
@@ -84,6 +80,11 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
             state.buttonPressed = clickHeld
             report(state)
         }
+    }
+
+    private fun onPadClickHeld(held: Boolean) {
+        clickHeld = held
+        report(latestFrame())
     }
 
     // The click button and the move surface merge into the slot's single frame stream:
@@ -99,21 +100,16 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
     private fun report(state: TouchpadSurfaceView.TouchpadState) {
         inputRateStore.recordScreenSample()
         lastReportedState = state
-        val summary = hub.summary(connectionId) ?: return
-        if (!summary.live.isLiveLink()) return
-        when (summary.kind) {
-            ConnectionKind.SATELLITE -> sendSatelliteTouchpadReport(state)
-            // Reliable control stream: events, no resend loop needed.
-            ConnectionKind.MOONLIGHT -> moonlight.get(connectionId)?.let { sendTouchpadReport(it, state) }
-            ConnectionKind.BLUETOOTH -> Unit
+        when (pointerRouteFor(hub.summary(connectionId))) {
+            PointerRoute.SATELLITE -> sendSatelliteTouchpadReport(state)
+            PointerRoute.MOONLIGHT -> moonlight.get(connectionId)?.let { sendTouchpadReport(it, state) }
+            PointerRoute.NONE -> Unit
         }
     }
 
     override fun resendOneIfReady() {
         val state = lastReportedState ?: return
-        val summary = hub.summary(connectionId) ?: return
-        if (summary.kind != ConnectionKind.SATELLITE) return
-        if (!summary.live.isLiveLink()) return
+        if (!pointerResendAllowed(hub.summary(connectionId))) return
         // The live state object mutates on the UI thread: copy() is the
         // stable comparison base (a torn read just costs one extra burst).
         val changed = state != lastResentSnapshot

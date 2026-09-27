@@ -20,26 +20,17 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
-import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
-import com.tinkernorth.dish.composer.LinkState
-import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.core.net.DishProtocolCompat
-import com.tinkernorth.dish.core.net.moonlight.AUTO
-import com.tinkernorth.dish.core.net.moonlight.fromStored
 import com.tinkernorth.dish.databinding.BindingDecisionRowBinding
 import com.tinkernorth.dish.databinding.BindingPillBinding
 import com.tinkernorth.dish.databinding.BindingValueMonoBinding
 import com.tinkernorth.dish.databinding.BindingValueNoneBinding
 import com.tinkernorth.dish.databinding.BindingValueNotBoundBinding
 import com.tinkernorth.dish.databinding.ItemControllerBinding
-import com.tinkernorth.dish.hotpath.input.Transport
-import com.tinkernorth.dish.repository.TOUCHPAD_MODE_DS4
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
-import com.tinkernorth.dish.ui.common.bundledControllerTypeLabelRes
-import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
+import com.tinkernorth.dish.ui.common.DIMMED_ALPHA
 import java.util.Locale
 
 interface SlotActionListener {
@@ -62,89 +53,10 @@ interface SlotActionListener {
     fun onUnbind(slotId: String)
 }
 
-internal fun LinkState.isAvailableForPicker(): Boolean =
-    when (this) {
-        LinkState.Connected, LinkState.Unstable -> true
-        LinkState.Connecting,
-        LinkState.Ready, LinkState.Found,
-        LinkState.Saved, LinkState.Stale,
-        -> false
-    }
-
-// The badge a bound slot's card can wear; NONE is the quiet default.
-internal enum class EdgeState { NONE, HOST_LOST, INPUT_LOST, UNSTEADY }
-
-// A Moonlight host is never "lost": there is no live link to lose, only remembered trust,
-// and the session is started by the binding itself. Its state is reported in the binding
-// screen where the actions that recover it live, so the dashboard stays quiet.
-internal fun slotEdgeState(slot: ControllerSlot): EdgeState {
-    val bound = slot.boundStatus
-    if (bound == null || slot.boundConnectionId == null) return EdgeState.NONE
-    if (slot.isDisconnecting) return EdgeState.INPUT_LOST
-    if (bound.kind == ConnectionKind.MOONLIGHT) return EdgeState.NONE
-    return when (bound.live) {
-        LinkState.Unstable -> EdgeState.UNSTEADY
-        LinkState.Connected -> EdgeState.NONE
-        // Connecting (incl. a global reconnect in flight) keeps showing "lost" so the badge doesn't flicker off.
-        else -> EdgeState.HOST_LOST
-    }
-}
-
-// A Moonlight host is always offered. Its session is started BY the binding, so requiring a
-// live link before it can be picked is circular: it can never be live until something binds to
-// it, and nothing can bind to it until it is live.
-internal fun connectionsVisibleInPicker(
-    all: List<ConnectionSummary>,
-    boundConnectionId: String?,
-): List<ConnectionSummary> =
-    all.filter {
-        it.live.isAvailableForPicker() || it.kind == ConnectionKind.MOONLIGHT || it.id == boundConnectionId
-    }
-
-// Unstable is degraded but still routing, so it counts as live alongside Connected.
-internal fun LinkState.isLiveLink(): Boolean = this == LinkState.Connected || this == LinkState.Unstable
-
-// The motion source can stream while motion is user-facing off (no host sink for the emulated
-// type, broken backend): the card's motion rate hides in exactly the states the motion indicator
-// renders as muted, so the two never disagree. Motion only carries to a Satellite, so the bound
-// summary's kind and liveness gate it (the capability model omits link state).
-internal fun motionRateUserFacingOn(
-    cap: SlotCapabilities,
-    boundStatus: ConnectionSummary?,
-): Boolean =
-    cap.inputOk(Feature.MOTION) &&
-        cap.userWants(Feature.MOTION) &&
-        boundStatus?.kind == ConnectionKind.SATELLITE &&
-        boundStatus.live == LinkState.Connected &&
-        cap.typeOk(Feature.MOTION) &&
-        Feature.MOTION !in cap.runtimeDown
-
-// Screen input can drive a slot only while an overlay surface exists for it: the on-screen
-// gamepad for the virtual slot, or one of the slot's phone pointer surfaces (a pad streaming
-// its own trackpad has neither). Outside those states the card's screen rate reads Off.
-internal fun screenRateUserFacingOn(
-    inputType: SlotInputType,
-    boundKind: ConnectionKind?,
-    pointer: PointerSlotUi?,
-): Boolean =
-    inputType == SlotInputType.VIRTUAL ||
-        (boundKind == ConnectionKind.SATELLITE && pointer?.anyOpenable == true)
-
 class ControllerAdapter(
     private val listener: SlotActionListener,
-) : ListAdapter<ControllerAdapter.Row, ControllerAdapter.VH>(Diff) {
+) : ListAdapter<ControllerRow, ControllerAdapter.VH>(Diff) {
     private val dismissedUnsteady = mutableSetOf<String>()
-
-    data class Row(
-        val slot: ControllerSlot,
-        val connections: List<ConnectionSummary>,
-        val motionCap: SlotCapabilities = SlotCapabilities.NONE,
-        val pointer: PointerSlotUi? = null,
-        val pathCard: PathCard? = null,
-        val inputRates: SlotInputRates? = null,
-        val screenPeakHz: Int = 0,
-        val hostCompat: DishProtocolCompat = DishProtocolCompat.UNKNOWN,
-    )
 
     fun submitSlots(
         slots: List<ControllerSlot>,
@@ -158,7 +70,7 @@ class ControllerAdapter(
     ) {
         submitList(
             slots.map { slot ->
-                Row(
+                ControllerRow(
                     slot = slot,
                     connections = connections,
                     motionCap = motionCapabilities[slot.id] ?: SlotCapabilities.NONE,
@@ -236,7 +148,7 @@ class ControllerAdapter(
             return row
         }
 
-        fun bind(row: Row) {
+        fun bind(row: ControllerRow) {
             val slot = row.slot
             val isVirtual = slot.inputType == SlotInputType.VIRTUAL
 
@@ -248,26 +160,28 @@ class ControllerAdapter(
 
             val edge = slotEdgeState(slot)
             if (edge != EdgeState.UNSTEADY) dismissedUnsteady.remove(slot.id)
-            val showEdge =
-                edge != EdgeState.NONE && !(edge == EdgeState.UNSTEADY && slot.id in dismissedUnsteady)
-            b.root.alpha = if (!showEdge && slot.isDisconnecting) 0.5f else 1f
+            val dismissed = edge == EdgeState.UNSTEADY && slot.id in dismissedUnsteady
+            val shownEdge = if (dismissed) EdgeState.NONE else edge
+            val dimmed = shownEdge == EdgeState.NONE && slot.isDisconnecting
+            b.root.alpha = if (dimmed) DIMMED_ALPHA else 1f
 
-            if (slot.boundStatus == null || slot.boundConnectionId == null) {
+            val bound = slot.boundStatus
+            if (bound == null || slot.boundConnectionId == null) {
                 bindUnbound(row)
             } else {
-                bindBound(row, slot.boundStatus)
+                bindBound(row, bound)
             }
             bindRates(row)
             bindActions(row)
-            bindEdge(if (showEdge) edge else EdgeState.NONE, row)
+            bindEdge(shownEdge, row)
         }
 
         private fun bindBound(
-            row: Row,
+            row: ControllerRow,
             bound: ConnectionSummary,
         ) {
             connectionRow.root.visibility = View.VISIBLE
-            connectionPills.bind(connectionSpecs(row))
+            connectionPills.bind(connectionPillFacts(row).map(::connectionPill))
 
             destinationRow.root.visibility = View.VISIBLE
             showDestination(bound.label)
@@ -275,21 +189,15 @@ class ControllerAdapter(
             compatRow.root.visibility = if (compatSpecs.isEmpty()) View.GONE else View.VISIBLE
             compatPills.bind(compatSpecs)
 
-            val emulate = typePillLabel(row, bound)
-            if (emulate != null) {
-                emulateRow.root.visibility = View.VISIBLE
-                emulatePills.bind(listOf(PillSpec(emulate, null, PillTone.FACT)))
-            } else {
-                emulateRow.root.visibility = View.GONE
-            }
+            bindEmulateRow(emulatePillFor(bound.kind, bound.satelliteControllerTypes[row.slot.id], bound.btProfile))
 
             functionRow.root.visibility = View.VISIBLE
-            bindFunctionPills(functionSpecs(row, bound))
+            bindFunctionPills(functionPillFacts(row, bound).map(::functionPill))
         }
 
-        private fun bindUnbound(row: Row) {
+        private fun bindUnbound(row: ControllerRow) {
             connectionRow.root.visibility = View.VISIBLE
-            connectionPills.bind(connectionSpecs(row))
+            connectionPills.bind(connectionPillFacts(row).map(::connectionPill))
             destinationRow.root.visibility = View.VISIBLE
             showDestination(null)
             compatRow.root.visibility = View.GONE
@@ -308,50 +216,22 @@ class ControllerAdapter(
             }
         }
 
-        private fun connectionSpecs(row: Row): List<PillSpec> {
-            val card = row.pathCard
-            val virtual = row.slot.inputType == SlotInputType.VIRTUAL
-            val isUsb = !virtual && card?.transport == Transport.Usb
-            val isBt = !virtual && card?.transport == Transport.Bluetooth
-            val (label, icon) =
-                when {
-                    virtual -> R.string.binding_link_onscreen to R.drawable.ic_gamepad_virtual
-                    isBt -> R.string.binding_link_bluetooth to R.drawable.ic_bluetooth
-                    else -> R.string.binding_link_usb to R.drawable.ic_usb
-                }
-            val specs = mutableListOf(PillSpec(ctx.getString(label), icon, PillTone.FACT))
-            if (isUsb) specs.add(usbModeSpec(card))
-            if (isBt && card.wiredSwitchAvailable) {
-                specs.add(PillSpec(ctx.getString(R.string.binding_usb_available), R.drawable.ic_usb, PillTone.WARN))
+        private fun bindEmulateRow(pill: EmulatePill?) {
+            if (pill == null) {
+                emulateRow.root.visibility = View.GONE
+                return
             }
-            return specs
+            emulateRow.root.visibility = View.VISIBLE
+            emulatePills.bind(listOf(PillSpec(emulateText(pill), null, PillTone.FACT)))
         }
 
-        private fun usbModeSpec(card: PathCard): PillSpec =
-            if (card.currentMode == InputPathMode.Direct) {
-                val tone = if (card.risk == PathRisk.GuessedLayout) PillTone.WARN else PillTone.ON
-                PillSpec(ctx.getString(R.string.binding_mode_direct), R.drawable.ic_bolt, tone)
-            } else {
-                PillSpec(ctx.getString(R.string.binding_mode_standard), R.drawable.ic_cable, PillTone.CAP)
+        private fun emulateText(pill: EmulatePill): String =
+            when (pill) {
+                is EmulatePill.Bundled -> ctx.getString(pill.labelRes)
+                is EmulatePill.Profile -> pill.name
             }
 
-        private fun typePillLabel(
-            row: Row,
-            bound: ConnectionSummary,
-        ): String? =
-            when (bound.kind) {
-                ConnectionKind.SATELLITE -> {
-                    val type = bound.satelliteControllerTypes[row.slot.id] ?: CONTROLLER_TYPE_XBOX
-                    ctx.getString(bundledControllerTypeLabelRes(type))
-                }
-                ConnectionKind.BLUETOOTH -> bound.btProfile
-                // A Moonlight host has its own type table; its ids overlap the catalog's, so
-                // the label comes from the Moonlight mapper and never the bundled one.
-                ConnectionKind.MOONLIGHT -> {
-                    val stored = bound.satelliteControllerTypes[row.slot.id]
-                    ctx.getString(moonlightTypeLabelRes(fromStored(stored ?: AUTO)))
-                }
-            }
+        private fun connectionPill(fact: ConnectionPillFact): PillSpec = PillSpec(ctx.getString(fact.labelRes), fact.iconRes, fact.tone)
 
         private fun bindFunctionPills(specs: List<PillSpec>) {
             if (specs.isEmpty()) {
@@ -363,55 +243,23 @@ class ControllerAdapter(
             }
         }
 
-        // Reports the configured (not live-gated) routing: motion only carries on a Satellite host
-        // emulating a motion-bearing type; touchpad only on a Satellite host.
-        private fun functionSpecs(
-            row: Row,
-            bound: ConnectionSummary,
-        ): List<PillSpec> {
-            if (inputFunctionsUnknown(row.pathCard)) return unknownFunctionSpecs(row)
-            val specs = mutableListOf<PillSpec>()
-            val card = row.pathCard
-            val rumblePresent =
-                card != null &&
-                    (if (card.currentMode == InputPathMode.Direct) card.direct.rumble else card.standard.rumble)
-            if (rumblePresent) {
-                specs.add(PillSpec(ctx.getString(R.string.binding_func_rumble), R.drawable.ic_rumble, PillTone.ON))
+        private fun functionPill(fact: FunctionPillFact): PillSpec =
+            when (fact) {
+                FunctionPillFact.RumbleUnknown -> unknownFuncPill(R.string.binding_func_rumble, R.drawable.ic_rumble)
+                FunctionPillFact.GyroUnknown -> unknownFuncPill(R.string.binding_func_gyro, R.drawable.ic_motion)
+                FunctionPillFact.TouchpadUnknown -> unknownFuncPill(R.string.binding_func_touchpad, R.drawable.ic_touchpad)
+                FunctionPillFact.Rumble ->
+                    PillSpec(ctx.getString(R.string.binding_func_rumble), R.drawable.ic_rumble, PillTone.ON)
+                is FunctionPillFact.Motion ->
+                    PillSpec(
+                        ctx.getString(R.string.binding_func_motion),
+                        R.drawable.ic_motion,
+                        if (fact.on) PillTone.ON else PillTone.OFF,
+                    )
+                is FunctionPillFact.Pointer -> pointerFactPill(fact.fact)
+                is FunctionPillFact.Feedback -> feedbackFactPill(fact.fact)
+                is FunctionPillFact.Audio -> audioFactPill(fact.fact)
             }
-
-            // Motion streams to a Satellite and, since protocol 2 shipped the
-            // Moonlight telemetry, to a Moonlight host too (its type layer gates
-            // which emulated pads carry it); Bluetooth stays gamepad-only.
-            val motionAvailable =
-                row.motionCap.inputOk(Feature.MOTION) &&
-                    bound.kind != ConnectionKind.BLUETOOTH &&
-                    row.motionCap.typeOk(Feature.MOTION)
-            if (motionAvailable) {
-                val on = row.motionCap.userWants(Feature.MOTION)
-                val tone = if (on) PillTone.ON else PillTone.OFF
-                specs.add(PillSpec(ctx.getString(R.string.binding_func_motion), R.drawable.ic_motion, tone))
-            }
-
-            when (bound.kind) {
-                ConnectionKind.SATELLITE -> specs.addAll(pointerFuncFacts(row).map(::pointerFactPill))
-                ConnectionKind.MOONLIGHT -> specs.addAll(moonlightPointerFacts(row).map(::pointerFactPill))
-                ConnectionKind.BLUETOOTH -> Unit
-            }
-            specs.addAll(feedbackFuncFacts(row.motionCap).map(::feedbackFactPill))
-            specs.addAll(audioFuncFacts(row.motionCap).map(::audioFactPill))
-            return specs
-        }
-
-        private fun unknownFunctionSpecs(row: Row): List<PillSpec> {
-            val specs =
-                mutableListOf(
-                    unknownFuncPill(R.string.binding_func_rumble, R.drawable.ic_rumble),
-                    unknownFuncPill(R.string.binding_func_gyro, R.drawable.ic_motion),
-                    unknownFuncPill(R.string.binding_func_touchpad, R.drawable.ic_touchpad),
-                )
-            if (row.pointer?.mouseOpenable == true) specs.add(pointerFactPill(PointerPillFact.MOUSE_READY))
-            return specs
-        }
 
         private fun unknownFuncPill(
             @StringRes label: Int,
@@ -463,40 +311,25 @@ class ControllerAdapter(
                 return
             }
             b.tvBattery.visibility = View.VISIBLE
-            val glyph = setStartCompoundDrawable(b.tvBattery, batteryIcon(battery), R.dimen.icon_battery)
+            val glyph = setStartCompoundDrawable(b.tvBattery, batteryIconRes(battery), R.dimen.icon_battery)
             (glyph as? Animatable)?.start()
-            b.tvBattery.text =
-                battery.level?.let { ctx.getString(R.string.battery_percent, it) }
-                    ?: ctx.getString(R.string.battery_unknown_level)
+            b.tvBattery.text = batteryLevelText(battery, R.string.battery_unknown_level)
             val colorRes = if (battery.isLow) R.color.colorError else R.color.colorMuted
             b.tvBattery.setTextColor(ctx.getColor(colorRes))
-            b.tvBattery.contentDescription = batteryDescription(battery)
+            b.tvBattery.contentDescription =
+                ctx.getString(
+                    R.string.battery_desc,
+                    batteryLevelText(battery, R.string.battery_desc_level_unknown),
+                    ctx.getString(batteryStateRes(battery)),
+                )
         }
 
-        private fun batteryIcon(battery: BatteryUi): Int {
-            if (battery.charging) return R.drawable.ic_battery_charging
-            val level = battery.level ?: return R.drawable.ic_battery
-            return when {
-                level <= 0 -> R.drawable.ic_battery_empty
-                level >= BATTERY_FULL_FLOOR -> R.drawable.ic_battery_full
-                level >= BATTERY_HIGH_FLOOR -> R.drawable.ic_battery_high
-                level >= BATTERY_MID_FLOOR -> R.drawable.ic_battery_mid
-                level >= BatteryUi.LOW_THRESHOLD -> R.drawable.ic_battery_low
-                else -> R.drawable.ic_battery_critical
-            }
-        }
-
-        private fun batteryDescription(battery: BatteryUi): String {
-            val levelText =
-                battery.level?.let { ctx.getString(R.string.battery_percent, it) }
-                    ?: ctx.getString(R.string.battery_desc_level_unknown)
-            val stateRes =
-                when {
-                    battery.isLow -> R.string.battery_state_low
-                    battery.charging -> R.string.battery_state_charging
-                    else -> R.string.battery_state_discharging
-                }
-            return ctx.getString(R.string.battery_desc, levelText, ctx.getString(stateRes))
+        private fun batteryLevelText(
+            battery: BatteryUi,
+            @StringRes unknownRes: Int,
+        ): String {
+            val level = battery.level ?: return ctx.getString(unknownRes)
+            return ctx.getString(R.string.battery_percent, level)
         }
 
         private fun setStartCompoundDrawable(
@@ -511,90 +344,27 @@ class ControllerAdapter(
             return drawable
         }
 
-        // The measurement line exists exactly on bound cards and always renders every pill the
-        // slot can have (value, pending, or Off), so a bound card's height never changes as
-        // measurements arrive. A physical slot measures screen, gyro, and controller; the
-        // virtual slot has no controller, so it measures screen and gyro.
-        private fun bindRates(row: Row) {
+        // The measurement line exists exactly on bound cards.
+        private fun bindRates(row: ControllerRow) {
             val slot = row.slot
             if (slot.boundStatus == null || slot.boundConnectionId == null) {
                 rateRow.root.visibility = View.GONE
                 return
             }
             rateRow.root.visibility = View.VISIBLE
-            ratePills.bind(rateSpecs(row))
+            ratePills.bind(ratePillFacts(row).map(::ratePill))
         }
 
-        // Direct streams reports continuously, so the live window is the measurement; routed
-        // paths (USB Standard, Bluetooth) and touch only deliver events while the user is
-        // pressing, so their peak window approximates the delivery rate and is shown with "~".
-        // Direct's measured rates render in the success tone to set them apart.
-        private fun rateSpecs(row: Row): List<PillSpec> {
-            val direct = row.pathCard?.currentMode == InputPathMode.Direct
-            val measuredTone = if (direct) PillTone.SUCCESS else PillTone.FACT
-            val specs = mutableListOf(screenRatePill(row), gyroRatePill(row, measuredTone))
-            if (row.slot.inputType == SlotInputType.PHYSICAL) {
-                specs.add(controllerRatePill(row, direct, measuredTone))
-            }
-            return specs
-        }
+        private fun ratePill(fact: RatePillFact): PillSpec = PillSpec(rateText(fact), fact.glyph.iconRes, fact.tone)
 
-        private fun screenRatePill(row: Row): PillSpec {
-            val computes =
-                screenRateUserFacingOn(
-                    inputType = row.slot.inputType,
-                    boundKind = row.slot.boundStatus?.kind,
-                    pointer = row.pointer,
-                )
-            return when {
-                !computes ->
-                    PillSpec(ctx.getString(R.string.binding_func_touchpad), R.drawable.ic_touchpad, PillTone.OFF)
-                row.screenPeakHz > 0 ->
-                    PillSpec(ctx.getString(R.string.binding_rate_hz_peak, row.screenPeakHz), R.drawable.ic_touchpad, PillTone.FACT)
-                else ->
-                    PillSpec(ctx.getString(R.string.binding_func_touchpad), R.drawable.ic_touchpad, PillTone.CAP)
-            }
-        }
-
-        private fun gyroRatePill(
-            row: Row,
-            measuredTone: PillTone,
-        ): PillSpec {
-            val gyroHz = row.inputRates?.gyroHz ?: 0
-            return when {
-                !motionRateUserFacingOn(row.motionCap, row.slot.boundStatus) ->
-                    PillSpec(ctx.getString(R.string.binding_func_gyro), R.drawable.ic_motion, PillTone.OFF)
-                gyroHz > 0 ->
-                    PillSpec(ctx.getString(R.string.binding_rate_hz, gyroHz), R.drawable.ic_motion, measuredTone)
-                else ->
-                    PillSpec(ctx.getString(R.string.binding_func_gyro), R.drawable.ic_motion, PillTone.CAP)
-            }
-        }
-
-        private fun controllerRatePill(
-            row: Row,
-            direct: Boolean,
-            measuredTone: PillTone,
-        ): PillSpec {
-            val hz = row.inputRates?.let { controllerRateText(it, direct) }
-            return if (hz != null) {
-                PillSpec(hz, R.drawable.ic_gamepad, measuredTone)
-            } else {
-                PillSpec(ctx.getString(R.string.setup_cfg_flow_controller), R.drawable.ic_gamepad, PillTone.CAP)
-            }
-        }
-
-        private fun controllerRateText(
-            rates: SlotInputRates,
-            direct: Boolean,
-        ): String? =
-            when {
-                direct && rates.controllerHz > 0 -> ctx.getString(R.string.binding_rate_hz, rates.controllerHz)
-                rates.controllerPeakHz > 0 -> ctx.getString(R.string.binding_rate_hz_peak, rates.controllerPeakHz)
-                else -> null
+        private fun rateText(fact: RatePillFact): String =
+            when (val reading = fact.reading) {
+                RateReading.Off, RateReading.Pending -> ctx.getString(fact.glyph.labelRes)
+                is RateReading.LiveHz -> ctx.getString(R.string.binding_rate_hz, reading.hz)
+                is RateReading.PeakHz -> ctx.getString(R.string.binding_rate_hz_peak, reading.hz)
             }
 
-        private fun bindActions(row: Row) {
+        private fun bindActions(row: ControllerRow) {
             val actions = computeCardActions(row)
             actions.filled.forEachIndexed { index, spec -> bindActionButton(filledActions[index], spec, row.slot.id) }
             val outlinedSpec = actions.outlined
@@ -628,60 +398,66 @@ class ControllerAdapter(
 
         private fun bindEdge(
             edge: EdgeState,
-            row: Row,
+            row: ControllerRow,
         ) {
-            b.edgeOverlay.visibility = if (edge == EdgeState.NONE) View.GONE else View.VISIBLE
-            if (edge == EdgeState.NONE) return
-            val slot = row.slot
-            b.pbEdgeReconnect.visibility = View.GONE
-            val accent =
-                when (edge) {
-                    EdgeState.HOST_LOST -> {
-                        b.ivEdgeIcon.setImageResource(R.drawable.ic_error)
-                        b.tvEdgeTitle.setText(R.string.binding_edge_host_lost_title)
-                        b.tvEdgeDetail.text =
-                            ctx.getString(R.string.binding_edge_host_lost_detail, slot.boundStatus?.label ?: "")
-                        b.edgeCountdownRow.visibility = View.GONE
-                        if (row.connections.any { it.live == LinkState.Connecting }) {
-                            hideEdgePrimary()
-                            b.pbEdgeReconnect.visibility = View.VISIBLE
-                        } else {
-                            setEdgePrimary(R.drawable.ic_refresh, R.string.binding_edge_action_reconnect) { listener.onReconnect(slot.id) }
-                        }
-                        setEdgeSecondary(R.string.binding_action_configure) { listener.onConfigure(slot.id) }
-                        R.color.colorError
-                    }
-                    EdgeState.INPUT_LOST -> {
-                        b.ivEdgeIcon.setImageResource(R.drawable.ic_usb)
-                        b.tvEdgeTitle.setText(R.string.binding_edge_input_lost_title)
-                        b.tvEdgeDetail.setText(R.string.binding_edge_input_lost_detail)
-                        b.edgeCountdownRow.visibility = View.VISIBLE
-                        b.tvEdgeCountdown.text = String.format(Locale.getDefault(), "%d", slot.disconnectTimeLeft)
-                        setEdgePrimary(R.drawable.ic_link_off, R.string.action_unbind) { listener.onUnbind(slot.id) }
-                        hideEdgeSecondary()
-                        R.color.colorWarning
-                    }
-                    EdgeState.UNSTEADY -> {
-                        b.ivEdgeIcon.setImageResource(R.drawable.ic_warning)
-                        b.tvEdgeTitle.setText(R.string.binding_edge_unsteady_title)
-                        b.tvEdgeDetail.setText(R.string.binding_edge_unsteady_detail)
-                        b.edgeCountdownRow.visibility = View.GONE
-                        hideEdgePrimary()
-                        setEdgeSecondary(R.string.binding_edge_action_dismiss) {
-                            dismissedUnsteady.add(slot.id)
-                            val pos = bindingAdapterPosition
-                            if (pos != RecyclerView.NO_POSITION) notifyItemChanged(pos)
-                        }
-                        R.color.colorWarning
-                    }
-                    EdgeState.NONE -> R.color.colorWarning
-                }
-            b.ivEdgeIcon.imageTintList = ColorStateList.valueOf(ctx.getColor(accent))
+            val card = edgeCardFor(edge, row)
+            b.edgeOverlay.visibility = if (card == null) View.GONE else View.VISIBLE
+            if (card == null) return
+            bindEdgeHeader(card)
+            bindEdgePrimary(card.primary, row.slot.id)
+            bindEdgeSecondary(card.secondary, row.slot.id)
+        }
+
+        private fun bindEdgeHeader(card: EdgeCard) {
+            b.ivEdgeIcon.setImageResource(card.iconRes)
+            b.ivEdgeIcon.imageTintList = ColorStateList.valueOf(ctx.getColor(card.accentRes))
+            b.tvEdgeTitle.setText(card.titleRes)
+            b.tvEdgeDetail.text = edgeDetailText(card)
+            val countdown = card.countdownSec
+            b.edgeCountdownRow.visibility = if (countdown == null) View.GONE else View.VISIBLE
+            if (countdown != null) b.tvEdgeCountdown.text = String.format(Locale.getDefault(), "%d", countdown)
+        }
+
+        private fun edgeDetailText(card: EdgeCard): String {
+            val arg = card.detailArg ?: return ctx.getString(card.detailRes)
+            return ctx.getString(card.detailRes, arg)
+        }
+
+        private fun bindEdgePrimary(
+            primary: EdgePrimary,
+            slotId: String,
+        ) {
+            b.pbEdgeReconnect.visibility = if (primary == EdgePrimary.RECONNECT_PENDING) View.VISIBLE else View.GONE
+            when (primary) {
+                EdgePrimary.RECONNECT ->
+                    setEdgePrimary(R.drawable.ic_refresh, R.string.binding_edge_action_reconnect) { listener.onReconnect(slotId) }
+                EdgePrimary.UNBIND ->
+                    setEdgePrimary(R.drawable.ic_link_off, R.string.action_unbind) { listener.onUnbind(slotId) }
+                EdgePrimary.RECONNECT_PENDING, EdgePrimary.NONE -> hideEdgePrimary()
+            }
+        }
+
+        private fun bindEdgeSecondary(
+            secondary: EdgeSecondary,
+            slotId: String,
+        ) {
+            when (secondary) {
+                EdgeSecondary.CONFIGURE -> setEdgeSecondary(R.string.binding_action_configure) { listener.onConfigure(slotId) }
+                EdgeSecondary.DISMISS -> setEdgeSecondary(R.string.binding_edge_action_dismiss) { dismissUnsteady(slotId) }
+                EdgeSecondary.NONE -> hideEdgeSecondary()
+            }
+        }
+
+        // Remembered per slot until the link steadies; the row re-binds without its banner.
+        private fun dismissUnsteady(slotId: String) {
+            dismissedUnsteady.add(slotId)
+            val pos = bindingAdapterPosition
+            if (pos != RecyclerView.NO_POSITION) notifyItemChanged(pos)
         }
 
         private fun setEdgePrimary(
             @DrawableRes icon: Int,
-            labelRes: Int,
+            @StringRes labelRes: Int,
             onClick: () -> Unit,
         ) {
             b.btnEdgePrimary.visibility = View.VISIBLE
@@ -695,7 +471,7 @@ class ControllerAdapter(
         }
 
         private fun setEdgeSecondary(
-            labelRes: Int,
+            @StringRes labelRes: Int,
             onClick: () -> Unit,
         ) {
             b.btnEdgeSecondary.visibility = View.VISIBLE
@@ -723,43 +499,18 @@ class ControllerAdapter(
         position: Int,
     ) = holder.bind(getItem(position))
 
-    companion object Diff : DiffUtil.ItemCallback<Row>() {
+    companion object Diff : DiffUtil.ItemCallback<ControllerRow>() {
         override fun areItemsTheSame(
-            o: Row,
-            n: Row,
+            o: ControllerRow,
+            n: ControllerRow,
         ) = o.slot.id == n.slot.id
 
         override fun areContentsTheSame(
-            o: Row,
-            n: Row,
+            o: ControllerRow,
+            n: ControllerRow,
         ) = o == n
     }
 }
-
-internal enum class CardActionKind { GAMEPAD, TOUCHPAD, MOUSE, SWITCH_DIRECT, SETUP_WIRED, CONFIGURE, FIND_HOSTS }
-
-// What the card's function row says about the slot's pointer surfaces, kept pure so the
-// facts stay testable: the pad surface reports its declared routing (or the Direct nudge
-// that unlocks it), and the mouse rides as an on-demand chip wherever its surface can open.
-internal enum class PointerPillFact { PAD_NEEDS_DIRECT, PAD_ON, PAD_OFF, MOUSE_READY }
-
-// Direct on an unrecognized model reads a guessed layout, so what the pad supports is not known.
-internal fun inputFunctionsUnknown(card: PathCard?): Boolean =
-    card != null && card.currentMode == InputPathMode.Direct && card.risk == PathRisk.GuessedLayout
-
-internal fun pointerFuncFacts(row: ControllerAdapter.Row): List<PointerPillFact> =
-    buildList {
-        when {
-            row.pathCard?.suggestDirectForTouch == true -> add(PointerPillFact.PAD_NEEDS_DIRECT)
-            row.pointer?.mode == TOUCHPAD_MODE_DS4 -> add(PointerPillFact.PAD_ON)
-            row.motionCap.typeOk(Feature.TOUCHPAD) -> add(PointerPillFact.PAD_OFF)
-        }
-        if (row.pointer?.mouseOpenable == true) add(PointerPillFact.MOUSE_READY)
-    }
-
-private const val BATTERY_FULL_FLOOR = 90
-private const val BATTERY_HIGH_FLOOR = 60
-private const val BATTERY_MID_FLOOR = 35
 
 private class PillPool(
     private val container: ViewGroup,

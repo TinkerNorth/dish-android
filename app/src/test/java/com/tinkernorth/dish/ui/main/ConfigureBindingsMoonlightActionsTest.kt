@@ -23,6 +23,7 @@ import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightProbe
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightSessionState
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
 import com.tinkernorth.dish.source.store.MicEnabledStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
@@ -51,6 +52,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -116,6 +119,8 @@ class ConfigureBindingsMoonlightActionsTest {
         every { registry.devices } returns MutableStateFlow(emptyMap())
         val usb = mockk<UsbGamepadManager>(relaxed = true)
         every { usb.controllers } returns MutableStateFlow(emptyMap())
+        val satellite = mockk<SatelliteConnectionManager>(relaxed = true)
+        every { satellite.get(any()) } returns null
 
         vm =
             ConfigureBindingsViewModel(
@@ -131,7 +136,7 @@ class ConfigureBindingsMoonlightActionsTest {
                     ),
                 micPermission = mockk<MicPermissionGate>(relaxed = true),
                 capabilityComposer = capabilities,
-                satellite = mockk<SatelliteConnectionManager>(relaxed = true),
+                satellite = satellite,
                 moonlight = moonlight,
                 hostFacts =
                     SatelliteHostFacts(
@@ -258,5 +263,200 @@ class ConfigureBindingsMoonlightActionsTest {
             dispatcher.scheduler.advanceUntilIdle()
 
             assertEquals("the pairing has to stop when the user says so", 0, running)
+        }
+
+    // A session the manager holds for this host, in one state, carrying some pads.
+    private fun session(
+        state: MoonlightSessionState,
+        padCount: Int,
+        appName: String? = "Desktop",
+    ): MoonlightConnection {
+        val conn = mockk<MoonlightConnection>(relaxed = true)
+        every { conn.state } returns MutableStateFlow(state)
+        every { conn.padFor(any()) } returns null
+        every { conn.padCount } returns padCount
+        every { conn.sessionAppName } returns appName
+        return conn
+    }
+
+    @Test
+    fun `a live session without this slot's pad reads as joining the next number`() =
+        runTest(dispatcher) {
+            every { moonlight.get(host.id) } returns session(MoonlightSessionState.Live, padCount = 2)
+            openOn(MoonlightTrustState.PAIRED)
+
+            assertEquals(MoonlightSessionUi.Joining(controllerNumber = 3, appName = "Desktop"), vm.ui.value.moonlightSession)
+        }
+
+    @Test
+    fun `a dropped session reads as dropped`() =
+        runTest(dispatcher) {
+            every { moonlight.get(host.id) } returns session(MoonlightSessionState.Dropped, padCount = 1)
+            openOn(MoonlightTrustState.PAIRED)
+
+            assertEquals(MoonlightSessionUi.Dropped, vm.ui.value.moonlightSession)
+        }
+
+    @Test
+    fun `a session the host ended reads as ended by host`() =
+        runTest(dispatcher) {
+            every { moonlight.get(host.id) } returns session(MoonlightSessionState.Ended, padCount = 1)
+            openOn(MoonlightTrustState.PAIRED)
+
+            assertEquals(MoonlightSessionUi.EndedByHost, vm.ui.value.moonlightSession)
+        }
+
+    @Test
+    fun `a probe that reports our own session reads as joining`() =
+        runTest(dispatcher) {
+            every { moonlight.rememberedAppName(host.id) } returns "Steam"
+            coEvery { moonlight.probe(any()) } returns MoonlightProbe(trust = MoonlightTrustState.PAIRED, ownSession = true)
+            vm.load(VIRTUAL_SLOT_ID)
+            vm.setHost(host.id)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(MoonlightSessionUi.Joining(controllerNumber = 1, appName = "Steam"), vm.ui.value.moonlightSession)
+        }
+
+    @Test
+    fun `a host already carrying four pads reads full for a new slot`() =
+        runTest(dispatcher) {
+            every { moonlight.get(host.id) } returns session(MoonlightSessionState.Idle, padCount = MOONLIGHT_MAX_PADS)
+            openOn(MoonlightTrustState.PAIRED)
+
+            assertEquals(
+                MoonlightFailure.HostFull,
+                vm.ui.value.moonlight
+                    ?.failure,
+            )
+            assertEquals(MoonlightSessionUi.HostFull, vm.ui.value.moonlightSession)
+            assertFalse(vm.ui.value.canApply)
+        }
+
+    @Test
+    fun `an app already running that is resumable records no failure`() =
+        runTest(dispatcher) {
+            openOn(MoonlightTrustState.PAIRED)
+
+            events.emit(MoonlightConnectionEvent.AppAlreadyRunning(host, resumable = true))
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(MoonlightSessionUi.AppsLoading, vm.ui.value.moonlightSession)
+
+            events.emit(MoonlightConnectionEvent.AppAlreadyRunning(host, resumable = false))
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(MoonlightSessionUi.BusyOther, vm.ui.value.moonlightSession)
+        }
+
+    @Test
+    fun `a launch refusal records the host's wording`() =
+        runTest(dispatcher) {
+            openOn(MoonlightTrustState.PAIRED)
+
+            events.emit(MoonlightConnectionEvent.LaunchRefused(host, "Steam is busy"))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(MoonlightSessionUi.Refused("Steam is busy"), vm.ui.value.moonlightSession)
+        }
+
+    @Test
+    fun `each refusal the host can give lands in its own state`() =
+        runTest(dispatcher) {
+            openOn(MoonlightTrustState.PAIRED)
+
+            events.emit(MoonlightConnectionEvent.RejoinRefused(host))
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(MoonlightSessionUi.ResumeFailed, vm.ui.value.moonlightSession)
+
+            events.emit(MoonlightConnectionEvent.SetupFailed(host))
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(MoonlightSessionUi.SetupFailed, vm.ui.value.moonlightSession)
+
+            events.emit(MoonlightConnectionEvent.HostFull(host))
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(MoonlightSessionUi.HostFull, vm.ui.value.moonlightSession)
+        }
+
+    @Test
+    fun `a pin on offer shows the pin and a pairing clears it`() =
+        runTest(dispatcher) {
+            openOn(MoonlightTrustState.NOT_PAIRED)
+
+            events.emit(MoonlightConnectionEvent.PairingPinReady(host, "1234"))
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(MoonlightSessionUi.PairingPin("1234"), vm.ui.value.moonlightSession)
+
+            events.emit(MoonlightConnectionEvent.PairingFailed(host, "timeout"))
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(MoonlightSessionUi.PairFailed, vm.ui.value.moonlightSession)
+
+            events.emit(MoonlightConnectionEvent.Paired(host))
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(MoonlightSessionUi.NotPaired, vm.ui.value.moonlightSession)
+        }
+
+    @Test
+    fun `a notice or an ending leaves the last refusal in place`() =
+        runTest(dispatcher) {
+            openOn(MoonlightTrustState.PAIRED)
+            events.emit(MoonlightConnectionEvent.SetupFailed(host))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            events.emit(MoonlightConnectionEvent.Notice("hello"))
+            events.emit(MoonlightConnectionEvent.EndedByHost(host))
+            events.emit(MoonlightConnectionEvent.HostReplaced(host))
+            events.emit(MoonlightConnectionEvent.Error("oops"))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(MoonlightSessionUi.SetupFailed, vm.ui.value.moonlightSession)
+        }
+
+    @Test
+    fun `a retry clears the last refusal and re-runs the converge`() =
+        runTest(dispatcher) {
+            openOn(MoonlightTrustState.PAIRED)
+            events.emit(MoonlightConnectionEvent.SetupFailed(host))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            vm.onMoonlightAction(MoonlightAction.RETRY)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertNotEquals(MoonlightSessionUi.SetupFailed, vm.ui.value.moonlightSession)
+            verify { moonlight.disconnect(host.id) }
+            verify { moonlight.retrySessions() }
+        }
+
+    @Test
+    fun `a moonlight event leaves a satellite screen alone`() =
+        runTest(dispatcher) {
+            val satelliteId = "satellite:mid:xyz"
+            val satellite =
+                ConnectionSummary(
+                    id = satelliteId,
+                    kind = ConnectionKind.SATELLITE,
+                    label = "Desk",
+                    detail = "",
+                    live = LinkState.Connected,
+                    boundSlotIds = emptyList(),
+                )
+            connections.value = listOf(summary, satellite)
+            every { hub.summary(satelliteId) } returns satellite
+            vm.load(VIRTUAL_SLOT_ID)
+            vm.setHost(satelliteId)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            events.emit(MoonlightConnectionEvent.LaunchRefused(host, "no"))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertNull(vm.ui.value.moonlightSession)
+            assertNull(vm.ui.value.moonlight)
+        }
+
+    @Test
+    fun `a destination with no remembered host renders unreachable`() =
+        runTest(dispatcher) {
+            every { moonlight.rememberedHost(host.id) } returns null
+            openOn(MoonlightTrustState.PAIRED)
+
+            assertEquals(MoonlightSessionUi.Unreachable, vm.ui.value.moonlightSession)
         }
 }

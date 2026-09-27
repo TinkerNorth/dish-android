@@ -33,6 +33,7 @@ import com.tinkernorth.dish.ui.common.Posture
 import com.tinkernorth.dish.ui.common.ResendPacer
 import com.tinkernorth.dish.ui.common.hingeInsetsFor
 import com.tinkernorth.dish.ui.common.observeWhileStarted
+import com.tinkernorth.dish.ui.common.resendDeadlineFor
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.delay
@@ -156,28 +157,32 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
     }
 
     private var guardCloseJob: Job? = null
+    private var linkGuard: OverlayLinkGuardBinding? = null
 
     private fun installLinkGuard() {
         val guardRoot = rootView().findViewById<View>(R.id.linkGuard) ?: return
-        val guard = OverlayLinkGuardBinding.bind(guardRoot)
+        linkGuard = OverlayLinkGuardBinding.bind(guardRoot)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                combine(
-                    hub.connections.map { conns -> conns.firstOrNull { it.id == connectionId } },
-                    hub.bindings.map { it[guardSlotId] },
-                    slotDeviceStates(),
-                    networkState.state,
-                ) { summary, bound, device, network ->
-                    overlayGuardFor(summary, bound, connectionId, device, network)
-                }.distinctUntilChanged().collectLatest { ui ->
-                    // A link blip settles before the scrim appears; recovery paints instantly.
-                    if (ui.kind == GuardKind.RECONNECTING || ui.kind == GuardKind.HOST_LOST) {
-                        delay(LINK_GUARD_GRACE_MS)
-                    }
-                    renderLinkGuard(guard, ui)
-                }
+                linkGuardUi().collectLatest(::renderGuardAfterGrace)
             }
         }
+    }
+
+    private fun linkGuardUi(): Flow<OverlayGuardUi> =
+        combine(
+            hub.connections.map { conns -> conns.firstOrNull { it.id == connectionId } },
+            hub.bindings.map { it[guardSlotId] },
+            slotDeviceStates(),
+            networkState.state,
+        ) { summary, bound, device, network ->
+            overlayGuardFor(summary, bound, connectionId, device, network)
+        }.distinctUntilChanged()
+
+    private suspend fun renderGuardAfterGrace(ui: OverlayGuardUi) {
+        val guard = linkGuard ?: return
+        if (guardWaitsOutBlip(ui.kind)) delay(LINK_GUARD_GRACE_MS)
+        renderLinkGuard(guard, ui)
     }
 
     private fun renderLinkGuard(
@@ -201,60 +206,37 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
             g.guardCountdownRow.visibility = View.GONE
         }
         if (ui.autoClose && guardCloseJob == null) {
-            guardCloseJob =
-                lifecycleScope.launch {
-                    var left = GUARD_AUTO_CLOSE_SEC
-                    g.guardCountdownRow.visibility = View.VISIBLE
-                    while (left > 0) {
-                        g.tvGuardCountdown.text = String.format(Locale.getDefault(), "%d", left)
-                        delay(1000L)
-                        left--
-                    }
-                    finish()
-                }
+            guardCloseJob = lifecycleScope.launch { countDownAndClose(g) }
         }
+    }
+
+    // Terminal states close the overlay themselves, after a countdown the user can read.
+    private suspend fun countDownAndClose(g: OverlayLinkGuardBinding) {
+        var left = GUARD_AUTO_CLOSE_SEC
+        g.guardCountdownRow.visibility = View.VISIBLE
+        while (left > 0) {
+            g.tvGuardCountdown.text = String.format(Locale.getDefault(), "%d", left)
+            delay(GUARD_TICK_MS)
+            left--
+        }
+        finish()
     }
 
     private fun paintGuardHeader(
         g: OverlayLinkGuardBinding,
         ui: OverlayGuardUi,
     ) {
-        val (icon, color) =
-            when (ui.kind) {
-                GuardKind.HOST_LOST, GuardKind.GONE -> R.drawable.ic_error to R.color.colorError
-                GuardKind.RECONNECTING -> R.drawable.ic_refresh to R.color.colorPrimary
-                GuardKind.UNBOUND -> R.drawable.ic_link_off to R.color.colorWarning
-                else -> R.drawable.ic_gamepad to R.color.colorWarning
-            }
-        g.ivGuardIcon.setImageResource(icon)
-        g.ivGuardIcon.imageTintList = ColorStateList.valueOf(getColor(color))
-        g.tvGuardTitle.setText(guardTitleRes(ui.kind))
-        g.tvGuardDetail.text = guardDetailText(ui)
+        val copy = guardCopy(ui)
+        g.ivGuardIcon.setImageResource(copy.iconRes)
+        g.ivGuardIcon.imageTintList = ColorStateList.valueOf(getColor(copy.colorRes))
+        g.tvGuardTitle.setText(copy.titleRes)
+        g.tvGuardDetail.text = guardDetailText(copy)
     }
 
-    private fun guardTitleRes(kind: GuardKind): Int =
-        when (kind) {
-            GuardKind.HOST_LOST -> R.string.binding_edge_host_lost_title
-            GuardKind.RECONNECTING -> R.string.chip_status_connecting
-            GuardKind.UNPLUGGED, GuardKind.DEPARTED -> R.string.binding_edge_input_lost_title
-            GuardKind.UNBOUND -> R.string.overlay_guard_unbound_title
-            else -> R.string.overlay_guard_gone_title
-        }
-
-    private fun guardDetailText(ui: OverlayGuardUi): String =
-        when (ui.kind) {
-            GuardKind.HOST_LOST, GuardKind.RECONNECTING ->
-                when (ui.detail) {
-                    GuardDetail.WIFI_DOWN -> getString(R.string.overlay_guard_wifi_detail)
-                    GuardDetail.BLUETOOTH_HOST -> getString(R.string.overlay_guard_bt_detail)
-                    GuardDetail.MOONLIGHT_SESSION -> getString(R.string.overlay_guard_ml_detail)
-                    GuardDetail.GENERIC -> getString(R.string.binding_edge_host_lost_detail, ui.hostLabel)
-                }
-            GuardKind.UNPLUGGED -> getString(R.string.overlay_guard_replug_detail)
-            GuardKind.DEPARTED -> getString(R.string.overlay_guard_departed_detail)
-            GuardKind.UNBOUND -> getString(R.string.overlay_guard_unbound_detail, ui.hostLabel)
-            else -> getString(R.string.overlay_guard_gone_detail)
-        }
+    private fun guardDetailText(copy: GuardCopy): String {
+        val arg = copy.detailArg ?: return getString(copy.detailRes)
+        return getString(copy.detailRes, arg)
+    }
 
     private fun paintGuardActions(
         g: OverlayLinkGuardBinding,
@@ -282,13 +264,10 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
         var nextTickNs = System.nanoTime() + resendIntervalNs
         while (currentCoroutineActive()) {
             val now = System.nanoTime()
-            // Reset deadline on runaway catch-up; don't spam back-dated reports.
-            if (now - nextTickNs > resendIntervalNs * MAX_BACKLOG_FACTOR) {
-                nextTickNs = now + resendIntervalNs
-            }
+            nextTickNs = resendDeadlineFor(nextTickNs, now, resendIntervalNs)
             val waitNs = nextTickNs - now
             if (waitNs > 0) {
-                val waitMs = waitNs / 1_000_000L
+                val waitMs = waitNs / NS_PER_MS
                 if (waitMs > 0) delay(waitMs)
             }
             nextTickNs += resendIntervalNs
@@ -324,9 +303,8 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
     }
 
     // The store owns the trackers and the low-power freeze, so the readout survives activity
-    // recreation and re-entry shows the last measurements. motionOn gates the motion line:
-    // the source may stream while motion is user-facing off, and the readout must agree with
-    // the motion indicator, not the raw sample flow; null means the screen has no motion line.
+    // recreation and re-entry shows the last measurements. A null motionOn means the screen
+    // has no motion line.
     protected fun installRateReadout(
         slotId: String,
         motionOn: Flow<Boolean>?,
@@ -338,43 +316,34 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
                     inputRateStore.state,
                     motionOn ?: flowOf(false),
                 ) { rates, on ->
-                    formatRateReadout(
+                    rateReadout(
                         screenPeakHz = rates.screenPeakHz,
                         gyroHz = rates.slots[slotId]?.gyroHz ?: 0,
                         hasMotion = motionOn != null,
                         motionOn = on,
                     )
-                }.distinctUntilChanged().collect { apply(it) }
+                }.distinctUntilChanged().map(::formatRateReadout).collect { apply(it) }
             }
         }
     }
 
-    private fun formatRateReadout(
-        screenPeakHz: Int,
-        gyroHz: Int,
-        hasMotion: Boolean,
-        motionOn: Boolean,
-    ): String {
-        val touchValue =
-            if (screenPeakHz > 0) {
-                getString(R.string.binding_rate_hz_peak, screenPeakHz)
-            } else {
-                getString(R.string.binding_rate_pending)
-            }
-        val touchPart = getString(R.string.overlay_rate_touch, touchValue)
-        if (!hasMotion) return touchPart
-        val motionValue =
-            when {
-                !motionOn -> getString(R.string.binding_state_off)
-                gyroHz > 0 -> getString(R.string.binding_rate_hz, gyroHz)
-                else -> getString(R.string.binding_rate_pending)
-            }
+    private fun formatRateReadout(readout: RateReadout): String {
+        val touchPart = getString(R.string.overlay_rate_touch, rateValueText(readout.touch))
+        val motion = readout.motion ?: return touchPart
         return getString(
             R.string.binding_func_value,
             touchPart,
-            getString(R.string.overlay_rate_motion, motionValue),
+            getString(R.string.overlay_rate_motion, rateValueText(motion)),
         )
     }
+
+    private fun rateValueText(reading: RateReading): String =
+        when (reading) {
+            RateReading.Off -> getString(R.string.binding_state_off)
+            RateReading.Pending -> getString(R.string.binding_rate_pending)
+            is RateReading.LiveHz -> getString(R.string.binding_rate_hz, reading.hz)
+            is RateReading.PeakHz -> getString(R.string.binding_rate_hz_peak, reading.hz)
+        }
 
     protected fun currentRotation(): Int = ContextCompat.getDisplayOrDefault(this).rotation
 
@@ -417,15 +386,16 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
     companion object {
         const val EXTRA_CONNECTION_ID = "extra_connection_id"
 
+        private const val NS_PER_MS = 1_000_000L
+
         // Tick = the resend SCHEDULER granularity (burst spacing + worst-case
         // single-loss heal time), not a send rate. Real input is event-driven
         // at the full touch sampling rate and never waits on this clock.
         const val RESEND_INTERVAL_MS_DEFAULT = 50L
-        const val RESEND_INTERVAL_NS_DEFAULT = RESEND_INTERVAL_MS_DEFAULT * 1_000_000L
-
-        const val MAX_BACKLOG_FACTOR = 5L
+        const val RESEND_INTERVAL_NS_DEFAULT = RESEND_INTERVAL_MS_DEFAULT * NS_PER_MS
 
         const val LINK_GUARD_GRACE_MS = 1500L
         const val GUARD_AUTO_CLOSE_SEC = 8
+        private const val GUARD_TICK_MS = 1000L
     }
 }

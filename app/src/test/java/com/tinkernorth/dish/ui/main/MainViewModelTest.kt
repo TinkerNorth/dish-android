@@ -10,6 +10,7 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.CapabilitySet
+import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.core.net.DISH_PROTOCOL_CURRENT
@@ -19,6 +20,7 @@ import com.tinkernorth.dish.core.net.moonlight.XBOX
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.connection.ConnectionEvent
+import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.lowpower.LowPowerSignal
@@ -44,6 +46,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -764,6 +767,132 @@ class MainViewModelTest {
                 true,
                 vm.uiState.value.pathCards["-1000"]
                     ?.restoring,
+            )
+        }
+
+    private fun collectEvents(): Pair<MutableList<MainEvent>, kotlinx.coroutines.Job> {
+        val events = mutableListOf<MainEvent>()
+        val job = kotlinx.coroutines.CoroutineScope(dispatcher).launch { vm.events.collect { events += it } }
+        dispatcher.scheduler.runCurrent()
+        return events to job
+    }
+
+    @Test
+    fun `a pairing required event becomes a pairing dialog keyed by the stable id`() =
+        runTest(dispatcher) {
+            val (events, job) = collectEvents()
+            val server = DiscoveredServer(name = "PC", ip = "10.0.0.2", machineId = "m-1")
+
+            satelliteEvents.emit(ConnectionEvent.PairingRequired(server))
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(listOf(MainEvent.ShowPairingDialog(SatelliteConnection.idFor(server))), events)
+            job.cancel()
+        }
+
+    @Test
+    fun `a connection error becomes a toast`() =
+        runTest(dispatcher) {
+            val (events, job) = collectEvents()
+
+            satelliteEvents.emit(ConnectionEvent.Error("no route"))
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(listOf(MainEvent.ShowToast("no route")), events)
+            job.cancel()
+        }
+
+    @Test
+    fun `setInputPath for a known pad sets the model's path choice`() {
+        devicesFlow.value = mapOf(60 to routed(60, 0x045E, 0x028E))
+
+        vm.setInputPath("60", PathChoice.Direct)
+
+        verify { usbGamepadManager.setPathChoice(0x045E, 0x028E, PathChoice.Direct) }
+    }
+
+    @Test
+    fun `setInputPath for the virtual slot does nothing`() {
+        vm.setInputPath(VIRTUAL_SLOT_ID, PathChoice.Direct)
+
+        verify(exactly = 0) { usbGamepadManager.setPathChoice(any(), any(), any()) }
+    }
+
+    @Test
+    fun `setInputPath for a device the registry does not know does nothing`() {
+        vm.setInputPath("77", PathChoice.Standard)
+
+        verify(exactly = 0) { usbGamepadManager.setPathChoice(any(), any(), any()) }
+    }
+
+    @Test
+    fun `a claimed pad shows the standard caps it had when routed`() =
+        runTest(dispatcher) {
+            every { gamepadRegistry.frameworkCapsFor(1, 2) } returns
+                PhysicalGamepadRegistry.FrameworkCaps(hasGyro = true, hasRumble = true)
+            devicesFlow.value = mapOf(-1000 to synthetic(-1000, 1, 2))
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(
+                PathCapabilities(rumble = true, motion = true),
+                vm.uiState.value.pathCards["-1000"]
+                    ?.standard,
+            )
+        }
+
+    @Test
+    fun `a claimed pad never seen routed shows no standard caps`() =
+        runTest(dispatcher) {
+            devicesFlow.value = mapOf(-1000 to synthetic(-1000, 1, 2))
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(
+                PathCapabilities(rumble = false, motion = false),
+                vm.uiState.value.pathCards["-1000"]
+                    ?.standard,
+            )
+        }
+
+    @Test
+    fun `a routed pad reads its standard caps off the live device`() =
+        runTest(dispatcher) {
+            devicesFlow.value = mapOf(60 to routed(60, 1, 2).copy(hasRumble = true, hasGyro = false))
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(
+                PathCapabilities(rumble = true, motion = false),
+                vm.uiState.value.pathCards["60"]
+                    ?.standard,
+            )
+        }
+
+    @Test
+    fun `a held synthetic reports no direct poll rate`() =
+        runTest(dispatcher) {
+            val live = synthetic(-1000, 1, 2, pollRateHz = 1000)
+
+            devicesFlow.value = mapOf(-1000 to live.copy(transitioning = true))
+            dispatcher.scheduler.runCurrent()
+            assertEquals(
+                0,
+                vm.uiState.value.pathCards["-1000"]
+                    ?.directPollHz,
+            )
+
+            devicesFlow.value = mapOf(-1000 to live.copy(restoreStuck = true))
+            dispatcher.scheduler.runCurrent()
+            assertEquals(
+                0,
+                vm.uiState.value.pathCards["-1000"]
+                    ?.directPollHz,
+            )
+
+            devicesFlow.value = mapOf(-1000 to live)
+            dispatcher.scheduler.runCurrent()
+            assertEquals(
+                1000,
+                vm.uiState.value.pathCards["-1000"]
+                    ?.directPollHz,
             )
         }
 }

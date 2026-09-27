@@ -79,14 +79,11 @@ fun mapPathCard(
         }
     // A pad's own trackpad streams only on Direct and has no phone-overlay fallback: nudge only when
     // cleanly on Standard USB with Direct actually reachable (a recent failure is left to settle first).
-    val suggestDirectForTouch =
-        facts.padHasTouchpad &&
-            transport == Transport.Usb &&
-            !claim.isClaimedDirect &&
-            !claim.restoring &&
-            !claim.restoreStuck &&
-            !claim.needsReplug &&
-            claim.directFailure == null
+    val isUsbPadWithTouch = facts.padHasTouchpad && transport == Transport.Usb
+    val claimIsSettled = !claim.restoring && !claim.restoreStuck && !claim.needsReplug
+    val cleanlyOnStandard = !claim.isClaimedDirect && claimIsSettled
+    val neverFailedDirect = claim.directFailure == null
+    val suggestDirectForTouch = isUsbPadWithTouch && cleanlyOnStandard && neverFailedDirect
     return PathCard(
         currentMode = if (onDirect) InputPathMode.Direct else InputPathMode.Standard,
         selected = if (onDirect) PathChoice.Direct else PathChoice.Standard,

@@ -7,7 +7,6 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.source.update.UpdateNoticePhase
 import com.tinkernorth.dish.source.update.UpdateNoticeStatus
 import com.tinkernorth.dish.source.update.UpdateNotices
 import com.tinkernorth.dish.ui.common.observeWhileStarted
@@ -42,22 +41,24 @@ private class UpdatePillHost(
     private var shown = false
 
     fun render(status: UpdateNoticeStatus) {
-        if (status.phase != UpdateNoticePhase.Available) {
+        val copy = updatePillCopy(status)
+        if (copy == null) {
             hide()
             return
         }
-        if (status.required) {
-            headline.text = activity.getString(R.string.update_pill_headline_required)
-            ask.text = activity.getString(R.string.update_pill_ask_required, status.availableVersion)
-        } else {
-            headline.text = activity.getString(R.string.update_pill_headline, status.availableVersion)
-            ask.text = activity.getString(R.string.update_pill_ask)
-        }
-        dismiss.isVisible = !status.required
+        headline.text = lineText(copy.headline)
+        ask.text = lineText(copy.ask)
+        dismiss.isVisible = copy.dismissible
         dismiss.setOnClickListener { notices.skipAvailableVersion() }
-        pill.setOnClickListener { open(status.downloadUrl) }
+        pill.setOnClickListener { open(copy.downloadUrl) }
         show()
     }
+
+    private fun lineText(line: PillLine): String =
+        when (line) {
+            is PillLine.Bare -> activity.getString(line.res)
+            is PillLine.WithVersion -> activity.getString(line.res, line.version)
+        }
 
     private fun show() {
         if (shown) return

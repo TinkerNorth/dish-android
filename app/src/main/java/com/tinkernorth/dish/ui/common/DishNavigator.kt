@@ -11,7 +11,16 @@ import androidx.navigation.NavGraphNavigator
 import androidx.navigation.NavInflater
 import androidx.navigation.NavigatorProvider
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.ui.connections.ConnectionsActivity
+import com.tinkernorth.dish.ui.diagnostics.BindingInspectorViewModel
+import com.tinkernorth.dish.ui.diagnostics.HostInspectorViewModel
+import com.tinkernorth.dish.ui.diagnostics.InputInspectorActivity
+import com.tinkernorth.dish.ui.diagnostics.InputInspectorViewModel
+import com.tinkernorth.dish.ui.main.ConfigureBindingsActivity
+import com.tinkernorth.dish.ui.main.GamepadOverlayActivity
 import com.tinkernorth.dish.ui.main.MainActivity
+import com.tinkernorth.dish.ui.main.MouseOverlayActivity
+import com.tinkernorth.dish.ui.main.TouchpadOverlayActivity
 import com.tinkernorth.dish.ui.setup.EXTRA_CONNECTION_ID
 import com.tinkernorth.dish.ui.setup.EXTRA_INPUT_TYPE
 import com.tinkernorth.dish.ui.setup.EXTRA_SLOT_ID
@@ -25,13 +34,15 @@ class DishNavigator(
 ) {
     private val navigator by lazy { ActivityNavigator(activity) }
 
-    private val graph: NavGraph by lazy {
+    private val graph: NavGraph by lazy(::inflateGraph)
+
+    private fun inflateGraph(): NavGraph {
         val provider =
             NavigatorProvider().apply {
                 addNavigator(NavGraphNavigator(this))
                 addNavigator(navigator)
             }
-        NavInflater(activity, provider).inflate(R.navigation.nav_graph)
+        return NavInflater(activity, provider).inflate(R.navigation.nav_graph)
     }
 
     private fun go(
@@ -48,7 +59,7 @@ class DishNavigator(
     fun toConnectionsForPairing(connectionId: String) {
         go(
             R.id.connectionsActivity,
-            Bundle().apply { putString("extra_pair_prompt_for_id", connectionId) },
+            Bundle().apply { putString(ConnectionsActivity.EXTRA_PAIR_PROMPT_FOR_ID, connectionId) },
         )
     }
 
@@ -63,7 +74,7 @@ class DishNavigator(
     fun toConfigureBindings(slotId: String) {
         go(
             R.id.configureBindingsActivity,
-            Bundle().apply { putString("extra_slot_id", slotId) },
+            Bundle().apply { putString(ConfigureBindingsActivity.EXTRA_SLOT_ID, slotId) },
         )
     }
 
@@ -137,8 +148,8 @@ class DishNavigator(
         go(
             R.id.inputInspectorActivity,
             Bundle().apply {
-                putString("extra_slot_id", slotId)
-                putString("extra_device_name", deviceName)
+                putString(InputInspectorViewModel.EXTRA_SLOT_ID, slotId)
+                putString(InputInspectorActivity.EXTRA_DEVICE_NAME, deviceName)
             },
         )
     }
@@ -150,8 +161,8 @@ class DishNavigator(
         go(
             R.id.hostInspectorActivity,
             Bundle().apply {
-                putString("extra_connection_id", connectionId)
-                putString("extra_label", label)
+                putString(HostInspectorViewModel.EXTRA_CONNECTION_ID, connectionId)
+                putString(HostInspectorViewModel.EXTRA_LABEL, label)
             },
         )
     }
@@ -163,8 +174,8 @@ class DishNavigator(
         go(
             R.id.bindingInspectorActivity,
             Bundle().apply {
-                putString("extra_slot_id", slotId)
-                putString("extra_label", label)
+                putString(BindingInspectorViewModel.EXTRA_SLOT_ID, slotId)
+                putString(BindingInspectorViewModel.EXTRA_LABEL, label)
             },
         )
     }
@@ -185,8 +196,8 @@ class DishNavigator(
         go(
             R.id.touchpadOverlayActivity,
             Bundle().apply {
-                putString("extra_connection_id", connectionId)
-                putString("extra_slot_id", slotId)
+                putString(TouchpadOverlayActivity.EXTRA_CONNECTION_ID, connectionId)
+                putString(TouchpadOverlayActivity.EXTRA_SLOT_ID, slotId)
             },
         )
     }
@@ -198,8 +209,8 @@ class DishNavigator(
         go(
             R.id.mouseOverlayActivity,
             Bundle().apply {
-                putString("extra_connection_id", connectionId)
-                putString("extra_slot_id", slotId)
+                putString(MouseOverlayActivity.EXTRA_CONNECTION_ID, connectionId)
+                putString(MouseOverlayActivity.EXTRA_SLOT_ID, slotId)
             },
         )
     }
@@ -211,8 +222,8 @@ class DishNavigator(
         go(
             R.id.gamepadOverlayActivity,
             Bundle().apply {
-                putString("extra_connection_id", connectionId)
-                putString("extra_gamepad_skin", skin.name)
+                putString(GamepadOverlayActivity.EXTRA_CONNECTION_ID, connectionId)
+                putString(GamepadOverlayActivity.EXTRA_GAMEPAD_SKIN, skin.name)
             },
         )
     }

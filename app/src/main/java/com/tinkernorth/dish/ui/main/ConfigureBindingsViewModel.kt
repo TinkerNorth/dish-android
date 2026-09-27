@@ -177,6 +177,10 @@ data class ConfigUiState(
     val hostCompat: Map<String, DishProtocolCompat> = emptyMap(),
     // RECORD_AUDIO, re-read on every resume: the OS says nothing when a grant is revoked.
     val micPermissionGranted: Boolean = false,
+    // The Moonlight card's own memory: what the pairing dialog is showing and what the host last
+    // refused. Both outlive a re-probe, which is why they sit beside `moonlight` rather than in it.
+    val moonlightPairing: MoonlightPairingUi? = null,
+    val moonlightFailure: MoonlightFailure? = null,
 ) {
     val selectedHost: BindingHost? get() = hosts.firstOrNull { it.id == draft?.hostId }
     val noHosts: Boolean get() = hosts.isEmpty()
@@ -199,11 +203,27 @@ data class ConfigUiState(
     // state blocks Apply: the session is attempted when the controller is used, not when the
     // binding is saved. The one exception is a host already carrying its four controllers, which
     // is a hard protocol limit and says so.
-    val canApply: Boolean get() = hostChosen && (isBluetoothHost || draft?.type != null) && !moonlightBlocked
+    val canApply: Boolean
+        get() {
+            val typeResolved = isBluetoothHost || draft?.type != null
+            val hostChosenAndTyped = hostChosen && typeResolved
+            return hostChosenAndTyped && !moonlightBlocked
+        }
 
     // Rendered by the Moonlight session section; every state it can be in is in MoonlightSessionUi.
+    // What the probe answered is merged with what the card remembers; a full host, re-derived by
+    // every probe, outranks the remembered refusal.
     val moonlightSession: MoonlightSessionUi?
-        get() = if (isMoonlightHost) moonlightSessionUi(moonlight ?: MoonlightSessionInput()) else null
+        get() {
+            if (!isMoonlightHost) return null
+            val probed = moonlight ?: MoonlightSessionInput()
+            val remembered =
+                probed.copy(
+                    pairing = probed.pairing ?: moonlightPairing,
+                    failure = probed.failure ?: moonlightFailure,
+                )
+            return moonlightSessionUi(remembered)
+        }
 
     private val moonlightBlocked: Boolean get() = moonlightSession?.blocksApply == true
 
@@ -494,10 +514,9 @@ class ConfigureBindingsViewModel
             val full = (conn?.padCount ?: 0) >= MOONLIGHT_MAX_PADS && pad == null
             return MoonlightSessionInput(
                 trust = probe.trust,
-                pairing = moonlightSection.pairing,
                 apps = appsUiFrom(probe),
                 phase = phase,
-                failure = if (full) MoonlightFailure.HostFull else moonlightSection.failure,
+                failure = if (full) MoonlightFailure.HostFull else null,
                 selectedAppId = moonlight.rememberedAppId(hostId).takeIf { it.isNotEmpty() },
             )
         }
@@ -524,15 +543,9 @@ class ConfigureBindingsViewModel
 
         fun onMoonlightAction(action: MoonlightAction) = moonlightSection.onAction(action)
 
-        // The Moonlight card's own state: what the pairing dialog is showing and what went wrong
-        // last, plus the one job that drives a pairing. It lives here rather than on the
-        // ViewModel because nothing outside the card reads any of it.
+        // The Moonlight card's actions and the one job that drives a pairing; what the card
+        // remembers of the host lives in ConfigUiState with everything else the screen renders.
         private inner class MoonlightSection {
-            var pairing: MoonlightPairingUi? = null
-                private set
-            var failure: MoonlightFailure? = null
-                private set
-
             private var pairingJob: kotlinx.coroutines.Job? = null
 
             fun observeEvents() {
@@ -597,7 +610,7 @@ class ConfigureBindingsViewModel
 
             private fun cancelPairing() {
                 cancelJob()
-                pairing = null
+                _ui.update { it.copy(moonlightPairing = null) }
                 refreshMoonlight()
             }
 
@@ -608,55 +621,22 @@ class ConfigureBindingsViewModel
 
             private fun quitApp(host: MoonlightHost) {
                 moonlight.quitHostApp(host)
-                failure = null
+                _ui.update { it.copy(moonlightFailure = null) }
                 refreshMoonlight()
             }
 
             private fun restartSession(hostId: String) {
-                failure = null
+                _ui.update { it.copy(moonlightFailure = null) }
                 moonlight.disconnect(hostId)
                 moonlight.retrySessions()
                 refreshMoonlight()
             }
 
             private fun onEvent(event: MoonlightConnectionEvent) {
-                record(event)
-                republish()
-            }
-
-            private fun record(event: MoonlightConnectionEvent) {
-                when (event) {
-                    is MoonlightConnectionEvent.PairingPinReady -> pairing = MoonlightPairingUi.Pin(event.pin)
-                    is MoonlightConnectionEvent.PairingFailed -> {
-                        Log.w(TAG, "pairing with ${event.host.address} failed: ${event.reason}")
-                        pairing = MoonlightPairingUi.Failed
-                    }
-                    is MoonlightConnectionEvent.Paired -> pairing = null
-                    is MoonlightConnectionEvent.AppAlreadyRunning ->
-                        if (!event.resumable) failure = MoonlightFailure.BusyOther
-                    is MoonlightConnectionEvent.RejoinRefused -> failure = MoonlightFailure.ResumeFailed
-                    is MoonlightConnectionEvent.LaunchRefused -> failure = MoonlightFailure.Refused(event.message)
-                    is MoonlightConnectionEvent.SetupFailed -> failure = MoonlightFailure.SetupFailed
-                    is MoonlightConnectionEvent.HostFull -> failure = MoonlightFailure.HostFull
-                    is MoonlightConnectionEvent.HostReplaced, is MoonlightConnectionEvent.EndedByHost -> Unit
-                    is MoonlightConnectionEvent.Error, is MoonlightConnectionEvent.Notice -> Unit
+                if (event is MoonlightConnectionEvent.PairingFailed) {
+                    Log.w(TAG, "pairing with ${event.host.address} failed: ${event.reason}")
                 }
-            }
-
-            // A slot bound to something other than Moonlight has no card to update, so an event
-            // that arrives for a different screen leaves the state alone.
-            private fun republish() {
-                _ui.update { state ->
-                    if (!state.isMoonlightHost) {
-                        state
-                    } else {
-                        state.copy(
-                            moonlight =
-                                state.moonlight?.copy(pairing = pairing, failure = failure)
-                                    ?: MoonlightSessionInput(pairing = pairing, failure = failure),
-                        )
-                    }
-                }
+                _ui.update { it.recordMoonlightEvent(event) }
             }
         }
 
@@ -756,16 +736,24 @@ class ConfigureBindingsViewModel
             if (snapshot == null || snapshot.link == BindingLink.ONSCREEN) return true
             val id = snapshot.slotId.toIntOrNull() ?: return true
             val twins =
-                gamepadRegistry.devices.value.values.filter { device ->
-                    device.id == id ||
-                        (snapshot.vendorId != 0 && device.vendorId == snapshot.vendorId && device.productId == snapshot.productId)
-                }
+                gamepadRegistry.devices.value.values
+                    .filter { device -> isTwinOf(device, id, snapshot) }
             return twins.any { !it.isDisconnecting }
         }
 
-        // Apply is gated on canApply (a resolved type); guard defensively so an unresolved type
-        // never ships. Every one of these used to return without a word, so a Bind button that
-        // could not act was indistinguishable from one that had not been pressed.
+        // The slot's device by id, or the other half of a USB path switch: the same model under a
+        // different id. A snapshot with no vendor id names no model, so only the id can match.
+        private fun isTwinOf(
+            device: PhysicalGamepadRegistry.Device,
+            id: Int,
+            snapshot: BindingSnapshot,
+        ): Boolean {
+            val isSameDevice = device.id == id
+            val modelKnown = snapshot.vendorId != 0
+            val isSameModel = device.vendorId == snapshot.vendorId && device.productId == snapshot.productId
+            return isSameDevice || (modelKnown && isSameModel)
+        }
+
         private fun resolveApplyTarget(state: ConfigUiState): ApplyTarget? {
             val snapshot = state.snapshot
             val draft = state.draft
@@ -1175,4 +1163,22 @@ internal fun seedDirectOn(
         device.isUsbSynthetic -> true
         device.transport == Transport.Bluetooth -> false
         else -> desired == PathChoice.Direct
+    }
+
+// What the Moonlight card keeps of an event: the pairing dialog's state and the last refusal.
+// A resumable app is not a refusal, and the manager's notices, errors and endings change neither.
+// Recorded whatever host the screen shows, since only a Moonlight host renders them.
+private fun ConfigUiState.recordMoonlightEvent(event: MoonlightConnectionEvent): ConfigUiState =
+    when (event) {
+        is MoonlightConnectionEvent.PairingPinReady -> copy(moonlightPairing = MoonlightPairingUi.Pin(event.pin))
+        is MoonlightConnectionEvent.PairingFailed -> copy(moonlightPairing = MoonlightPairingUi.Failed)
+        is MoonlightConnectionEvent.Paired -> copy(moonlightPairing = null)
+        is MoonlightConnectionEvent.AppAlreadyRunning ->
+            if (event.resumable) this else copy(moonlightFailure = MoonlightFailure.BusyOther)
+        is MoonlightConnectionEvent.RejoinRefused -> copy(moonlightFailure = MoonlightFailure.ResumeFailed)
+        is MoonlightConnectionEvent.LaunchRefused -> copy(moonlightFailure = MoonlightFailure.Refused(event.message))
+        is MoonlightConnectionEvent.SetupFailed -> copy(moonlightFailure = MoonlightFailure.SetupFailed)
+        is MoonlightConnectionEvent.HostFull -> copy(moonlightFailure = MoonlightFailure.HostFull)
+        is MoonlightConnectionEvent.HostReplaced, is MoonlightConnectionEvent.EndedByHost -> this
+        is MoonlightConnectionEvent.Error, is MoonlightConnectionEvent.Notice -> this
     }

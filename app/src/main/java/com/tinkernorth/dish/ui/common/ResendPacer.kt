@@ -34,5 +34,21 @@ class ResendPacer(
         // frame heals at the next tick, a double loss at the one after.
         const val EDGE_BURST_RESENDS = 3
         const val KEEPALIVE_INTERVAL_NS = 1_000_000_000L
+
+        // How far behind its clock the loop may fall before it stops catching up.
+        const val MAX_BACKLOG_FACTOR = 5L
     }
+}
+
+// The loop's next deadline: kept while the loop is merely late, re-anchored to now once it
+// has fallen more than MAX_BACKLOG_FACTOR intervals behind, so a stall never replays a burst
+// of back-dated reports.
+internal fun resendDeadlineFor(
+    deadlineNs: Long,
+    nowNs: Long,
+    intervalNs: Long,
+): Long {
+    val backlogNs = nowNs - deadlineNs
+    val runaway = backlogNs > intervalNs * ResendPacer.MAX_BACKLOG_FACTOR
+    return if (runaway) nowNs + intervalNs else deadlineNs
 }

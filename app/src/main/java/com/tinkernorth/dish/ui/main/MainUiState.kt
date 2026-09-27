@@ -78,17 +78,18 @@ data class MainUiState(
 ) {
     val virtualSlot get() = slots.first { it.id == VIRTUAL_SLOT_ID }
     val physicalSlots get() = slots.filter { it.inputType == SlotInputType.PHYSICAL }
-    val anyConnected get() = connections.any { it.live == com.tinkernorth.dish.composer.LinkState.Connected }
-    val anyConnecting get() = connections.any { it.live == com.tinkernorth.dish.composer.LinkState.Connecting }
+    val anyConnected get() = connections.any { it.live == LinkState.Connected }
+    val anyConnecting get() = connections.any { it.live == LinkState.Connecting }
 
     // Distinct from connections.count { CONNECTED }: excludes physical slots with no device attached.
-    val streamingSlotCount: Int get() =
-        slots.count {
-            !it.isDisconnecting &&
-                it.boundConnectionId != null &&
-                it.boundStatus?.live == com.tinkernorth.dish.composer.LinkState.Connected &&
-                (it.inputType == SlotInputType.VIRTUAL || it.physicalDeviceId >= 0)
-        }
+    val streamingSlotCount: Int get() = slots.count { it.isStreaming() }
+}
+
+private fun ControllerSlot.isStreaming(): Boolean {
+    val isBound = boundConnectionId != null
+    val hostIsConnected = boundStatus?.live == LinkState.Connected
+    val hasAnInput = inputType == SlotInputType.VIRTUAL || physicalDeviceId >= 0
+    return !isDisconnecting && isBound && hostIsConnected && hasAnInput
 }
 
 const val VIRTUAL_SLOT_ID = "virtual"
