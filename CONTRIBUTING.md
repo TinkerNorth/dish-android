@@ -114,7 +114,11 @@ app, JNI and test code alike.
     object that pay for one,
   - a process-wide switch that owns state by definition
     (`HotPathBenchController`, whose one job is to be the single thing a
-    broadcast toggles).
+    broadcast toggles),
+  - a holder of `external fun` declarations (`SessionNative`,
+    `SlotReportNative` and the other `core/jni` objects): the C symbol each
+    binds to spells out the class name (`Java_..._SessionNative_openSocket`),
+    so the object is the JNI contract, and it carries no state of its own.
 
   Hilt `@Singleton` bindings are a different thing and are fine: they are
   graph-scoped, injected, and replaceable in a test.
