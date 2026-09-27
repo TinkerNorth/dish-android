@@ -667,6 +667,25 @@ static inline void applyUsbStickDeadzone(int16_t& x, int16_t& y) {
     }
 }
 
+// Protocol 2 widened the payload to 19 bytes with the mouse buttons and the wheel; a protocol 1
+// satellite still gets the 16-byte form, which has neither, so those fields are dropped for it.
+static void sendTouchpadFrame(Session& session, const uint8_t idx, const gamepad::TouchpadState& t,
+                              const bool rightPressed, const bool middlePressed,
+                              const uint32_t eventTimeMs, const int16_t scrollDelta) {
+    uint8_t payload[dish_wire::TOUCHPAD_V2_PAYLOAD_BYTES];
+    const bool isProtocol2 = session.protocolVersion.load() >= PROTOCOL_VERSION_TOUCHPAD_V2;
+    if (isProtocol2) {
+        dish_wire::encodeTouchpadPayloadV2(payload, idx, t.f0Active, t.f1Active, t.clickDown,
+                                           rightPressed, middlePressed, t.f0Id, t.f0X, t.f0Y,
+                                           t.f1Id, t.f1X, t.f1Y, eventTimeMs, scrollDelta);
+        sendEncrypted(&session, MSG_TOUCHPAD, payload, dish_wire::TOUCHPAD_V2_PAYLOAD_BYTES);
+        return;
+    }
+    dish_wire::encodeTouchpadPayloadV1(payload, idx, t.f0Active, t.f1Active, t.clickDown, t.f0Id,
+                                       t.f0X, t.f0Y, t.f1Id, t.f1X, t.f1Y, eventTimeMs);
+    sendEncrypted(&session, MSG_TOUCHPAD, payload, dish_wire::TOUCHPAD_V1_PAYLOAD_BYTES);
+}
+
 namespace dispatch {
 
 void prewarmDevice(int32_t deviceId) {
@@ -823,25 +842,6 @@ static void publishTouchToBridge(const SlotBinding& binding, const gamepad::Touc
     r.controllerNumber = binding.controllerIndex;
     r.touch = t;
     enqueueBridgeReport(std::move(r));
-}
-
-// Protocol 2 widened the payload to 19 bytes with the mouse buttons and the wheel; a protocol 1
-// satellite still gets the 16-byte form, which has neither, so those fields are dropped for it.
-static void sendTouchpadFrame(Session& session, const uint8_t idx, const gamepad::TouchpadState& t,
-                              const bool rightPressed, const bool middlePressed,
-                              const uint32_t eventTimeMs, const int16_t scrollDelta) {
-    uint8_t payload[dish_wire::TOUCHPAD_V2_PAYLOAD_BYTES];
-    const bool isProtocol2 = session.protocolVersion.load() >= PROTOCOL_VERSION_TOUCHPAD_V2;
-    if (isProtocol2) {
-        dish_wire::encodeTouchpadPayloadV2(payload, idx, t.f0Active, t.f1Active, t.clickDown,
-                                           rightPressed, middlePressed, t.f0Id, t.f0X, t.f0Y,
-                                           t.f1Id, t.f1X, t.f1Y, eventTimeMs, scrollDelta);
-        sendEncrypted(&session, MSG_TOUCHPAD, payload, dish_wire::TOUCHPAD_V2_PAYLOAD_BYTES);
-        return;
-    }
-    dish_wire::encodeTouchpadPayloadV1(payload, idx, t.f0Active, t.f1Active, t.clickDown, t.f0Id,
-                                       t.f0X, t.f0Y, t.f1Id, t.f1X, t.f1Y, eventTimeMs);
-    sendEncrypted(&session, MSG_TOUCHPAD, payload, dish_wire::TOUCHPAD_V1_PAYLOAD_BYTES);
 }
 
 // A pad's own trackpad carries no mouse buttons and no wheel.
