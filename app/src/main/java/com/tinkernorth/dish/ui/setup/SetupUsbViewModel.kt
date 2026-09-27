@@ -4,6 +4,7 @@ package com.tinkernorth.dish.ui.setup
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.usb.DirectClaimFailure
 import com.tinkernorth.dish.source.usb.PathChoice
@@ -81,7 +82,14 @@ class SetupUsbViewModel
         }
 
         private fun onControllers(map: Map<Int, UsbController>) {
-            val rows = map.values.map { Controller(vpk(it), it.name, "%04X:%04X".format(it.vendorId, it.productId)) }
+            val rows =
+                map.values.map {
+                    Controller(
+                        vidPidKey(it.vendorId, it.productId),
+                        it.name,
+                        "%04X:%04X".format(it.vendorId, it.productId),
+                    )
+                }
             // The controller we were configuring was unplugged: abandon any in-flight switch and drop to the list.
             if (activeKey != null && map[activeKey] == null) {
                 pathJob?.cancel()
@@ -154,8 +162,6 @@ class SetupUsbViewModel
                 Stage.DETECTING -> false
             }
         }
-
-        private fun vpk(c: UsbController): Int = (c.vendorId shl 16) or (c.productId and 0xFFFF)
 
         private companion object {
             const val DIRECT_TIMEOUT_MS = 20_000L

@@ -18,6 +18,7 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.InputFunctions
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.comparatorByLinkTier
+import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.CatalogTypeDto
@@ -910,7 +911,7 @@ class ConfigureBindingsViewModel
                 if (wantDirect) PathChoice.Direct else PathChoice.Standard,
             )
             if (!wantDirect) return true
-            val key = vpKey(device)
+            val key = vidPidKey(device.vendorId, device.productId)
             // Direct shows a system permission prompt; wait out the FSM (Routed while still wanting Direct = prompt open).
             val settled =
                 withTimeoutOrNull(DIRECT_TIMEOUT_MS) {
@@ -1149,9 +1150,7 @@ class ConfigureBindingsViewModel
         }
 
         private fun desiredUsbPathFor(device: PhysicalGamepadRegistry.Device?): PathChoice? =
-            device?.let { usbGamepadManager.controllers.value[vpKey(it)]?.desired }
-
-        private fun vpKey(device: PhysicalGamepadRegistry.Device): Int = (device.vendorId shl 16) or device.productId
+            device?.let { usbGamepadManager.controllers.value[vidPidKey(it.vendorId, it.productId)]?.desired }
 
         private companion object {
             const val TAG = "ConfigureBindingsVM"

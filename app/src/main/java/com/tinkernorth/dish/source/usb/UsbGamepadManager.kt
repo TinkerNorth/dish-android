@@ -20,6 +20,7 @@ import androidx.core.content.IntentCompat
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionCoordinator
+import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.jni.UsbInterfaceClaim
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
@@ -62,7 +63,7 @@ class UsbGamepadManager
     ) {
         private val usbManager = context.getSystemService(Context.USB_SERVICE) as? UsbManager
 
-        // Single source of truth for USB controller path state, keyed by vpKey (vid<<16|pid).
+        // Single source of truth for USB controller path state, keyed by vidPidKey.
         private val _controllers = MutableStateFlow<Map<Int, UsbController>>(emptyMap())
         val controllers: StateFlow<Map<Int, UsbController>> = _controllers.asStateFlow()
 
@@ -131,7 +132,7 @@ class UsbGamepadManager
             val device =
                 usbManager?.deviceList?.values?.firstOrNull { it.vendorId == vendorId && it.productId == productId }
             if (device != null) onUsbPresent(device)
-            applyEvent(vpk(vendorId, productId), UsbEvent.Choose(choice, userInitiated = true))
+            applyEvent(vidPidKey(vendorId, productId), UsbEvent.Choose(choice, userInitiated = true))
         }
 
         // The streaming notification's Stop action: release every held claim so each pad gets its
@@ -154,9 +155,9 @@ class UsbGamepadManager
                     ACTION_USB_PERMISSION ->
                         if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
                             onUsbPresent(device)
-                            applyEvent(vpk(device.vendorId, device.productId), UsbEvent.PermissionGranted)
+                            applyEvent(vidPidKey(device.vendorId, device.productId), UsbEvent.PermissionGranted)
                         } else {
-                            applyEvent(vpk(device.vendorId, device.productId), UsbEvent.PermissionDenied)
+                            applyEvent(vidPidKey(device.vendorId, device.productId), UsbEvent.PermissionDenied)
                         }
                 }
             }
@@ -168,7 +169,7 @@ class UsbGamepadManager
 
         private fun onUsbPresent(device: UsbDevice) {
             if (!isGamepadShaped(device)) return
-            val key = vpk(device.vendorId, device.productId)
+            val key = vidPidKey(device.vendorId, device.productId)
             usbDevices[key] = device
             noteEndpointFacts(device)
 
@@ -231,7 +232,7 @@ class UsbGamepadManager
         }
 
         private fun onUsbGone(device: UsbDevice) {
-            val key = vpk(device.vendorId, device.productId)
+            val key = vidPidKey(device.vendorId, device.productId)
             applyEvent(key, UsbEvent.UsbUnplugged)
             usbDevices.remove(key)
             timeouts.remove(key)?.cancel()
@@ -254,7 +255,7 @@ class UsbGamepadManager
             // before the USB broadcast landed): start tracking it.
             for (dev in devices.values) {
                 if (dev.isUsbSynthetic || dev.vendorId == 0 || dev.productId == 0) continue
-                if (vpk(dev.vendorId, dev.productId) in _controllers.value) continue
+                if (vidPidKey(dev.vendorId, dev.productId) in _controllers.value) continue
                 usbManager
                     ?.deviceList
                     ?.values
@@ -440,7 +441,7 @@ class UsbGamepadManager
                 }
                 return ClaimOutcome.Fail(DirectClaimFailure.InitFailed, frameworkStolen = true)
             }
-            claimedConns[vpk(device.vendorId, device.productId)] = ClaimedConn(conn, intf, synthetic)
+            claimedConns[vidPidKey(device.vendorId, device.productId)] = ClaimedConn(conn, intf, synthetic)
             registry.addUsbSynthetic(
                 deviceId = synthetic,
                 name = friendlyName(device),
@@ -544,11 +545,6 @@ class UsbGamepadManager
         }
 
         // ── Pure-ish helpers ─────────────────────────────────────────────────
-
-        private fun vpk(
-            vendorId: Int,
-            productId: Int,
-        ): Int = (vendorId shl 16) or (productId and 0xFFFF)
 
         private fun liveFrameworkFor(
             devices: Map<Int, PhysicalGamepadRegistry.Device>,

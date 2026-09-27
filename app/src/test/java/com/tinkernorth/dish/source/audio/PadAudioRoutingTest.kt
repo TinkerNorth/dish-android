@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.source.audio
 
+import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
@@ -41,7 +42,7 @@ class PadAudioRoutingTest {
     private fun publishDs5Route() {
         routes.publishRoutes(
             mapOf(
-                PadAudioRoutes.key(DS5_VID, DS5_PID) to
+                vidPidKey(DS5_VID, DS5_PID) to
                     PadAudioRoute(
                         microphone = true,
                         speaker = true,

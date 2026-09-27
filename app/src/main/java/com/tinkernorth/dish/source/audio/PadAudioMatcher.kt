@@ -2,6 +2,8 @@
 
 package com.tinkernorth.dish.source.audio
 
+import com.tinkernorth.dish.core.input.vidPidKey
+
 /**
  * One attached USB device, flattened out of [android.hardware.usb.UsbDevice] so the matching rule
  * below stays pure.
@@ -78,7 +80,7 @@ fun resolvePadAudioRoutes(
         // The widest count the platform offers, so a pad that lists both stereo
         // and quad opens at quad and keeps its lane pairs apart.
         val playbackChannels = sink?.channelCounts?.maxOrNull() ?: 0
-        out[PadAudioRoutes.key(pad.vendorId, pad.productId)] =
+        out[vidPidKey(pad.vendorId, pad.productId)] =
             PadAudioRoute(
                 microphone = source != null,
                 speaker = sink != null,

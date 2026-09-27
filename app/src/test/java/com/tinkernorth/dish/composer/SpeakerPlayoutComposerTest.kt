@@ -2,12 +2,12 @@
 
 package com.tinkernorth.dish.composer
 
+import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.source.audio.MapSlotAudioRoutes
 import com.tinkernorth.dish.source.audio.PadAudioRoute
-import com.tinkernorth.dish.source.audio.PadAudioRoutes
 import com.tinkernorth.dish.source.audio.SpeakerPlayoutPlan
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
@@ -157,7 +157,7 @@ class SpeakerPlayoutComposerTest {
 
             // The plan itself does not change when a route does, so the table has to be an input.
             padRoutes[SLOT] = PadAudioRoute(microphone = false, speaker = true, playbackDeviceId = PAD_ENDPOINT)
-            routeTable.value = mapOf(PadAudioRoutes.key(0x054C, 0x0CE6) to padRoutes[SLOT]!!)
+            routeTable.value = mapOf(vidPidKey(0x054C, 0x0CE6) to padRoutes[SLOT]!!)
             assertEquals(PAD_ENDPOINT, voice()!!.playbackDeviceId)
         }
 

@@ -10,6 +10,7 @@ import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
 import com.tinkernorth.dish.core.input.resolveGamepadQuirk
+import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.bluetooth.BluetoothConnections
 import com.tinkernorth.dish.source.lights.hasLightbar
@@ -198,7 +199,7 @@ class PhysicalGamepadRegistry
             val hasLightbar = hasLightbar(dev)
             val touchpadDeviceId = touchpadSurfaceFor(deviceId, dev, vid, pid)
             if (vid != 0 && pid != 0) {
-                lastFrameworkCaps[vpKey(vid, pid)] =
+                lastFrameworkCaps[vidPidKey(vid, pid)] =
                     FrameworkCaps(hasGyro, hasRumble, hasLightbar, hasTouchpad = touchpadDeviceId != null)
             }
             return Device(
@@ -208,7 +209,7 @@ class PhysicalGamepadRegistry
                 hasRumble = hasRumble,
                 hasLightbar = hasLightbar,
                 touchpadDeviceId = touchpadDeviceId,
-                directFailure = directFailed[vpKey(vid, pid)],
+                directFailure = directFailed[vidPidKey(vid, pid)],
                 vendorId = vid,
                 productId = pid,
                 transport = resolveTransport(dev.name, vid, pid),
@@ -290,12 +291,7 @@ class PhysicalGamepadRegistry
         fun frameworkCapsFor(
             vendorId: Int,
             productId: Int,
-        ): FrameworkCaps? = lastFrameworkCaps[vpKey(vendorId, productId)]
-
-        private fun vpKey(
-            vendorId: Int,
-            productId: Int,
-        ): Int = (vendorId shl 16) or (productId and 0xFFFF)
+        ): FrameworkCaps? = lastFrameworkCaps[vidPidKey(vendorId, productId)]
 
         // Record why a Direct claim failed: shown on the model's card and consulted so the model is not
         // auto-retried into Direct on the next plug-in (an explicit user pick still claims).
@@ -304,7 +300,7 @@ class PhysicalGamepadRegistry
             productId: Int,
             reason: DirectClaimFailure,
         ) {
-            directFailed[vpKey(vendorId, productId)] = reason
+            directFailed[vidPidKey(vendorId, productId)] = reason
             _devices.update { map ->
                 map.mapValues { (_, d) ->
                     if (!d.isUsbSynthetic && d.vendorId == vendorId && d.productId == productId) {
@@ -320,7 +316,7 @@ class PhysicalGamepadRegistry
             vendorId: Int,
             productId: Int,
         ) {
-            directFailed.remove(vpKey(vendorId, productId))
+            directFailed.remove(vidPidKey(vendorId, productId))
             _devices.update { map ->
                 map.mapValues { (_, d) ->
                     if (d.directFailure != null && d.vendorId == vendorId && d.productId == productId) {
@@ -335,7 +331,7 @@ class PhysicalGamepadRegistry
         fun directFailureFor(
             vendorId: Int,
             productId: Int,
-        ): DirectClaimFailure? = directFailed[vpKey(vendorId, productId)]
+        ): DirectClaimFailure? = directFailed[vidPidKey(vendorId, productId)]
 
         // The manager marks a model "transitioning" around a path switch so the disconnect reaper does
         // not silently remove the framework device when claiming force-detaches the kernel HID driver.
@@ -346,14 +342,14 @@ class PhysicalGamepadRegistry
             vendorId: Int,
             productId: Int,
         ) {
-            transitioningModels.add(vpKey(vendorId, productId))
+            transitioningModels.add(vidPidKey(vendorId, productId))
         }
 
         fun endModelTransition(
             vendorId: Int,
             productId: Int,
         ) {
-            transitioningModels.remove(vpKey(vendorId, productId))
+            transitioningModels.remove(vidPidKey(vendorId, productId))
             // Drop the stale placeholder (loader or needs-replug); a live re-enumerated entry of the
             // same model is neither flag and is left in place.
             _devices.update { map ->
@@ -372,7 +368,7 @@ class PhysicalGamepadRegistry
             vendorId: Int,
             productId: Int,
         ) {
-            transitioningModels.remove(vpKey(vendorId, productId))
+            transitioningModels.remove(vidPidKey(vendorId, productId))
             _devices.update { map ->
                 map.mapValues { (_, d) ->
                     if (d.transitioning && !d.isUsbSynthetic && d.vendorId == vendorId && d.productId == productId) {
@@ -437,7 +433,7 @@ class PhysicalGamepadRegistry
         }
 
         private fun isModelTransitioning(d: Device): Boolean =
-            d.vendorId != 0 && d.productId != 0 && vpKey(d.vendorId, d.productId) in transitioningModels
+            d.vendorId != 0 && d.productId != 0 && vidPidKey(d.vendorId, d.productId) in transitioningModels
 
         // Hold a removed framework device as a visible loader placeholder instead of reaping it.
         private fun holdAsTransitioning(deviceId: Int) {

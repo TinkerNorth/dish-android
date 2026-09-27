@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.source.audio
 
+import com.tinkernorth.dish.core.input.vidPidKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -17,8 +18,8 @@ import org.junit.Test
  * AudioDeviceInfo carries no vendor:product.
  */
 class PadAudioMatcherTest {
-    private val ds5 = PadAudioRoutes.key(DS5_VID, DS5_PID)
-    private val ds4v2 = PadAudioRoutes.key(DS5_VID, DS4V2_PID)
+    private val ds5 = vidPidKey(DS5_VID, DS5_PID)
+    private val ds4v2 = vidPidKey(DS5_VID, DS4V2_PID)
 
     private fun pad(
         vendorId: Int = DS5_VID,
@@ -151,7 +152,7 @@ class PadAudioMatcherTest {
             )
         assertEquals(11, routes[ds5]!!.playbackDeviceId)
         assertEquals(12, routes[ds5]!!.captureDeviceId)
-        val otherRoute = routes[PadAudioRoutes.key(OTHER_VID, OTHER_PID)]!!
+        val otherRoute = routes[vidPidKey(OTHER_VID, OTHER_PID)]!!
         assertEquals(21, otherRoute.playbackDeviceId)
         assertFalse(otherRoute.microphone)
     }

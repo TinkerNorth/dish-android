@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.composer
 
+import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.CatalogDto
 import com.tinkernorth.dish.core.model.HostFeatureSet
@@ -135,7 +136,7 @@ internal fun composerFor(
         mockk {
             every { state } returns stores.padAudioRoutes
             every { routeFor(any(), any()) } answers {
-                stores.padAudioRoutes.value[PadAudioRoutes.key(firstArg(), secondArg())] ?: PadAudioRoute.NONE
+                stores.padAudioRoutes.value[vidPidKey(firstArg(), secondArg())] ?: PadAudioRoute.NONE
             }
         }
     val mouseSurfaceStore: MouseSurfaceStore =

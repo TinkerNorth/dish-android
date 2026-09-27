@@ -4,12 +4,12 @@ package com.tinkernorth.dish.ui.diagnostics
 
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.input.resolveGamepadQuirk
+import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.bluetooth.BluetoothLinkType
 import com.tinkernorth.dish.source.store.StickTestHistoryStore
-import com.tinkernorth.dish.source.usb.UsbDescriptorStore
 import com.tinkernorth.dish.ui.main.BatteryUi
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import com.tinkernorth.dish.ui.main.routedTwinIdsHiddenBySynthetics
@@ -123,7 +123,7 @@ internal fun padFacts(
     world: DiagnosticsWorld,
 ): PadFacts {
     val pads = world.pads
-    val endpointKey = UsbDescriptorStore.key(device.vendorId, device.productId)
+    val endpointKey = vidPidKey(device.vendorId, device.productId)
     return PadFacts(
         vendorId = device.vendorId,
         productId = device.productId,
