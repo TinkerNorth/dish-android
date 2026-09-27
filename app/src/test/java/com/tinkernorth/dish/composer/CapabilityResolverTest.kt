@@ -444,4 +444,57 @@ class CapabilityResolverTest {
             wireCaps(staticDbPad),
         )
     }
+
+    @Test
+    fun `haptic audio follows the speaker toggle`() {
+        val speakerOn = userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = false, speakerOn = true)
+        val speakerOff = userEnabledCapabilities(motionOn = true, rumbleOn = true, micOn = true, speakerOn = false)
+        assertTrue(Feature.HAPTIC_AUDIO in speakerOn)
+        assertTrue(Feature.HAPTIC_AUDIO !in speakerOff)
+    }
+
+    private fun hapticSlot(
+        controllerHaptics: Boolean,
+        userSpeaker: Boolean,
+    ): SlotCapabilities {
+        val controller = if (controllerHaptics) CapabilitySet.of(Feature.HAPTIC_AUDIO) else CapabilitySet.EMPTY
+        val userEnabled = if (userSpeaker) CapabilitySet.of(Feature.SPEAKER, Feature.HAPTIC_AUDIO) else CapabilitySet.EMPTY
+        return SlotCapabilities(
+            controller = controller,
+            transport = CapabilitySet(Feature.entries.toSet()),
+            type = CapabilitySet.EMPTY,
+            host = CapabilitySet.EMPTY,
+            userEnabled = userEnabled,
+            runtimeDown = CapabilitySet.EMPTY,
+        )
+    }
+
+    @Test
+    fun `wireCaps carries CAP_HAPTIC_AUDIO only where the client both can and will`() {
+        for (canPlayHaptics in listOf(true, false)) {
+            for (speakerOn in listOf(true, false)) {
+                val caps = wireCaps(hapticSlot(canPlayHaptics, speakerOn))
+                val expected = if (canPlayHaptics && speakerOn) ControllerDescriptor.CAP_HAPTIC_AUDIO else 0
+                assertEquals(
+                    "canPlayHaptics=$canPlayHaptics speakerOn=$speakerOn",
+                    expected,
+                    caps and ControllerDescriptor.CAP_HAPTIC_AUDIO,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `wireCaps decisive case - a DualSense on a four-channel endpoint is 0x01C3`() {
+        val fourChannelDualSense =
+            SlotCapabilities(
+                controller = CapabilitySet.of(Feature.MIC, Feature.SPEAKER, Feature.HAPTIC_AUDIO),
+                transport = CapabilitySet(Feature.entries.toSet()),
+                type = CapabilitySet.EMPTY,
+                host = CapabilitySet.EMPTY,
+                userEnabled = CapabilitySet.of(Feature.MIC, Feature.SPEAKER, Feature.HAPTIC_AUDIO),
+                runtimeDown = CapabilitySet.EMPTY,
+            )
+        assertEquals(0x01C3, wireCaps(fourChannelDualSense))
+    }
 }

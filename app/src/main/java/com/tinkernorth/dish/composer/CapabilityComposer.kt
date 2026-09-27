@@ -179,6 +179,7 @@ class CapabilityComposer
                         hub.connections.value
                             .firstOrNull { it.id == connId }
                             ?.kind ?: ConnectionKind.SATELLITE,
+                        sourceHasMotion = Feature.MOTION in liveControllerLayer(slotId),
                     ),
                 host = (hostFacts.features.featuresFor(connId) ?: HostFeatureSet.SATELLITE_DEFAULT).toCapabilitySet(),
             )
@@ -195,15 +196,23 @@ class CapabilityComposer
             candidateHostKind: ConnectionKind,
             candidateHostId: String?,
             candidateDirect: Boolean? = null,
-        ): SlotCapabilities =
-            resolve(
-                controller = candidateControllerLayer(slotId, candidateDirect),
+        ): SlotCapabilities {
+            val controller = candidateControllerLayer(slotId, candidateDirect)
+            return resolve(
+                controller = controller,
                 transport = transportProfileFor(candidateHostKind),
-                type = typeCapabilitiesFor(candidateType, candidateHostId, candidateHostKind),
+                type =
+                    typeCapabilitiesFor(
+                        candidateType,
+                        candidateHostId,
+                        candidateHostKind,
+                        sourceHasMotion = Feature.MOTION in controller,
+                    ),
                 host = candidateHostLayer(candidateHostKind, candidateHostId),
                 userEnabled = ALL,
                 runtimeDown = candidateRuntimeDownLayer(candidateHostKind, candidateHostId),
             )
+        }
 
         private fun slotFor(
             slotId: String,
@@ -222,7 +231,7 @@ class CapabilityComposer
             return resolve(
                 controller = controller,
                 transport = transportLayer(summary),
-                type = typeLayer(slotId, summary),
+                type = typeLayer(slotId, summary, controller),
                 host = hostLayer(connId, summary, hosts.features),
                 userEnabled = userEnabledCapabilities(motionOn, rumbleOn, micOn, speakerOn),
                 runtimeDown = runtimeDownLayer(connId, slotId, hosts.motionBackend),
@@ -382,29 +391,28 @@ class CapabilityComposer
         private fun typeLayer(
             slotId: String,
             summary: ConnectionSummary?,
+            controller: CapabilitySet,
         ): CapabilitySet {
             if (summary == null) return ALL
             if (summary.kind == ConnectionKind.BLUETOOTH) return ALL
             val typeId = summary.satelliteControllerTypes[slotId] ?: return ALL
-            return typeCapabilitiesFor(typeId, summary.id, summary.kind)
+            return typeCapabilitiesFor(typeId, summary.id, summary.kind, sourceHasMotion = Feature.MOTION in controller)
         }
 
         // The satellite's own per-type features from its cached catalog are the source
         // of truth; the bundled set covers an unfetched catalog or the slugs we ship.
         // A Moonlight host has no catalog at all and its own table of types, so it never
-        // reads either: the two type systems share names and nothing else.
+        // reads either: the two type systems share names and nothing else. Its Auto pick
+        // resolves from the same motion fact the session controller announces with, so the
+        // dashboard and the wire agree on which pad the host was told about.
         private fun typeCapabilitiesFor(
             typeId: Int,
             connId: String?,
             kind: ConnectionKind,
+            sourceHasMotion: Boolean,
         ): CapabilitySet {
             if (kind == ConnectionKind.MOONLIGHT) {
-                return moonlightTypeCapabilities(
-                    resolveMoonlightEmulatedType(
-                        fromStored(typeId),
-                        sourceHasMotion = false,
-                    ),
-                )
+                return moonlightTypeCapabilities(resolveMoonlightEmulatedType(fromStored(typeId), sourceHasMotion))
             }
             val catalogType =
                 connId

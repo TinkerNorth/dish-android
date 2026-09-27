@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.composer
 
 import com.tinkernorth.dish.core.model.Feature
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -91,5 +92,15 @@ class BundledCatalogTest {
         // Switch Pro is the only motion pad without a touchpad.
         assertTrue(Feature.TOUCHPAD in typeCapabilitiesById(CONTROLLER_TYPE_DUALSENSE))
         assertFalse(Feature.TOUCHPAD in typeCapabilitiesById(CONTROLLER_TYPE_SWITCHPRO))
+    }
+
+    @Test
+    fun `typeCapabilitiesById falls back to xbox360 for an unknown id`() {
+        assertEquals(typeCapabilitiesById(CONTROLLER_TYPE_XBOX), typeCapabilitiesById(UNKNOWN_TYPE_ID))
+        assertTrue(Feature.MIC !in typeCapabilitiesById(UNKNOWN_TYPE_ID))
+    }
+
+    private companion object {
+        const val UNKNOWN_TYPE_ID = 99
     }
 }
