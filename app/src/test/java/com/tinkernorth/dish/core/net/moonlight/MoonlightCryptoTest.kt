@@ -57,4 +57,17 @@ class MoonlightCryptoTest {
         val seen = (1..64).map { randomBytes(16).toList() }.toSet()
         assertEquals(64, seen.size)
     }
+
+    @Test
+    fun `constantTimeEquals is true only for identical bytes`() {
+        val expected = byteArrayOf(1, 2, 3)
+        assertTrue(constantTimeEquals(expected, byteArrayOf(1, 2, 3)))
+        assertFalse(constantTimeEquals(expected, byteArrayOf(1, 2, 4)))
+    }
+
+    @Test
+    fun `constantTimeEquals is false for a length mismatch`() {
+        assertFalse(constantTimeEquals(byteArrayOf(1, 2, 3), byteArrayOf(1, 2)))
+        assertFalse(constantTimeEquals(byteArrayOf(), byteArrayOf(0)))
+    }
 }

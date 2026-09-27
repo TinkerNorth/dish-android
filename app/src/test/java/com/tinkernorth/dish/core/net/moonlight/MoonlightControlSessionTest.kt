@@ -6,6 +6,8 @@ package com.tinkernorth.dish.core.net.moonlight
 import com.tinkernorth.dish.core.net.hexToBytes
 import com.tinkernorth.dish.core.net.moonlight.enet.EnetClient
 import com.tinkernorth.dish.core.net.moonlight.enet.EnetProtocol
+import com.tinkernorth.dish.core.net.moonlight.enet.EnetWriter
+import com.tinkernorth.dish.core.net.moonlight.enet.commandHeader
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -41,10 +43,10 @@ class MoonlightControlSessionTest {
     }
 
     private fun verifyConnectDatagram(): ByteArray {
-        val w = EnetProtocol.Writer(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.VERIFY_CONNECT_LEN)
+        val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.VERIFY_CONNECT_LEN)
         w.u16(EnetProtocol.HEADER_FLAG_SENT_TIME)
         w.u16(10)
-        EnetProtocol.commandHeader(
+        commandHeader(
             w,
             EnetProtocol.COMMAND_VERIFY_CONNECT or EnetProtocol.FLAG_ACKNOWLEDGE,
             EnetProtocol.SYSTEM_CHANNEL,
@@ -70,10 +72,10 @@ class MoonlightControlSessionTest {
         seq: Int,
         sealed: ByteArray,
     ): ByteArray {
-        val w = EnetProtocol.Writer(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.SEND_RELIABLE_HEADER_LEN + sealed.size)
+        val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.SEND_RELIABLE_HEADER_LEN + sealed.size)
         w.u16(EnetProtocol.HEADER_FLAG_SENT_TIME)
         w.u16(20)
-        EnetProtocol.commandHeader(w, EnetProtocol.COMMAND_SEND_RELIABLE or EnetProtocol.FLAG_ACKNOWLEDGE, 0, seq)
+        commandHeader(w, EnetProtocol.COMMAND_SEND_RELIABLE or EnetProtocol.FLAG_ACKNOWLEDGE, 0, seq)
         w.u16(sealed.size)
         w.bytes(sealed)
         return w.toByteArray()
@@ -163,10 +165,10 @@ class MoonlightControlSessionTest {
     }
 
     private fun hostDisconnectDatagram(): ByteArray {
-        val w = EnetProtocol.Writer(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.DISCONNECT_LEN)
+        val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.DISCONNECT_LEN)
         w.u16(EnetProtocol.HEADER_FLAG_SENT_TIME)
         w.u16(30)
-        EnetProtocol.commandHeader(
+        commandHeader(
             w,
             EnetProtocol.COMMAND_DISCONNECT or EnetProtocol.FLAG_UNSEQUENCED,
             EnetProtocol.SYSTEM_CHANNEL,

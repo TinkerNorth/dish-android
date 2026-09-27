@@ -5,11 +5,13 @@ package com.tinkernorth.dish.repository
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.core.model.ServerCapabilitiesDto
+import com.tinkernorth.dish.core.model.hostFeaturesFromServerCapabilities
 import com.tinkernorth.dish.core.net.DiscoveryGateway
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.SatelliteHostRuntime
 import com.tinkernorth.dish.source.store.SatelliteHostRuntimeStore
 import kotlinx.serialization.json.Json
+import java.net.HttpURLConnection
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -46,21 +48,19 @@ class SatelliteCapabilitiesRepository
                 runCatching {
                     gateway.serverCapabilities(server.ip, server.httpPort, satelliteId)
                 }.getOrNull() ?: return null
-            if (reply.status != 200 || reply.body.isBlank()) return null
+            if (reply.status != HttpURLConnection.HTTP_OK || reply.body.isBlank()) return null
             val caps =
                 runCatching { json.decodeFromString(ServerCapabilitiesDto.serializer(), reply.body) }
                     .getOrNull() ?: return null
 
-            val probed = HostFeatureSet.fromServerCapabilities(caps)
+            val probed = hostFeaturesFromServerCapabilities(caps)
             // An older satellite omits the host block (catalog.supported stays false): leave
             // the optimistic default in place rather than reporting everything unsupported.
             if (caps.host.catalog.supported) {
                 hostFeaturesStore.setIfAbsent(satelliteId, probed)
             }
-            // Audio rides its own merge: this document is the ONLY one that carries the
-            // host's audio verdict, so it has to land whether or not a catalog read got
-            // here first, and whether or not the host block exists at all. Both directions
-            // go together because the host reports them together and switches them apart.
+            // Audio merges on its own: only this document carries the host's verdict, so it lands
+            // whether or not a catalog read or a host block got here first.
             hostFeaturesStore.noteControllerAudio(
                 satelliteId,
                 mic = probed.controllerMic,

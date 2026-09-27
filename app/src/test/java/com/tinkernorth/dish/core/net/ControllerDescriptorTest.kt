@@ -42,6 +42,12 @@ class ControllerDescriptorTest {
     }
 
     @Test
+    fun `toJson carries the mouse mode verbatim`() {
+        val d = ControllerDescriptor(ctrlIdx = 0, type = 0, caps = 0, touchpadMode = ControllerDescriptor.TOUCHPAD_MODE_MOUSE)
+        assertTrue(d.toJson().endsWith("\"touchpadMode\":\"mouse\"}"))
+    }
+
+    @Test
     fun `wantsMouseControl follows the mouse routing mode`() {
         assertTrue(ControllerDescriptor(0, 0, 0, ControllerDescriptor.TOUCHPAD_MODE_MOUSE).wantsMouseControl)
         assertFalse(ControllerDescriptor(0, 0, 0, ControllerDescriptor.TOUCHPAD_MODE_DS4).wantsMouseControl)

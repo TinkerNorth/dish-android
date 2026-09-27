@@ -2,13 +2,13 @@
 
 package com.tinkernorth.dish.repository
 
-import com.tinkernorth.dish.architecture.interfaces.Repository
-import com.tinkernorth.dish.architecture.testing.AbstractRepositoryContract
+import com.tinkernorth.dish.architecture.interfaces.KeyedRepository
+import com.tinkernorth.dish.architecture.testing.AbstractKeyedRepositoryContract
 import kotlinx.serialization.json.Json
 import kotlin.random.Random
 
-class RememberedBtRepositoryContractTest : AbstractRepositoryContract<String, RememberedBt>() {
-    override fun newRepository(): Repository<String, RememberedBt> =
+class RememberedBtRepositoryContractTest : AbstractKeyedRepositoryContract<String, RememberedBt>() {
+    override fun newKeyedRepository(): KeyedRepository<String, RememberedBt> =
         RememberedBtRepository(
             context = mapBackedPrefs().first,
             json = Json { ignoreUnknownKeys = true },

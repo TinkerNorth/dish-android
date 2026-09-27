@@ -67,4 +67,12 @@ class SessionCryptoTest {
             deriveSessionKey(pairingKey, ByteArray(8), ByteArray(2))
         }
     }
+
+    @Test
+    fun `the wire sizes match the contract`() {
+        assertEquals(32, PAIRING_KEY_BYTES)
+        assertEquals(64, PAIRING_KEY_HEX_LEN)
+        assertEquals(8, SESSION_SALT_BYTES)
+        assertEquals(4, TOKEN_BYTES)
+    }
 }

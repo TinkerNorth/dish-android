@@ -8,6 +8,7 @@ import com.tinkernorth.dish.repository.TofuVerdict
 import com.tinkernorth.dish.repository.sha256FingerprintHex
 import com.tinkernorth.dish.repository.tofuVerdict
 import java.io.IOException
+import java.net.HttpURLConnection
 import java.net.URL
 import java.security.SecureRandom
 import javax.inject.Inject
@@ -28,7 +29,7 @@ data class HttpReply(
     val etag: String?,
     val pinMismatch: Boolean = false,
 ) {
-    val notModified: Boolean get() = status == 304
+    val notModified: Boolean get() = status == HttpURLConnection.HTTP_NOT_MODIFIED
 
     val unreachable: Boolean get() = status == 0 || body.isBlank()
 }
@@ -51,24 +52,27 @@ class SatelliteHttpClient
             onMismatch: () -> Unit,
         ): SSLSocketFactory =
             SSLContext
-                .getInstance("TLS")
+                .getInstance(TLS_CONTEXT)
                 .apply {
                     init(null, arrayOf<TrustManager>(TofuTrustManager(satelliteId, pins, onMismatch)), SecureRandom())
                 }.socketFactory
 
-        // The cert names no host the URL stack could match (a self-signed cert for a LAN IP), so
-        // the platform verifier is replaced by the one check that means something here: the
-        // session the handshake negotiated carries the certificate pinned for this satellite.
-        // internal (not private) so the decision is unit-testable with a mocked session.
-        internal fun pinnedSessionVerifier(satelliteId: String): HostnameVerifier =
-            HostnameVerifier { _: String?, session: SSLSession? ->
-                val cert = session?.peerCertificates?.firstOrNull() ?: return@HostnameVerifier false
-                tofuVerdict(pins.pinnedFingerprint(satelliteId), sha256FingerprintHex(cert.encoded)) == TofuVerdict.MATCH
-            }
+        // The cert names no host the URL stack could match (a self-signed cert for a LAN IP), so the
+        // platform verifier is replaced by the one check that means something here: the negotiated
+        // session carries the certificate pinned for this satellite.
+        internal fun verifyPinnedSession(
+            satelliteId: String,
+            session: SSLSession?,
+        ): Boolean {
+            val cert = session?.peerCertificates?.firstOrNull() ?: return false
+            val presented = sha256FingerprintHex(cert.encoded)
+            return tofuVerdict(pins.pinnedFingerprint(satelliteId), presented) == TofuVerdict.MATCH
+        }
 
-        // PUT /api/connections: the declarative session upsert. `descriptorsJson`
-        // is the prebuilt `[{...}, ...]` controllers array (ControllerDescriptor
-        // owns its shape so it stays unit-testable without a socket).
+        private fun pinnedSessionVerifier(satelliteId: String): HostnameVerifier =
+            HostnameVerifier { _: String?, session: SSLSession? -> verifyPinnedSession(satelliteId, session) }
+
+        // PUT /api/connections: the declarative session upsert.
         fun putSession(
             ip: String,
             port: Int,
@@ -87,12 +91,7 @@ class SatelliteHttpClient
                 path = "/api/connections",
                 deviceId = deviceId,
                 hmacProof = hmacProof,
-                body =
-                    """{"deviceId":"${jsonEscape(deviceId)}",""" +
-                        """"deviceName":"${jsonEscape(deviceName)}",""" +
-                        """"protocolVersion":$protocolVersion,""" +
-                        """"controllers":$descriptorsJson,""" +
-                        """"hostFeatures":{"mouseControl":$requestMouseControl}}""",
+                body = sessionPutBody(deviceId, deviceName, protocolVersion, descriptorsJson, requestMouseControl),
                 satelliteId = satelliteId,
             )
 
@@ -176,7 +175,7 @@ class SatelliteHttpClient
                 path = "/api/connections/$connectionId",
                 deviceId = deviceId,
                 hmacProof = hmacProof,
-                body = """{"deviceId":"${jsonEscape(deviceId)}"}""",
+                body = disconnectBody(deviceId),
                 satelliteId = satelliteId,
             )
 
@@ -210,10 +209,8 @@ class SatelliteHttpClient
             acceptLanguage: String,
             etag: String?,
             satelliteId: String,
-        ): HttpReply {
-            val headers = mutableMapOf("Accept-Language" to acceptLanguage)
-            if (!etag.isNullOrBlank()) headers["If-None-Match"] = etag
-            return requestWithMeta(
+        ): HttpReply =
+            requestWithMeta(
                 method = "GET",
                 ip = ip,
                 port = port,
@@ -222,9 +219,8 @@ class SatelliteHttpClient
                 hmacProof = null,
                 body = null,
                 satelliteId = satelliteId,
-                extraHeaders = headers,
+                extraHeaders = catalogHeaders(acceptLanguage, etag),
             )
-        }
 
         // GET /api/server/capabilities: live host state. Unauthenticated like the catalog
         // (read before pairing); not ETag'd because it is dynamic, so fetched fresh each probe.
@@ -245,9 +241,6 @@ class SatelliteHttpClient
             )
 
         // No X-Device-Id: /api/pair is the only client route that bypasses clientAuthorized.
-        // `pin` drives Path A (the dish entered the satellite's PIN); `clientPin` drives
-        // Path B (the dish shows its own PIN for the operator to accept). Both ride in the
-        // body; the satellite uses a valid `pin` first and only falls back to `clientPin`.
         fun pair(
             ip: String,
             port: Int,
@@ -265,12 +258,7 @@ class SatelliteHttpClient
                 path = "/api/pair",
                 deviceId = null,
                 hmacProof = null,
-                body =
-                    """{"deviceId":"${jsonEscape(deviceId)}",""" +
-                        """"deviceName":"${jsonEscape(deviceName)}",""" +
-                        """"protocolVersion":$protocolVersion,""" +
-                        """"pin":"${jsonEscape(pin)}",""" +
-                        """"clientPin":"${jsonEscape(clientPin)}"}""",
+                body = pairBody(deviceId, deviceName, protocolVersion, pin, clientPin),
                 satelliteId = satelliteId,
             )
 
@@ -285,7 +273,7 @@ class SatelliteHttpClient
                 method = "GET",
                 ip = ip,
                 port = port,
-                path = "/api/pair/status?deviceId=" + java.net.URLEncoder.encode(deviceId, "UTF-8"),
+                path = pairStatusPath(deviceId),
                 deviceId = null,
                 hmacProof = null,
                 body = null,
@@ -316,8 +304,8 @@ class SatelliteHttpClient
             satelliteId: String,
             extraHeaders: Map<String, String> = emptyMap(),
         ): HttpReply {
-            val url = URL("https", ip, port, path)
-            Log.i(TAG, "$method https://$ip:$port$path")
+            val url = URL(SCHEME, ip, port, path)
+            Log.i(TAG, "$method $SCHEME://$ip:$port$path")
             var conn: HttpsURLConnection? = null
             var pooled = false
             var pinMismatch = false
@@ -326,15 +314,16 @@ class SatelliteHttpClient
                 conn.applyHeaders(deviceId, hmacProof, extraHeaders)
                 if (body != null) conn.writeBody(body)
                 val status = conn.responseCode
-                val stream = if (status in 200..299) conn.inputStream else conn.errorStream
+                val succeeded = status in SUCCESS_STATUSES
+                val stream = if (succeeded) conn.inputStream else conn.errorStream
                 val text = stream?.use { it.readBytes().toString(Charsets.UTF_8) }.orEmpty()
                 Log.i(TAG, "$method $path -> HTTP $status (${text.length} bytes)")
                 // Fully drained: leave the socket in the keep-alive pool so the approval poll reuses the TLS session.
                 pooled = true
-                HttpReply(status, text, conn.getHeaderField("ETag"))
+                HttpReply(status, text, conn.getHeaderField(HEADER_ETAG))
             } catch (e: IOException) {
                 Log.e(TAG, "$method $path failed: ${e.message}")
-                HttpReply(0, """{"error":"${jsonEscape("request failed: ${e.message}")}"}""", null, pinMismatch)
+                HttpReply(0, requestFailedBody(e.message), null, pinMismatch)
             } finally {
                 if (!pooled) conn?.disconnect()
             }
@@ -352,7 +341,7 @@ class SatelliteHttpClient
                 requestMethod = method
                 connectTimeout = CONNECT_TIMEOUT_MS
                 readTimeout = READ_TIMEOUT_MS
-                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty(HEADER_CONTENT_TYPE, MIME_JSON)
             }
 
         private fun HttpsURLConnection.applyHeaders(
@@ -360,8 +349,8 @@ class SatelliteHttpClient
             hmacProof: String?,
             extraHeaders: Map<String, String>,
         ) {
-            if (deviceId != null) setRequestProperty("X-Device-Id", deviceId)
-            if (hmacProof != null) setRequestProperty("X-Hmac-Proof", hmacProof)
+            if (deviceId != null) setRequestProperty(HEADER_DEVICE_ID, deviceId)
+            if (hmacProof != null) setRequestProperty(HEADER_HMAC_PROOF, hmacProof)
             for ((k, v) in extraHeaders) setRequestProperty(k, v)
         }
 
@@ -370,23 +359,14 @@ class SatelliteHttpClient
             outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
         }
 
-        private fun jsonEscape(s: String): String =
-            buildString(s.length) {
-                for (c in s) {
-                    when (c) {
-                        '"' -> append("\\\"")
-                        '\\' -> append("\\\\")
-                        '\n' -> append("\\n")
-                        '\r' -> append("\\r")
-                        '\t' -> append("\\t")
-                        else -> if (c < ' ') append("\\u%04x".format(c.code)) else append(c)
-                    }
-                }
-            }
-
         private companion object {
             const val TAG = "SatelliteHttpClient"
+            const val SCHEME = "https"
+            const val TLS_CONTEXT = "TLS"
             const val CONNECT_TIMEOUT_MS = 5_000
             const val READ_TIMEOUT_MS = 5_000
+
+            // The 2xx class: a body on the input stream; anything else has an error stream.
+            val SUCCESS_STATUSES = HttpURLConnection.HTTP_OK until HttpURLConnection.HTTP_MULT_CHOICE
         }
     }

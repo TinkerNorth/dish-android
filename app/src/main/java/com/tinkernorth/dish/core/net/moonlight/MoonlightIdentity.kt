@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.core.net.moonlight
 
+import com.tinkernorth.dish.core.net.bytesToHex
 import java.io.ByteArrayInputStream
 import java.security.PrivateKey
 import java.security.PublicKey
@@ -40,23 +41,11 @@ fun signatureOf(pem: String): ByteArray = parseMoonlightCert(pem).signature
 
 fun publicKeyOf(pem: String): PublicKey = parseMoonlightCert(pem).publicKey
 
-fun sha256FingerprintHex(pem: String): String = bytesHex(sha256(parseMoonlightCert(pem).encoded))
+fun sha256FingerprintHex(pem: String): String = bytesToHex(sha256(parseMoonlightCert(pem).encoded))
 
 fun parseMoonlightCert(pem: String): X509Certificate {
     val factory = CertificateFactory.getInstance("X.509")
     return ByteArrayInputStream(pem.toByteArray(Charsets.US_ASCII)).use {
         factory.generateCertificate(it) as X509Certificate
     }
-}
-
-private val hexDigits = "0123456789abcdef".toCharArray()
-
-private fun bytesHex(bytes: ByteArray): String {
-    val out = CharArray(bytes.size * 2)
-    for (i in bytes.indices) {
-        val v = bytes[i].toInt() and 0xFF
-        out[i * 2] = hexDigits[v ushr 4]
-        out[i * 2 + 1] = hexDigits[v and 0x0F]
-    }
-    return String(out)
 }

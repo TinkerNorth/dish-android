@@ -120,6 +120,26 @@ class MoonlightMotionGateTest {
         gate.clearAll()
         assertFalse(gate.wanted(1))
     }
+
+    @Test
+    fun `a stop then start sends the first sample at once`() {
+        val gate = MoonlightMotionGate()
+        gate.onMotionRequest(0, 100, gyro)
+        assertTrue(gate.shouldSend(0, gyro, 0L))
+        gate.onMotionRequest(0, 0, gyro)
+        gate.onMotionRequest(0, 100, gyro)
+        assertTrue(gate.shouldSend(0, gyro, 1L))
+    }
+
+    @Test
+    fun `a rate change keeps the pacing clock`() {
+        val gate = MoonlightMotionGate()
+        gate.onMotionRequest(0, 100, gyro)
+        assertTrue(gate.shouldSend(0, gyro, 0L))
+        gate.onMotionRequest(0, 200, gyro)
+        assertFalse(gate.shouldSend(0, gyro, 1L))
+        assertTrue(gate.shouldSend(0, gyro, 5_000_000L))
+    }
 }
 
 class MoonlightTouchDifferTest {
@@ -199,5 +219,41 @@ class MoonlightTouchDifferTest {
         val events = differ.frame(f0 = Triple(1, 0.5f, 0.5f))
         assertEquals(1, events.size)
         assertEquals(down, events[0].eventType)
+    }
+
+    @Test
+    fun `the second finger moves and lifts independently of the first`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame(f0 = Triple(1, 0.1f, 0.1f), f1 = Triple(2, 0.9f, 0.9f))
+
+        val moved = differ.frame(f0 = Triple(1, 0.1f, 0.1f), f1 = Triple(2, 0.8f, 0.8f))
+        assertEquals(1, moved.size)
+        assertEquals(move, moved[0].eventType)
+        assertEquals(2, moved[0].pointerId)
+        assertEquals(0.8f, moved[0].x, 0f)
+
+        val lifted = differ.frame(f0 = Triple(1, 0.1f, 0.1f))
+        assertEquals(1, lifted.size)
+        assertEquals(up, lifted[0].eventType)
+        assertEquals(2, lifted[0].pointerId)
+    }
+
+    @Test
+    fun `a tracking id change on the second finger is a lift plus a fresh contact`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame(f0 = Triple(1, 0.1f, 0.1f), f1 = Triple(2, 0.9f, 0.9f))
+        val events = differ.frame(f0 = Triple(1, 0.1f, 0.1f), f1 = Triple(3, 0.7f, 0.7f))
+        assertEquals(listOf(up, down), events.map { it.eventType })
+        assertEquals(listOf(2, 3), events.map { it.pointerId })
+    }
+
+    @Test
+    fun `lifting the first finger leaves the second one held`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame(f0 = Triple(1, 0.1f, 0.1f), f1 = Triple(2, 0.9f, 0.9f))
+        val events = differ.frame(f1 = Triple(2, 0.9f, 0.9f))
+        assertEquals(1, events.size)
+        assertEquals(up, events[0].eventType)
+        assertEquals(1, events[0].pointerId)
     }
 }

@@ -22,20 +22,23 @@ data class MoonlightHost(
     val uniqueId: String = "",
     val manual: Boolean = false,
 ) {
-    val id: String get() = idFor(address, uniqueId)
+    val id: String get() = moonlightHostIdFor(address, uniqueId)
 
     companion object {
         const val DEFAULT_HTTP_PORT = 47989
         const val DEFAULT_HTTPS_PORT = 47984
         const val ID_PREFIX = "moonlight:"
-
-        // Prefer the stable uniqueid so a host that changes IP keeps one identity;
-        // fall back to the address for a host not yet probed.
-        fun idFor(
-            address: String,
-            uniqueId: String,
-        ): String = if (uniqueId.isNotBlank()) "${ID_PREFIX}uid:$uniqueId" else "$ID_PREFIX$address"
     }
+}
+
+private const val STABLE_ID_MARKER = "uid:"
+
+internal fun moonlightHostIdFor(
+    address: String,
+    uniqueId: String,
+): String {
+    val hasStableId = uniqueId.isNotBlank()
+    return if (hasStableId) "${MoonlightHost.ID_PREFIX}$STABLE_ID_MARKER$uniqueId" else "${MoonlightHost.ID_PREFIX}$address"
 }
 
 @Serializable

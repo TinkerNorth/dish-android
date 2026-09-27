@@ -7,6 +7,8 @@ import com.tinkernorth.dish.core.net.bytesToHex
 import com.tinkernorth.dish.core.net.hexToBytes
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class MoonlightHotSealerTest {
     private val key = hexToBytes("edf04a215c4fbea20934120c8480d855")
@@ -80,7 +82,24 @@ class MoonlightHotSealerTest {
         assertEquals(bytesToHex(periodicPing()), bytesToHex(receiver.open(last)!!))
     }
 
+    @Test
+    fun `the hot path and the cold seal share one sequence`() {
+        val sealer = MoonlightHotSealer(key)
+        val receiver = MoonlightControlPacket(key)
+        val hot = sealer.sealControllerMulti(0, 1, BTN_A, 0, 0, 0, 0, 0, 0)
+        val cold = sealer.seal(periodicPing())
+        val hotAgain = sealer.sealControllerMulti(0, 1, BTN_B, 0, 0, 0, 0, 0, 0)
+        assertEquals(listOf(0, 1, 2), listOf(hot, cold, hotAgain).map(::seqOf))
+        assertEquals(bytesToHex(controllerMulti(0, 1, BTN_A, 0, 0, 0, 0, 0, 0)), bytesToHex(receiver.open(hot)!!))
+        assertEquals(bytesToHex(periodicPing()), bytesToHex(receiver.open(cold)!!))
+        assertEquals(bytesToHex(controllerMulti(0, 1, BTN_B, 0, 0, 0, 0, 0, 0)), bytesToHex(receiver.open(hotAgain)!!))
+    }
+
+    // [type u16][len u16][seq u32]: the seq follows the four-byte frame header, little-endian.
+    private fun seqOf(packet: ByteArray): Int = ByteBuffer.wrap(packet, FRAME_HEADER_LEN, Int.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).int
+
     private companion object {
         const val PAST_THE_WRAP = 257
+        const val FRAME_HEADER_LEN = 4
     }
 }

@@ -42,7 +42,6 @@ class RememberedBtRepository
             return runCatching {
                 json.decodeFromString(ListSerializer(RememberedBt.serializer()), raw)
             }.getOrElse { err ->
-                // Fall back to empty on parse failure: forgetting paired controllers beats crashing on corrupt prefs.
                 Log.w(
                     TAG,
                     "Failed to decode remembered-Bluetooth list; treating as empty. " +

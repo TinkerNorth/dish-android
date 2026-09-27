@@ -93,6 +93,13 @@ class BluetoothGamepadReportTest {
     }
 
     @Test
+    fun `XInput right Y = min short clamps to HID plus 32767 (no negate overflow)`() {
+        val r = buildHidReport(0, 0, 0, 0, 0, Short.MIN_VALUE, 0, 0)
+        assertEquals(0xFF.toByte(), r[10])
+        assertEquals(0x7F.toByte(), r[11])
+    }
+
+    @Test
     fun `signed min short round-trips correctly (two's complement)`() {
         val r = buildHidReport(0, 0, Short.MIN_VALUE, 0, 0, 0, 0, 0)
         assertEquals(0x00.toByte(), r[4])

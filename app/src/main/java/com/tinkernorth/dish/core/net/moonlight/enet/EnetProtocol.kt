@@ -48,8 +48,17 @@ internal object EnetProtocol {
 
     const val MAXIMUM_PEER_ID = 0xFFF
 
+    // A session id neither side has assigned yet (peer.c enet_peer_reset).
+    const val SESSION_ID_UNSET = 0xFF
+
     // The system channel 0xFF carries connect/ping/disconnect; data rides channel 0.
     const val SYSTEM_CHANNEL = 0xFF
+
+    // Unsigned field widths, and the 16-bit reliable sequence space they bound.
+    const val U8_MASK = 0xFF
+    const val U16_MASK = 0xFFFF
+    const val SEQ_RANGE = 0x10000
+    const val SEQ_HALF_RANGE = 0x7FFF
 
     const val PROTOCOL_MINIMUM_MTU = 576
     const val PROTOCOL_MAXIMUM_MTU = 4096
@@ -95,95 +104,97 @@ internal object EnetProtocol {
         val commandNumber: Int get() = command and COMMAND_MASK
         val wantsAck: Boolean get() = command and FLAG_ACKNOWLEDGE != 0
     }
-
-    class Writer(
-        capacity: Int,
-    ) {
-        val buffer: ByteBuffer = ByteBuffer.allocate(capacity).order(ByteOrder.BIG_ENDIAN)
-
-        fun u8(value: Int): Writer = apply { buffer.put(value.toByte()) }
-
-        fun u16(value: Int): Writer = apply { buffer.putShort(value.toShort()) }
-
-        fun u32(value: Int): Writer = apply { buffer.putInt(value) }
-
-        fun bytes(value: ByteArray): Writer = apply { buffer.put(value) }
-
-        fun toByteArray(): ByteArray {
-            buffer.flip()
-            val out = ByteArray(buffer.remaining())
-            buffer.get(out)
-            return out
-        }
-    }
-
-    /**
-     * The outer datagram header. peerID is the low 12 bits; session id and the
-     * sent-time/compressed flags share the remaining bits (protocol.c
-     * enet_protocol_handle_incoming_commands).
-     */
-    fun writeHeader(
-        w: Writer,
-        outgoingPeerId: Int,
-        sessionId: Int,
-        sentTime: Int?,
-    ) {
-        var field = outgoingPeerId and MAXIMUM_PEER_ID
-        if (outgoingPeerId < MAXIMUM_PEER_ID) {
-            field = field or ((sessionId shl HEADER_SESSION_SHIFT) and HEADER_SESSION_MASK)
-        }
-        if (sentTime != null) field = field or HEADER_FLAG_SENT_TIME
-        w.u16(field)
-        if (sentTime != null) w.u16(sentTime and 0xFFFF)
-    }
-
-    fun commandHeader(
-        w: Writer,
-        command: Int,
-        channelId: Int,
-        reliableSequenceNumber: Int,
-    ) {
-        w.u8(command)
-        w.u8(channelId)
-        w.u16(reliableSequenceNumber and 0xFFFF)
-    }
-
-    /**
-     * The fixed on-wire size of one command, mirroring protocol.c's
-     * `commandSizes` table exactly. For the SEND_* commands this is the header
-     * only: a `dataLength` payload follows it.
-     *
-     * EVERY COMMAND NUMBER HAS TO BE IN HERE, including the ones this client
-     * never sends. A peer bundles several commands into one datagram, so a
-     * command whose size we do not know is not one command lost, it is the rest
-     * of that datagram lost, acknowledgements included. See [EnetClient.onDatagram].
-     */
-    fun sizeForCommand(commandNumber: Int): Int =
-        when (commandNumber) {
-            COMMAND_ACKNOWLEDGE -> ACKNOWLEDGE_LEN
-            COMMAND_CONNECT -> CONNECT_LEN
-            COMMAND_VERIFY_CONNECT -> VERIFY_CONNECT_LEN
-            COMMAND_DISCONNECT -> DISCONNECT_LEN
-            COMMAND_PING -> PING_LEN
-            COMMAND_SEND_RELIABLE -> SEND_RELIABLE_HEADER_LEN
-            COMMAND_SEND_UNRELIABLE -> SEND_UNRELIABLE_HEADER_LEN
-            COMMAND_SEND_FRAGMENT -> SEND_FRAGMENT_HEADER_LEN
-            COMMAND_SEND_UNSEQUENCED -> SEND_UNSEQUENCED_HEADER_LEN
-            COMMAND_BANDWIDTH_LIMIT -> BANDWIDTH_LIMIT_LEN
-            COMMAND_THROTTLE_CONFIGURE -> THROTTLE_CONFIGURE_LEN
-            COMMAND_SEND_UNRELIABLE_FRAGMENT -> SEND_FRAGMENT_HEADER_LEN
-            else -> 0
-        }
-
-    /**
-     * Whether a command carries a `dataLength`-counted payload after its fixed
-     * header, and at what offset within that header the count sits.
-     */
-    fun dataLengthOffset(commandNumber: Int): Int =
-        when (commandNumber) {
-            COMMAND_SEND_RELIABLE -> COMMAND_HEADER_LEN
-            COMMAND_SEND_UNRELIABLE, COMMAND_SEND_UNSEQUENCED -> COMMAND_HEADER_LEN + 2
-            COMMAND_SEND_FRAGMENT, COMMAND_SEND_UNRELIABLE_FRAGMENT -> COMMAND_HEADER_LEN + 2
-            else -> -1
-        }
 }
+
+/** A big-endian scratch buffer for one datagram or one command. */
+internal class EnetWriter(
+    capacity: Int,
+) {
+    val buffer: ByteBuffer = ByteBuffer.allocate(capacity).order(ByteOrder.BIG_ENDIAN)
+
+    fun u8(value: Int): EnetWriter = apply { buffer.put(value.toByte()) }
+
+    fun u16(value: Int): EnetWriter = apply { buffer.putShort(value.toShort()) }
+
+    fun u32(value: Int): EnetWriter = apply { buffer.putInt(value) }
+
+    fun bytes(value: ByteArray): EnetWriter = apply { buffer.put(value) }
+
+    fun toByteArray(): ByteArray {
+        buffer.flip()
+        val out = ByteArray(buffer.remaining())
+        buffer.get(out)
+        return out
+    }
+}
+
+/**
+ * The outer datagram header. peerID is the low 12 bits; session id and the
+ * sent-time/compressed flags share the remaining bits (protocol.c
+ * enet_protocol_handle_incoming_commands).
+ */
+internal fun writeHeader(
+    w: EnetWriter,
+    outgoingPeerId: Int,
+    sessionId: Int,
+    sentTime: Int?,
+) {
+    val peerBits = outgoingPeerId and EnetProtocol.MAXIMUM_PEER_ID
+    val peerIsAssigned = outgoingPeerId < EnetProtocol.MAXIMUM_PEER_ID
+    val sessionBits = if (peerIsAssigned) (sessionId shl EnetProtocol.HEADER_SESSION_SHIFT) and EnetProtocol.HEADER_SESSION_MASK else 0
+    val sentTimeBit = if (sentTime != null) EnetProtocol.HEADER_FLAG_SENT_TIME else 0
+    val field = peerBits or sessionBits or sentTimeBit
+    w.u16(field)
+    if (sentTime != null) w.u16(sentTime and EnetProtocol.U16_MASK)
+}
+
+internal fun commandHeader(
+    w: EnetWriter,
+    command: Int,
+    channelId: Int,
+    reliableSequenceNumber: Int,
+) {
+    w.u8(command)
+    w.u8(channelId)
+    w.u16(reliableSequenceNumber and EnetProtocol.U16_MASK)
+}
+
+/**
+ * The fixed on-wire size of one command, mirroring protocol.c's
+ * `commandSizes` table exactly. For the SEND_* commands this is the header
+ * only: a `dataLength` payload follows it.
+ *
+ * EVERY COMMAND NUMBER HAS TO BE IN HERE, including the ones this client
+ * never sends. A peer bundles several commands into one datagram, so a
+ * command whose size we do not know is not one command lost, it is the rest
+ * of that datagram lost, acknowledgements included. See [EnetClient.onDatagram].
+ */
+internal fun sizeForCommand(commandNumber: Int): Int =
+    when (commandNumber) {
+        EnetProtocol.COMMAND_ACKNOWLEDGE -> EnetProtocol.ACKNOWLEDGE_LEN
+        EnetProtocol.COMMAND_CONNECT -> EnetProtocol.CONNECT_LEN
+        EnetProtocol.COMMAND_VERIFY_CONNECT -> EnetProtocol.VERIFY_CONNECT_LEN
+        EnetProtocol.COMMAND_DISCONNECT -> EnetProtocol.DISCONNECT_LEN
+        EnetProtocol.COMMAND_PING -> EnetProtocol.PING_LEN
+        EnetProtocol.COMMAND_SEND_RELIABLE -> EnetProtocol.SEND_RELIABLE_HEADER_LEN
+        EnetProtocol.COMMAND_SEND_UNRELIABLE -> EnetProtocol.SEND_UNRELIABLE_HEADER_LEN
+        EnetProtocol.COMMAND_SEND_FRAGMENT -> EnetProtocol.SEND_FRAGMENT_HEADER_LEN
+        EnetProtocol.COMMAND_SEND_UNSEQUENCED -> EnetProtocol.SEND_UNSEQUENCED_HEADER_LEN
+        EnetProtocol.COMMAND_BANDWIDTH_LIMIT -> EnetProtocol.BANDWIDTH_LIMIT_LEN
+        EnetProtocol.COMMAND_THROTTLE_CONFIGURE -> EnetProtocol.THROTTLE_CONFIGURE_LEN
+        EnetProtocol.COMMAND_SEND_UNRELIABLE_FRAGMENT -> EnetProtocol.SEND_FRAGMENT_HEADER_LEN
+        else -> 0
+    }
+
+/**
+ * Whether a command carries a `dataLength`-counted payload after its fixed
+ * header, and at what offset within that header the count sits.
+ */
+internal fun dataLengthOffset(commandNumber: Int): Int =
+    when (commandNumber) {
+        EnetProtocol.COMMAND_SEND_RELIABLE -> EnetProtocol.COMMAND_HEADER_LEN
+        EnetProtocol.COMMAND_SEND_UNRELIABLE, EnetProtocol.COMMAND_SEND_UNSEQUENCED -> EnetProtocol.COMMAND_HEADER_LEN + Short.SIZE_BYTES
+        EnetProtocol.COMMAND_SEND_FRAGMENT, EnetProtocol.COMMAND_SEND_UNRELIABLE_FRAGMENT ->
+            EnetProtocol.COMMAND_HEADER_LEN + Short.SIZE_BYTES
+        else -> -1
+    }

@@ -213,33 +213,29 @@ class DiscoveryGateway
                 http.getServerCapabilities(ip, port, pinId(satelliteId, ip))
             }
 
-        companion object {
-            private const val TAG = "DiscoveryGateway"
-
-            // Empty satelliteId means "caller didn't override": key the pin on the host.
-            internal fun pinId(
-                satelliteId: String,
-                ip: String,
-            ): String = satelliteId.ifEmpty { ip }
-
-            internal fun mergeDiscovered(
-                broadcast: List<DiscoveredServer>,
-                mdns: List<DiscoveredServer>,
-            ): List<DiscoveredServer> {
-                val byKey = LinkedHashMap<String, DiscoveredServer>()
-                for (server in broadcast) {
-                    byKey[server.stableKey] =
-                        server.copy(source = DiscoverySource.BROADCAST)
-                }
-                for (server in mdns) {
-                    // Same physical satellite heard on both paths collapses to
-                    // one BOTH-tagged row when their stable ids match.
-                    val key = server.stableKey
-                    val source =
-                        if (byKey.containsKey(key)) DiscoverySource.BOTH else DiscoverySource.MDNS
-                    byKey[key] = server.copy(source = source)
-                }
-                return byKey.values.sortedBy { it.name }
-            }
+        private companion object {
+            const val TAG = "DiscoveryGateway"
         }
     }
+
+internal fun pinId(
+    satelliteId: String,
+    ip: String,
+): String = satelliteId.ifEmpty { ip }
+
+internal fun mergeDiscovered(
+    broadcast: List<DiscoveredServer>,
+    mdns: List<DiscoveredServer>,
+): List<DiscoveredServer> {
+    val byKey = LinkedHashMap<String, DiscoveredServer>()
+    for (server in broadcast) {
+        byKey[server.stableKey] = server.copy(source = DiscoverySource.BROADCAST)
+    }
+    for (server in mdns) {
+        val key = server.stableKey
+        val heardOnBothPaths = byKey.containsKey(key)
+        val source = if (heardOnBothPaths) DiscoverySource.BOTH else DiscoverySource.MDNS
+        byKey[key] = server.copy(source = source)
+    }
+    return byKey.values.sortedBy { it.name }
+}

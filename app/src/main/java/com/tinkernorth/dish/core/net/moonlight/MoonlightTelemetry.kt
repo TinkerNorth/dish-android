@@ -12,13 +12,26 @@ import java.util.concurrent.ConcurrentHashMap
 private const val GYRO_SCALE_DEG_S = 2000.0f / 32767.0f
 private const val ACCEL_SCALE_G = 4.0f / 32767.0f
 private const val STANDARD_GRAVITY = 9.80665f
+private const val INT16_OFFSET = 32768
+private const val INT16_SPAN = 65535.0f
+
+// The satellite's MSG_BATTERY status byte (docs/contract.md).
+private const val WIRE_BATTERY_DISCHARGING = 1
+private const val WIRE_BATTERY_CHARGING = 2
+private const val WIRE_BATTERY_FULL = 3
+private const val WIRE_BATTERY_WIRED = 4
+private const val PERCENT_MAX = 100
+
+private const val NS_PER_SECOND = 1_000_000_000L
+private const val PRESSURE_TOUCHING = 1.0f
+private const val PRESSURE_LIFTED = 0.0f
 
 fun gyroDegS(wire: Short): Float = wire * GYRO_SCALE_DEG_S
 
 fun accelMs2(wire: Short): Float = wire * ACCEL_SCALE_G * STANDARD_GRAVITY
 
 // Satellite touch coordinates are full-range int16; Moonlight's are 0..1.
-fun touchNorm(wire: Short): Float = (wire.toInt() + 32768) / 65535.0f
+fun touchNorm(wire: Short): Float = (wire.toInt() + INT16_OFFSET) / INT16_SPAN
 
 /**
  * Satellite battery status byte -> Moonlight BATTERY_STATE. Wired (no
@@ -27,14 +40,14 @@ fun touchNorm(wire: Short): Float = (wire.toInt() + 32768) / 65535.0f
  */
 fun batteryState(satelliteStatus: Int): Int =
     when (satelliteStatus) {
-        1 -> BATTERY_DISCHARGING
-        2 -> BATTERY_CHARGING
-        3 -> BATTERY_FULL
-        4 -> BATTERY_NOT_PRESENT
+        WIRE_BATTERY_DISCHARGING -> BATTERY_DISCHARGING
+        WIRE_BATTERY_CHARGING -> BATTERY_CHARGING
+        WIRE_BATTERY_FULL -> BATTERY_FULL
+        WIRE_BATTERY_WIRED -> BATTERY_NOT_PRESENT
         else -> BATTERY_STATE_UNKNOWN
     }
 
-fun batteryPercentage(level: Int): Int = if (level in 0..100) level else BATTERY_PERCENTAGE_UNKNOWN
+fun batteryPercentage(level: Int): Int = if (level in 0..PERCENT_MAX) level else BATTERY_PERCENTAGE_UNKNOWN
 
 /**
  * Host-requested motion streaming state for one Moonlight session
@@ -91,7 +104,7 @@ class MoonlightMotionGate {
     ): Boolean {
         val key = Key(controllerNumber, motionType)
         val rate = rates[key] ?: return false
-        val intervalNs = 1_000_000_000L / rate
+        val intervalNs = NS_PER_SECOND / rate
         val last = lastSentNs[key]
         if (last != null && nowNs - last < intervalNs) return false
         lastSentNs[key] = nowNs
@@ -151,18 +164,24 @@ class MoonlightTouchDiffer {
         cur: FingerState,
         out: MutableList<TouchEvent>,
     ): FingerState {
+        val landed = !prev.active && cur.active
+        val lifted = prev.active && !cur.active
+        val bothActive = prev.active && cur.active
+        val retracked = bothActive && prev.id != cur.id
+        val moved = bothActive && (prev.x != cur.x || prev.y != cur.y)
         when {
-            !prev.active && cur.active ->
-                out += TouchEvent(TOUCH_EVENT_DOWN, cur.id, cur.x, cur.y, 1.0f)
-            prev.active && !cur.active ->
-                out += TouchEvent(TOUCH_EVENT_UP, prev.id, prev.x, prev.y, 0.0f)
-            prev.active && cur.active && prev.id != cur.id -> {
-                out += TouchEvent(TOUCH_EVENT_UP, prev.id, prev.x, prev.y, 0.0f)
-                out += TouchEvent(TOUCH_EVENT_DOWN, cur.id, cur.x, cur.y, 1.0f)
+            landed -> out += down(cur)
+            lifted -> out += up(prev)
+            retracked -> {
+                out += up(prev)
+                out += down(cur)
             }
-            prev.active && cur.active && (prev.x != cur.x || prev.y != cur.y) ->
-                out += TouchEvent(TOUCH_EVENT_MOVE, cur.id, cur.x, cur.y, 1.0f)
+            moved -> out += TouchEvent(TOUCH_EVENT_MOVE, cur.id, cur.x, cur.y, PRESSURE_TOUCHING)
         }
         return cur
     }
+
+    private fun down(finger: FingerState) = TouchEvent(TOUCH_EVENT_DOWN, finger.id, finger.x, finger.y, PRESSURE_TOUCHING)
+
+    private fun up(finger: FingerState) = TouchEvent(TOUCH_EVENT_UP, finger.id, finger.x, finger.y, PRESSURE_LIFTED)
 }

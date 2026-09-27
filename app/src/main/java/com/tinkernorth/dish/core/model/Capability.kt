@@ -163,37 +163,37 @@ data class HostFeatureSet(
                 controllerMic = false,
                 controllerSpeaker = false,
             )
-
-        fun fromCatalog(catalog: CatalogDto): HostFeatureSet =
-            HostFeatureSet(
-                hasCatalog = true,
-                mouseControl = catalog.hostFeatures["mouseControl"]?.supported == true,
-                keyboardControl = catalog.hostFeatures["keyboardControl"]?.supported == true,
-                rumbleReturn = catalog.hostFeatures["rumble"]?.supported ?: true,
-                // No audio here: the catalog is cached on server version + locale, so an
-                // install-time switch must not move it. SatelliteHostFeaturesStore carries
-                // the probed directions across a catalog write instead.
-                protocolVersion = catalog.protocolVersion,
-            )
-
-        // Pre-bind, pre-catalog host read (GET /api/server/capabilities). Caller must
-        // gate on host.catalog.supported first: an older satellite omits the block, and
-        // mapping its all-false default would wrongly report everything unsupported.
-        fun fromServerCapabilities(caps: ServerCapabilitiesDto): HostFeatureSet {
-            // The fallback for a satellite that carries audio but predates the host block.
-            val perBackend = caps.backends.any { it.available && it.audio }
-            // Nullable because an ABSENT block is unknown, not off.
-            val block = caps.controllerAudio
-            return HostFeatureSet(
-                hasCatalog = caps.host.catalog.supported,
-                mouseControl = caps.host.mouseControl.supported,
-                keyboardControl = caps.host.keyboardControl.supported,
-                rumbleReturn = caps.host.rumble.supported,
-                controllerMic = block?.let { it.enabled && it.mic } ?: perBackend,
-                controllerSpeaker = block?.let { it.enabled && it.speaker } ?: perBackend,
-                controllerHapticAudio = block?.let { it.enabled && it.hapticAudio } ?: false,
-                protocolVersion = caps.protocolVersion,
-            )
-        }
     }
+}
+
+internal fun hostFeaturesFromCatalog(catalog: CatalogDto): HostFeatureSet =
+    HostFeatureSet(
+        hasCatalog = true,
+        mouseControl = catalog.hostFeatures["mouseControl"]?.supported == true,
+        keyboardControl = catalog.hostFeatures["keyboardControl"]?.supported == true,
+        rumbleReturn = catalog.hostFeatures["rumble"]?.supported ?: true,
+        // No audio here: the catalog is cached on server version + locale, so an
+        // install-time switch must not move it. SatelliteHostFeaturesStore carries
+        // the probed directions across a catalog write instead.
+        protocolVersion = catalog.protocolVersion,
+    )
+
+// Pre-bind, pre-catalog host read (GET /api/server/capabilities). Caller must
+// gate on host.catalog.supported first: an older satellite omits the block, and
+// mapping its all-false default would wrongly report everything unsupported.
+internal fun hostFeaturesFromServerCapabilities(caps: ServerCapabilitiesDto): HostFeatureSet {
+    // The fallback for a satellite that carries audio but predates the host block.
+    val perBackend = caps.backends.any { it.available && it.audio }
+    // Nullable because an ABSENT block is unknown, not off.
+    val block = caps.controllerAudio
+    return HostFeatureSet(
+        hasCatalog = caps.host.catalog.supported,
+        mouseControl = caps.host.mouseControl.supported,
+        keyboardControl = caps.host.keyboardControl.supported,
+        rumbleReturn = caps.host.rumble.supported,
+        controllerMic = block?.let { it.enabled && it.mic } ?: perBackend,
+        controllerSpeaker = block?.let { it.enabled && it.speaker } ?: perBackend,
+        controllerHapticAudio = block?.let { it.enabled && it.hapticAudio } ?: false,
+        protocolVersion = caps.protocolVersion,
+    )
 }

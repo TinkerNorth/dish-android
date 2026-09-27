@@ -24,8 +24,6 @@ fun jsonGet(
     }
 
 fun hexToBytes(hex: String): ByteArray {
-    // Validate up front: an odd length would read past the end mid-loop, and a
-    // non-hex char makes Character.digit return -1 and silently corrupt a byte.
     require(hex.length % 2 == 0) { "hex string must have even length" }
     require(hex.all { it.isHexDigit() }) { "hex string contains a non-hex character" }
     val data = ByteArray(hex.length / 2)

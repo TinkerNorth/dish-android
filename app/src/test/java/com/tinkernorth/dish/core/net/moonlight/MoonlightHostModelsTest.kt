@@ -10,8 +10,8 @@ import org.junit.Test
 class MoonlightHostModelsTest {
     @Test
     fun `host id prefers the stable uniqueid over the address`() {
-        assertEquals("moonlight:uid:abc123", MoonlightHost.idFor("192.168.1.5", "abc123"))
-        assertEquals("moonlight:192.168.1.5", MoonlightHost.idFor("192.168.1.5", ""))
+        assertEquals("moonlight:uid:abc123", moonlightHostIdFor("192.168.1.5", "abc123"))
+        assertEquals("moonlight:192.168.1.5", moonlightHostIdFor("192.168.1.5", ""))
     }
 
     @Test

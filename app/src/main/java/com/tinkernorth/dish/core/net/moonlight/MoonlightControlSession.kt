@@ -61,7 +61,8 @@ class MoonlightControlSession(
     /** A one-line account of what the link did, for the session log. */
     fun linkStats(): String =
         synchronized(lock) {
-            "acks ${enet.acksSent}, retransmits ${enet.retransmits}, unknown commands ${enet.unknownCommands}"
+            val stats = enet.stats
+            "acks ${stats.acksSent}, retransmits ${stats.retransmits}, unknown commands ${stats.unknownCommands}"
         }
 
     fun roundTripMs(): Long? = synchronized(lock) { enet.roundTripMs }

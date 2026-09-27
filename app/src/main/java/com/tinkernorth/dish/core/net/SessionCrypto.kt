@@ -14,6 +14,13 @@ import javax.crypto.spec.SecretKeySpec
 private const val HMAC_ALGORITHM = "HmacSHA256"
 private const val PROOF_CONTEXT = "satellite-proof:"
 private const val HKDF_INFO_LABEL = "satellite-session-v1"
+private const val HKDF_FIRST_BLOCK: Byte = 0x01
+
+// Wire sizes of the pairing and session material (docs/contract.md §Crypto).
+const val PAIRING_KEY_BYTES = 32
+const val PAIRING_KEY_HEX_LEN = PAIRING_KEY_BYTES * 2
+const val SESSION_SALT_BYTES = 8
+const val TOKEN_BYTES = 4
 
 private fun hmacSha256(
     key: ByteArray,
@@ -28,7 +35,7 @@ private fun hmacSha256(
 fun hmacProof(
     pairingKey: ByteArray,
     deviceId: String,
-): String = hmacSha256(pairingKey, (PROOF_CONTEXT + deviceId).toByteArray(Charsets.UTF_8)).toHex()
+): String = bytesToHex(hmacSha256(pairingKey, (PROOF_CONTEXT + deviceId).toByteArray(Charsets.UTF_8)))
 
 /**
  * sessionKey = HKDF-SHA256(ikm = pairingKey, salt = sessionSalt,
@@ -42,17 +49,10 @@ fun deriveSessionKey(
     sessionSalt: ByteArray,
     token: ByteArray,
 ): ByteArray {
-    require(pairingKey.size == 32) { "pairing key must be 32 bytes" }
-    require(sessionSalt.size == 8) { "session salt must be 8 bytes" }
-    require(token.size == 4) { "token must be 4 bytes" }
+    require(pairingKey.size == PAIRING_KEY_BYTES) { "pairing key must be $PAIRING_KEY_BYTES bytes" }
+    require(sessionSalt.size == SESSION_SALT_BYTES) { "session salt must be $SESSION_SALT_BYTES bytes" }
+    require(token.size == TOKEN_BYTES) { "token must be $TOKEN_BYTES bytes" }
     val prk = hmacSha256(sessionSalt, pairingKey)
-    val info = HKDF_INFO_LABEL.toByteArray(Charsets.US_ASCII) + token + byteArrayOf(0x01)
+    val info = HKDF_INFO_LABEL.toByteArray(Charsets.US_ASCII) + token + byteArrayOf(HKDF_FIRST_BLOCK)
     return hmacSha256(prk, info)
 }
-
-private fun ByteArray.toHex(): String =
-    buildString(size * 2) {
-        for (b in this@toHex) {
-            append("%02x".format(b.toInt() and 0xFF))
-        }
-    }

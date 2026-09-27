@@ -8,6 +8,7 @@ import com.tinkernorth.dish.repository.sha256FingerprintHex
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.security.cert.Certificate
@@ -18,6 +19,8 @@ import javax.net.ssl.SSLSession
 // pins itself, it only confirms the negotiated session carries the pinned certificate.
 class SatelliteHttpClientVerifierTest {
     private val sat = "satellite:mid:test"
+    private val pinnedDer = byteArrayOf(1, 2, 3)
+    private val otherDer = byteArrayOf(9, 9, 9)
 
     private fun sessionWith(der: ByteArray): SSLSession {
         val cert = mockk<X509Certificate>()
@@ -29,37 +32,40 @@ class SatelliteHttpClientVerifierTest {
 
     private fun pinRepo(): SatellitePinRepository = SatellitePinRepository(mapBackedPrefs().first)
 
+    private fun clientPinnedTo(der: ByteArray): SatelliteHttpClient {
+        val pins = pinRepo()
+        pins.pin(sat, sha256FingerprintHex(der))
+        return SatelliteHttpClient(pins)
+    }
+
     @Test
     fun `a session presenting the pinned cert is accepted`() {
-        val pins = pinRepo()
-        pins.pin(sat, sha256FingerprintHex(byteArrayOf(1, 2, 3)))
-
-        assertTrue(SatelliteHttpClient(pins).pinnedSessionVerifier(sat).verify("1.2.3.4", sessionWith(byteArrayOf(1, 2, 3))))
+        assertTrue(clientPinnedTo(pinnedDer).verifyPinnedSession(sat, sessionWith(pinnedDer)))
     }
 
     @Test
     fun `a session presenting another cert is rejected`() {
-        val pins = pinRepo()
-        pins.pin(sat, sha256FingerprintHex(byteArrayOf(1, 2, 3)))
-
-        assertFalse(SatelliteHttpClient(pins).pinnedSessionVerifier(sat).verify("1.2.3.4", sessionWith(byteArrayOf(9, 9, 9))))
+        assertFalse(clientPinnedTo(pinnedDer).verifyPinnedSession(sat, sessionWith(otherDer)))
     }
 
     @Test
     fun `an unpinned satellite never passes the verifier, pinning is the trust manager's job`() {
         val pins = pinRepo()
 
-        assertFalse(SatelliteHttpClient(pins).pinnedSessionVerifier(sat).verify("1.2.3.4", sessionWith(byteArrayOf(1, 2, 3))))
-        assertFalse("the verifier must not pin", pins.pinnedFingerprint(sat) != null)
+        assertFalse(SatelliteHttpClient(pins).verifyPinnedSession(sat, sessionWith(pinnedDer)))
+        assertNull("the verifier must not pin", pins.pinnedFingerprint(sat))
     }
 
     @Test
     fun `a session without peer certificates is rejected`() {
-        val pins = pinRepo()
-        pins.pin(sat, sha256FingerprintHex(byteArrayOf(1, 2, 3)))
         val session = mockk<SSLSession>()
         every { session.peerCertificates } returns emptyArray()
 
-        assertFalse(SatelliteHttpClient(pins).pinnedSessionVerifier(sat).verify("1.2.3.4", session))
+        assertFalse(clientPinnedTo(pinnedDer).verifyPinnedSession(sat, session))
+    }
+
+    @Test
+    fun `a missing session is rejected`() {
+        assertFalse(clientPinnedTo(pinnedDer).verifyPinnedSession(sat, null))
     }
 }
