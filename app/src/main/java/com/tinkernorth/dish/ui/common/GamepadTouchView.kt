@@ -8,8 +8,6 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
-import android.graphics.Rect
-import android.graphics.RectF
 import android.graphics.drawable.Drawable
 import android.os.SystemClock
 import android.util.AttributeSet
@@ -118,9 +116,6 @@ class GamepadTouchView
             // MSG_MIC_LED's own states; the two lit ones both accent the pill, pulse by breathing it.
             internal const val MIC_LED_STATE_OFF = 0
             internal const val MIC_LED_STATE_PULSE = 2
-
-            private const val HALF_INT16 = 32768
-            private const val NORM_INT16_SPAN = 65535f
 
             const val HAT_NONE = 0
             const val HAT_N = 1
@@ -334,7 +329,7 @@ class GamepadTouchView
 
         private val triggerClipPath = Path()
 
-        private val safeInsets = Rect()
+        private var safeInsets = NO_INSETS
 
         private var icBtnA: Drawable? = null
         private var icBtnB: Drawable? = null
@@ -364,24 +359,24 @@ class GamepadTouchView
 
         init {
             loadDrawables()
-            ViewCompat.setOnApplyWindowInsetsListener(this) { v, wi ->
-                val ins =
-                    wi.getInsets(
-                        WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
-                    )
-                if (ins.left != safeInsets.left ||
-                    ins.top != safeInsets.top ||
-                    ins.right != safeInsets.right ||
-                    ins.bottom != safeInsets.bottom
-                ) {
-                    safeInsets.set(ins.left, ins.top, ins.right, ins.bottom)
-                    if (v.width > 0 && v.height > 0) {
-                        relayout()
-                        invalidate()
-                    }
-                }
-                wi
+            ViewCompat.setOnApplyWindowInsetsListener(this, ::onSafeInsetsChanged)
+        }
+
+        private fun onSafeInsetsChanged(
+            v: View,
+            wi: WindowInsetsCompat,
+        ): WindowInsetsCompat {
+            val ins = wi.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val next = EdgeInsets(ins.left, ins.top, ins.right, ins.bottom)
+            val unchanged = next == safeInsets
+            if (unchanged) return wi
+            safeInsets = next
+            val laidOut = v.width > 0 && v.height > 0
+            if (laidOut) {
+                relayout()
+                invalidate()
             }
+            return wi
         }
 
         private fun loadDrawables() {
@@ -585,19 +580,19 @@ class GamepadTouchView
         ) {
             val rect = l.micMuteRect ?: return
             val face = micMutePillFace(pressed = s.buttons and BTN_MIC_MUTE != 0, muted = micMuted)
-            val corner = min(rect.width(), rect.height()) * PILL_CORNER_RADIUS_FRACTION
-            c.drawRoundRect(rect, corner, corner, if (face == MicPillFace.PRESSED) paintPillPressed else paintPillBg)
-            if (face == MicPillFace.MUTED) c.drawRoundRect(rect, corner, corner, paintPillMicMuted)
+            val corner = min(rect.width, rect.height) * PILL_CORNER_RADIUS_FRACTION
+            c.drawRoundBox(rect, corner, if (face == MicPillFace.PRESSED) paintPillPressed else paintPillBg)
+            if (face == MicPillFace.MUTED) c.drawRoundBox(rect, corner, paintPillMicMuted)
             // The glyph tracks the mute alone: a finger on the pill changes the ground it sits
             // on, not what the microphone is doing.
             drawPillIcon(c, rect, if (micMuted) icMicMuteMuted else icMicMute)
             val state = micMuteLedState
             val alpha = micMuteLampAlpha(state, SystemClock.uptimeMillis())
             if (alpha == 0) return
-            val r = min(rect.width(), rect.height()) * PILL_CORNER_RADIUS_FRACTION
+            val r = min(rect.width, rect.height) * PILL_CORNER_RADIUS_FRACTION
             paintTriggerEffect.strokeWidth = TRIGGER_EFFECT_STROKE_DP * density
             paintTriggerEffect.alpha = alpha
-            c.drawRoundRect(rect, r, r, paintTriggerEffect)
+            c.drawRoundBox(rect, r, paintTriggerEffect)
             // Shared with the trigger accents, which expect the solid colour back.
             paintTriggerEffect.alpha = MIC_MUTE_LAMP_ALPHA
             if (state == MIC_LED_STATE_PULSE) postInvalidateOnAnimation()
@@ -608,9 +603,9 @@ class GamepadTouchView
             l: GamepadLayout,
             s: GamepadState,
         ) {
-            val cx = l.dpadRect.centerX()
-            val cy = l.dpadRect.centerY()
-            val size = l.dpadRect.width()
+            val cx = l.dpadRect.centerX
+            val cy = l.dpadRect.centerY
+            val size = l.dpadRect.width
             drawDrawable(c, icDpad, cx, cy, size)
 
             val first: Drawable?
@@ -677,8 +672,8 @@ class GamepadTouchView
             l: GamepadLayout,
             s: GamepadState,
         ) {
-            val cx = l.abxyRect.centerX()
-            val cy = l.abxyRect.centerY()
+            val cx = l.abxyRect.centerX
+            val cy = l.abxyRect.centerY
             val sp = l.btnRadius * ABXY_BTN_SPACING_FACTOR
             val sz = l.btnRadius * ABXY_BTN_DRAW_SIZE_FACTOR
             drawIcon(c, icBtnY, cx, cy - sp, sz, s.buttons and BTN_Y != 0)
@@ -753,17 +748,17 @@ class GamepadTouchView
         ) {
             if (trackpadMode == TrackpadMode.NONE) return
             val tp = l.trackpadRect ?: return
-            val corner = tp.height() * TRACKPAD_CORNER_RADIUS_FRACTION
-            c.drawRoundRect(tp, corner, corner, paintStickBg)
+            val corner = tp.height * TRACKPAD_CORNER_RADIUS_FRACTION
+            c.drawRoundBox(tp, corner, paintStickBg)
             paintStickRing.strokeWidth = TRACKPAD_OUTLINE_STROKE_DP * density
-            c.drawRoundRect(tp, corner, corner, paintStickRing)
+            c.drawRoundBox(tp, corner, paintStickRing)
             lightbarColor?.let { color ->
                 paintLightbar.color = color
                 paintLightbar.strokeWidth = LIGHTBAR_STROKE_DP * density
-                c.drawRoundRect(tp, corner, corner, paintLightbar)
+                c.drawRoundBox(tp, corner, paintLightbar)
             }
             if (trackpadClickFlash || s.buttons and BTN_TOUCHPAD_CLICK != 0) {
-                c.drawRoundRect(tp, corner, corner, paintPressed)
+                c.drawRoundBox(tp, corner, paintPressed)
             }
             if (trackpadMode != TrackpadMode.TOUCH) return
             val touch = recognizer.trackpadState
@@ -773,23 +768,23 @@ class GamepadTouchView
 
         private fun drawTrackpadFinger(
             c: Canvas,
-            tp: RectF,
+            tp: Box,
             x: Short,
             y: Short,
         ) {
-            val px = tp.left + ((x.toInt() + HALF_INT16).toFloat() / NORM_INT16_SPAN) * tp.width()
-            val py = tp.top + ((y.toInt() + HALF_INT16).toFloat() / NORM_INT16_SPAN) * tp.height()
+            val px = tp.left + ((x.toInt() + HALF_INT16).toFloat() / NORM_INT16_SPAN) * tp.width
+            val py = tp.top + ((y.toInt() + HALF_INT16).toFloat() / NORM_INT16_SPAN) * tp.height
             c.drawCircle(px, py, TRACKPAD_FINGER_DOT_RADIUS_DP * density, paintStickThumbActive)
         }
 
         private fun drawPillButton(
             c: Canvas,
-            rect: RectF,
+            rect: Box,
             d: Drawable?,
             pressed: Boolean,
         ) {
-            val r = min(rect.width(), rect.height()) * PILL_CORNER_RADIUS_FRACTION
-            c.drawRoundRect(rect, r, r, if (pressed) paintPillPressed else paintPillBg)
+            val r = min(rect.width, rect.height) * PILL_CORNER_RADIUS_FRACTION
+            c.drawRoundBox(rect, r, if (pressed) paintPillPressed else paintPillBg)
             drawPillIcon(c, rect, d)
         }
 
@@ -797,14 +792,14 @@ class GamepadTouchView
         // not two) but centres its glyph exactly like every other pill.
         private fun drawPillIcon(
             c: Canvas,
-            rect: RectF,
+            rect: Box,
             d: Drawable?,
         ) {
             d ?: return
-            val iconSize = (min(rect.width(), rect.height()) * PILL_ICON_SIZE_FRACTION).toInt()
+            val iconSize = (min(rect.width, rect.height) * PILL_ICON_SIZE_FRACTION).toInt()
             val half = iconSize / 2
-            val cx = rect.centerX().toInt()
-            val cy = rect.centerY().toInt()
+            val cx = rect.centerX.toInt()
+            val cy = rect.centerY.toInt()
             d.setBounds(cx - half, cy - half, cx + half, cy + half)
             d.draw(c)
         }
@@ -836,7 +831,7 @@ class GamepadTouchView
         // binary pill.
         private fun drawTriggerRail(
             c: Canvas,
-            rect: RectF,
+            rect: Box,
             d: Drawable?,
             value: Int,
         ) {
@@ -846,12 +841,12 @@ class GamepadTouchView
             }
             val full = value >= TRIGGER_MAX
             drawPillButton(c, rect, d, full)
-            val boundaryY = rect.top + rect.height() * TRIGGER_FULL_ZONE_FRACTION
+            val boundaryY = rect.top + rect.height * TRIGGER_FULL_ZONE_FRACTION
             if (!full && value > 0) {
-                val r = min(rect.width(), rect.height()) * PILL_CORNER_RADIUS_FRACTION
+                val r = min(rect.width, rect.height) * PILL_CORNER_RADIUS_FRACTION
                 val fillTop = rect.bottom - (rect.bottom - boundaryY) * (value / TRIGGER_MAX.toFloat())
                 triggerClipPath.reset()
-                triggerClipPath.addRoundRect(rect, r, r, Path.Direction.CW)
+                triggerClipPath.addRoundRect(rect.left, rect.top, rect.right, rect.bottom, r, r, Path.Direction.CW)
                 c.withClip(triggerClipPath) {
                     drawRect(rect.left, fillTop, rect.right, rect.bottom, paintTriggerFill)
                 }
@@ -865,11 +860,11 @@ class GamepadTouchView
         // gets an accent ring while the game holds a non-neutral effect.
         private fun drawTriggerEffectRing(
             c: Canvas,
-            rect: RectF,
+            rect: Box,
         ) {
-            val r = min(rect.width(), rect.height()) * PILL_CORNER_RADIUS_FRACTION
+            val r = min(rect.width, rect.height) * PILL_CORNER_RADIUS_FRACTION
             paintTriggerEffect.strokeWidth = TRIGGER_EFFECT_STROKE_DP * density
-            c.drawRoundRect(rect, r, r, paintTriggerEffect)
+            c.drawRoundBox(rect, r, paintTriggerEffect)
         }
 
         // The DualSense's five microLEDs sit under the touchpad; skins without a
@@ -887,7 +882,7 @@ class GamepadTouchView
                 } else {
                     l.homeCy + l.smallBtnRadius + PLAYER_LED_GAP_DP * density
                 }
-            val cx = tp?.centerX() ?: l.homeCx
+            val cx = tp?.centerX ?: l.homeCx
             val radius = PLAYER_LED_RADIUS_DP * density
             val pitch = radius * 2f + PLAYER_LED_PITCH_DP * density
             val count = PLAYER_LED_COUNT
@@ -962,6 +957,16 @@ class GamepadTouchView
         }
     }
 
+// The pad's rounded rects have equal corner radii and come from the Android-free layout, so the
+// float overload draws them without a RectF of their own.
+private fun Canvas.drawRoundBox(
+    box: Box,
+    radius: Float,
+    paint: Paint,
+) {
+    drawRoundRect(box.left, box.top, box.right, box.bottom, radius, radius, paint)
+}
+
 /** The mute pill's ground, from most transient to most durable: a finger, then the mute. */
 internal enum class MicPillFace {
     IDLE,
@@ -1032,7 +1037,6 @@ internal fun computeStickAxes(
         dx = dx,
         dy = dy,
         axisX = (dx * max).toInt().toShort(),
-        // Sign flip: Android view coords are y-down but XInput wire expects stick-up = +Y.
         axisY = (-dy * max).toInt().toShort(),
     )
 }

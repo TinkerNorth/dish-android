@@ -100,6 +100,20 @@ class PhysicalSlotBindingObserverTest {
     }
 
     @Test
+    fun `a live Moonlight host with no pad number for the slot unbinds instead of binding`() {
+        // One session carries four controllers; a report that cannot name which one belongs to nobody.
+        val ops =
+            reconcile(
+                present = setOf(3),
+                bindings = mapOf("3" to "moonlight:pc"),
+                summaries = listOf(moonlightSummary("moonlight:pc")),
+                moonlightLiveIds = setOf("moonlight:pc"),
+                moonlightPadNumbers = mapOf("4" to 0),
+            )
+        assertEquals(listOf(BindOp.Unbind(3)), ops)
+    }
+
+    @Test
     fun `an unchanged Moonlight bind is deduped, a changed one is re-applied`() {
         val op = BindOp.BindMoonlight(deviceId = 3, connectionId = "moonlight:pc", controllerNumber = 0)
         val first = dedupeBindOps(listOf(op), emptyMap())

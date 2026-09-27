@@ -243,10 +243,11 @@ class FeedbackRouter
 
             // Matches the Moonlight rumble hold: refreshed by the host well before expiry.
             private const val TRIGGER_RUMBLE_HOLD_MS = 1500
-
-            private fun triggerEffectActive(
-                blocks: ByteArray,
-                offset: Int,
-            ): Boolean = blocks.size > offset && blocks[offset].toInt() != 0
         }
     }
+
+// A block whose mode byte is present and non-zero holds an effect; a truncated array reads as off.
+private fun triggerEffectActive(
+    blocks: ByteArray,
+    offset: Int,
+): Boolean = blocks.size > offset && blocks[offset].toInt() != 0

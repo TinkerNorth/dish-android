@@ -4,27 +4,37 @@ package com.tinkernorth.dish.hotpath.input
 
 import android.content.Context
 import android.os.Vibrator
+import android.view.InputDevice
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.store.FeedbackActivityStore
+import com.tinkernorth.dish.source.store.FeedbackKind
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import io.mockk.Called
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import io.mockk.verify
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class RumbleRouterTest {
+    private val dispatcher = StandardTestDispatcher()
+
     private fun slot(index: Int) = SatelliteConnection.SlotBinding(controllerIndex = index, controllerType = 0, registered = true)
 
     @Test
@@ -184,6 +194,7 @@ class RumbleRouterTest {
         slotId: String,
         controllerIndex: Int,
         rumbleOn: Boolean,
+        scope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined),
     ) {
         val native = mockk<PhysicalInputNative>(relaxed = true)
 
@@ -191,6 +202,7 @@ class RumbleRouterTest {
         val vibrator = mockk<Vibrator>(relaxed = true) { every { hasVibrator() } returns true }
         val rumbleEnabled =
             mockk<RumbleEnabledStore> { every { isEnabled(any()) } returns rumbleOn }
+        val feedbackActivity = FeedbackActivityStore()
 
         private val context =
             mockk<Context>(relaxed = true) {
@@ -215,9 +227,9 @@ class RumbleRouterTest {
                 context = context,
                 satellite = satellite,
                 native = native,
-                scope = CoroutineScope(Dispatchers.Unconfined),
+                scope = scope,
                 rumbleEnabled = rumbleEnabled,
-                feedbackActivity = FeedbackActivityStore(),
+                feedbackActivity = feedbackActivity,
             )
     }
 
@@ -274,11 +286,213 @@ class RumbleRouterTest {
         verify(exactly = 0) { h.native.sendUsbRumble(any(), any(), any()) }
     }
 
+    // ---- the stop path ----
+
+    @Test
+    fun `dispatch with zero magnitudes cancels the phone vibrator`() {
+        val h = DispatchHarness(slotId = VIRTUAL_SLOT_ID, controllerIndex = 0, rumbleOn = true)
+
+        h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 0, weakMagnitude = 0, durationMs = 100)
+
+        verify { h.vibrator.cancel() }
+        verifyNoLegacyVibrate(h.vibrator)
+    }
+
+    @Test
+    fun `dispatch with zero duration sends a USB stop and drops the pending stop job`() =
+        runTest(dispatcher) {
+            val h = DispatchHarness(slotId = "-1000", controllerIndex = 0, rumbleOn = true, scope = this)
+            h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 250, durationMs = 100)
+
+            h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 250, durationMs = 0)
+
+            verify(exactly = 1) { h.native.sendUsbRumble(-1000, 0, 0) }
+            dispatcher.scheduler.advanceTimeBy(RUMBLE_MAX_MS.toLong())
+            dispatcher.scheduler.runCurrent()
+            verify(exactly = 1) { h.native.sendUsbRumble(-1000, 0, 0) }
+        }
+
+    // ---- the scheduled USB stop ----
+
+    @Test
+    fun `usb rumble sends a zero after the clamped duration`() =
+        runTest(dispatcher) {
+            val h = DispatchHarness(slotId = "-1000", controllerIndex = 0, rumbleOn = true, scope = this)
+
+            h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 250, durationMs = 5_000)
+
+            dispatcher.scheduler.advanceTimeBy(RUMBLE_MAX_MS - 1L)
+            dispatcher.scheduler.runCurrent()
+            verify(exactly = 0) { h.native.sendUsbRumble(-1000, 0, 0) }
+            dispatcher.scheduler.advanceTimeBy(1L)
+            dispatcher.scheduler.runCurrent()
+            verify(exactly = 1) { h.native.sendUsbRumble(-1000, 0, 0) }
+        }
+
+    @Test
+    fun `a second usb rumble cancels the first pending stop`() =
+        runTest(dispatcher) {
+            val h = DispatchHarness(slotId = "-1000", controllerIndex = 0, rumbleOn = true, scope = this)
+            h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 250, durationMs = 100)
+            dispatcher.scheduler.advanceTimeBy(50L)
+            dispatcher.scheduler.runCurrent()
+
+            h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 250, durationMs = 100)
+
+            dispatcher.scheduler.advanceTimeBy(60L)
+            dispatcher.scheduler.runCurrent()
+            verify(exactly = 0) { h.native.sendUsbRumble(-1000, 0, 0) }
+            dispatcher.scheduler.advanceTimeBy(40L)
+            dispatcher.scheduler.runCurrent()
+            verify(exactly = 1) { h.native.sendUsbRumble(-1000, 0, 0) }
+        }
+
+    // ---- activity, the bench entry and the slot-addressed entry ----
+
+    @Test
+    fun `dispatch records rumble activity even when the slot is rumble-off`() {
+        val h = DispatchHarness(slotId = VIRTUAL_SLOT_ID, controllerIndex = 0, rumbleOn = false)
+
+        h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 500, durationMs = 100)
+
+        assertEquals(FeedbackKind.RUMBLE, h.feedbackActivity.snapshot()[VIRTUAL_SLOT_ID]?.lastKind)
+    }
+
+    @Test
+    fun `testBuzz ignores the per-slot rumble toggle`() {
+        val h = DispatchHarness(slotId = VIRTUAL_SLOT_ID, controllerIndex = 0, rumbleOn = false)
+
+        h.router.testBuzz(VIRTUAL_SLOT_ID, strongMagnitude = 500, weakMagnitude = 500, durationMs = 100)
+
+        verifyLegacyVibrate(h.vibrator)
+        verify(exactly = 0) { h.rumbleEnabled.isEnabled(any()) }
+    }
+
+    @Test
+    fun `testBuzz for an unparseable slot does nothing`() {
+        val h = DispatchHarness(slotId = VIRTUAL_SLOT_ID, controllerIndex = 0, rumbleOn = true)
+
+        h.router.testBuzz("not-a-slot", strongMagnitude = 500, weakMagnitude = 500, durationMs = 100)
+
+        verify { h.vibrator wasNot Called }
+        verify(exactly = 0) { h.native.sendUsbRumble(any(), any(), any()) }
+    }
+
+    @Test
+    fun `testBuzz with zero amplitude does not vibrate`() {
+        val h = DispatchHarness(slotId = VIRTUAL_SLOT_ID, controllerIndex = 0, rumbleOn = true)
+
+        h.router.testBuzz(VIRTUAL_SLOT_ID, strongMagnitude = 0, weakMagnitude = 0, durationMs = 100)
+
+        verifyNoLegacyVibrate(h.vibrator)
+    }
+
+    @Test
+    fun `testBuzz still clamps the duration`() {
+        val h = DispatchHarness(slotId = VIRTUAL_SLOT_ID, controllerIndex = 0, rumbleOn = true)
+
+        h.router.testBuzz(VIRTUAL_SLOT_ID, strongMagnitude = 500, weakMagnitude = 500, durationMs = 5_000)
+
+        verifyLegacyVibrateFor(h.vibrator, RUMBLE_MAX_MS.toLong())
+    }
+
+    @Test
+    fun `dispatchToSlot actuates a direct pad and consults the gate with its slot id`() {
+        val h = DispatchHarness(slotId = "-1000", controllerIndex = 0, rumbleOn = true)
+
+        h.router.dispatchToSlot("-1000", strongMagnitude = 500, weakMagnitude = 250, durationMs = 100)
+
+        verify { h.rumbleEnabled.isEnabled("-1000") }
+        verify { h.native.sendUsbRumble(-1000, 500, 250) }
+    }
+
+    @Test
+    fun `phone rumble on a device without a vibrator does nothing`() {
+        val h = DispatchHarness(slotId = VIRTUAL_SLOT_ID, controllerIndex = 0, rumbleOn = true)
+        every { h.vibrator.hasVibrator() } returns false
+
+        h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 500, durationMs = 100)
+
+        verifyNoLegacyVibrate(h.vibrator)
+    }
+
+    // ---- a framework pad's own motor ----
+
+    @Test
+    fun `framework rumble reaches the pad's own vibrator`() {
+        val h = DispatchHarness(slotId = "1234", controllerIndex = 0, rumbleOn = true)
+        val motor = mockk<Vibrator>(relaxed = true) { every { hasVibrator() } returns true }
+
+        withListedDevice(1234, padWithMotor(motor)) {
+            h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 250, durationMs = 100)
+        }
+
+        verifyLegacyVibrateFor(motor, 100L)
+        verify { h.vibrator wasNot Called }
+    }
+
+    @Test
+    fun `a framework stop cancels the pad's own vibrator`() {
+        val h = DispatchHarness(slotId = "1234", controllerIndex = 0, rumbleOn = true)
+        val motor = mockk<Vibrator>(relaxed = true)
+
+        withListedDevice(1234, padWithMotor(motor)) {
+            h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 0, weakMagnitude = 0, durationMs = 100)
+        }
+
+        verify { motor.cancel() }
+    }
+
+    @Test
+    fun `framework rumble for a device Android no longer lists is dropped`() {
+        val h = DispatchHarness(slotId = "1234", controllerIndex = 0, rumbleOn = true)
+
+        withListedDevice(1234, null) {
+            h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 250, durationMs = 100)
+            h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 0, weakMagnitude = 0, durationMs = 100)
+        }
+
+        verify { h.vibrator wasNot Called }
+        verify(exactly = 0) { h.native.sendUsbRumble(any(), any(), any()) }
+    }
+
+    private inline fun withListedDevice(
+        deviceId: Int,
+        device: InputDevice?,
+        block: () -> Unit,
+    ) {
+        mockkStatic(InputDevice::class)
+        try {
+            every { InputDevice.getDevice(deviceId) } returns device
+            block()
+        } finally {
+            unmockkStatic(InputDevice::class)
+        }
+    }
+
+    // Marker: InputDevice.getVibrator is the only vibrator a pad exposes below 31 (see
+    // InputDeviceVibrators.kt), and the JVM stub reports SDK 0, so the router reads exactly it.
+    @Suppress("DEPRECATION")
+    private fun padWithMotor(motor: Vibrator): InputDevice = mockk { every { vibrator } returns motor }
+
     // Marker: under the JVM stub SDK_INT is 0, so the router takes its API 24/25 branch, and the
     // only thing that branch can call is the deprecated Vibrator.vibrate(long) (RumbleRouter has
     // the reason). Verifying that branch means naming that overload; it is named here, once.
     @Suppress("DEPRECATION")
     private fun verifyLegacyVibrate(vibrator: Vibrator) {
         verify { vibrator.vibrate(any<Long>()) }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun verifyLegacyVibrateFor(
+        vibrator: Vibrator,
+        durationMs: Long,
+    ) {
+        verify { vibrator.vibrate(durationMs) }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun verifyNoLegacyVibrate(vibrator: Vibrator) {
+        verify(exactly = 0) { vibrator.vibrate(any<Long>()) }
     }
 }

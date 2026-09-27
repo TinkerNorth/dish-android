@@ -2,8 +2,6 @@
 
 package com.tinkernorth.dish.ui.common
 
-import android.graphics.Rect
-import android.graphics.RectF
 import com.tinkernorth.dish.ui.common.ABXY_BTN_RADIUS_FRACTION
 import com.tinkernorth.dish.ui.common.BOTTOM_ROW_Y_FRACTION
 import com.tinkernorth.dish.ui.common.CENTER_BTN_HALF_GAP_DP
@@ -36,12 +34,12 @@ import com.tinkernorth.dish.ui.common.TRIGGER_WIDTH_DP
 import kotlin.math.min
 
 internal data class GamepadLayout(
-    val dpadRect: RectF,
-    val abxyRect: RectF,
-    val lbRect: RectF,
-    val rbRect: RectF,
-    val ltRect: RectF,
-    val rtRect: RectF,
+    val dpadRect: Box,
+    val abxyRect: Box,
+    val lbRect: Box,
+    val rbRect: Box,
+    val ltRect: Box,
+    val rtRect: Box,
     val leftStickCx: Float,
     val leftStickCy: Float,
     val rightStickCx: Float,
@@ -59,17 +57,17 @@ internal data class GamepadLayout(
     val homeCx: Float,
     val homeCy: Float,
     val centerBtnCy: Float,
-    val trackpadRect: RectF? = null,
+    val trackpadRect: Box? = null,
     // Null for every skin but the DualSense: the mic-mute button only exists on that pad, and
     // only that identity carries WBUTTON_MIC_MUTE into the emulated pad's input report.
-    val micMuteRect: RectF? = null,
+    val micMuteRect: Box? = null,
 )
 
 internal fun computeGamepadLayout(
     width: Int,
     height: Int,
     density: Float,
-    safeInsets: Rect,
+    safeInsets: EdgeInsets,
     skin: GamepadSkin,
     trackpad: Boolean = false,
 ): GamepadLayout {
@@ -88,13 +86,13 @@ internal fun computeGamepadLayout(
     val centreX = (safeLeft + safeRight) / 2f
     val sbHalfGap = SHOULDER_CENTER_HALF_GAP_DP * density
 
-    val lbRect = RectF(safeLeft + sbCornerInset, safeTop, centreX - sbHalfGap, safeTop + sbH)
-    val rbRect = RectF(centreX + sbHalfGap, safeTop, safeRight - sbCornerInset, safeTop + sbH)
+    val lbRect = Box(safeLeft + sbCornerInset, safeTop, centreX - sbHalfGap, safeTop + sbH)
+    val rbRect = Box(centreX + sbHalfGap, safeTop, safeRight - sbCornerInset, safeTop + sbH)
 
     val contentTop = safeTop + sbH + gap
     val contentBottom = safeBottom
-    val ltRect = RectF(safeLeft, contentTop, safeLeft + tW, contentBottom)
-    val rtRect = RectF(safeRight - tW, contentTop, safeRight, contentBottom)
+    val ltRect = Box(safeLeft, contentTop, safeLeft + tW, contentBottom)
+    val rtRect = Box(safeRight - tW, contentTop, safeRight, contentBottom)
 
     val contentLeft = ltRect.right + gap
     val contentRight = rtRect.left - gap
@@ -111,7 +109,7 @@ internal fun computeGamepadLayout(
     val dpadCx = contentLeft + qw * CLUSTER_X_FRACTION_OF_QUARTER
     val dpadCy = if (psLayout) topRowCy else bottomRowCy
     val dpadRect =
-        RectF(dpadCx - clusterSize / 2, dpadCy - clusterSize / 2, dpadCx + clusterSize / 2, dpadCy + clusterSize / 2)
+        Box(dpadCx - clusterSize / 2, dpadCy - clusterSize / 2, dpadCx + clusterSize / 2, dpadCy + clusterSize / 2)
 
     val stickRadius = min(qw * STICK_RADIUS_QW_FRACTION, contentH * STICK_RADIUS_H_FRACTION)
     val l3StickRadius = stickRadius * L3_STICK_RADIUS_FRACTION
@@ -123,7 +121,7 @@ internal fun computeGamepadLayout(
 
     val abxyCx = contentRight - qw * CLUSTER_X_FRACTION_OF_QUARTER
     val abxyRect =
-        RectF(abxyCx - clusterSize / 2, topRowCy - clusterSize / 2, abxyCx + clusterSize / 2, topRowCy + clusterSize / 2)
+        Box(abxyCx - clusterSize / 2, topRowCy - clusterSize / 2, abxyCx + clusterSize / 2, topRowCy + clusterSize / 2)
     val btnRadius = clusterSize * ABXY_BTN_RADIUS_FRACTION
 
     val rightStickCx = contentRight - qw * STICK_X_FRACTION_OF_QUARTER
@@ -133,7 +131,7 @@ internal fun computeGamepadLayout(
 
     val centre =
         computeCentreCluster(
-            content = RectF(contentLeft, contentTop, contentRight, contentBottom),
+            content = Box(contentLeft, contentTop, contentRight, contentBottom),
             density = density,
             trackpad = psLayout && trackpad,
             micMute = skin.hasMicMute,
@@ -177,19 +175,19 @@ private class CentreCluster(
     val homeCx: Float,
     val homeCy: Float,
     val centerBtnCy: Float,
-    val trackpadRect: RectF?,
-    val micMuteRect: RectF?,
+    val trackpadRect: Box?,
+    val micMuteRect: Box?,
 )
 
 private fun computeCentreCluster(
-    content: RectF,
+    content: Box,
     density: Float,
     trackpad: Boolean,
     micMute: Boolean,
 ): CentreCluster {
     val smallBtnRadius = SMALL_BTN_RADIUS_DP * density
     val centerBtnCy = content.top + smallBtnRadius * CENTER_BTN_TOP_OFFSET_FACTOR
-    val centerCx = content.centerX()
+    val centerCx = content.centerX
     val centerHalfGap = CENTER_BTN_HALF_GAP_DP * density
 
     // The trackpad sits where the real DS4/DualSense carries it: top centre, with the
@@ -197,9 +195,9 @@ private fun computeCentreCluster(
     val trackpadRect =
         if (trackpad) {
             val padH =
-                min(content.width() * TRACKPAD_WIDTH_FRACTION / TRACKPAD_ASPECT, content.height() * TRACKPAD_MAX_HEIGHT_FRACTION)
+                min(content.width * TRACKPAD_WIDTH_FRACTION / TRACKPAD_ASPECT, content.height * TRACKPAD_MAX_HEIGHT_FRACTION)
             val padW = padH * TRACKPAD_ASPECT
-            RectF(centerCx - padW / 2, content.top, centerCx + padW / 2, content.top + padH)
+            Box(centerCx - padW / 2, content.top, centerCx + padW / 2, content.top + padH)
         } else {
             null
         }
@@ -224,7 +222,7 @@ private fun computeCentreCluster(
                     homeCy + smallBtnRadius + MIC_MUTE_GAP_DP * density,
                     content.bottom - muteH,
                 )
-            RectF(centerCx - muteW / 2, muteTop, centerCx + muteW / 2, muteTop + muteH)
+            Box(centerCx - muteW / 2, muteTop, centerCx + muteW / 2, muteTop + muteH)
         } else {
             null
         }

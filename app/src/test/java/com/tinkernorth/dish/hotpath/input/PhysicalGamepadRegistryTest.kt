@@ -179,7 +179,7 @@ class PhysicalGamepadRegistryTest {
     }
 
     @Test
-    fun `forgetSupersededFramework drops the device immediately`() {
+    fun `forgetSupersededFramework drops the device without the disconnect grace, so a re-enumerated card never doubles it`() {
         val registry = buildRegistry()
         registry.addUsbSynthetic(-1000, "Pad", false, 0, 1, 2)
         registry.forgetSupersededFramework(-1000)
@@ -259,10 +259,10 @@ class PhysicalGamepadRegistryTest {
 
     @Test
     fun `isSyntheticId treats negative ids as synthetic and non-negative as framework`() {
-        assertTrue(PhysicalGamepadRegistry.isSyntheticId(-1000))
-        assertTrue(PhysicalGamepadRegistry.isSyntheticId(-1))
-        assertFalse(PhysicalGamepadRegistry.isSyntheticId(0))
-        assertFalse(PhysicalGamepadRegistry.isSyntheticId(42))
+        assertTrue(isSyntheticId(-1000))
+        assertTrue(isSyntheticId(-1))
+        assertFalse(isSyntheticId(0))
+        assertFalse(isSyntheticId(42))
     }
 
     // ---- the pad's own touch surface ----

@@ -188,12 +188,45 @@ class PhysicalGamepadRegistry
             return isAnotherSlot && isAPlaceholder && !held.isUsbSynthetic && isTheSameModel
         }
 
+        private fun InputDevice.vendorIdOrZero(): Int = runCatching { vendorId }.getOrDefault(0)
+
+        private fun InputDevice.productIdOrZero(): Int = runCatching { productId }.getOrDefault(0)
+
+        private fun isFrameworkCardOfModel(
+            d: Device,
+            vendorId: Int,
+            productId: Int,
+        ): Boolean {
+            val isAFrameworkCard = !d.isUsbSynthetic
+            val isTheModel = d.vendorId == vendorId && d.productId == productId
+            return isAFrameworkCard && isTheModel
+        }
+
+        private fun isSyntheticOfModel(
+            d: Device,
+            vendorId: Int,
+            productId: Int,
+        ): Boolean {
+            val isTheModel = d.vendorId == vendorId && d.productId == productId
+            return d.isUsbSynthetic && isTheModel
+        }
+
+        // A framework card standing in for a device the OS took away: the loader or the replug ask.
+        private fun isFrameworkPlaceholderOfModel(
+            d: Device,
+            vendorId: Int,
+            productId: Int,
+        ): Boolean {
+            val isAPlaceholder = d.transitioning || d.needsReplug
+            return isAPlaceholder && isFrameworkCardOfModel(d, vendorId, productId)
+        }
+
         private fun makeRoutedDevice(
             deviceId: Int,
             dev: InputDevice,
         ): Device {
-            val vid = runCatching { dev.vendorId }.getOrDefault(0)
-            val pid = runCatching { dev.productId }.getOrDefault(0)
+            val vid = dev.vendorIdOrZero()
+            val pid = dev.productIdOrZero()
             val hasGyro = hasGyro(deviceId)
             val hasRumble = probeRumble(dev)
             val hasLightbar = hasLightbar(dev)
@@ -216,28 +249,30 @@ class PhysicalGamepadRegistry
             )
         }
 
-        // The pad's own surface, the merged device first (the common case), then a sibling
-        // device of the same identity. Pointer capture is what turns the surface into finger
-        // positions, and it does not exist before API 26: there the surface stays a system
-        // mouse and the app reports none, so nothing offers what it cannot read.
         private fun touchpadSurfaceFor(
             deviceId: Int,
             dev: InputDevice,
             vid: Int,
             pid: Int,
-        ): Int? {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
-            if (hasPointerSource(dev.sources)) return deviceId
-            if (vid == 0 && pid == 0) return null
-            return InputDevice.getDeviceIds().firstOrNull { id ->
-                if (id == deviceId) return@firstOrNull false
-                val other = InputDevice.getDevice(id) ?: return@firstOrNull false
-                hasPointerSource(other.sources) &&
-                    !isGamepad(other) &&
-                    runCatching { other.vendorId }.getOrDefault(0) == vid &&
-                    runCatching { other.productId }.getOrDefault(0) == pid
+        ): Int? = resolveTouchpadSurface(Build.VERSION.SDK_INT, deviceId, dev.sources, vid, pid, ::siblingDevices)
+
+        // Every InputDevice Android lists, flattened to the facts the surface resolution reads.
+        private fun siblingDevices(): List<SiblingDevice> =
+            buildList {
+                for (id in InputDevice.getDeviceIds()) {
+                    val dev = InputDevice.getDevice(id) ?: continue
+                    add(siblingFacts(dev))
+                }
             }
-        }
+
+        private fun siblingFacts(dev: InputDevice): SiblingDevice =
+            SiblingDevice(
+                id = dev.id,
+                sources = dev.sources,
+                isGamepad = isGamepad(dev),
+                vendorId = dev.vendorIdOrZero(),
+                productId = dev.productIdOrZero(),
+            )
 
         // Re-resolve every framework pad's surface; cheap (a few devices) and only on a
         // pointer-bearing device's arrival or departure.
@@ -253,8 +288,8 @@ class PhysicalGamepadRegistry
         }
 
         private fun probeRumble(dev: InputDevice): Boolean {
-            val vid = runCatching { dev.vendorId }.getOrDefault(0)
-            val pid = runCatching { dev.productId }.getOrDefault(0)
+            val vid = dev.vendorIdOrZero()
+            val pid = dev.productIdOrZero()
             // The Switch Pro protocol exposes a framework vibrator Android can't drive; only Direct can.
             if (native.modelFrameworkRumbleUnreliable(vid, pid)) return false
             return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -303,7 +338,7 @@ class PhysicalGamepadRegistry
             directFailed[vidPidKey(vendorId, productId)] = reason
             _devices.update { map ->
                 map.mapValues { (_, d) ->
-                    if (!d.isUsbSynthetic && d.vendorId == vendorId && d.productId == productId) {
+                    if (isFrameworkCardOfModel(d, vendorId, productId)) {
                         d.copy(directFailure = reason)
                     } else {
                         d
@@ -350,16 +385,7 @@ class PhysicalGamepadRegistry
             productId: Int,
         ) {
             transitioningModels.remove(vidPidKey(vendorId, productId))
-            // Drop the stale placeholder (loader or needs-replug); a live re-enumerated entry of the
-            // same model is neither flag and is left in place.
-            _devices.update { map ->
-                map.filterNot { (_, d) ->
-                    (d.transitioning || d.needsReplug) &&
-                        !d.isUsbSynthetic &&
-                        d.vendorId == vendorId &&
-                        d.productId == productId
-                }
-            }
+            _devices.update { map -> map.filterNot { (_, d) -> isFrameworkPlaceholderOfModel(d, vendorId, productId) } }
         }
 
         // Settle a held loader placeholder into a visible "needs replug" card (the OS never returned
@@ -371,7 +397,7 @@ class PhysicalGamepadRegistry
             transitioningModels.remove(vidPidKey(vendorId, productId))
             _devices.update { map ->
                 map.mapValues { (_, d) ->
-                    if (d.transitioning && !d.isUsbSynthetic && d.vendorId == vendorId && d.productId == productId) {
+                    if (d.transitioning && isFrameworkCardOfModel(d, vendorId, productId)) {
                         d.withPlaceholder(placeholderTransition(d.placeholderState(), PlaceholderEvent.MarkNeedsReplug))
                     } else {
                         d
@@ -388,7 +414,7 @@ class PhysicalGamepadRegistry
         ) {
             _devices.update { map ->
                 map.mapValues { (_, d) ->
-                    if (d.isUsbSynthetic && d.vendorId == vendorId && d.productId == productId) {
+                    if (isSyntheticOfModel(d, vendorId, productId)) {
                         d.withPlaceholder(placeholderTransition(d.placeholderState(), PlaceholderEvent.MarkRestoreStuck))
                     } else {
                         d
@@ -404,7 +430,7 @@ class PhysicalGamepadRegistry
         ) {
             _devices.update { map ->
                 map.mapValues { (_, d) ->
-                    if (d.isUsbSynthetic && d.vendorId == vendorId && d.productId == productId) {
+                    if (isSyntheticOfModel(d, vendorId, productId)) {
                         d.withPlaceholder(placeholderTransition(d.placeholderState(), PlaceholderEvent.ClearRestoreStuck))
                     } else {
                         d
@@ -468,19 +494,12 @@ class PhysicalGamepadRegistry
             // gyro; a pad's light bar as its merged device gains a sub-device), so re-probe.
             val current = _devices.value[deviceId]
             val probed = probeCapabilities(deviceId, dev, current)
-            if (!hasChanged(current, dev, probed)) return
+            if (!frameworkPadChanged(current, dev.name, probed)) return
 
             logReprobe(deviceId, dev, "hasGyro", current?.hasGyro, probed.hasGyro)
             logReprobe(deviceId, dev, "hasRumble", current?.hasRumble, probed.hasRumble)
             _devices.update { it + (deviceId to makeRoutedDevice(deviceId, dev)) }
         }
-
-        private data class ProbedCapabilities(
-            val hasGyro: Boolean,
-            val hasRumble: Boolean,
-            val hasLightbar: Boolean,
-            val touchpadDeviceId: Int?,
-        )
 
         private fun probeCapabilities(
             deviceId: Int,
@@ -493,19 +512,6 @@ class PhysicalGamepadRegistry
             touchpadDeviceId =
                 touchpadSurfaceFor(deviceId, dev, current?.vendorId ?: 0, current?.productId ?: 0),
         )
-
-        private fun hasChanged(
-            current: Device?,
-            dev: InputDevice,
-            probed: ProbedCapabilities,
-        ): Boolean =
-            current == null ||
-                current.name != dev.name ||
-                current.isDisconnecting ||
-                current.hasGyro != probed.hasGyro ||
-                current.hasRumble != probed.hasRumble ||
-                current.hasLightbar != probed.hasLightbar ||
-                current.touchpadDeviceId != probed.touchpadDeviceId
 
         private fun logReprobe(
             deviceId: Int,
@@ -530,7 +536,7 @@ class PhysicalGamepadRegistry
                                 map + (device.id to cur.copy(disconnectingTimeLeftSec = remaining))
                             }
                         if (device.id !in snapshot) return@launch
-                        delay(1000L)
+                        delay(DISCONNECT_TICK_MS)
                         remaining -= 1
                     }
                     _devices.update { it - device.id }
@@ -575,9 +581,6 @@ class PhysicalGamepadRegistry
             _devices.update { it - deviceId }
         }
 
-        // Drop a framework device a Direct claim just superseded (its interface was stolen) instead of
-        // leaving it in the 5s disconnect grace, where it would collide with the framework that
-        // re-enumerates on a switch back to Standard and briefly show two cards for one controller.
         fun forgetSupersededFramework(deviceId: Int) {
             disconnectJobs.remove(deviceId)?.cancel()
             _devices.update { it - deviceId }
@@ -603,9 +606,7 @@ class PhysicalGamepadRegistry
                 dev.getMotionRange(MotionEvent.AXIS_Z, src)?.flat ?: 0f,
                 dev.getMotionRange(MotionEvent.AXIS_RZ, src)?.flat ?: 0f,
             )
-            val vid = runCatching { dev.vendorId }.getOrDefault(0)
-            val pid = runCatching { dev.productId }.getOrDefault(0)
-            native.setDeviceQuirk(dev.id, resolveGamepadQuirk(vid, pid))
+            native.setDeviceQuirk(dev.id, resolveGamepadQuirk(dev.vendorIdOrZero(), dev.productIdOrZero()))
             logDeviceCapabilities(dev)
         }
 
@@ -637,9 +638,12 @@ class PhysicalGamepadRegistry
             // Covers a USB cable jiggle / re-enumeration without holding state long enough that a real removal feels stuck.
             private const val DISCONNECT_GRACE_SEC = 5
 
-            fun isSyntheticId(deviceId: Int): Boolean = deviceId < 0
+            private const val DISCONNECT_TICK_MS = 1000L
         }
     }
+
+// A Direct-claimed pad is registered under a negative synthetic id; framework ids are Android's own.
+internal fun isSyntheticId(deviceId: Int): Boolean = deviceId < 0
 
 // A device Android reads as a pointer: a touchpad in its default (system mouse) mode reports
 // SOURCE_MOUSE, and only switches to SOURCE_TOUCHPAD while a view holds pointer capture, so the

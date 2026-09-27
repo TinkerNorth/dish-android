@@ -332,14 +332,21 @@ internal fun combinedRumblePlan(
 
 // Returns 0 only for exact zero; tiny magnitudes clamp to 1 so on/off response matches a physical pad.
 internal fun rumbleMagnitudeTo255(magnitude: Int): Int {
-    val clamped = magnitude.coerceIn(0, 65535)
+    val clamped = magnitude.coerceIn(0, WIRE_MAGNITUDE_MAX)
     if (clamped == 0) return 0
-    val scaled = (clamped * 255 + 32767) / 65535
-    return scaled.coerceIn(1, 255)
+    val scaled = (clamped * MOTOR_MAX + ROUND_HALF) / WIRE_MAGNITUDE_MAX
+    return scaled.coerceIn(1, MOTOR_MAX)
 }
 
-// Cap at 1500ms so a buggy/malicious satellite can't strand a multi-second buzz on the device.
+// Capped so a buggy/malicious satellite can't strand a multi-second buzz on the device.
 internal fun rumbleSafeDurationMs(durationMs: Int): Int {
     if (durationMs == 0) return 0
-    return durationMs.coerceIn(1, 1500)
+    return durationMs.coerceIn(1, RUMBLE_MAX_MS)
 }
+
+// The wire carries a 16-bit magnitude; a vibrator takes an 8-bit amplitude, rounded half up.
+private const val WIRE_MAGNITUDE_MAX = 65535
+private const val MOTOR_MAX = 255
+private const val ROUND_HALF = WIRE_MAGNITUDE_MAX / 2
+
+internal const val RUMBLE_MAX_MS = 1500

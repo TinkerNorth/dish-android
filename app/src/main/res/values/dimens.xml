@@ -219,4 +219,19 @@
     <dimen name="donate_content_max_width">@dimen/size_600</dimen>
     <dimen name="inspector_stick_plot_height">@dimen/size_160</dimen>
     <dimen name="inspector_touch_plot_height">@dimen/size_140</dimen>
+
+    <!-- ============================================================
+         TOUCHPAD SURFACE (TouchpadSurfaceView)
+
+         In px, not dp: the view drew these as raw pixels and the tokens
+         keep that rendering exactly. Scaling them with density is a
+         visual change to make with a device in hand, not in a rename.
+         ============================================================ -->
+    <dimen name="touchpad_surface_inset">8px</dimen>
+    <dimen name="touchpad_surface_outline_stroke">4px</dimen>
+    <dimen name="touchpad_surface_label_text">56px</dimen>
+    <dimen name="touchpad_surface_hint_text">28px</dimen>
+    <dimen name="touchpad_surface_label_lift">8px</dimen>
+    <dimen name="touchpad_surface_hint_offset">44px</dimen>
+    <dimen name="touchpad_surface_finger_radius">32px</dimen>
 </resources>

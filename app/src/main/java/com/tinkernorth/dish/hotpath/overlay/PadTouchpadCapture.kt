@@ -96,10 +96,14 @@ class PadTouchpadCapture(
         combine(registry.devices, reachability.state) { devices, reachable ->
             routes(devices, reachable.keys, capabilities::touchpadSource)
         }.distinctUntilChanged()
-            .onEach { next ->
-                routes = next
-                apply()
-            }.launchIn(scope)
+            .onEach(::installRoutes)
+            .launchIn(scope)
+    }
+
+    // The captured surfaces the composer routes now; capture follows them and the window focus.
+    internal fun installRoutes(next: Map<Int, String>) {
+        routes = next
+        apply()
     }
 
     fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -170,29 +174,15 @@ class PadTouchpadCapture(
         Log.w(TAG, "captured touchpad on device $deviceId reports no axis range; dropping its frames")
     }
 
-    // Every pointer still on the surface after this event: the one lifting on an UP is gone,
-    // all of them on a CANCEL, and a hover carries no finger at all.
-    private fun downPointers(event: MotionEvent): List<Pointer> {
-        val lifting =
-            when (event.actionMasked) {
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> event.actionIndex
-                MotionEvent.ACTION_CANCEL,
-                MotionEvent.ACTION_HOVER_ENTER,
-                MotionEvent.ACTION_HOVER_MOVE,
-                MotionEvent.ACTION_HOVER_EXIT,
-                -> return emptyList()
-                else -> -1
-            }
-        return (0 until event.pointerCount)
-            .filter { it != lifting }
-            .map { Pointer(event.getPointerId(it), event.getX(it), event.getY(it)) }
-    }
+    private fun downPointers(event: MotionEvent): List<Pointer> =
+        pointersStillDown(event.actionMasked, event.actionIndex, allPointers(event))
+
+    private fun allPointers(event: MotionEvent): List<Pointer> =
+        List(event.pointerCount) { Pointer(event.getPointerId(it), event.getX(it), event.getY(it)) }
 
     private fun liftAll() {
         val now = SystemClock.uptimeMillis()
-        for ((slotId, frame) in lastFrame) {
-            if (!frame.anyFingerDown() && !frame.buttonPressed) continue
-            val lifted = frame.lifted(now)
+        for ((slotId, lifted) in liftedFrames(lastFrame, now)) {
             lastFrame[slotId] = lifted
             reachability.state.value[slotId]?.let { send(it, slotId, lifted) }
         }
@@ -226,9 +216,7 @@ class PadTouchpadCapture(
 
     // Resend thread. A changed frame is re-sent EDGE_BURST_RESENDS ticks in a row, then on the
     // slow keepalive, so a lost finger-up heals at the next tick; the receiver drops a duplicate
-    // by its equal event time. A slot no longer routed (capture released, pad unbound) is kept
-    // only through its lift's burst, then forgotten: nothing should keep pacing a surface the
-    // app stopped reading. With every slot forgotten the loop stops itself; the next capture
+    // by its equal event time. With every slot forgotten the loop stops itself; the next capture
     // starts it again.
     private fun resendDue() {
         val routedSlots = routes.values.toSet()
@@ -238,14 +226,19 @@ class PadTouchpadCapture(
             if (changed) lastResent[slotId] = frame
             val pacer = pacers.getOrPut(slotId) { ResendPacer() }
             val due = pacer.resendDue(changed)
-            if (due && sink != null) send(sink, slotId, frame)
-            if (!due && slotId !in routedSlots) {
-                lastFrame.remove(slotId)
-                lastResent.remove(slotId)
-                pacers.remove(slotId)
+            when (resendStepFor(due, hasSink = sink != null, routed = slotId in routedSlots)) {
+                ResendStep.SEND -> if (sink != null) send(sink, slotId, frame)
+                ResendStep.FORGET -> forgetSlot(slotId)
+                ResendStep.KEEP -> Unit
             }
         }
         if (lastFrame.isEmpty() && !shouldCapture(routes, focused)) stopResend()
+    }
+
+    private fun forgetSlot(slotId: String) {
+        lastFrame.remove(slotId)
+        lastResent.remove(slotId)
+        pacers.remove(slotId)
     }
 
     private fun send(

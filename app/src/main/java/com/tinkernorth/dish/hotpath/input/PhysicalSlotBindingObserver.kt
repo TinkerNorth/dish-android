@@ -30,34 +30,36 @@ import javax.inject.Singleton
 // the routing decision (which physical device id lands on which server-side controller) is testable
 // without the JNI side effects; getting it wrong routes input to the wrong controller.
 sealed interface BindOp {
+    val deviceId: Int
+
     data class BindSatellite(
-        val deviceId: Int,
+        override val deviceId: Int,
         val handle: Int,
         val controllerIndex: Int,
     ) : BindOp
 
     data class BindBluetooth(
-        val deviceId: Int,
+        override val deviceId: Int,
         val connectionId: String,
     ) : BindOp
 
     data class BindMoonlight(
-        val deviceId: Int,
+        override val deviceId: Int,
         val connectionId: String,
         val controllerNumber: Int,
     ) : BindOp
 
     data class Unbind(
-        val deviceId: Int,
+        override val deviceId: Int,
     ) : BindOp
 
     data class Forget(
-        val deviceId: Int,
+        override val deviceId: Int,
     ) : BindOp
 
     // The departed-id path also drops the hub binding for the slot, so a re-added id re-binds cleanly.
     data class ReleaseHubBinding(
-        val deviceId: Int,
+        override val deviceId: Int,
     ) : BindOp
 }
 
@@ -175,33 +177,32 @@ fun dedupeBindOps(
     val out = mutableListOf<BindOp>()
     for (op in ops) {
         when (op) {
-            is BindOp.BindSatellite -> {
-                if (applied[op.deviceId] == op) continue
-                applied[op.deviceId] = op
-                out += op
-            }
-            is BindOp.BindBluetooth -> {
-                if (applied[op.deviceId] == op) continue
-                applied[op.deviceId] = op
-                out += op
-            }
-            is BindOp.BindMoonlight -> {
-                if (applied[op.deviceId] == op) continue
-                applied[op.deviceId] = op
-                out += op
-            }
-            is BindOp.Unbind -> {
-                applied.remove(op.deviceId)
-                out += op
-            }
-            is BindOp.Forget -> {
-                applied.remove(op.deviceId)
-                out += op
-            }
+            is BindOp.BindSatellite, is BindOp.BindBluetooth, is BindOp.BindMoonlight -> applyBind(op, applied, out)
+            is BindOp.Unbind, is BindOp.Forget -> applyUnbind(op, applied, out)
             is BindOp.ReleaseHubBinding -> out += op
         }
     }
     return DedupedBindOps(out, applied)
+}
+
+private fun applyBind(
+    op: BindOp,
+    applied: MutableMap<Int, BindOp>,
+    out: MutableList<BindOp>,
+) {
+    val alreadyApplied = applied[op.deviceId] == op
+    if (alreadyApplied) return
+    applied[op.deviceId] = op
+    out += op
+}
+
+private fun applyUnbind(
+    op: BindOp,
+    applied: MutableMap<Int, BindOp>,
+    out: MutableList<BindOp>,
+) {
+    applied.remove(op.deviceId)
+    out += op
 }
 
 // Process-scoped (not activity-scoped) so bindings survive MainActivity → GamepadOverlayActivity hand-off.
@@ -284,12 +285,8 @@ class PhysicalSlotBindingObserver
 
         private fun push(state: BindingState) {
             val ops = reconcile(state)
-            // A satellite re-bind is not idempotent on the native side: bindPhysicalSlotSatellite
-            // re-runs syncSlotBaseline, which resets the device to neutral and publishes it,
-            // briefly releasing every held button and trigger until the next physical report.
-            // push() fires on every upstream re-emit (a few Hz), so replaying an unchanged bind
-            // makes held inputs flicker. Binds identical to the one already applied are dropped;
-            // changed binds go through.
+            // A satellite re-bind re-runs syncSlotBaseline, which flickers every held input to
+            // neutral, and push() fires on every upstream re-emit: see BindOpDedupeTest.
             val deduped = dedupeBindOps(ops, lastAppliedBinds)
             for (op in deduped.ops) execute(op)
             lastAppliedBinds = deduped.applied

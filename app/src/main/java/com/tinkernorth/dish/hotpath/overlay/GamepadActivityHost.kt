@@ -139,10 +139,8 @@ class GamepadActivityHost(
         screenHold.value = active
     }
 
-    // Trust the device, not event.source: generic HID adapters report BUTTON_* as SOURCE_KEYBOARD; fallthrough → DPAD_CENTER clicks.
     fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        val isKnownGamepad = event.deviceId in gamepadRegistry.devices.value
-        if (!isGamepadSource(event.source) && !isKnownGamepad) return false
+        if (!acceptsGamepadKey(event.source, event.deviceId, gamepadRegistry.devices.value.keys)) return false
         if (inputTiming.enabled) inputTiming.record(event.deviceId, event.eventTime, SystemClock.uptimeMillis())
         PhysicalSlotNative.processGamepadKeyEvent(
             event.deviceId,
@@ -158,9 +156,7 @@ class GamepadActivityHost(
         // the pad's, never a stick: taken first, before the joystick fold below could read
         // their coordinates as axes.
         if (padTouchpad.onGenericMotionEvent(event)) return true
-        val isJoy =
-            isJoystickMotionSource(event.source) ||
-                event.deviceId in gamepadRegistry.devices.value
+        val isJoy = isJoystickEvent(event.source, event.deviceId, gamepadRegistry.devices.value.keys)
         if (shouldRequestUnbufferedJoystick(isJoy, unbufferedJoystickRequested)) {
             unbufferedJoystickRequested = true
             requestUnbufferedJoystickDispatch(event)
@@ -194,7 +190,7 @@ class GamepadActivityHost(
     fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         val overlayActive = lowPowerManager.state.value == LowPowerManager.State.ACTIVE
         val consume = lowPowerTouchGate.onDispatch(ev.action, overlayActive)
-        if (keepScreenOn && ev.actionMasked != MotionEvent.ACTION_CANCEL) {
+        if (shouldResetInactivity(keepScreenOn, ev.actionMasked)) {
             lowPowerManager.onUserInteraction()
         }
         return consume
@@ -224,10 +220,6 @@ class GamepadActivityHost(
         }
         lowPowerManager.onLockStateChanged(keepOn, streaming)
     }
-
-    private fun isGamepadSource(source: Int): Boolean =
-        (source and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
-            (source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
 
     // Joystick MotionEvents are vsync-batched by default; unbuffered dispatch delivers each sample as it lands.
     private fun requestUnbufferedJoystickDispatch(event: MotionEvent) {

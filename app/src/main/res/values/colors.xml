@@ -176,6 +176,13 @@
          so the low-power HUD can apply it as a single background. -->
     <color name="colorOverlayScrim">@color/ink_900_a80</color>
 
+    <!-- ===== Touchpad surface =====
+         The on-screen touchpad's outline (signal cyan @ ~71% alpha) and finger
+         dots (@ ~86%): alpha-derived from the mode-neutral brand accent like
+         the outline family above, so one binding serves both modes. -->
+    <color name="colorTouchpadOutline">#B44FE3FF</color>
+    <color name="colorTouchpadFinger">#DC4FE3FF</color>
+
 <color name="pulse_pink_500">#FFFF6FB5</color>
     <color name="pulse_pink_200">#1FFF6FB5</color>
 

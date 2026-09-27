@@ -8,6 +8,7 @@ import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.lights.FrameworkLightGateway
 import com.tinkernorth.dish.source.store.FeedbackActivityStore
+import com.tinkernorth.dish.source.store.FeedbackKind
 import com.tinkernorth.dish.source.store.MIC_LED_OFF
 import com.tinkernorth.dish.source.store.MIC_LED_ON
 import com.tinkernorth.dish.source.store.MIC_LED_PULSE
@@ -34,6 +35,7 @@ class FeedbackRouterTest {
     private val store = VirtualPadFeedbackStore()
     private val rumble: RumbleRouter = mockk(relaxed = true)
     private val frameworkLights: FrameworkLightGateway = mockk(relaxed = true)
+    private val activity = FeedbackActivityStore()
 
     private fun managerWith(
         handle: Int,
@@ -53,7 +55,9 @@ class FeedbackRouterTest {
     }
 
     private fun router(manager: SatelliteConnectionManager = mockk(relaxed = true)) =
-        FeedbackRouter(manager, native, store, rumble, FeedbackActivityStore(), frameworkLights)
+        FeedbackRouter(manager, native, store, rumble, activity, frameworkLights)
+
+    private fun lastKindNoted(slotId: String): FeedbackKind? = activity.snapshot()[slotId]?.lastKind
 
     @Test
     fun `lightbar reaches a Direct-claimed pad through the session resolve`() {
@@ -233,5 +237,71 @@ class FeedbackRouterTest {
         verify(exactly = 0) { native.sendUsbPlayerLeds(any(), any()) }
         verify(exactly = 0) { native.sendUsbTriggerEffects(any(), any()) }
         verify(exactly = 0) { native.sendUsbMicMuteLed(any(), any()) }
+    }
+
+    // ---- host activity, the diagnostics "last feedback" line ----
+
+    @Test
+    fun `session-addressed feedback records host activity against the resolved slot`() {
+        router(managerWith(handle = 7, slotId = VIRTUAL_SLOT_ID)).dispatchLightbar(7, 0, 1, 2, 3)
+        router(managerWith(handle = 7, slotId = "9")).dispatchLightbar(7, 0, 1, 2, 3)
+        router(managerWith(handle = 7, slotId = "-1000")).dispatchLightbar(7, 0, 1, 2, 3)
+
+        assertEquals(FeedbackKind.LIGHTBAR, lastKindNoted(VIRTUAL_SLOT_ID))
+        assertEquals(FeedbackKind.LIGHTBAR, lastKindNoted("9"))
+        assertEquals(FeedbackKind.LIGHTBAR, lastKindNoted("-1000"))
+    }
+
+    @Test
+    fun `session-addressed feedback that resolves to nothing records no activity`() {
+        router(managerWith(handle = 7, slotId = "-1000")).dispatchLightbar(sessionHandle = 8, controllerIndex = 0, r = 1, g = 2, b = 3)
+        assertTrue(activity.snapshot().isEmpty())
+    }
+
+    @Test
+    fun `each feedback kind is noted under its own kind`() {
+        val r = router(managerWith(handle = 7, slotId = "-1000"))
+        r.dispatchTriggerEffects(7, 0, ByteArray(22))
+        assertEquals(FeedbackKind.TRIGGER_EFFECTS, lastKindNoted("-1000"))
+        r.dispatchPlayerLeds(7, 0, 0x1F)
+        assertEquals(FeedbackKind.PLAYER_LEDS, lastKindNoted("-1000"))
+        r.dispatchMicLed(7, 0, MIC_LED_ON)
+        assertEquals(FeedbackKind.MIC_LED, lastKindNoted("-1000"))
+    }
+
+    @Test
+    fun `trigger rumble to a slot notes host activity but the bench entry does not`() {
+        val r = router()
+        r.dispatchTriggerRumbleToSlot("-1000", 100, 200)
+        assertEquals(FeedbackKind.TRIGGER_RUMBLE, lastKindNoted("-1000"))
+        assertEquals(1L, activity.snapshot()["-1000"]?.count)
+
+        r.testTriggerRumble("-1000", 100, 200)
+
+        assertEquals(1L, activity.snapshot()["-1000"]?.count)
+        verify(exactly = 2) { native.sendUsbTriggerRumble(-1000, 100, 200) }
+    }
+
+    @Test
+    fun `slot-addressed feedback is not counted as host activity`() {
+        val r = router()
+        r.dispatchLightbarToSlot("-1000", 1, 2, 3)
+        r.dispatchTriggerEffectsToSlot("-1000", ByteArray(22))
+        r.dispatchPlayerLedsToSlot("-1000", 0x1F)
+        r.dispatchMicLedToSlot("-1000", MIC_LED_ON)
+        assertTrue(activity.snapshot().isEmpty())
+    }
+
+    @Test
+    fun `a truncated block array treats the missing trigger as inactive`() {
+        val r = router(managerWith(handle = 7, slotId = VIRTUAL_SLOT_ID))
+        val leftOnlyAndShort = ByteArray(5).also { it[0] = 0x21 }
+        r.dispatchTriggerEffects(7, 0, leftOnlyAndShort)
+        assertTrue(store.state.value.leftTriggerEffect)
+        assertFalse(store.state.value.rightTriggerEffect)
+
+        r.dispatchTriggerEffects(7, 0, ByteArray(0))
+        assertFalse(store.state.value.leftTriggerEffect)
+        assertFalse(store.state.value.rightTriggerEffect)
     }
 }

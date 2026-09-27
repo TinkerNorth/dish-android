@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.hotpath.overlay
 
 import android.view.InputDevice
+import android.view.MotionEvent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -141,10 +142,70 @@ class OverlayPerformanceHintsTest {
         assertFalse(shouldRequestUnbufferedJoystick(isJoystick = false, alreadyRequested = true))
     }
 
+    // ---- which key and motion events belong to a pad ----
+
+    @Test
+    fun `a key from a known pad with a keyboard source is still a gamepad key`() {
+        assertTrue(acceptsGamepadKey(InputDevice.SOURCE_KEYBOARD, deviceId = KNOWN_PAD, knownPadIds = setOf(KNOWN_PAD)))
+    }
+
+    @Test
+    fun `a key from an unknown keyboard is not a gamepad key`() {
+        assertFalse(acceptsGamepadKey(InputDevice.SOURCE_KEYBOARD, deviceId = STRANGER, knownPadIds = setOf(KNOWN_PAD)))
+    }
+
+    @Test
+    fun `a gamepad-sourced key from a device the registry has not listed yet is a gamepad key`() {
+        assertTrue(acceptsGamepadKey(InputDevice.SOURCE_GAMEPAD, deviceId = STRANGER, knownPadIds = emptySet()))
+    }
+
+    @Test
+    fun `a joystick-sourced key is a gamepad key`() {
+        assertTrue(acceptsGamepadKey(InputDevice.SOURCE_JOYSTICK, deviceId = STRANGER, knownPadIds = emptySet()))
+    }
+
+    @Test
+    fun `motion from a known pad with a foreign source is a joystick event`() {
+        assertTrue(isJoystickEvent(InputDevice.SOURCE_MOUSE, deviceId = KNOWN_PAD, knownPadIds = setOf(KNOWN_PAD)))
+    }
+
+    @Test
+    fun `motion from an unknown mouse is not a joystick event`() {
+        assertFalse(isJoystickEvent(InputDevice.SOURCE_MOUSE, deviceId = STRANGER, knownPadIds = setOf(KNOWN_PAD)))
+    }
+
+    @Test
+    fun `joystick-sourced motion is a joystick event whatever the registry holds`() {
+        assertTrue(isJoystickEvent(InputDevice.SOURCE_JOYSTICK, deviceId = STRANGER, knownPadIds = emptySet()))
+    }
+
+    // ---- what re-arms the inactivity dim ----
+
+    @Test
+    fun `a touch re-arms the inactivity timer while the screen is kept on`() {
+        assertTrue(shouldResetInactivity(keepScreenOn = true, actionMasked = MotionEvent.ACTION_DOWN))
+        assertTrue(shouldResetInactivity(keepScreenOn = true, actionMasked = MotionEvent.ACTION_UP))
+    }
+
+    @Test
+    fun `a cancelled touch does not re-arm the inactivity timer`() {
+        assertFalse(shouldResetInactivity(keepScreenOn = true, actionMasked = MotionEvent.ACTION_CANCEL))
+    }
+
+    @Test
+    fun `no touch re-arms the timer while the screen is not kept on`() {
+        assertFalse(shouldResetInactivity(keepScreenOn = false, actionMasked = MotionEvent.ACTION_DOWN))
+    }
+
     private fun mode(
         modeId: Int,
         width: Int = 1080,
         height: Int = 2400,
         hz: Float,
     ): DisplayModeInfo = DisplayModeInfo(modeId = modeId, width = width, height = height, refreshRate = hz)
+
+    private companion object {
+        const val KNOWN_PAD = 7
+        const val STRANGER = 8
+    }
 }
