@@ -15,15 +15,14 @@ import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
 import java.util.Calendar
 import java.util.Locale
 
-// The pre-dim countdown. The tick shows the second the user is about to lose, so it rounds up:
-// 3000 ms left reads "3", not "2".
+// The pre-dim countdown; countdownSecondsShown says what each tick reads.
 private class DimCountdown(
     seconds: Int,
     private val label: android.widget.TextView,
     private val onFinished: () -> Unit,
 ) : CountDownTimer(seconds * MS_PER_SECOND, MS_PER_SECOND) {
     override fun onTick(millisUntilFinished: Long) {
-        val secondsRemaining = (millisUntilFinished / MS_PER_SECOND) + 1
+        val secondsRemaining = countdownSecondsShown(millisUntilFinished)
         label.text = String.format(Locale.getDefault(), "%d", secondsRemaining)
     }
 
@@ -200,6 +199,13 @@ class LowPowerManager(
 }
 
 private const val MS_PER_SECOND = 1000L
+
+// Counts the second in progress: a tick lands just after its whole second (4999 ms left reads
+// "5", 999 ms reads "1"), and one landing exactly on it (3000 ms) already reads the next up, "4".
+internal fun countdownSecondsShown(millisUntilFinished: Long): Long {
+    val wholeSecondsLeft = millisUntilFinished / MS_PER_SECOND
+    return wholeSecondsLeft + 1
+}
 
 // The dim overlay's clock only shows hours and minutes, so a quarter-minute tick keeps it honest.
 private const val CLOCK_TICK_MS = 15_000L
