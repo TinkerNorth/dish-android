@@ -247,7 +247,8 @@ app, JNI and test code alike.
 - `app/src/test/cpp`: googletest over the host-buildable JNI split, one
   target per layer (`gamepad_input`, `wire_encoders`, `usb_parsers`,
   `usb_hid_descriptor`, `send_counter`, `audio_jitter`, `heartbeat_thread`,
-  `hotpath_latency`, `audio_codec`), run by `./gradlew :app:nativeTest`.
+  `hotpath_latency`, `audio_codec`, `bridge_connection_ids`), run by
+  `./gradlew :app:nativeTest`.
 - `app/src/androidTest`: instrumented tests for what genuinely needs a
   device.
 

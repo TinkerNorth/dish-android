@@ -93,6 +93,15 @@ target_include_directories(audio_jitter_test PRIVATE "${SATELLITE_CPP}")
 target_compile_options(audio_jitter_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(audio_jitter_test PRIVATE GTest::gtest_main)
 
+# The bridge thread's per-bind connection-id refs: header-only and JNI-free (the refs are a
+# template parameter), so "one string per bind, released once the bind is gone" is provable here.
+add_executable(bridge_connection_ids_test
+    bridge_connection_ids_test.cpp
+)
+target_include_directories(bridge_connection_ids_test PRIVATE "${SATELLITE_CPP}")
+target_compile_options(bridge_connection_ids_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_link_libraries(bridge_connection_ids_test PRIVATE GTest::gtest_main)
+
 find_package(Threads REQUIRED)
 add_executable(heartbeat_thread_test
     heartbeat_thread_test.cpp
@@ -155,3 +164,4 @@ gtest_discover_tests(audio_jitter_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(heartbeat_thread_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(hotpath_latency_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(audio_codec_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(bridge_connection_ids_test DISCOVERY_MODE PRE_TEST)

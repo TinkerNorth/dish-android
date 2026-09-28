@@ -32,6 +32,7 @@
 
 #include "audio_codec.h"
 #include "audio_jitter.h"
+#include "bridge_connection_ids.h"
 #include "dispatch.h"
 #include "gamepad_input.h"
 #include "heartbeat_thread.h"
@@ -194,11 +195,7 @@ enum SlotKind : uint8_t {
     SLOT_MOONLIGHT = 3
 };
 
-// The Kotlin-side connection id of a bridge slot (Bluetooth / Moonlight). Built once when the slot
-// binds and shared, never copied: every report the slot queues points at the same string, so the
-// per-event path bumps a reference count where a std::string copy would allocate (an id is longer
-// than the small-string buffer). Null for a satellite slot or a bind that named no connection.
-using BridgeConnectionId = std::shared_ptr<const std::string>;
+using dish_bridge::BridgeConnectionId;
 
 struct SlotBinding {
     SlotKind kind = SLOT_NONE;
@@ -338,14 +335,40 @@ static void callBridgeUpcall(JNIEnv* env, jclass cls, jmethodID method, jstring 
                               (jint)r.sLX, (jint)r.sLY, (jint)r.sRX, (jint)r.sRY);
 }
 
+// The connection-id cache's refs: a global ref to a Java string per bind, made and released on the
+// bridge thread, the one thread that upcalls with them.
+struct JniConnectionRefs {
+    JNIEnv* const env;
+
+    jstring make(const std::string& id) const {
+        const jstring local = env->NewStringUTF(id.c_str());
+        if (local == nullptr) return nullptr;
+        const auto global = static_cast<jstring>(env->NewGlobalRef(local));
+        env->DeleteLocalRef(local);
+        return global;
+    }
+
+    void release(const jstring ref) const { env->DeleteGlobalRef(ref); }
+};
+
+// Eight binds at once keep a string each; a ninth takes an entry over in turn, which stays correct.
+static constexpr size_t BRIDGE_CONNECTION_REFS = 8;
+
+// Bridge thread only.
+static dish_bridge::ConnectionRefCache<jstring, BRIDGE_CONNECTION_REFS> g_bridgeConnectionRefs;
+
 static void dispatchBridgeReport(JNIEnv* env, const BridgeReport& r) {
     jclass cls = nullptr;
     jmethodID method = nullptr;
     if (!bridgeTargetFor(r, cls, method)) return;
 
-    jstring connId = env->NewStringUTF(r.connectionId->c_str());
+    JniConnectionRefs refs{env};
+    const jstring connId = g_bridgeConnectionRefs.refFor(r.connectionId, refs);
+    if (connId == nullptr) {
+        if (env->ExceptionCheck()) env->ExceptionClear();
+        return;
+    }
     callBridgeUpcall(env, cls, method, connId, r);
-    env->DeleteLocalRef(connId);
     if (env->ExceptionCheck()) env->ExceptionClear();
 }
 
@@ -398,6 +421,8 @@ static void bridgeDispatchLoop() {
         }
         dispatchBridgeReport(env, report);
     }
+    JniConnectionRefs refs{env};
+    g_bridgeConnectionRefs.releaseAll(refs);
     g_jvm->DetachCurrentThread();
     LOGI("Bridge dispatch thread stopped");
 }
