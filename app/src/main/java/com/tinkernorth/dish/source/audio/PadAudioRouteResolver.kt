@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.annotation.ChecksSdkIntAtLeast
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -126,7 +127,15 @@ internal fun isPluggedUsbType(
     type: Int,
     sdkInt: Int,
 ): Boolean {
-    val isUsbDevice = type == AudioDeviceInfo.TYPE_USB_DEVICE
-    val isUsbHeadset = sdkInt >= Build.VERSION_CODES.O && type == AudioDeviceInfo.TYPE_USB_HEADSET
-    return isUsbDevice || isUsbHeadset
+    if (type == AudioDeviceInfo.TYPE_USB_DEVICE) return true
+    if (atLeast(Build.VERSION_CODES.O, sdkInt)) return type == AudioDeviceInfo.TYPE_USB_HEADSET
+    return false
 }
+
+// The annotation is what lets lint read a caller-supplied API level as the gate the 26+ constant
+// above needs; a bare `sdkInt >= api` comparison it cannot see through.
+@ChecksSdkIntAtLeast(parameter = 0)
+private fun atLeast(
+    api: Int,
+    sdkInt: Int,
+): Boolean = sdkInt >= api

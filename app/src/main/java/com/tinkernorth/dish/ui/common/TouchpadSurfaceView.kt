@@ -91,11 +91,6 @@ class TouchpadSurfaceView
                 invalidate()
             }
 
-        private val inset = context.resources.getDimension(R.dimen.touchpad_surface_inset)
-        private val labelLift = context.resources.getDimension(R.dimen.touchpad_surface_label_lift)
-        private val hintOffset = context.resources.getDimension(R.dimen.touchpad_surface_hint_offset)
-        private val fingerRadius = context.resources.getDimension(R.dimen.touchpad_surface_finger_radius)
-
         private val bgPaint =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = ContextCompat.getColor(context, R.color.colorSurfaceDim)
@@ -105,7 +100,7 @@ class TouchpadSurfaceView
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = ContextCompat.getColor(context, R.color.colorTouchpadOutline)
                 style = Paint.Style.STROKE
-                strokeWidth = context.resources.getDimension(R.dimen.touchpad_surface_outline_stroke)
+                strokeWidth = OUTLINE_STROKE_PX
             }
         private val fingerPaint =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -115,13 +110,13 @@ class TouchpadSurfaceView
         private val labelPaint =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = ContextCompat.getColor(context, R.color.colorOnSurface)
-                textSize = context.resources.getDimension(R.dimen.touchpad_surface_label_text)
+                textSize = LABEL_TEXT_PX
                 textAlign = Paint.Align.CENTER
             }
         private val hintPaint =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = ContextCompat.getColor(context, R.color.colorOnSurfaceVariant)
-                textSize = context.resources.getDimension(R.dimen.touchpad_surface_hint_text)
+                textSize = HINT_TEXT_PX
                 textAlign = Paint.Align.CENTER
             }
 
@@ -205,13 +200,13 @@ class TouchpadSurfaceView
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
-            canvas.drawRect(inset, inset, width - inset, height - inset, bgPaint)
-            canvas.drawRect(inset, inset, width - inset, height - inset, outlinePaint)
+            canvas.drawRect(INSET_PX, INSET_PX, width - INSET_PX, height - INSET_PX, bgPaint)
+            canvas.drawRect(INSET_PX, INSET_PX, width - INSET_PX, height - INSET_PX, outlinePaint)
 
             val cx = width / 2f
-            val labelY = height / 2f - labelLift
+            val labelY = height / 2f - LABEL_LIFT_PX
             if (label.isNotEmpty()) canvas.drawText(label, cx, labelY, labelPaint)
-            if (hint.isNotEmpty()) canvas.drawText(hint, cx, labelY + hintOffset, hintPaint)
+            if (hint.isNotEmpty()) canvas.drawText(hint, cx, labelY + HINT_OFFSET_PX, hintPaint)
 
             val state = fingers.state
             if (state.finger0Active) drawFinger(canvas, state.finger0X, state.finger0Y)
@@ -225,12 +220,23 @@ class TouchpadSurfaceView
         ) {
             val px = ((x.toInt() + HALF_INT16).toFloat() / NORM_INT16_SPAN) * width
             val py = ((y.toInt() + HALF_INT16).toFloat() / NORM_INT16_SPAN) * height
-            canvas.drawCircle(px, py, fingerRadius, fingerPaint)
+            canvas.drawCircle(px, py, FINGER_RADIUS_PX, fingerPaint)
         }
 
         companion object {
             const val ACCEPTING_ALPHA: Float = 1.0f
 
             const val DIM_ALPHA: Float = 0.4f
+
+            // Raw pixels, as this view has always drawn them. A @dimen would scale them with
+            // density, which is a visual change to make with a device in hand, and lint refuses
+            // a px token, so the sizes stay here as the view's own drawing constants.
+            private const val INSET_PX: Float = 8f
+            private const val OUTLINE_STROKE_PX: Float = 4f
+            private const val LABEL_TEXT_PX: Float = 56f
+            private const val HINT_TEXT_PX: Float = 28f
+            private const val LABEL_LIFT_PX: Float = 8f
+            private const val HINT_OFFSET_PX: Float = 44f
+            private const val FINGER_RADIUS_PX: Float = 32f
         }
     }
