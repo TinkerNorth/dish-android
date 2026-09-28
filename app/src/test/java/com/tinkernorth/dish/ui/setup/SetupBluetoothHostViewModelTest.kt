@@ -221,6 +221,24 @@ class SetupBluetoothHostViewModelTest {
         }
 
     @Test
+    fun `a remembered host already registered when we start finishes once its own key connects`() =
+        runTest(dispatcher) {
+            val hostId = BluetoothGamepadRegistry.idFor(REMEMBERED_MAC)
+            states.value = mapOf(hostId to slot(isConnected = false, isRegistered = true))
+            dispatcher.scheduler.runCurrent()
+            vm.bindArgs("42")
+            val events = collectEvents()
+            vm.onHostSelected(SetupBluetoothHostViewModel.HostRow(hostId, "Old PC", REMEMBERED_MAC, GamepadProfile.XBOX))
+            dispatcher.scheduler.runCurrent()
+
+            states.value = mapOf(hostId to slot(isConnected = true, isRegistered = true))
+            dispatcher.scheduler.runCurrent()
+
+            verify { hub.bind("42", hostId, CONTROLLER_TYPE_XBOX) }
+            assertTrue(events.any { it is SetupBluetoothHostViewModel.Event.Done })
+        }
+
+    @Test
     fun `a registered but not yet connected session does not finish`() =
         runTest(dispatcher) {
             dispatcher.scheduler.runCurrent()
@@ -326,5 +344,9 @@ class SetupBluetoothHostViewModelTest {
         backgroundScope.launch { vm.events.collect { out.add(it) } }
         dispatcher.scheduler.runCurrent()
         return out
+    }
+
+    private companion object {
+        const val REMEMBERED_MAC = "AA:BB:CC:DD:EE:FF"
     }
 }
