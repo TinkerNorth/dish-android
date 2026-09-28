@@ -4,12 +4,14 @@
 package com.tinkernorth.dish.source.connection.moonlight
 
 import com.tinkernorth.dish.architecture.testing.allocatedBytesDuring
+import com.tinkernorth.dish.architecture.testing.fewestAllocatedBytesDuring
 import com.tinkernorth.dish.architecture.testing.freshAppInstanceOf
 import com.tinkernorth.dish.core.net.moonlight.BTN_A
 import com.tinkernorth.dish.core.net.moonlight.BTN_TOUCHPAD
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
+import com.tinkernorth.dish.core.net.moonlight.XBOX
 import com.tinkernorth.dish.source.connection.TouchpadReport
 import io.mockk.every
 import io.mockk.mockk
@@ -83,6 +85,40 @@ internal class MoonlightFrameCycles :
     }
 
     override fun getAsLong(): Long = connection.reportsSentFor(MoonlightConnection.MAX_PADS - 1)
+}
+
+// How many lookups one MoonlightSlotLookups cycle makes.
+internal const val SLOT_LOOKUPS_PER_CYCLE = 250
+
+// A bridge upcall's slot lookup, for the last pad of a full connection, SLOT_LOOKUPS_PER_CYCLE
+// times a run; the lookups that named a slot so far through LongSupplier. Reached through JDK
+// interfaces because the allocation test makes it in a class loader of its own.
+internal class MoonlightSlotLookups :
+    Runnable,
+    LongSupplier {
+    private val dispatcher = StandardTestDispatcher()
+    private val connection =
+        MoonlightConnection(
+            id = "moonlight:uid:abc",
+            host = MoonlightHost(name = "PC", address = "10.0.0.5", uniqueId = "abc"),
+            scope = TestScope(dispatcher),
+            ioDispatcher = dispatcher,
+        )
+    private var named = 0L
+
+    init {
+        for (number in 0 until MoonlightConnection.MAX_PADS) connection.acquirePad("slot-$number", PLAYSTATION, CYCLE_CAPS, CYCLE_BUTTONS)
+    }
+
+    override fun run() {
+        repeat(SLOT_LOOKUPS_PER_CYCLE) { lookUpTheLastPad() }
+    }
+
+    private fun lookUpTheLastPad() {
+        if (connection.slotIdForNumber(MoonlightConnection.MAX_PADS - 1) != null) named++
+    }
+
+    override fun getAsLong(): Long = named
 }
 
 // The connection's per-frame path: what it remembers of each pad's last frame, and that
@@ -343,6 +379,53 @@ class MoonlightConnectionFrameTest {
         assertTrue("$allocatedBytes bytes over $MEASURED_CYCLES cycles", allocatedBytes < MEASURED_CYCLES * BYTES_PER_CYCLE_BOUND)
     }
 
+    // ---- the slot a bridge upcall's controller number names ----
+
+    @Test
+    fun `each held pad's number names its slot`() {
+        val conn = connection()
+        repeat(ALL_PADS) { conn.acquirePad("slot-$it", PLAYSTATION, CAPS, BUTTONS) }
+        for (number in 0 until ALL_PADS) assertEquals("slot-$number", conn.slotIdForNumber(number))
+    }
+
+    @Test
+    fun `a number no pad holds names no slot`() {
+        val conn = connection()
+        conn.acquirePad("slot-0", PLAYSTATION, CAPS, BUTTONS)
+        assertEquals(null, conn.slotIdForNumber(1))
+        assertEquals(null, conn.slotIdForNumber(PAST_LAST_NUMBER))
+        assertEquals(null, conn.slotIdForNumber(BEFORE_FIRST_NUMBER))
+    }
+
+    @Test
+    fun `a released pad's number names the slot that takes it next`() {
+        val conn = connection()
+        conn.acquirePad("slot-0", PLAYSTATION, CAPS, BUTTONS)
+        conn.releasePad("slot-0")
+        assertEquals(null, conn.slotIdForNumber(FIRST_NUMBER))
+        conn.acquirePad("slot-next", PLAYSTATION, CAPS, BUTTONS)
+        assertEquals("slot-next", conn.slotIdForNumber(FIRST_NUMBER))
+    }
+
+    @Test
+    fun `a pad announced again as another type keeps naming its slot`() {
+        val conn = connection()
+        conn.acquirePad("slot-0", PLAYSTATION, CAPS, BUTTONS)
+        conn.reannouncePad("slot-0", XBOX, CAPS, BUTTONS)
+        assertEquals("slot-0", conn.slotIdForNumber(FIRST_NUMBER))
+    }
+
+    @Test
+    fun `looking a slot up by number allocates nothing, even once MockK has rewritten the connection class`() {
+        mockk<MoonlightConnection>(relaxed = true).slotIdForNumber(FIRST_NUMBER)
+        val lookups = freshAppInstanceOf(MoonlightSlotLookups::class.java)
+        val cycle = lookups as Runnable
+        cycle.run()
+        val allocatedBytes = fewestAllocatedBytesDuring(MEASURED_RUNS, cycle::run)
+        assertEquals(((1 + MEASURED_RUNS) * SLOT_LOOKUPS_PER_CYCLE).toLong(), (lookups as LongSupplier).asLong)
+        assertTrue("$allocatedBytes bytes over $SLOT_LOOKUPS_PER_CYCLE lookups", allocatedBytes < SLOT_LOOKUPS_PER_CYCLE * BYTES_PER_CYCLE_BOUND)
+    }
+
     private companion object {
         const val CAPS = 0xFF
         const val BUTTONS = 0x10FFFF
@@ -364,5 +447,6 @@ class MoonlightConnectionFrameTest {
         // Half the smallest object: one allocation in any frame costs 16 bytes or more every
         // cycle, while the JIT's one-off warm-up allocations stay flat as the cycles grow.
         const val BYTES_PER_CYCLE_BOUND = 8
+        const val MEASURED_RUNS = 3
     }
 }

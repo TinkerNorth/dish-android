@@ -49,6 +49,13 @@ private const val CLICK_DOWN = 2
 
 private fun padMaskOf(pads: Map<String, MoonlightPad>): Int = pads.values.fold(0) { mask, pad -> mask or (1 shl pad.number) }
 
+// Each pad's slot at its number, null where no pad holds the number.
+private fun slotsByNumberOf(pads: Map<String, MoonlightPad>): Array<String?> {
+    val slots = arrayOfNulls<String>(MoonlightConnection.MAX_PADS)
+    for (pad in pads.values) slots[pad.number] = pad.slotId
+    return slots
+}
+
 /**
  * One Moonlight host session, the sibling of
  * [com.tinkernorth.dish.source.connection.SatelliteConnection]. Holds the live
@@ -78,6 +85,9 @@ class MoonlightConnection(
 
     // The active mask of [_pads], kept beside it so a frame reads an Int instead of walking the map.
     @Volatile private var padMask = 0
+
+    // [_pads] by number, kept beside it so a bridge upcall finds its slot without walking the map.
+    @Volatile private var slotsByNumber = arrayOfNulls<String>(MAX_PADS)
 
     @Volatile private var session: MoonlightControlSession? = null
     private var pumpJob: Job? = null
@@ -190,6 +200,7 @@ class MoonlightConnection(
     private fun publishPads(next: Map<String, MoonlightPad>) {
         _pads.value = next
         padMask = padMaskOf(next)
+        slotsByNumber = slotsByNumberOf(next)
     }
 
     // What the host asked of, or was told about, the pad that held [number]: a pad it plugs in
@@ -395,10 +406,11 @@ class MoonlightConnection(
     }
 
     /** Resolve a wire controller number back to the slot bound to it, if any. */
-    fun slotIdForNumber(controllerNumber: Int): String? =
-        _pads.value.values
-            .firstOrNull { it.number == controllerNumber }
-            ?.slotId
+    fun slotIdForNumber(controllerNumber: Int): String? {
+        val slots = slotsByNumber
+        val isAPadNumber = controllerNumber in slots.indices
+        return if (isAPadNumber) slots[controllerNumber] else null
+    }
 
     fun sendMouseMoveRel(
         deltaX: Int,
