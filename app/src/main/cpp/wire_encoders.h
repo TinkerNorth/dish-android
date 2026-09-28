@@ -36,7 +36,7 @@ inline constexpr size_t TOUCHPAD_V1_PAYLOAD_BYTES = 16;
 inline constexpr size_t TOUCHPAD_V2_PAYLOAD_BYTES = 19;
 inline constexpr size_t LIGHTBAR_PAYLOAD_BYTES = 4;
 inline constexpr size_t PLAYER_LEDS_PAYLOAD_BYTES = 2;
-// MSG_RUMBLE 0x0003 inner, 7B: ctrlIdx, strong u16 BE, weak u16 BE, durationMs u16 BE.
+// MSG_RUMBLE 0x0009 inner, 7B: ctrlIdx, strong u16 BE, weak u16 BE, durationMs u16 BE.
 inline constexpr size_t RUMBLE_PAYLOAD_BYTES = 7;
 // MSG_HEARTBEAT_ACK's optional tail: backendAvailable u8, totalActive u8, epoch u16 BE,
 // active-controller bitmap u16 BE.

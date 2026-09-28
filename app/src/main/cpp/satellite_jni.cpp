@@ -1471,7 +1471,8 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_receiveA
         // Enriched ack: backendAvailable(1) + totalActive(1) + epoch(u16 BE) +
         // active-controller bitmap(u16 BE). The epoch/bitmap pair drives the
         // Kotlin-side reconcile against involuntary server-side topology loss.
-        if (msgLen >= 6 && decLen >= 10) {
+        if (msgLen >= dish_wire::HEARTBEAT_ACK_ENRICHED_BYTES &&
+            decLen >= 4 + dish_wire::HEARTBEAT_ACK_ENRICHED_BYTES) {
             uint8_t backend = decrypted[4];
             uint8_t count = decrypted[5];
             int32_t epoch = ((int32_t)decrypted[6] << 8) | (int32_t)decrypted[7];
@@ -1487,7 +1488,8 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_receiveA
         s->closeReason.store(reason, std::memory_order_release);
         s->connectionAlive.store(false, std::memory_order_release);
         LOGI("Session %d close notify: reason=%d", handle, reason);
-    } else if (msgType == MSG_RUMBLE && msgLen == 7 && decLen >= 11) {
+    } else if (msgType == MSG_RUMBLE && msgLen == dish_wire::RUMBLE_PAYLOAD_BYTES &&
+               decLen >= 4 + dish_wire::RUMBLE_PAYLOAD_BYTES) {
         // 7B fixed payload: ctrlIdx, strong BE16, weak BE16, durMs BE16.
         if (g_rumbleBridgeClass == nullptr || g_rumbleDispatchMethod == nullptr) return 1;
         const jint ctrlIdx = (jint)decrypted[4];
@@ -1497,7 +1499,8 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_receiveA
         env->CallStaticVoidMethod(g_rumbleBridgeClass, g_rumbleDispatchMethod, handle, ctrlIdx,
                                   strong, weakMag, durMs);
         if (env->ExceptionCheck()) env->ExceptionClear();
-    } else if (msgType == MSG_LIGHTBAR && msgLen == 4 && decLen >= 8) {
+    } else if (msgType == MSG_LIGHTBAR && msgLen == dish_wire::LIGHTBAR_PAYLOAD_BYTES &&
+               decLen >= 4 + dish_wire::LIGHTBAR_PAYLOAD_BYTES) {
         // Routed like rumble: the FeedbackRouter lands it on a Direct-claimed
         // DS4/DualSense; every other target has no LED sink and drops it.
         if (g_feedbackBridgeClass == nullptr || g_feedbackLightbarMethod == nullptr) return 1;
@@ -1521,10 +1524,12 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_receiveA
                                   ctrlIdx, blocks);
         env->DeleteLocalRef(blocks);
         if (env->ExceptionCheck()) env->ExceptionClear();
-    } else if (msgType == MSG_PLAYER_LEDS && msgLen == 2 && decLen >= 6) {
+    } else if (msgType == MSG_PLAYER_LEDS && msgLen == dish_wire::PLAYER_LEDS_PAYLOAD_BYTES &&
+               decLen >= 4 + dish_wire::PLAYER_LEDS_PAYLOAD_BYTES) {
         if (g_feedbackBridgeClass == nullptr || g_feedbackPlayerLedsMethod == nullptr) return 1;
+        const dish_wire::PlayerLedsPayload leds = dish_wire::decodePlayerLedsPayload(decrypted + 4);
         env->CallStaticVoidMethod(g_feedbackBridgeClass, g_feedbackPlayerLedsMethod, handle,
-                                  (jint)decrypted[4], (jint)decrypted[5]);
+                                  (jint)leds.ctrlIdx, (jint)leds.ledMask);
         if (env->ExceptionCheck()) env->ExceptionClear();
     } else if ((msgType == MSG_SPEAKER_AUDIO || msgType == MSG_HAPTIC_AUDIO) &&
                msgLen >= dish_wire::AUDIO_WIRE_MIN_PAYLOAD_BYTES &&
