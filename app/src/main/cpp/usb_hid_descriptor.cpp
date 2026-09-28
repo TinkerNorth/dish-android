@@ -91,8 +91,10 @@ uint32_t extractBits(const uint8_t* d, const size_t dlen, const uint32_t bitOff,
     return v;
 }
 
-// A field is two's complement only when its logical minimum is negative (HID 1.11 §6.2.2.7); an
-// unsigned field keeps all 32 bits as magnitude, so a value above its range stays above it.
+// HID 1.11 §6.2.2.7 reads a field as unsigned when both logical bounds are non-negative. Like
+// Linux hid-core, this decides on the minimum alone, because a common descriptor bug writes Logical
+// Maximum 255 as the one-byte 0x25 0xFF, which reads as -1. An unsigned field keeps all 32 bits as
+// magnitude, so a value above its range stays above it.
 int64_t toSigned(const uint32_t raw, const uint8_t bits, const int32_t logicalMin) {
     const bool isAnUnsignedField = logicalMin >= 0;
     if (isAnUnsignedField) return raw;

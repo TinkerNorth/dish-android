@@ -57,8 +57,8 @@ struct DeviceCtx {
     // one. Written on the reader thread, read by getPadBattery from the JVM.
     std::atomic<int32_t> lastBattery{-1};
 
-    // Serialises the writes to the device (the send* paths and a wireless reconnect's re-init)
-    // against each other and against the detach that closes fd; outSeq is the output report
+    // Serialises the send* paths' writes to the device against each other and against the
+    // detach that closes fd; outSeq is the output report
     // counter for protocols that carry one (Xbox One serial, Switch Pro packet number).
     std::mutex outMtx;
     uint8_t outSeq = 0;
@@ -210,9 +210,10 @@ void publishWirelessEvent(DeviceCtx& ctx, const usbparsers::WirelessEvent wev,
     dispatch::applyUsbReport(ctx.syntheticDeviceId, scratch);
     if (wev != usbparsers::WirelessEvent::CONNECT) return;
     // The reboot wiped the quiet-mode settings, so re-run the attach init or the pad streams
-    // without motion while its lizard keyboard leaks through. Under outMtx: the send* paths write
-    // to the same device from their own threads.
-    std::lock_guard<std::mutex> lock(ctx.outMtx);
+    // without motion while its lizard keyboard leaks through. Not under outMtx: only the Steam
+    // Controller reports wireless events, its feedback builders send nothing, and init touches no
+    // FeedbackState, so there is no write to serialise; holding outMtx here would instead let a
+    // rumble on the session receive thread wait out an init of up to a second.
     usbparsers::runInit(ctx.fd, ctx.interfaceNumber, ctx.epOut, ctx.init);
 }
 
@@ -349,8 +350,8 @@ void shutdownLocked(const std::shared_ptr<DeviceCtx>& ctx) {
     ctx->stop.store(true, std::memory_order_relaxed);
     if (ctx->poller.joinable()) {
         // No lock is held here: detachDevice has already taken ctx out of the map and released
-        // g_mtx, and outMtx is taken only after the join, because the poll thread locks it to
-        // re-run a reconnecting pad's init.
+        // g_mtx, and outMtx is taken only after the join so the poll thread's last writes land
+        // before teardown.
         ctx->poller.join();
     }
     // outMtx so an in-flight sendRumble finishes before the fd it is writing to is closed.
