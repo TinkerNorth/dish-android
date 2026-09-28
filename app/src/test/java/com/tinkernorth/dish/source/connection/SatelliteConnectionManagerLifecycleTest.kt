@@ -10,11 +10,7 @@ import io.mockk.every
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -42,29 +38,6 @@ private const val MOVED_IP = "10.0.0.7"
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixture() {
-    private fun sessionGrantBody(): String =
-        """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
-            """"epoch":1,"protocolVersion":2,"controllers":[],"hostFeatures":{"mouseControl":{"granted":false}}}"""
-
-    private fun stubStoredKey() {
-        every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
-    }
-
-    // A satellite that grants every session PUT and a socket that opens: the shortest road to Live.
-    private fun stubLiveSession() {
-        stubStoredKey()
-        coEvery {
-            discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
-        } returns ok(sessionGrantBody())
-        every { controllerRepo.openSocket(any(), any()) } returns 5
-    }
-
-    private fun connectLive(mgr: SatelliteConnectionManager) {
-        mgr.connect(server)
-        scope.testScheduler.runCurrent()
-        assertEquals(SatelliteSessionState.Live, mgr.get(serverId)?.state?.value)
-    }
-
     private fun closeNotifyRetries(reason: Int) =
         runMgrTest { mgr, _ ->
             stubLiveSession()
@@ -151,20 +124,6 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
             coVerify(exactly = 2) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
         }
 
-    // Each session PUT waits on its own gate, in call order, so a test decides when each answers.
-    private fun gatedSessionPuts(vararg bodies: String): List<CompletableDeferred<Unit>> {
-        val gates = bodies.map { CompletableDeferred<Unit>() }
-        var call = 0
-        coEvery {
-            discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
-        } coAnswers {
-            val mine = call++
-            gates[mine].await()
-            ok(bodies[mine])
-        }
-        return gates
-    }
-
     @Test
     fun `a user disconnect during the session PUT wins and hands the granted session back`() =
         runMgrTest { mgr, events ->
@@ -184,21 +143,6 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
             verify(exactly = 0) { controllerRepo.openSocket(any(), any()) }
             assertTrue("the user asked for this; no banner: $events", events.isEmpty())
         }
-
-    // The session PUT reaches the satellite whatever becomes of its caller: the satellite grants
-    // on arrival, and a caller cancelled meanwhile only loses the answer, as withContext does
-    // to the blocking request under it.
-    private fun sessionPutGrantedRegardless(body: String): CompletableDeferred<Unit> {
-        val gate = CompletableDeferred<Unit>()
-        coEvery {
-            discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
-        } coAnswers {
-            withContext(NonCancellable) { gate.await() }
-            currentCoroutineContext().ensureActive()
-            ok(body)
-        }
-        return gate
-    }
 
     @Test
     fun `a user disconnect during an approved request's session PUT hands the granted session back`() =
@@ -262,16 +206,6 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
             coVerify(exactly = 0) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
             assertTrue(events.isEmpty())
         }
-
-    // The pair round trip answers only when the test opens its gate, with [body].
-    private fun gatedPair(body: String): CompletableDeferred<Unit> {
-        val gate = CompletableDeferred<Unit>()
-        coEvery { discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), any()) } coAnswers {
-            gate.await()
-            ok(body)
-        }
-        return gate
-    }
 
     @Test
     fun `a pair that fails after a user disconnect raises no banner`() =
@@ -645,11 +579,6 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
                     """"motion":{"sinkSupportedForType":false,"backendOk":true}}}""",
             )
     }
-
-    private fun matchingViewBody(epoch: Int): String =
-        """{"connectionId":"conn_1","epoch":$epoch,"controllers":""" +
-            """[{"ctrlIdx":0,"active":true,"appliedType":1,"touchpadMode":"off"}],""" +
-            """"hostFeatures":{"mouseControl":{"granted":false}}}"""
 
     @Test
     fun `a second reconcile while one is in flight is dropped`() =

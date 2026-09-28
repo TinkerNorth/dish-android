@@ -14,16 +14,23 @@ import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import org.junit.Assert.assertEquals
 import org.junit.Before
 
 // What wireCaps resolves for a pad with nothing else on.
@@ -66,6 +73,73 @@ open class SatelliteConnectionManagerFixture {
     protected fun unreachable() = reply(0, """{"error":"request failed: connect timed out"}""")
 
     protected fun identityMismatch() = HttpReply(0, """{"error":"request failed: hostname not verified"}""", null, pinMismatch = true)
+
+    protected fun sessionGrantBody(): String =
+        """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
+            """"epoch":1,"protocolVersion":2,"controllers":[],"hostFeatures":{"mouseControl":{"granted":false}}}"""
+
+    protected fun matchingViewBody(epoch: Int): String =
+        """{"connectionId":"conn_1","epoch":$epoch,"controllers":""" +
+            """[{"ctrlIdx":0,"active":true,"appliedType":1,"touchpadMode":"off"}],""" +
+            """"hostFeatures":{"mouseControl":{"granted":false}}}"""
+
+    protected fun stubStoredKey() {
+        every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
+    }
+
+    // A satellite that grants every session PUT and a socket that opens: the shortest road to Live.
+    protected fun stubLiveSession() {
+        stubStoredKey()
+        coEvery {
+            discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
+        } returns ok(sessionGrantBody())
+        every { controllerRepo.openSocket(any(), any()) } returns 5
+    }
+
+    protected fun connectLive(mgr: SatelliteConnectionManager) {
+        mgr.connect(server)
+        scope.testScheduler.runCurrent()
+        assertEquals(SatelliteSessionState.Live, mgr.get(serverId)?.state?.value)
+    }
+
+    // Each session PUT waits on its own gate, in call order, so a test decides when each answers.
+    protected fun gatedSessionPuts(vararg bodies: String): List<CompletableDeferred<Unit>> {
+        val gates = bodies.map { CompletableDeferred<Unit>() }
+        var call = 0
+        coEvery {
+            discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
+        } coAnswers {
+            val mine = call++
+            gates[mine].await()
+            ok(bodies[mine])
+        }
+        return gates
+    }
+
+    // The session PUT reaches the satellite whatever becomes of its caller: the satellite grants
+    // on arrival, and a caller cancelled meanwhile only loses the answer, as withContext does
+    // to the blocking request under it.
+    protected fun sessionPutGrantedRegardless(body: String): CompletableDeferred<Unit> {
+        val gate = CompletableDeferred<Unit>()
+        coEvery {
+            discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
+        } coAnswers {
+            withContext(NonCancellable) { gate.await() }
+            currentCoroutineContext().ensureActive()
+            ok(body)
+        }
+        return gate
+    }
+
+    // The pair round trip answers only when the test opens its gate, with [body].
+    protected fun gatedPair(body: String): CompletableDeferred<Unit> {
+        val gate = CompletableDeferred<Unit>()
+        coEvery { discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), any()) } coAnswers {
+            gate.await()
+            ok(body)
+        }
+        return gate
+    }
 
     @Before
     fun setUp() {
