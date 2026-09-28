@@ -4,6 +4,7 @@ package com.tinkernorth.dish.ui.diagnostics
 
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.net.ControllerDescriptor
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 
@@ -112,25 +113,20 @@ internal fun micState(
     }
 }
 
-internal fun declaredFeatures(caps: Int): List<Feature> =
-    buildList {
-        if (caps and CAP_ANALOG_TRIGGERS != 0) add(Feature.ANALOG_TRIGGERS)
-        if (caps and CAP_RUMBLE != 0) add(Feature.RUMBLE)
-        if (caps and CAP_MOTION != 0) add(Feature.MOTION)
-        if (caps and CAP_LIGHTBAR != 0) add(Feature.LIGHTBAR)
-        if (caps and CAP_TRIGGER_EFFECTS != 0) add(Feature.TRIGGER_EFFECTS)
-        if (caps and CAP_PLAYER_LEDS != 0) add(Feature.PLAYER_LEDS)
-        if (caps and CAP_MIC != 0) add(Feature.MIC)
-        if (caps and CAP_SPEAKER != 0) add(Feature.SPEAKER)
-        if (caps and CAP_HAPTIC_AUDIO != 0) add(Feature.HAPTIC_AUDIO)
-    }
+private val DECLARED_CAP_FEATURES =
+    listOf(
+        ControllerDescriptor.CAP_ANALOG_TRIGGERS to Feature.ANALOG_TRIGGERS,
+        ControllerDescriptor.CAP_RUMBLE to Feature.RUMBLE,
+        ControllerDescriptor.CAP_MOTION to Feature.MOTION,
+        ControllerDescriptor.CAP_LIGHTBAR to Feature.LIGHTBAR,
+        ControllerDescriptor.CAP_TRIGGER_EFFECTS to Feature.TRIGGER_EFFECTS,
+        ControllerDescriptor.CAP_PLAYER_LEDS to Feature.PLAYER_LEDS,
+        ControllerDescriptor.CAP_MIC to Feature.MIC,
+        ControllerDescriptor.CAP_SPEAKER to Feature.SPEAKER,
+        ControllerDescriptor.CAP_HAPTIC_AUDIO to Feature.HAPTIC_AUDIO,
+    )
 
-private const val CAP_ANALOG_TRIGGERS = 0x0001
-private const val CAP_RUMBLE = 0x0002
-private const val CAP_MOTION = 0x0004
-private const val CAP_LIGHTBAR = 0x0008
-private const val CAP_TRIGGER_EFFECTS = 0x0010
-private const val CAP_PLAYER_LEDS = 0x0020
-private const val CAP_MIC = 0x0040
-private const val CAP_SPEAKER = 0x0080
-private const val CAP_HAPTIC_AUDIO = 0x0100
+internal fun declaredFeatures(caps: Int): List<Feature> =
+    DECLARED_CAP_FEATURES
+        .filter { (bit, _) -> caps and bit != 0 }
+        .map { (_, feature) -> feature }

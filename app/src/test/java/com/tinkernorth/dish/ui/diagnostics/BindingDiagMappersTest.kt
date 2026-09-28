@@ -6,6 +6,7 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.net.ControllerDescriptor
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.audio.MicCapturePlan
@@ -267,6 +268,18 @@ class BindingDiagMappersTest {
     }
 
     @Test
+    fun `each declared cap bit on its own maps to exactly its own feature`() {
+        for ((bit, feature) in WIRE_CAP_FEATURES) {
+            assertEquals("cap bit 0x${bit.toString(HEX)}", listOf(feature), declaredFeatures(bit))
+        }
+    }
+
+    @Test
+    fun `a cap bit past the known ones declares nothing`() {
+        assertTrue(declaredFeatures(FIRST_UNKNOWN_CAP_BIT).isEmpty())
+    }
+
+    @Test
     fun `battery source and feedback target follow the slot kind`() {
         assertEquals(BatterySource.LOWEST_OF_BOTH, batterySource(Transport.Bluetooth, isVirtual = false))
         assertEquals(BatterySource.PHONE, batterySource(Transport.Usb, isVirtual = false))
@@ -274,5 +287,23 @@ class BindingDiagMappersTest {
         assertEquals(FeedbackTargetKind.PHONE, feedbackTarget(VIRTUAL_SLOT_ID))
         assertEquals(FeedbackTargetKind.PAD_FRAMEWORK, feedbackTarget("9"))
         assertEquals(FeedbackTargetKind.NONE, feedbackTarget("nope"))
+    }
+
+    private companion object {
+        const val HEX = 16
+        const val FIRST_UNKNOWN_CAP_BIT = 0x0200
+
+        val WIRE_CAP_FEATURES =
+            listOf(
+                ControllerDescriptor.CAP_ANALOG_TRIGGERS to Feature.ANALOG_TRIGGERS,
+                ControllerDescriptor.CAP_RUMBLE to Feature.RUMBLE,
+                ControllerDescriptor.CAP_MOTION to Feature.MOTION,
+                ControllerDescriptor.CAP_LIGHTBAR to Feature.LIGHTBAR,
+                ControllerDescriptor.CAP_TRIGGER_EFFECTS to Feature.TRIGGER_EFFECTS,
+                ControllerDescriptor.CAP_PLAYER_LEDS to Feature.PLAYER_LEDS,
+                ControllerDescriptor.CAP_MIC to Feature.MIC,
+                ControllerDescriptor.CAP_SPEAKER to Feature.SPEAKER,
+                ControllerDescriptor.CAP_HAPTIC_AUDIO to Feature.HAPTIC_AUDIO,
+            )
     }
 }
