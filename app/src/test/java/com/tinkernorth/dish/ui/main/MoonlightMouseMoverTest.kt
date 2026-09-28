@@ -94,6 +94,14 @@ class MoonlightMouseMoverTest {
     }
 
     @Test
+    fun `the vertical remainder carries across moves instead of being dropped`() {
+        frame(finger(0, 0))
+        frame(finger(0, 1000))
+        frame(finger(0, 2000))
+        assertEquals(listOf(MouseCommand.MoveRel(0, 28)), frame(finger(0, 3000)))
+    }
+
+    @Test
     fun `lifting the finger resets the anchor`() {
         frame(finger(0, 0))
         assertTrue(frame(lifted()).isEmpty())
