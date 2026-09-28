@@ -525,12 +525,7 @@ class UsbGamepadManager
 
         private fun requestPermission(device: UsbDevice) {
             val intent = Intent(ACTION_USB_PERMISSION).setPackage(context.packageName)
-            val flags =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-                } else {
-                    PendingIntent.FLAG_UPDATE_CURRENT
-                }
+            val flags = usbPermissionIntentFlags(Build.VERSION.SDK_INT)
             val pending = PendingIntent.getBroadcast(context, device.deviceId, intent, flags)
             scope.launch(Dispatchers.Main) { usbManager?.requestPermission(device, pending) }
         }
@@ -547,7 +542,7 @@ class UsbGamepadManager
         private fun friendlyName(device: UsbDevice): String =
             friendlyUsbName(
                 knownModelName = native.lookupKnownModelName(device.vendorId, device.productId),
-                deviceName = device.deviceName,
+                deviceName = device::getDeviceName,
                 productName = device::getProductName,
             )
 

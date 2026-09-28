@@ -91,7 +91,8 @@ class UsbGamepadManagerTest {
         unmockkAll()
     }
 
-    private fun gamepadDevice(): UsbDevice {
+    // A null device node leaves deviceName unstubbed, so the strict mock throws if anything reads it.
+    private fun gamepadDevice(deviceNode: String? = "usb-pad"): UsbDevice {
         val epIn =
             mockk<UsbEndpoint> {
                 every { type } returns UsbConstants.USB_ENDPOINT_XFER_INT
@@ -112,7 +113,7 @@ class UsbGamepadManagerTest {
         return mockk<UsbDevice> {
             every { vendorId } returns vid
             every { productId } returns pid
-            every { deviceName } returns "usb-pad"
+            deviceNode?.let { node -> every { deviceName } returns node }
             every { interfaceCount } returns 1
             every { getInterface(0) } returns intf
         }
@@ -300,6 +301,15 @@ class UsbGamepadManagerTest {
         every { pathPrefs.choiceFor(vid, pid) } returns null
         val scope = CoroutineScope(SupervisorJob() + dispatcher)
         return UsbGamepadManager(ctx, registry, Provider { hub }, notifications, scope, native, pathPrefs, descriptors)
+    }
+
+    @Test
+    fun `a known model is named by the table without reading its device node`() {
+        val m = buildManagerForDevice(gamepadDevice(deviceNode = null))
+
+        m.reconcileForeground()
+
+        assertEquals("Pad", m.controllers.value[key]?.name)
     }
 
     @Test
@@ -757,9 +767,24 @@ class UsbGamepadManagerTest {
 
     private fun installedReceiver(m: UsbGamepadManager): BroadcastReceiver {
         val receiver = slot<BroadcastReceiver>()
-        every { ContextCompat.registerReceiver(ctx, capture(receiver), any(), any()) } returns null
+        every {
+            ContextCompat.registerReceiver(ctx, capture(receiver), any(), ContextCompat.RECEIVER_NOT_EXPORTED)
+        } returns null
         m.install()
         return receiver.captured
+    }
+
+    // The permission grant rides this receiver: an exported one would let any app forge
+    // ACTION_USB_PERMISSION or a detach for a pad it does not own.
+    @Test
+    fun `install registers its receiver not exported`() {
+        val m = buildManager()
+
+        m.install()
+
+        verify(exactly = 1) {
+            ContextCompat.registerReceiver(ctx, any(), any(), ContextCompat.RECEIVER_NOT_EXPORTED)
+        }
     }
 
     private fun detachedIntent(): Intent {

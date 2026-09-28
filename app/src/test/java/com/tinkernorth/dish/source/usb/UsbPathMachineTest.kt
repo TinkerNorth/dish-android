@@ -615,7 +615,7 @@ class UsbPathMachineTest {
     }
 
     @Test
-    fun `awaiting from a cable jiggle + framework up ends the hold and clears nothing`() {
+    fun `awaiting from a cable jiggle + framework up ends the hold, settles on Standard and clears the failure`() {
         val r = reduce(controller(UsbPhase.AwaitingFramework), UsbEvent.FrameworkUp(9))
         assertEquals(UsbPhase.Routed, r.next?.phase)
         assertEquals(9, r.next?.frameworkId)

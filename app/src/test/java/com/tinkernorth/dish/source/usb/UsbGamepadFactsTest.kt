@@ -3,7 +3,9 @@
 
 package com.tinkernorth.dish.source.usb
 
+import android.app.PendingIntent
 import android.hardware.usb.UsbConstants
+import android.os.Build
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -74,23 +76,49 @@ class UsbGamepadFactsTest {
 
     @Test
     fun `a known model is named by the table`() {
-        assertEquals("Xbox 360 Controller", friendlyUsbName("Xbox 360 Controller", "/dev/bus/usb/001/002") { "Controller" })
+        assertEquals("Xbox 360 Controller", friendlyUsbName("Xbox 360 Controller", ::deviceNode) { "Controller" })
     }
 
     @Test
     fun `a known model is never asked for its product string`() {
-        friendlyUsbName("Xbox 360 Controller", "/dev/bus/usb/001/002") { error("read the product string") }
+        friendlyUsbName("Xbox 360 Controller", ::deviceNode) { error("read the product string") }
     }
 
     @Test
     fun `an unknown model is named by its product string`() {
-        assertEquals("Controller", friendlyUsbName("", "/dev/bus/usb/001/002") { "Controller" })
+        assertEquals("Controller", friendlyUsbName("", ::deviceNode) { "Controller" })
+    }
+
+    @Test
+    fun `a known model never reads its device node`() {
+        friendlyUsbName("Xbox 360 Controller", { error("read the device node") }) { "Controller" }
+    }
+
+    @Test
+    fun `a model named by its product string never reads its device node`() {
+        assertEquals("Controller", friendlyUsbName("", { error("read the device node") }) { "Controller" })
     }
 
     @Test
     fun `an unknown model with a blank product string is named by its device node`() {
-        assertEquals("/dev/bus/usb/001/002", friendlyUsbName("", "/dev/bus/usb/001/002") { "  " })
-        assertEquals("/dev/bus/usb/001/002", friendlyUsbName("", "/dev/bus/usb/001/002") { null })
+        assertEquals(DEVICE_NODE, friendlyUsbName("", ::deviceNode) { "  " })
+        assertEquals(DEVICE_NODE, friendlyUsbName("", ::deviceNode) { null })
+    }
+
+    private fun deviceNode(): String = DEVICE_NODE
+
+    // UsbManager fills the device and the grant into the permission broadcast, which 31+ only
+    // allows on a mutable PendingIntent; below 31 the flag does not exist.
+    @Test
+    fun `below API 31 the permission intent only updates in place`() {
+        assertEquals(PendingIntent.FLAG_UPDATE_CURRENT, usbPermissionIntentFlags(Build.VERSION_CODES.R))
+    }
+
+    @Test
+    fun `from API 31 the permission intent is also mutable`() {
+        val expected = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+
+        assertEquals(expected, usbPermissionIntentFlags(Build.VERSION_CODES.S))
     }
 
     private fun framework(
@@ -152,5 +180,6 @@ class UsbGamepadFactsTest {
     private companion object {
         const val VID = 0x045E
         const val PID = 0x028E
+        const val DEVICE_NODE = "/dev/bus/usb/001/002"
     }
 }

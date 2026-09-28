@@ -3,7 +3,10 @@
 
 package com.tinkernorth.dish.source.usb
 
+import android.app.PendingIntent
 import android.hardware.usb.UsbConstants
+import android.os.Build
+import androidx.annotation.ChecksSdkIntAtLeast
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 
 private const val XINPUT_SUBCLASS = 0x5D
@@ -50,15 +53,30 @@ private fun hidInterfaceRank(facts: UsbInterfaceFacts): Int {
 }
 
 // The known-model table names the pad best, and a pad it names is never asked for its product
-// string; a blank product string is not a name at all.
+// string or its device node; a blank product string is not a name at all.
 internal fun friendlyUsbName(
     knownModelName: String,
-    deviceName: String,
+    deviceName: () -> String,
     productName: () -> String?,
 ): String {
     if (knownModelName.isNotEmpty()) return knownModelName
-    return productName()?.takeIf { it.isNotBlank() } ?: deviceName
+    return productName()?.takeIf { it.isNotBlank() } ?: deviceName()
 }
+
+// UsbManager fills the device and the grant into the permission broadcast, which needs a mutable
+// PendingIntent from 31; below 31 the flag does not exist.
+internal fun usbPermissionIntentFlags(sdkInt: Int): Int {
+    if (atLeast(Build.VERSION_CODES.S, sdkInt)) return PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+    return PendingIntent.FLAG_UPDATE_CURRENT
+}
+
+// The annotation is what lets lint read a caller-supplied API level as the gate FLAG_MUTABLE
+// needs; a bare `sdkInt >= api` comparison it cannot see through.
+@ChecksSdkIntAtLeast(parameter = 0)
+private fun atLeast(
+    api: Int,
+    sdkInt: Int,
+): Boolean = sdkInt >= api
 
 // The framework InputDevice of this model that is really there right now, if any: a held
 // placeholder, a needs-replug card or a device on its disconnect countdown does not count.
