@@ -432,7 +432,7 @@ void fetchPsCalibration(int fd, int interfaceNumber, uint8_t reportId,
     ct.timeout = usbparsers::USB_CONTROL_TIMEOUT_MS;
     ct.data = buf;
     int n = ioctl(fd, USBDEVFS_CONTROL, &ct);
-    if (n < 35) return;
+    if (n < 0 || static_cast<size_t>(n) < usbparsers::PS_CALIBRATION_REPORT_BYTES) return;
     usbparsers::parsePsCalibration(buf, (size_t)n, out);
 }
 
