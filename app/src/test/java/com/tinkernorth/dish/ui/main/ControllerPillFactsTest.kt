@@ -11,6 +11,7 @@ import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.net.moonlight.CONTROLLER_TYPE_UNKNOWN
 import com.tinkernorth.dish.core.net.moonlight.NINTENDO
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.TOUCHPAD_MODE_DS4
@@ -244,27 +245,65 @@ class ControllerPillFactsTest {
     }
 
     @Test
-    fun `feedback and audio facts trail the classic pills in that order`() {
+    fun `feedback and audio facts trail rumble, motion and pointer in that order`() {
         val everything =
             caps(
-                input = setOf(Feature.LIGHTBAR, Feature.MIC),
-                type = setOf(Feature.LIGHTBAR, Feature.MIC),
-                userEnabled = setOf(Feature.MIC),
+                input = setOf(Feature.MOTION, Feature.LIGHTBAR, Feature.MIC),
+                type = setOf(Feature.MOTION, Feature.TOUCHPAD, Feature.LIGHTBAR, Feature.MIC),
+                userEnabled = setOf(Feature.MOTION, Feature.MIC),
             )
+        val rumbling = card(standardRumble = true)
+        val expected =
+            listOf(
+                FunctionPillFact.Rumble,
+                FunctionPillFact.Motion(on = true),
+                FunctionPillFact.Pointer(PointerPillFact.PAD_OFF),
+                FunctionPillFact.Feedback(FeedbackPillFact.LIGHTBAR),
+                FunctionPillFact.Audio(AudioPillFact.MIC),
+            )
+        assertEquals(expected, functionPillFacts(row(pathCard = rumbling, motionCap = everything), summary()))
+    }
+
+    // The label, glyph and tone each connection pill wore when the adapter still built them
+    // itself (connectionSpecs and usbModeSpec), entry by entry.
+    @Test
+    fun `every connection pill wears the label, glyph and tone the card always gave it`() {
+        val expected =
+            mapOf(
+                ConnectionPillFact.ONSCREEN to PillLook(R.string.binding_link_onscreen, R.drawable.ic_gamepad_virtual, PillTone.FACT),
+                ConnectionPillFact.BLUETOOTH to PillLook(R.string.binding_link_bluetooth, R.drawable.ic_bluetooth, PillTone.FACT),
+                ConnectionPillFact.USB to PillLook(R.string.binding_link_usb, R.drawable.ic_usb, PillTone.FACT),
+                ConnectionPillFact.DIRECT to PillLook(R.string.binding_mode_direct, R.drawable.ic_bolt, PillTone.ON),
+                ConnectionPillFact.DIRECT_GUESSED to PillLook(R.string.binding_mode_direct, R.drawable.ic_bolt, PillTone.WARN),
+                ConnectionPillFact.STANDARD to PillLook(R.string.binding_mode_standard, R.drawable.ic_cable, PillTone.CAP),
+                ConnectionPillFact.WIRED_AVAILABLE to PillLook(R.string.binding_usb_available, R.drawable.ic_usb, PillTone.WARN),
+            )
+        assertEquals(expected, ConnectionPillFact.entries.associateWith(::lookOf))
+    }
+
+    @Test
+    fun `a moonlight slot with no stored type emulates auto`() {
         assertEquals(
-            listOf(FunctionPillFact.Feedback(FeedbackPillFact.LIGHTBAR), FunctionPillFact.Audio(AudioPillFact.MIC)),
-            functionPillFacts(row(pathCard = card(), motionCap = everything), summary()),
+            EmulatePill.Bundled(R.string.ml_type_auto),
+            emulatePillFor(ConnectionKind.MOONLIGHT, storedType = null, btProfile = null),
         )
     }
 
     @Test
-    fun `every connection pill fact resolves to a label and a glyph`() {
-        for (fact in ConnectionPillFact.entries) {
-            assertEquals(true, fact.labelRes != 0)
-            assertEquals(true, fact.iconRes != 0)
-        }
-        assertEquals(R.string.binding_usb_available, ConnectionPillFact.WIRED_AVAILABLE.labelRes)
+    fun `a moonlight slot stored as the legacy unknown type emulates auto`() {
+        assertEquals(
+            EmulatePill.Bundled(R.string.ml_type_auto),
+            emulatePillFor(ConnectionKind.MOONLIGHT, CONTROLLER_TYPE_UNKNOWN, btProfile = null),
+        )
     }
+
+    private data class PillLook(
+        val labelRes: Int,
+        val iconRes: Int,
+        val tone: PillTone,
+    )
+
+    private fun lookOf(fact: ConnectionPillFact): PillLook = PillLook(fact.labelRes, fact.iconRes, fact.tone)
 
     private companion object {
         const val CONTROLLER_TYPE_XBOX_ID = com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX

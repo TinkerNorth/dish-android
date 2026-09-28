@@ -358,6 +358,65 @@ class ConfigureBindingsApplyTest {
         }
 
     @Test
+    fun `the usb machine is waited on for exactly the direct timeout`() =
+        runTest(dispatcher) {
+            usbControllersFlow.value = controller(UsbPhase.Claiming)
+            satelliteSlotsFlow.value = registered(slotId())
+            open()
+            vm.setDirect(true)
+
+            vm.apply()
+            dispatcher.scheduler.runCurrent()
+            advanceToJustBefore(DIRECT_TIMEOUT_MS)
+            assertEquals(0, running().doneCount)
+            advanceOneMillisecond()
+
+            assertEquals(res(R.string.binding_apply_warn_detail), finished().warningMessage)
+        }
+
+    @Test
+    fun `a host that never comes up is waited on for exactly the connect timeout`() =
+        runTest(dispatcher) {
+            open(host = summary(SATELLITE_ID, ConnectionKind.SATELLITE, LinkState.Saved))
+            vm.setDirect(false)
+
+            vm.apply()
+            dispatcher.scheduler.runCurrent()
+            advanceToJustBefore(CONNECT_TIMEOUT_MS)
+            assertTrue(vm.applyState.value is ApplyState.Running)
+            advanceOneMillisecond()
+
+            assertEquals(res(R.string.binding_apply_error_no_connect), finished().errorMessage)
+        }
+
+    @Test
+    fun `a satellite slot that never registers is waited on for exactly the apply timeout`() =
+        runTest(dispatcher) {
+            open()
+            vm.setDirect(false)
+
+            vm.apply()
+            dispatcher.scheduler.runCurrent()
+            advanceToJustBefore(APPLY_TIMEOUT_MS)
+            assertTrue(vm.applyState.value is ApplyState.Running)
+            advanceOneMillisecond()
+
+            assertEquals(res(R.string.binding_apply_error_no_connect), finished().errorMessage)
+        }
+
+    // runCurrent after each advance runs what is due at the new time itself, which advanceTimeBy
+    // alone leaves queued; without it a timeout one millisecond early would still pass.
+    private fun advanceToJustBefore(timeoutMs: Long) {
+        dispatcher.scheduler.advanceTimeBy(timeoutMs - 1)
+        dispatcher.scheduler.runCurrent()
+    }
+
+    private fun advanceOneMillisecond() {
+        dispatcher.scheduler.advanceTimeBy(1)
+        dispatcher.scheduler.runCurrent()
+    }
+
+    @Test
     fun `a finished step and the active step are drawn opaque`() {
         assertEquals(OPAQUE, applyStepAlpha(index = 0, doneCount = 1), EXACT)
         assertEquals(OPAQUE, applyStepAlpha(index = 1, doneCount = 1), EXACT)
@@ -488,6 +547,9 @@ class ConfigureBindingsApplyTest {
         const val PID = 0x0CE6
         const val KEY = (VID shl 16) or PID
         const val TYPE = 2
+        const val DIRECT_TIMEOUT_MS = 20_000L
+        const val CONNECT_TIMEOUT_MS = 8_000L
+        const val APPLY_TIMEOUT_MS = 8_000L
         const val HALF_FADED = 0.5f
         const val OPAQUE = 1f
         const val EXACT = 0f

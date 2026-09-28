@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.ui.main
 
+import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
@@ -173,4 +174,24 @@ class RatePillFactsTest {
             factFor(physical(InputPathMode.Direct, cap = motionOn, rates = rates(gyroHz = 200)), RateGlyph.GYRO),
         )
     }
+
+    // The label and glyph each measurement pill wore when the adapter still built them itself
+    // (screenRatePill, gyroRatePill and controllerRatePill), entry by entry.
+    @Test
+    fun `every rate glyph wears the label and glyph the card always gave it`() {
+        val expected =
+            mapOf(
+                RateGlyph.SCREEN to GlyphLook(R.string.binding_func_touchpad, R.drawable.ic_touchpad),
+                RateGlyph.GYRO to GlyphLook(R.string.binding_func_gyro, R.drawable.ic_motion),
+                RateGlyph.CONTROLLER to GlyphLook(R.string.setup_cfg_flow_controller, R.drawable.ic_gamepad),
+            )
+        assertEquals(expected, RateGlyph.entries.associateWith(::lookOf))
+    }
+
+    private data class GlyphLook(
+        val labelRes: Int,
+        val iconRes: Int,
+    )
+
+    private fun lookOf(glyph: RateGlyph): GlyphLook = GlyphLook(glyph.labelRes, glyph.iconRes)
 }

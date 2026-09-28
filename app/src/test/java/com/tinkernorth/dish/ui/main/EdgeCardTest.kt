@@ -81,6 +81,32 @@ class EdgeCardTest {
         assertEquals(R.string.binding_edge_unsteady_title, card?.titleRes)
     }
 
+    // What each banner says and wears, as the adapter painted it before the banner became facts.
+    @Test
+    fun `a host lost banner wears the error glyph and the host lost title`() {
+        val card = edgeCardFor(EdgeState.HOST_LOST, row())
+        assertEquals(R.drawable.ic_error, card?.iconRes)
+        assertEquals(R.string.binding_edge_host_lost_title, card?.titleRes)
+    }
+
+    @Test
+    fun `an input lost banner wears the usb glyph, the input lost title and its detail`() {
+        val card = edgeCardFor(EdgeState.INPUT_LOST, row())
+        assertEquals(R.drawable.ic_usb, card?.iconRes)
+        assertEquals(R.string.binding_edge_input_lost_title, card?.titleRes)
+        assertEquals(R.string.binding_edge_input_lost_detail, card?.detailRes)
+    }
+
+    @Test
+    fun `an unsteady banner wears the warning glyph, its detail and the warning accent`() {
+        val card = edgeCardFor(EdgeState.UNSTEADY, row())
+        assertEquals(R.drawable.ic_warning, card?.iconRes)
+        assertEquals(R.string.binding_edge_unsteady_detail, card?.detailRes)
+        assertEquals(R.color.colorWarning, card?.accentRes)
+        assertNull(card?.countdownSec)
+        assertNull(card?.detailArg)
+    }
+
     @Test
     fun `a disconnecting card with no banner fades to half`() {
         assertEquals(HALF_FADED, cardAlpha(EdgeState.NONE, isDisconnecting = true), EXACT)
