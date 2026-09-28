@@ -52,9 +52,10 @@ class MoonlightConvergeTest {
         }
     }
 
-    private fun request(type: Int) = MoonlightPadRequest(slotId = "a", emulatedType = type, capabilities = 0x03, supportedButtons = 0xFFFF)
+    private fun request(type: Int) = MoonlightPadRequest(slotId = "a", emulatedType = type, capabilities = CAPS, supportedButtons = BUTTONS)
 
-    private fun held(type: Int) = MoonlightPad(slotId = "a", number = 0, emulatedType = type, capabilities = 0x03, supportedButtons = 0xFFFF)
+    private fun held(type: Int) =
+        MoonlightPad(slotId = "a", number = 0, emulatedType = type, capabilities = CAPS, supportedButtons = BUTTONS)
 
     @Test
     fun `a slot that holds no pad acquires one`() {
@@ -70,7 +71,8 @@ class MoonlightConvergeTest {
     // the same pad for the same type.
     @Test
     fun `a held pad asked for with other bits but the same type is kept`() {
-        assertEquals(PadPlacement.KEEP, padPlacement(held(XBOX), request(XBOX).copy(capabilities = 0x3F, supportedButtons = 0x10FFFF)))
+        val otherBits = request(XBOX).copy(capabilities = OTHER_CAPS, supportedButtons = OTHER_BUTTONS)
+        assertEquals(PadPlacement.KEEP, padPlacement(held(XBOX), otherBits))
     }
 
     @Test
@@ -84,5 +86,12 @@ class MoonlightConvergeTest {
         MoonlightSessionState.entries.forEach { state ->
             (0..4).forEach { wanted -> moonlightConverge(state, wanted) }
         }
+    }
+
+    private companion object {
+        const val CAPS = 0x03
+        const val BUTTONS = 0xFFFF
+        const val OTHER_CAPS = 0x3F
+        const val OTHER_BUTTONS = 0x10FFFF
     }
 }

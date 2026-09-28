@@ -30,10 +30,10 @@ import com.tinkernorth.dish.source.sensor.PhoneBatterySource
 import com.tinkernorth.dish.source.sensor.PhoneMotionSource
 import com.tinkernorth.dish.source.store.MicMuteStore
 import com.tinkernorth.dish.source.store.VirtualPadFeedback
-import com.tinkernorth.dish.ui.common.gamepadSkinFromName
 import com.tinkernorth.dish.ui.common.GamepadTouchView
 import com.tinkernorth.dish.ui.common.ResendPacer
 import com.tinkernorth.dish.ui.common.TouchpadSurfaceView
+import com.tinkernorth.dish.ui.common.gamepadSkinFromName
 import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.paintConnectionMenuItem
 import com.tinkernorth.dish.ui.common.setupDishToolbar

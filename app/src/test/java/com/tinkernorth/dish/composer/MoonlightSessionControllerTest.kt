@@ -196,13 +196,27 @@ class MoonlightSessionControllerTest {
 
             controller().onStart(owner)
             dispatcher.scheduler.advanceUntilIdle()
-            assertEquals(XBOX, desired.last().getValue("moonlight:pc").single().emulatedType)
+            assertEquals(
+                XBOX,
+                desired
+                    .last()
+                    .getValue("moonlight:pc")
+                    .single()
+                    .emulatedType,
+            )
 
             every { capabilities.capabilityForCandidate(any(), any(), any(), any(), any()) } returns motionCaps
             devices.value = mapOf(1 to PhysicalGamepadRegistry.Device(1, "Pad", hasGyro = true))
             dispatcher.scheduler.advanceUntilIdle()
 
-            assertEquals(PLAYSTATION, desired.last().getValue("moonlight:pc").single().emulatedType)
+            assertEquals(
+                PLAYSTATION,
+                desired
+                    .last()
+                    .getValue("moonlight:pc")
+                    .single()
+                    .emulatedType,
+            )
         }
 
     @Test
