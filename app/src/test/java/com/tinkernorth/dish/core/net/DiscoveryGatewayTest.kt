@@ -135,6 +135,27 @@ class DiscoveryGatewayTest {
     }
 
     @Test
+    fun duplicateMdnsKeysNeverHeardByBroadcastStayMdns() {
+        val first = DiscoveredServer(name = "Sat", ip = "10.0.0.1", machineId = "mid-1")
+        val second = DiscoveredServer(name = "Sat", ip = "10.0.0.2", machineId = "mid-1")
+        val merged = mergeDiscovered(broadcast = emptyList(), mdns = listOf(first, second))
+        assertEquals(1, merged.size)
+        assertEquals("10.0.0.2", merged.single().ip)
+        assertEquals(DiscoverySource.MDNS, merged.single().source)
+    }
+
+    @Test
+    fun duplicateMdnsKeysAlsoHeardByBroadcastAreBoth() {
+        val fromBroadcast = DiscoveredServer(name = "Sat", ip = "10.0.0.1", machineId = "mid-1")
+        val first = DiscoveredServer(name = "Sat", ip = "10.0.0.1", machineId = "mid-1")
+        val second = DiscoveredServer(name = "Sat", ip = "10.0.0.2", machineId = "mid-1")
+        val merged = mergeDiscovered(broadcast = listOf(fromBroadcast), mdns = listOf(first, second))
+        assertEquals(1, merged.size)
+        assertEquals("10.0.0.2", merged.single().ip)
+        assertEquals(DiscoverySource.BOTH, merged.single().source)
+    }
+
+    @Test
     fun theSameHostWithoutAMachineIdIsKeyedOnItsAddress() {
         val merged =
             mergeDiscovered(

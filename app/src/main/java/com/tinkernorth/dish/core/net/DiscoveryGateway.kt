@@ -231,9 +231,12 @@ internal fun mergeDiscovered(
     for (server in broadcast) {
         byKey[server.stableKey] = server.copy(source = DiscoverySource.BROADCAST)
     }
+    // Snapshotted before any mDNS row lands, so a second mDNS row for the same key is not
+    // mistaken for the broadcast path having heard it.
+    val heardByBroadcast = byKey.keys.toSet()
     for (server in mdns) {
         val key = server.stableKey
-        val heardOnBothPaths = byKey.containsKey(key)
+        val heardOnBothPaths = key in heardByBroadcast
         val source = if (heardOnBothPaths) DiscoverySource.BOTH else DiscoverySource.MDNS
         byKey[key] = server.copy(source = source)
     }
