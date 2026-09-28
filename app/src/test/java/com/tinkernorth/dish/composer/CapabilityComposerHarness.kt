@@ -21,9 +21,9 @@ import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 
-// The harness CapabilityComposerTest and CapabilityComposerPadAudioTest share: the
-// summary/device builders and the fully mocked composer factory. Top level so the
-// two suites stay under the class-size gate without duplicating any of it.
+// The harness the CapabilityComposer suites share (every one but the lightbar suite, which
+// builds its own): the summary/device builders and the fully mocked composer factory. Top
+// level so each suite stays under the class-size gate without duplicating any of it.
 
 internal fun summary(
     id: String,

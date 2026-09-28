@@ -24,7 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 // The layers a bound slot takes from its host kind, and the projections read on top of the
-// composed map. Split from CapabilityComposerTest to stay under the class-size gate.
+// composed map. A suite of its own beside CapabilityComposerTest, which is at the class-size gate.
 class CapabilityComposerLayersTest {
     // ── bound Moonlight and Bluetooth slots: the layers a satellite never takes ──
 
