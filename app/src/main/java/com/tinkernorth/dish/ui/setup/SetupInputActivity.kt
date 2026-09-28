@@ -35,8 +35,7 @@ class SetupInputActivity : BaseGamepadHostActivity() {
         bindInputChoices()
     }
 
-    // Wired first: it is the only path with no pairing step and the lowest latency, which is what
-    // the badge says.
+    // Wired first: it has the lowest latency, which is what the badge says.
     private fun bindInputChoices() {
         bindChoice(
             binding.cardWired,
