@@ -66,6 +66,7 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
     // UI-thread only: what the Moonlight host was last told, and the finger anchor the
     // relative moves accumulate against.
     private val mouseMover = MoonlightMouseMover()
+    private var moonlightMouseSink: MoonlightConnectionMouseSink? = null
 
     private var optionsMenu: Menu? = null
     private var currentSummary: ConnectionSummary? = null
@@ -189,7 +190,7 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
 
     private fun releaseMoonlightButtons() {
         val conn = moonlight.get(connectionId) ?: return
-        mouseMover.releaseButtons().forEach { conn.send(it) }
+        mouseMover.releaseButtons(moonlightMouseSinkOn(conn))
     }
 
     private fun latestFingers(): TouchpadSurfaceView.TouchpadState {
@@ -264,15 +265,13 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
         scrollNotches: Int,
     ) {
         val conn = moonlight.get(connectionId) ?: return
-        mouseMover.onFrame(fingers, scrollNotches, leftHeld, rightHeld, middleHeld).forEach { conn.send(it) }
+        mouseMover.onFrame(moonlightMouseSinkOn(conn), fingers, scrollNotches, leftHeld, rightHeld, middleHeld)
     }
 
-    private fun MoonlightConnection.send(command: MouseCommand) {
-        when (command) {
-            is MouseCommand.Button -> sendMouseButton(command.down, command.button)
-            is MouseCommand.Scroll -> sendMouseScroll(command.amount)
-            is MouseCommand.MoveRel -> sendMouseMoveRel(command.dx, command.dy)
-        }
+    private fun moonlightMouseSinkOn(conn: MoonlightConnection): MoonlightConnectionMouseSink {
+        val sink = moonlightMouseSinkFor(moonlightMouseSink, conn)
+        moonlightMouseSink = sink
+        return sink
     }
 
     private fun sendMouseReport(

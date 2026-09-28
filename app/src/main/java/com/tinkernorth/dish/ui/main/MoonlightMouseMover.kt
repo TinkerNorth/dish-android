@@ -6,6 +6,7 @@ package com.tinkernorth.dish.ui.main
 import com.tinkernorth.dish.core.net.moonlight.MOUSE_BUTTON_LEFT
 import com.tinkernorth.dish.core.net.moonlight.MOUSE_BUTTON_MIDDLE
 import com.tinkernorth.dish.core.net.moonlight.MOUSE_BUTTON_RIGHT
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.ui.common.TouchpadSurfaceView
 
 private const val WHEEL_DELTA_PER_NOTCH = 120
@@ -20,21 +21,48 @@ private const val MOONLIGHT_MOVE_SCALE = MOONLIGHT_MOVE_PX_PER_SWEEP / NORM_INT1
 internal fun wheelDeltaFor(scrollNotches: Int): Int =
     (scrollNotches * WHEEL_DELTA_PER_NOTCH).coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
 
-// One packet for the Moonlight control stream, in the order the host must see them.
-internal sealed interface MouseCommand {
-    data class Button(
-        val down: Boolean,
-        val button: Int,
-    ) : MouseCommand
+// Where the mover's packets go, called in the order the host must see them. The overlay
+// implements it once over its Moonlight connection, so a touch frame builds nothing.
+internal interface MoonlightMouseSink {
+    fun sendMouseButton(
+        down: Boolean,
+        button: Int,
+    )
 
-    data class Scroll(
-        val amount: Int,
-    ) : MouseCommand
+    fun sendMouseScroll(amount: Int)
 
-    data class MoveRel(
-        val dx: Int,
-        val dy: Int,
-    ) : MouseCommand
+    fun sendMouseMoveRel(
+        dx: Int,
+        dy: Int,
+    )
+}
+
+// The sink over a live Moonlight connection.
+internal class MoonlightConnectionMouseSink(
+    val connection: MoonlightConnection,
+) : MoonlightMouseSink {
+    override fun sendMouseButton(
+        down: Boolean,
+        button: Int,
+    ) = connection.sendMouseButton(down, button)
+
+    override fun sendMouseScroll(amount: Int) = connection.sendMouseScroll(amount)
+
+    override fun sendMouseMoveRel(
+        dx: Int,
+        dy: Int,
+    ) = connection.sendMouseMoveRel(dx, dy)
+}
+
+// The sink a frame sends through: the one already held while the connection object is the
+// same, a new one once a reconnect has replaced it.
+internal fun moonlightMouseSinkFor(
+    held: MoonlightConnectionMouseSink?,
+    connection: MoonlightConnection,
+): MoonlightConnectionMouseSink {
+    val heldIsForThisConnection = held != null && held.connection === connection
+    if (heldIsForThisConnection) return held
+    return MoonlightConnectionMouseSink(connection)
 }
 
 // Turns the mouse surface's frames into Moonlight's edge-triggered packets: a button is sent
@@ -52,59 +80,52 @@ internal class MoonlightMouseMover {
     private var remainderY = 0f
 
     fun onFrame(
+        sink: MoonlightMouseSink,
         fingers: TouchpadSurfaceView.TouchpadState,
         scrollNotches: Int,
         leftHeld: Boolean,
         rightHeld: Boolean,
         middleHeld: Boolean,
-    ): List<MouseCommand> {
-        val commands = mutableListOf<MouseCommand>()
-        if (leftHeld != leftSent) {
-            commands.add(MouseCommand.Button(leftHeld, MOUSE_BUTTON_LEFT))
-            leftSent = leftHeld
-        }
-        if (rightHeld != rightSent) {
-            commands.add(MouseCommand.Button(rightHeld, MOUSE_BUTTON_RIGHT))
-            rightSent = rightHeld
-        }
-        if (middleHeld != middleSent) {
-            commands.add(MouseCommand.Button(middleHeld, MOUSE_BUTTON_MIDDLE))
-            middleSent = middleHeld
-        }
-        if (scrollNotches != 0) commands.add(MouseCommand.Scroll(wheelDeltaFor(scrollNotches)))
-        moveFor(fingers)?.let { commands.add(it) }
-        return commands
+    ) {
+        leftSent = sendButtonEdge(sink, MOUSE_BUTTON_LEFT, held = leftHeld, sent = leftSent)
+        rightSent = sendButtonEdge(sink, MOUSE_BUTTON_RIGHT, held = rightHeld, sent = rightSent)
+        middleSent = sendButtonEdge(sink, MOUSE_BUTTON_MIDDLE, held = middleHeld, sent = middleSent)
+        if (scrollNotches != 0) sink.sendMouseScroll(wheelDeltaFor(scrollNotches))
+        sendMove(sink, fingers)
     }
 
     // Leaving the surface must never strand a held button on the host.
-    fun releaseButtons(): List<MouseCommand> {
-        val commands = mutableListOf<MouseCommand>()
-        if (leftSent) {
-            commands.add(MouseCommand.Button(false, MOUSE_BUTTON_LEFT))
-            leftSent = false
-        }
-        if (rightSent) {
-            commands.add(MouseCommand.Button(false, MOUSE_BUTTON_RIGHT))
-            rightSent = false
-        }
-        if (middleSent) {
-            commands.add(MouseCommand.Button(false, MOUSE_BUTTON_MIDDLE))
-            middleSent = false
-        }
-        return commands
+    fun releaseButtons(sink: MoonlightMouseSink) {
+        leftSent = sendButtonEdge(sink, MOUSE_BUTTON_LEFT, held = false, sent = leftSent)
+        rightSent = sendButtonEdge(sink, MOUSE_BUTTON_RIGHT, held = false, sent = rightSent)
+        middleSent = sendButtonEdge(sink, MOUSE_BUTTON_MIDDLE, held = false, sent = middleSent)
     }
 
-    private fun moveFor(fingers: TouchpadSurfaceView.TouchpadState): MouseCommand.MoveRel? {
+    // Returns what the host now holds for this button.
+    private fun sendButtonEdge(
+        sink: MoonlightMouseSink,
+        button: Int,
+        held: Boolean,
+        sent: Boolean,
+    ): Boolean {
+        if (held != sent) sink.sendMouseButton(held, button)
+        return held
+    }
+
+    private fun sendMove(
+        sink: MoonlightMouseSink,
+        fingers: TouchpadSurfaceView.TouchpadState,
+    ) {
         if (!fingers.finger0Active) {
             trackingId = Int.MIN_VALUE
-            return null
+            return
         }
         val x = fingers.finger0X.toInt()
         val y = fingers.finger0Y.toInt()
         val freshTouch = fingers.finger0TrackingId != trackingId
         if (freshTouch) {
             anchorAt(fingers.finger0TrackingId, x, y)
-            return null
+            return
         }
         remainderX += (x - lastX) * MOONLIGHT_MOVE_SCALE
         remainderY += (y - lastY) * MOONLIGHT_MOVE_SCALE
@@ -112,10 +133,10 @@ internal class MoonlightMouseMover {
         lastY = y
         val dx = remainderX.toInt()
         val dy = remainderY.toInt()
-        if (dx == 0 && dy == 0) return null
+        if (dx == 0 && dy == 0) return
         remainderX -= dx
         remainderY -= dy
-        return MouseCommand.MoveRel(dx, dy)
+        sink.sendMouseMoveRel(dx, dy)
     }
 
     private fun anchorAt(
