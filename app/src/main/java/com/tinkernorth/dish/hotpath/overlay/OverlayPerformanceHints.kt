@@ -38,11 +38,11 @@ internal fun acceptsGamepadKey(
 ): Boolean = isGamepadKeySource(source) || deviceId in knownPadIds
 
 // The joystick fold reads any motion from a pad the registry knows, whatever source bits it carries.
-internal fun isJoystickEvent(
+// Inline, so the registry lookup costs no object and runs only when the source bits leave it open.
+internal inline fun isJoystickEvent(
     source: Int,
-    deviceId: Int,
-    knownPadIds: Set<Int>,
-): Boolean = isJoystickMotionSource(source) || deviceId in knownPadIds
+    isKnownPad: () -> Boolean,
+): Boolean = isJoystickMotionSource(source) || isKnownPad()
 
 // A touch re-arms the inactivity dim only while the screen is being kept on, and a cancelled one never does.
 internal fun shouldResetInactivity(

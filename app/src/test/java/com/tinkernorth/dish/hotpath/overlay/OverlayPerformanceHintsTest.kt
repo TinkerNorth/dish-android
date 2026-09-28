@@ -166,17 +166,36 @@ class OverlayPerformanceHintsTest {
 
     @Test
     fun `motion from a known pad with a foreign source is a joystick event`() {
-        assertTrue(isJoystickEvent(InputDevice.SOURCE_MOUSE, deviceId = KNOWN_PAD, knownPadIds = setOf(KNOWN_PAD)))
+        assertTrue(isJoystickEvent(InputDevice.SOURCE_MOUSE) { true })
     }
 
     @Test
     fun `motion from an unknown mouse is not a joystick event`() {
-        assertFalse(isJoystickEvent(InputDevice.SOURCE_MOUSE, deviceId = STRANGER, knownPadIds = setOf(KNOWN_PAD)))
+        assertFalse(isJoystickEvent(InputDevice.SOURCE_MOUSE) { false })
     }
 
     @Test
     fun `joystick-sourced motion is a joystick event whatever the registry holds`() {
-        assertTrue(isJoystickEvent(InputDevice.SOURCE_JOYSTICK, deviceId = STRANGER, knownPadIds = emptySet()))
+        assertTrue(isJoystickEvent(InputDevice.SOURCE_JOYSTICK) { false })
+    }
+
+    // The 250 Hz path reads the registry only when the source bits leave the question open.
+    @Test
+    fun `joystick-sourced motion never asks the registry`() {
+        var registryReads = 0
+
+        isJoystickEvent(InputDevice.SOURCE_JOYSTICK) { ++registryReads > 0 }
+
+        assertEquals(0, registryReads)
+    }
+
+    @Test
+    fun `motion with a foreign source asks the registry once`() {
+        var registryReads = 0
+
+        isJoystickEvent(InputDevice.SOURCE_MOUSE) { ++registryReads > 0 }
+
+        assertEquals(1, registryReads)
     }
 
     // ---- what re-arms the inactivity dim ----

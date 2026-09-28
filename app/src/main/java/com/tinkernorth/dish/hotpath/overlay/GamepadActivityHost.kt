@@ -156,7 +156,7 @@ class GamepadActivityHost(
         // the pad's, never a stick: taken first, before the joystick fold below could read
         // their coordinates as axes.
         if (padTouchpad.onGenericMotionEvent(event)) return true
-        val isJoy = isJoystickEvent(event.source, event.deviceId, gamepadRegistry.devices.value.keys)
+        val isJoy = isJoystickEvent(event.source) { event.deviceId in gamepadRegistry.devices.value }
         if (shouldRequestUnbufferedJoystick(isJoy, unbufferedJoystickRequested)) {
             unbufferedJoystickRequested = true
             requestUnbufferedJoystickDispatch(event)
