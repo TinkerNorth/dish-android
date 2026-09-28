@@ -11,16 +11,22 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.net.URI
 import java.security.cert.Certificate
 import java.security.cert.X509Certificate
+import javax.net.ssl.HostnameVerifier
 import javax.net.ssl.SSLSession
 
 // The hostname verifier runs after TofuTrustManager has pinned inside the handshake; it never
-// pins itself, it only confirms the negotiated session carries the pinned certificate.
+// pins itself, it only confirms the negotiated session carries the pinned certificate. Every case
+// goes through the verifier openConnection installs, so a connection wired to anything weaker
+// fails here. Opening a connection does not touch the network; nothing here connects.
 class SatelliteHttpClientVerifierTest {
     private val sat = "satellite:mid:test"
     private val pinnedDer = byteArrayOf(1, 2, 3)
     private val otherDer = byteArrayOf(9, 9, 9)
+    private val satelliteUrl = URI("https://192.0.2.1:47990/api/connections").toURL()
+    private val lanHost = "192.0.2.1"
 
     private fun sessionWith(der: ByteArray): SSLSession {
         val cert = mockk<X509Certificate>()
@@ -38,21 +44,31 @@ class SatelliteHttpClientVerifierTest {
         return SatelliteHttpClient(pins)
     }
 
+    private fun ignoreMismatch() = Unit
+
+    private fun installedVerifier(client: SatelliteHttpClient): HostnameVerifier =
+        client.openConnection(satelliteUrl, "GET", sat, ::ignoreMismatch).hostnameVerifier
+
     @Test
     fun `a session presenting the pinned cert is accepted`() {
-        assertTrue(clientPinnedTo(pinnedDer).verifyPinnedSession(sat, sessionWith(pinnedDer)))
+        val verifier = installedVerifier(clientPinnedTo(pinnedDer))
+
+        assertTrue(verifier.verify(lanHost, sessionWith(pinnedDer)))
     }
 
     @Test
     fun `a session presenting another cert is rejected`() {
-        assertFalse(clientPinnedTo(pinnedDer).verifyPinnedSession(sat, sessionWith(otherDer)))
+        val verifier = installedVerifier(clientPinnedTo(pinnedDer))
+
+        assertFalse(verifier.verify(lanHost, sessionWith(otherDer)))
     }
 
     @Test
     fun `an unpinned satellite never passes the verifier, pinning is the trust manager's job`() {
         val pins = pinRepo()
+        val verifier = installedVerifier(SatelliteHttpClient(pins))
 
-        assertFalse(SatelliteHttpClient(pins).verifyPinnedSession(sat, sessionWith(pinnedDer)))
+        assertFalse(verifier.verify(lanHost, sessionWith(pinnedDer)))
         assertNull("the verifier must not pin", pins.pinnedFingerprint(sat))
     }
 
@@ -60,12 +76,15 @@ class SatelliteHttpClientVerifierTest {
     fun `a session without peer certificates is rejected`() {
         val session = mockk<SSLSession>()
         every { session.peerCertificates } returns emptyArray()
+        val verifier = installedVerifier(clientPinnedTo(pinnedDer))
 
-        assertFalse(clientPinnedTo(pinnedDer).verifyPinnedSession(sat, session))
+        assertFalse(verifier.verify(lanHost, session))
     }
 
     @Test
     fun `a missing session is rejected`() {
-        assertFalse(clientPinnedTo(pinnedDer).verifyPinnedSession(sat, null))
+        val verifier = installedVerifier(clientPinnedTo(pinnedDer))
+
+        assertFalse(verifier.verify(lanHost, null))
     }
 }

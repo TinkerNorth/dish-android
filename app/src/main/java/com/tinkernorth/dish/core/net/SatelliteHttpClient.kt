@@ -60,7 +60,7 @@ class SatelliteHttpClient
         // The cert names no host the URL stack could match (a self-signed cert for a LAN IP), so the
         // platform verifier is replaced by the one check that means something here: the negotiated
         // session carries the certificate pinned for this satellite.
-        internal fun verifyPinnedSession(
+        private fun verifyPinnedSession(
             satelliteId: String,
             session: SSLSession?,
         ): Boolean {
@@ -329,7 +329,7 @@ class SatelliteHttpClient
             }
         }
 
-        private fun openConnection(
+        internal fun openConnection(
             url: URL,
             method: String,
             satelliteId: String,
