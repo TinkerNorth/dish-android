@@ -17,6 +17,7 @@ import com.tinkernorth.dish.core.net.moonlight.fromStored
 import com.tinkernorth.dish.core.net.moonlight.resolveMoonlightEmulatedType
 import com.tinkernorth.dish.core.net.moonlight.supportedButtons
 import com.tinkernorth.dish.hotpath.input.FeedbackRouter
+import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.RumbleRouter
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
@@ -52,6 +53,7 @@ class MoonlightSessionController
         private val hub: ConnectionCoordinator,
         private val moonlight: MoonlightConnectionManager,
         private val capabilities: CapabilityComposer,
+        private val registry: PhysicalGamepadRegistry,
         private val rumble: RumbleRouter,
         private val feedback: FeedbackRouter,
         scope: CoroutineScope,
@@ -70,8 +72,12 @@ class MoonlightSessionController
             }
         }
 
+        // The devices are read only to re-resolve: Auto and the capability bits come from each
+        // pad's live controller layer, and Android can enumerate a pad's gyro after the pad, so
+        // a device change must ask again or a pad acquired later carries what was resolved
+        // before it. A change that resolves the same pads stops at distinctUntilChanged.
         override fun upstream(): Flow<MoonlightDesiredPads> =
-            combine(hub.bindings, hub.connections, hub.satTypes) { bindings, conns, types ->
+            combine(hub.bindings, hub.connections, hub.satTypes, registry.devices) { bindings, conns, types, _ ->
                 desiredPads(bindings, conns, types)
             }.distinctUntilChanged()
 

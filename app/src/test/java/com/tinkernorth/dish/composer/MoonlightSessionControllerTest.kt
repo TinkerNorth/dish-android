@@ -17,6 +17,7 @@ import com.tinkernorth.dish.core.net.moonlight.NINTENDO
 import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
 import com.tinkernorth.dish.core.net.moonlight.XBOX
 import com.tinkernorth.dish.hotpath.input.FeedbackRouter
+import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.RumbleRouter
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
@@ -46,6 +47,7 @@ class MoonlightSessionControllerTest {
     private val bindings = MutableStateFlow<Map<String, String>>(emptyMap())
     private val connections = MutableStateFlow<List<ConnectionSummary>>(emptyList())
     private val satTypes = MutableStateFlow<Map<Pair<String, String>, Int>>(emptyMap())
+    private val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
 
     private lateinit var context: Context
     private lateinit var hub: ConnectionCoordinator
@@ -77,12 +79,15 @@ class MoonlightSessionControllerTest {
 
     private val feedback: FeedbackRouter = mockk(relaxed = true)
 
+    private val registry: PhysicalGamepadRegistry = mockk { every { devices } returns this@MoonlightSessionControllerTest.devices }
+
     private fun controller() =
         MoonlightSessionController(
             context = context,
             hub = hub,
             moonlight = moonlight,
             capabilities = capabilities,
+            registry = registry,
             rumble = rumble,
             feedback = feedback,
             scope = TestScope(dispatcher),
@@ -175,6 +180,44 @@ class MoonlightSessionControllerTest {
                     .single()
                     .emulatedType,
             )
+        }
+
+    // Android can enumerate a pad's motion sensor after the pad itself, so a pad bound on Auto
+    // first resolves without a gyro; the pads are asked for again once the gyro shows up, so a
+    // pad the session acquires from then on is announced as the type its motion resolves to.
+    @Test
+    fun `a gyro that enumerates after the binding re-resolves Auto to PlayStation`() =
+        runTest(dispatcher) {
+            connections.value = listOf(summary("moonlight:pc"))
+            bindings.value = mapOf("1" to "moonlight:pc")
+            devices.value = mapOf(1 to PhysicalGamepadRegistry.Device(1, "Pad"))
+            val desired = mutableListOf<Map<String, List<MoonlightPadRequest>>>()
+            every { moonlight.applyDesired(capture(desired)) } returns Unit
+
+            controller().onStart(owner)
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(XBOX, desired.last().getValue("moonlight:pc").single().emulatedType)
+
+            every { capabilities.capabilityForCandidate(any(), any(), any(), any(), any()) } returns motionCaps
+            devices.value = mapOf(1 to PhysicalGamepadRegistry.Device(1, "Pad", hasGyro = true))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(PLAYSTATION, desired.last().getValue("moonlight:pc").single().emulatedType)
+        }
+
+    @Test
+    fun `a device change that resolves the same pads asks for nothing again`() =
+        runTest(dispatcher) {
+            connections.value = listOf(summary("moonlight:pc"))
+            bindings.value = mapOf("1" to "moonlight:pc")
+            devices.value = mapOf(1 to PhysicalGamepadRegistry.Device(1, "Pad"))
+
+            controller().onStart(owner)
+            dispatcher.scheduler.advanceUntilIdle()
+            devices.value = mapOf(1 to PhysicalGamepadRegistry.Device(1, "Pad", disconnectingTimeLeftSec = 3))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            verify(exactly = 1) { moonlight.applyDesired(any()) }
         }
 
     @Test
