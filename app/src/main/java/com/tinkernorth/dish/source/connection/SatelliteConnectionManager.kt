@@ -37,6 +37,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -84,6 +86,14 @@ internal fun lateSlotConverge(
         resyncs = desired.filter { sentByIdx[it.ctrlIdx] != it }.map { it.ctrlIdx },
         deletes = sent.map { it.ctrlIdx }.filter { it !in desiredIdx },
     )
+}
+
+// A round trip that failed reads as no reply. A caller cancelled meanwhile stops here instead:
+// runCatching alone would hand it a null to act on as though the satellite had not answered.
+private suspend inline fun <T> replyOrNull(call: () -> T): T? {
+    val reply = runCatching(call).getOrNull()
+    currentCoroutineContext().ensureActive()
+    return reply
 }
 
 @Singleton
@@ -144,8 +154,13 @@ class SatelliteConnectionManager
         // Bumped by every disconnect. A handshake notes the generation it started under; when a
         // disconnect has moved it on by the time a round trip answers, the handshake stops without
         // touching the connection (a newer handshake may own it by then) and hands back any session
-        // it was granted.
+        // it was granted. Written only under transitionLock.
         private val disconnectGenerations = ConcurrentHashMap<String, Int>()
+
+        // A disconnect (from the UI thread) and a handshake, converge or retry (on the app scope's
+        // workers) each change the connection under this lock together with the generation check that
+        // decides the change, so a disconnect lands wholly before or wholly after it, never between.
+        private val transitionLock = Any()
 
         // Single-flight reconcile guard per id: heartbeat ticks fire every
         // second, the reconcile round-trip can take longer.
@@ -262,7 +277,7 @@ class SatelliteConnectionManager
             descriptors: List<ControllerDescriptor>,
             version: Int,
         ): HttpReply? =
-            runCatching {
+            replyOrNull {
                 discoveryRepo.putSession(
                     server.ip,
                     server.httpPort,
@@ -273,7 +288,7 @@ class SatelliteConnectionManager
                     conn.wantsMouseControl(),
                     version,
                 )
-            }.getOrNull()
+            }
 
         // One pair round-trip at the version we'd speak, retried once when the 409
         // echoes a version this client also speaks. Callers keep their reply-shape
@@ -286,7 +301,7 @@ class SatelliteConnectionManager
         ): HttpReply? {
             val speak = versionToSpeak(id) ?: DISH_PROTOCOL_MIN
             val first =
-                runCatching {
+                replyOrNull {
                     discoveryRepo.pair(
                         server.ip,
                         server.pairPort,
@@ -296,11 +311,11 @@ class SatelliteConnectionManager
                         clientPin,
                         protocolVersion = speak,
                     )
-                }.getOrNull()
+                }
             if (first == null || first.status != HTTP_CONFLICT) return first
             val retryWith = protocolRetryVersion(first.body) ?: return first
             noteNegotiated(id, retryWith)
-            return runCatching {
+            return replyOrNull {
                 discoveryRepo.pair(
                     server.ip,
                     server.pairPort,
@@ -310,7 +325,7 @@ class SatelliteConnectionManager
                     clientPin,
                     protocolVersion = retryWith,
                 )
-            }.getOrNull()
+            }
         }
 
         private fun generationOf(id: String): Int = disconnectGenerations[id] ?: 0
@@ -319,6 +334,65 @@ class SatelliteConnectionManager
             id: String,
             generation: Int,
         ): Boolean = generationOf(id) != generation
+
+        // Runs [transition] only while no disconnect has overtaken [generation]; null when one has.
+        private inline fun <T> ifCurrent(
+            id: String,
+            generation: Int,
+            transition: () -> T,
+        ): T? =
+            synchronized(transitionLock) {
+                if (isSuperseded(id, generation)) null else transition()
+            }
+
+        // The generation is read before the connection turns Linking: a disconnect that lands as a
+        // handshake starts must supersede it, not hand it the generation that disconnect began.
+        private fun beginHandshake(
+            conn: SatelliteConnection,
+            server: DiscoveredServer,
+        ): Int =
+            synchronized(transitionLock) {
+                val generation = generationOf(conn.id)
+                conn.updateServer(server)
+                conn.markConnecting()
+                generation
+            }
+
+        // False when a disconnect overtook the handshake: a newer one may own the connection by then.
+        private fun markDisconnectedIfCurrent(
+            conn: SatelliteConnection,
+            generation: Int,
+        ): Boolean = ifCurrent(conn.id, generation) { conn.markDisconnected() } != null
+
+        // Tears a live session down for a fresh session PUT (reconcile, rekey). False when a
+        // disconnect overtook the caller: the connection is the disconnect's to leave Idle.
+        private fun restartHandshake(
+            conn: SatelliteConnection,
+            generation: Int,
+        ): Boolean =
+            ifCurrent(conn.id, generation) {
+                conn.markDisconnected()
+                conn.markConnecting()
+            } != null
+
+        // The grant becomes the connection's only while this handshake still owns it: no disconnect
+        // overtook it, and it is still Linking (a sibling handshake under the same generation, a PIN
+        // submitted while a connect was linking, may have gone Live first).
+        private fun adoptGrant(
+            conn: SatelliteConnection,
+            generation: Int,
+            grant: SatelliteConnection.SessionGrant,
+            facts: SatelliteConnection.SessionFacts,
+            callbacks: SatelliteConnection.SessionCallbacks,
+        ): Boolean =
+            ifCurrent(conn.id, generation) {
+                val ownsTheConnection = conn.state.value == SatelliteSessionState.Linking
+                if (ownsTheConnection) {
+                    conn.protocolVersion = facts.protocolVersion
+                    conn.noteSessionFacts(facts.maxControllers, facts.protocolVersion)
+                }
+                ownsTheConnection && conn.markConnected(grant, callbacks)
+            } == true
 
         fun remembered(): List<RememberedSatellite> = store.remembered()
 
@@ -397,9 +471,7 @@ class SatelliteConnectionManager
                     SatelliteSessionState.Idle -> Unit
                 }
             }
-            conn.updateServer(server)
-            conn.markConnecting()
-            val generation = generationOf(id)
+            val generation = beginHandshake(conn, server)
             scope.launch {
                 if (store.satelliteSharedKey(id) != null) {
                     openSession(conn, server, intent, generation)
@@ -417,40 +489,35 @@ class SatelliteConnectionManager
         ) {
             val id = satelliteConnectionIdFor(server)
             val reply = pairNegotiated(id, server, pin = "")
-            if (isSuperseded(id, generation)) return
             if (reply == null || reply.unreachable) {
-                conn.markDisconnected()
-                emitErrorIfUserInitiated(intent, unreachableMessage(reply))
-                return
+                return failSession(conn, server, intent, unreachableMessage(reply), retry = false, generation)
             }
             if (reply.status == HTTP_CONFLICT) {
-                conn.markDisconnected()
-                emitErrorIfUserInitiated(intent, protocolRejectMessage(reply.body))
-                return
+                return failSession(conn, server, intent, protocolRejectMessage(reply.body), retry = false, generation)
             }
             val pair =
                 runCatching { json.decodeFromString(PairResponse.serializer(), reply.body) }
                     .getOrNull()
             if (pair == null) {
-                conn.markDisconnected()
-                emitErrorIfUserInitiated(intent, SERVER_UNREACHABLE_MSG)
-                return
+                return failSession(conn, server, intent, SERVER_UNREACHABLE_MSG, retry = false, generation)
             }
             if (!pair.ok || pair.sharedKey == null) {
                 // Reachable but no key and no PIN sent: first-time pair / server forgot us.
-                conn.markDisconnected()
-                when (intent) {
-                    ConnectIntent.USER_INITIATED ->
-                        _events.emit(ConnectionEvent.PairingRequired(server))
-                    ConnectIntent.AUTO_RECONNECT,
-                    ConnectIntent.RETRY_AFTER_DEATH,
-                    ->
-                        // No unsolicited dialog: the Stale chip reads "Needs pairing"
-                        // and the next user tap promotes to the PIN dialog.
-                        markStale(id)
+                if (markDisconnectedIfCurrent(conn, generation)) {
+                    when (intent) {
+                        ConnectIntent.USER_INITIATED ->
+                            _events.emit(ConnectionEvent.PairingRequired(server))
+                        ConnectIntent.AUTO_RECONNECT,
+                        ConnectIntent.RETRY_AFTER_DEATH,
+                        ->
+                            // No unsolicited dialog: the Stale chip reads "Needs pairing"
+                            // and the next user tap promotes to the PIN dialog.
+                            markStale(id)
+                    }
                 }
                 return
             }
+            if (isSuperseded(id, generation)) return
             clearStale(id)
             store.setSatelliteSharedKey(id, pair.sharedKey)
             openSession(conn, server, intent, generation)
@@ -466,35 +533,25 @@ class SatelliteConnectionManager
             // allocate duplicates, and a submit must not stack on a live session.
             val (conn, _) = findOrCreate(id, server)
             if (conn.state.value == SatelliteSessionState.Live) return
-            conn.updateServer(server)
-            conn.markConnecting()
-            val generation = generationOf(id)
+            val generation = beginHandshake(conn, server)
             scope.launch {
                 val reply = pairNegotiated(id, server, pin)
-                if (isSuperseded(id, generation)) return@launch
                 if (reply == null || reply.unreachable) {
-                    conn.markDisconnected()
-                    _events.emit(ConnectionEvent.Error(unreachableMessage(reply)))
-                    return@launch
+                    return@launch failUserHandshake(conn, server, unreachableMessage(reply), generation)
                 }
                 if (reply.status == HTTP_CONFLICT) {
-                    conn.markDisconnected()
-                    _events.emit(ConnectionEvent.Error(protocolRejectMessage(reply.body)))
-                    return@launch
+                    return@launch failUserHandshake(conn, server, protocolRejectMessage(reply.body), generation)
                 }
                 val pair =
                     runCatching { json.decodeFromString(PairResponse.serializer(), reply.body) }
                         .getOrNull()
                 if (pair == null) {
-                    conn.markDisconnected()
-                    _events.emit(ConnectionEvent.Error(SERVER_UNREACHABLE_MSG))
-                    return@launch
+                    return@launch failUserHandshake(conn, server, SERVER_UNREACHABLE_MSG, generation)
                 }
                 if (!pair.ok || pair.sharedKey == null) {
-                    conn.markDisconnected()
-                    _events.emit(ConnectionEvent.Error(pair.error ?: "Pairing failed"))
-                    return@launch
+                    return@launch failUserHandshake(conn, server, pair.error ?: "Pairing failed", generation)
                 }
+                if (isSuperseded(id, generation)) return@launch
                 clearStale(id)
                 store.setSatelliteSharedKey(id, pair.sharedKey)
                 openSession(conn, server, ConnectIntent.USER_INITIATED, generation)
@@ -515,25 +572,22 @@ class SatelliteConnectionManager
             val id = satelliteConnectionIdFor(server)
             retryAttempts.remove(id)
             val (conn, _) = findOrCreate(id, server)
-            conn.updateServer(server)
-            conn.markConnecting()
             // A re-issued request supersedes any prior poll for this id; cancel it
             // so two polls can't race to openSession on the same satellite.
             cancelApprovalPoll(id)
-            val generation = generationOf(id)
+            val generation = beginHandshake(conn, server)
             val job =
                 scope.launch {
                     val reply = pairNegotiated(id, server, pin = "", clientPin = clientPin)
                     if (reply == null || reply.unreachable) {
-                        conn.markDisconnected()
-                        _events.emit(ConnectionEvent.Error(unreachableMessage(reply)))
-                        return@launch
+                        return@launch failUserHandshake(conn, server, unreachableMessage(reply), generation)
                     }
                     if (reply.status == HTTP_CONFLICT) {
-                        conn.markDisconnected()
-                        _events.emit(ConnectionEvent.Error(protocolRejectMessage(reply.body)))
-                        return@launch
+                        return@launch failUserHandshake(conn, server, protocolRejectMessage(reply.body), generation)
                     }
+                    // A disconnect that landed before this poll was registered reached it through
+                    // the generation alone: no cancellation did.
+                    if (isSuperseded(id, generation)) return@launch
                     // Poll until accept / deny / timeout. pairWithPin shares this
                     // connection: once it reaches Live, bail. The poll's terminal
                     // paths must not tear down a session the PIN just established.
@@ -543,8 +597,7 @@ class SatelliteConnectionManager
                         kotlinx.coroutines.delay(APPROVAL_POLL_INTERVAL_MS)
                         waited += APPROVAL_POLL_INTERVAL_MS
                         val statusRaw =
-                            runCatching { discoveryRepo.pairStatus(server.ip, server.httpPort, deviceId) }
-                                .getOrNull()
+                            replyOrNull { discoveryRepo.pairStatus(server.ip, server.httpPort, deviceId) }
                                 ?.takeIf { !it.unreachable }
                                 ?.body
                         // A transient null reply is treated as still-pending, not a refusal.
@@ -567,14 +620,11 @@ class SatelliteConnectionManager
                             return@launch
                         }
                         if (st is Status.Declined) {
-                            conn.markDisconnected()
-                            _events.emit(ConnectionEvent.Error(APPROVAL_DECLINED_MSG))
-                            return@launch
+                            return@launch failUserHandshake(conn, server, APPROVAL_DECLINED_MSG, generation)
                         }
                     }
                     if (conn.state.value != SatelliteSessionState.Live) {
-                        conn.markDisconnected()
-                        _events.emit(ConnectionEvent.Error(APPROVAL_TIMEOUT_MSG))
+                        failUserHandshake(conn, server, APPROVAL_TIMEOUT_MSG, generation)
                     }
                 }
             approvalPollJobs[id] = job
@@ -619,60 +669,48 @@ class SatelliteConnectionManager
             // host. Every connect path funnels through here, so both discovery
             // transports are covered at one choke point.
             if (!isPrivateHostLiteral(server.ip)) {
-                conn.markDisconnected()
-                emitErrorIfUserInitiated(intent, SERVER_UNREACHABLE_MSG)
-                return@withContext
+                return@withContext failSession(conn, server, intent, SERVER_UNREACHABLE_MSG, retry = false, generation)
             }
-            val creds = credentialsFor(id)
-            if (creds == null) {
-                conn.markDisconnected()
-                store.forgetSatelliteSharedKey(id)
-                markStale(id)
-                emitErrorIfUserInitiated(intent, REPAIR_NEEDED_MSG)
-                return@withContext
-            }
+            val creds = credentialsFor(id) ?: return@withContext dropUntrustedKey(conn, intent, generation)
             val descriptors = conn.desiredDescriptors()
             val put = putSessionNegotiated(id, conn, server, creds.proof, descriptors)
             if (isSuperseded(id, generation)) {
                 return@withContext releaseStaleGrant(server, put?.reply, creds.proof)
             }
             if (put == null) {
-                return@withContext failSession(conn, server, intent, SATELLITE_UPDATE_REQUIRED_MSG, retry = false)
+                return@withContext failSession(conn, server, intent, SATELLITE_UPDATE_REQUIRED_MSG, retry = false, generation)
             }
             val speak = put.speak
             val reply = put.reply
             if (reply?.status == HTTP_CONFLICT) {
-                return@withContext failSession(conn, server, intent, protocolRejectMessage(reply.body), retry = false)
+                return@withContext failSession(conn, server, intent, protocolRejectMessage(reply.body), retry = false, generation)
             }
             if (reply?.pinMismatch == true) {
-                return@withContext failSession(conn, server, intent, IDENTITY_CHANGED_MSG, retry = false)
+                return@withContext failSession(conn, server, intent, IDENTITY_CHANGED_MSG, retry = false, generation)
             }
             if (reply == null || reply.unreachable) {
-                return@withContext failSession(conn, server, intent, SERVER_UNREACHABLE_MSG, retry = true)
+                return@withContext failSession(conn, server, intent, SERVER_UNREACHABLE_MSG, retry = true, generation)
             }
             if (reply.status == HTTP_CONFLICT) {
-                return@withContext failSession(conn, server, intent, protocolRejectMessage(reply.body), retry = false)
+                return@withContext failSession(conn, server, intent, protocolRejectMessage(reply.body), retry = false, generation)
             }
             val resp =
                 runCatching { json.decodeFromString(SessionResponse.serializer(), reply.body) }
                     .getOrNull()
             if (resp == null) {
-                return@withContext failSession(conn, server, intent, SERVER_UNREACHABLE_MSG, retry = true)
+                return@withContext failSession(conn, server, intent, SERVER_UNREACHABLE_MSG, retry = true, generation)
             }
             if (resp.unauthorized) {
                 // Terminal by contract: the server no longer trusts our key (or
                 // never did). Stop retrying: only a re-pair can fix this.
-                conn.markDisconnected()
-                store.forgetSatelliteSharedKey(id)
-                markStale(id)
-                emitErrorIfUserInitiated(intent, REPAIR_NEEDED_MSG)
-                return@withContext
+                return@withContext dropUntrustedKey(conn, intent, generation)
             }
             val connId = resp.connectionId
             val tokenHex = resp.token
             val saltHex = resp.sessionSalt
             if (connId == null || tokenHex == null || saltHex == null) {
-                return@withContext failSession(conn, server, intent, "Error: ${resp.error ?: "connection failed"}", retry = true)
+                val refusal = "Error: ${resp.error ?: "connection failed"}"
+                return@withContext failSession(conn, server, intent, refusal, retry = true, generation)
             }
             // The response's own version is the settled truth (the satellite accepted the
             // offer, so they match); it keys the wire frames this session encodes.
@@ -680,40 +718,62 @@ class SatelliteConnectionManager
             val handle = openWire(server, creds.pairingKey, tokenHex, saltHex, negotiated)
             if (handle == null) {
                 releaseSession(server, connId, creds.proof)
-                return@withContext failSession(conn, server, intent, WIRE_FAILED_MSG, retry = false)
+                return@withContext failSession(conn, server, intent, WIRE_FAILED_MSG, retry = false, generation)
             }
             noteNegotiated(id, negotiated)
-            conn.protocolVersion = negotiated
-            conn.noteSessionFacts(resp.maxControllers, negotiated)
             store.rememberSatellite(server)
             clearStale(id)
             retryAttempts.remove(id)
-            conn.markConnected(
+            val grant =
                 SatelliteConnection.SessionGrant(
                     handle = handle,
                     connectionId = connId,
                     epoch = resp.epoch,
                     applied = resp.controllers,
                     mouseControlGranted = resp.hostFeatures.mouseControl.granted,
-                ),
-                SatelliteConnection.SessionCallbacks(
-                    onDead = { onSessionDead(conn, server) },
-                    onClosedByServer = { reason -> handleServerClose(conn, server, reason) },
-                    onReconcileNeeded = { scope.launch(ioDispatcher) { reconcile(conn, server) } },
-                    onRekeyNeeded = { scope.launch(ioDispatcher) { rekey(conn, server) } },
-                    onApplyFailures = { failures -> reportApplyFailures(server.name, failures) },
-                ),
-            )
+                )
+            val facts = SatelliteConnection.SessionFacts(resp.maxControllers, negotiated)
+            if (!adoptGrant(conn, generation, grant, facts, sessionCallbacks(conn, server, generation))) {
+                // Nobody else will: the connection never held this socket or session.
+                controllerRepo.closeSocket(handle)
+                return@withContext releaseSession(server, connId, creds.proof)
+            }
             convergeSlotChangesSinceSnapshot(id, conn, descriptors)
+        }
+
+        // Every callback is judged by the generation the session was adopted under: a heartbeat
+        // tick already past its checks when a disconnect (and perhaps a new tap) lands must not end
+        // or converge the session that replaced this one.
+        private fun sessionCallbacks(
+            conn: SatelliteConnection,
+            server: DiscoveredServer,
+            generation: Int,
+        ) = SatelliteConnection.SessionCallbacks(
+            onDead = { onSessionDead(conn, server, generation) },
+            onClosedByServer = { reason -> handleServerClose(conn, server, reason, generation) },
+            onReconcileNeeded = { scope.launch(ioDispatcher) { reconcile(conn, server, generation) } },
+            onRekeyNeeded = { scope.launch(ioDispatcher) { rekey(conn, server, generation) } },
+            onApplyFailures = { failures -> reportApplyFailures(server.name, failures) },
+        )
+
+        // The satellite does not know our key, or ours cannot be read: dropped, and the user told.
+        private suspend fun dropUntrustedKey(
+            conn: SatelliteConnection,
+            intent: ConnectIntent,
+            generation: Int,
+        ) {
+            if (dropRejectedSession(conn, generation)) emitErrorIfUserInitiated(intent, REPAIR_NEEDED_MSG)
         }
 
         // Heartbeat death: the tuple is torn down at once and the silent backoff owns the return.
         private fun onSessionDead(
             conn: SatelliteConnection,
             server: DiscoveredServer,
+            generation: Int,
         ) {
-            disconnect(conn.id)
-            scheduleRetry(conn, server, ConnectIntent.RETRY_AFTER_DEATH)
+            ifCurrent(conn.id, generation) {
+                scheduleRetry(conn, server, ConnectIntent.RETRY_AFTER_DEATH, disconnectAt(conn.id))
+            }
         }
 
         private fun reportApplyFailures(
@@ -750,26 +810,33 @@ class SatelliteConnectionManager
             conn: SatelliteConnection,
             server: DiscoveredServer,
             reason: Int,
+            generation: Int,
         ) {
             val id = conn.id
-            disconnect(id)
-            when (reason) {
-                SatelliteConnection.CLOSE_REASON_UNPAIRED -> {
-                    store.forgetSatelliteSharedKey(id)
-                    markStale(id)
+            ifCurrent(id, generation) {
+                val closedAt = disconnectAt(id)
+                when (reason) {
+                    SatelliteConnection.CLOSE_REASON_UNPAIRED -> {
+                        store.forgetSatelliteSharedKey(id)
+                        markStale(id)
+                    }
+                    SatelliteConnection.CLOSE_REASON_REPLACED -> Unit
+                    else -> scheduleRetry(conn, server, ConnectIntent.RETRY_AFTER_DEATH, closedAt)
                 }
-                SatelliteConnection.CLOSE_REASON_REPLACED -> Unit
-                else -> scheduleRetry(conn, server, ConnectIntent.RETRY_AFTER_DEATH)
             }
         }
 
         // Bounded exponential backoff for the silent retry paths; a user tap
         // resets the curve. Never schedules for USER_INITIATED: the user gets
         // immediate feedback instead of a background loop they didn't ask for.
+        // Called under transitionLock, in the step that ended the session, so a disconnect lands
+        // either before (and nothing is scheduled) or after (and cancels it). [generation] is the one
+        // the session ended under: a disconnect after it keeps even a retry already firing from dialling.
         private fun scheduleRetry(
             conn: SatelliteConnection,
             server: DiscoveredServer,
             intent: ConnectIntent,
+            generation: Int,
         ) {
             if (intent == ConnectIntent.USER_INITIATED) return
             val id = conn.id
@@ -784,7 +851,7 @@ class SatelliteConnectionManager
                         id !in _staleSatelliteIds.value
                     ) {
                         val target = store.remembered().firstOrNull { it.id == id }?.toDiscovered() ?: server
-                        connect(target, ConnectIntent.RETRY_AFTER_DEATH)
+                        ifCurrent(id, generation) { connect(target, ConnectIntent.RETRY_AFTER_DEATH) }
                     }
                 }
             trackPendingRetry(id, retry)
@@ -813,25 +880,23 @@ class SatelliteConnectionManager
         private suspend fun reconcile(
             conn: SatelliteConnection,
             server: DiscoveredServer,
+            generation: Int,
         ) {
             val id = conn.id
             if (reconcileInFlight.putIfAbsent(id, true) != null) return
-            val generation = generationOf(id)
             try {
                 val live = liveSessionOf(conn) ?: return
                 val view = fetchSessionView(live) ?: return
                 when {
-                    isSuperseded(id, generation) -> Unit
-                    rejectsOurCredentials(view.code) -> dropRejectedSession(conn)
-                    view.connectionId == live.connectionId && conn.matchesAppliedView(view) -> conn.adoptEpoch(view.epoch)
-                    else -> {
-                        // Applied ≠ desired (or the session is gone): converge with a
-                        // fresh session PUT. Tear the UDP tuple down first: the PUT
-                        // rotates token/key.
-                        conn.markDisconnected()
-                        conn.markConnecting()
-                        openSession(conn, server, ConnectIntent.RETRY_AFTER_DEATH, generation)
-                    }
+                    rejectsOurCredentials(view.code) -> dropRejectedSession(conn, generation)
+                    view.connectionId == live.connectionId && conn.matchesAppliedView(view) ->
+                        ifCurrent(id, generation) { conn.adoptEpoch(view.epoch) }
+                    // Applied ≠ desired (or the session is gone): converge with a fresh session
+                    // PUT. Tear the UDP tuple down first: the PUT rotates token/key.
+                    else ->
+                        if (restartHandshake(conn, generation)) {
+                            openSession(conn, server, ConnectIntent.RETRY_AFTER_DEATH, generation)
+                        }
                 }
             } finally {
                 reconcileInFlight.remove(id)
@@ -856,9 +921,9 @@ class SatelliteConnectionManager
 
         private suspend fun fetchSessionView(live: LiveSession): SessionViewDto? {
             val raw =
-                runCatching {
+                replyOrNull {
                     discoveryRepo.getSession(live.server.ip, live.server.httpPort, live.connectionId, deviceId, live.proof)
-                }.getOrNull()?.takeIf { !it.unreachable }?.body ?: return null
+                }?.takeIf { !it.unreachable }?.body ?: return null
             return runCatching { json.decodeFromString(SessionViewDto.serializer(), raw) }.getOrNull()
         }
 
@@ -867,7 +932,7 @@ class SatelliteConnectionManager
             descriptor: ControllerDescriptor,
         ): ControllerPutResponse? {
             val raw =
-                runCatching {
+                replyOrNull {
                     discoveryRepo.putController(
                         live.server.ip,
                         live.server.httpPort,
@@ -877,7 +942,7 @@ class SatelliteConnectionManager
                         live.proof,
                         descriptor.toJson(),
                     )
-                }.getOrNull()?.takeIf { !it.unreachable }?.body ?: return null
+                }?.takeIf { !it.unreachable }?.body ?: return null
             return runCatching { json.decodeFromString(ControllerPutResponse.serializer(), raw) }.getOrNull()
         }
 
@@ -886,10 +951,16 @@ class SatelliteConnectionManager
 
         // The satellite no longer knows us (unpaired there, or our proof stopped matching):
         // the session is over and the key is worthless, and the row reads Stale until re-paired.
-        private fun dropRejectedSession(conn: SatelliteConnection) {
-            conn.markDisconnected()
+        // False, touching nothing, when a disconnect overtook the caller: the answer is about a
+        // session that is gone, and a newer handshake may own the connection by then.
+        private fun dropRejectedSession(
+            conn: SatelliteConnection,
+            generation: Int,
+        ): Boolean {
+            if (!markDisconnectedIfCurrent(conn, generation)) return false
             store.forgetSatelliteSharedKey(conn.id)
             markStale(conn.id)
+            return true
         }
 
         // The send counter crossed the re-PUT threshold: converge with a fresh
@@ -899,11 +970,10 @@ class SatelliteConnectionManager
         private suspend fun rekey(
             conn: SatelliteConnection,
             server: DiscoveredServer,
+            generation: Int,
         ) {
             if (conn.state.value != SatelliteSessionState.Live) return
-            val generation = generationOf(conn.id)
-            conn.markDisconnected()
-            conn.markConnecting()
+            if (!restartHandshake(conn, generation)) return
             openSession(conn, server, ConnectIntent.RETRY_AFTER_DEATH, generation)
         }
 
@@ -913,32 +983,37 @@ class SatelliteConnectionManager
             id: String,
             slotId: String,
         ) {
+            val generation = generationOf(id)
             val conn = _connections.value[id]?.takeIf { it.state.value == SatelliteSessionState.Live } ?: return
             val live = liveSessionOf(conn) ?: return
             val descriptor = conn.descriptorFor(slotId) ?: return
             val resp = putControllerFor(live, descriptor) ?: return
             when {
-                rejectsOurCredentials(resp.code) -> dropRejectedSession(conn)
+                rejectsOurCredentials(resp.code) -> dropRejectedSession(conn, generation)
                 // 404 connection-not-found: the session died under us; the
                 // alive-poll/close-notify path owns recovery. Nothing to fold in.
                 resp.controller == null -> Unit
-                else -> foldControllerPut(live, resp.epoch, resp.controller)
+                else -> foldControllerPut(live, generation, resp.epoch, resp.controller)
             }
         }
 
         private suspend fun foldControllerPut(
             live: LiveSession,
+            generation: Int,
             epoch: Int,
             result: ControllerApplyDto,
         ) {
             val conn = live.conn
-            conn.adoptEpoch(epoch)
-            conn.applyResults(listOf(result), onApplyFailures = { failures -> reportApplyFailures(live.server.name, failures) })
-            if (conn.wantsMouseControl() != conn.mouseControlGranted) {
+            val folded =
+                ifCurrent(conn.id, generation) {
+                    conn.adoptEpoch(epoch)
+                    conn.applyResults(listOf(result), onApplyFailures = { failures -> reportApplyFailures(live.server.name, failures) })
+                } != null
+            if (folded && conn.wantsMouseControl() != conn.mouseControlGranted) {
                 // The toggle changed the session-level desire, but the grant is
                 // only computed at session PUT (contract §hostFeatures).
                 // Converge the full session so the request rides along.
-                reconcile(conn, live.server)
+                reconcile(conn, live.server, generation)
             }
         }
 
@@ -948,12 +1023,13 @@ class SatelliteConnectionManager
             id: String,
             ctrlIdx: Int,
         ) {
+            val generation = generationOf(id)
             val conn = _connections.value[id] ?: return
             val connId = conn.connectionId ?: return
             val server = conn.server.value
             val creds = credentialsFor(id) ?: return
             val raw =
-                runCatching {
+                replyOrNull {
                     discoveryRepo.deleteController(
                         server.ip,
                         server.httpPort,
@@ -962,11 +1038,11 @@ class SatelliteConnectionManager
                         deviceId,
                         creds.proof,
                     )
-                }.getOrNull()?.takeIf { !it.unreachable }?.body ?: return
+                }?.takeIf { !it.unreachable }?.body ?: return
             val resp =
                 runCatching { json.decodeFromString(ControllerPutResponse.serializer(), raw) }
                     .getOrNull() ?: return
-            if (resp.error == null) conn.adoptEpoch(resp.epoch)
+            if (resp.error == null) ifCurrent(id, generation) { conn.adoptEpoch(resp.epoch) }
         }
 
         private fun unreachableMessage(reply: HttpReply?): String =
@@ -978,11 +1054,22 @@ class SatelliteConnectionManager
             intent: ConnectIntent,
             message: String,
             retry: Boolean,
+            generation: Int,
         ) {
-            conn.markDisconnected()
-            emitErrorIfUserInitiated(intent, message)
-            if (retry) scheduleRetry(conn, server, intent)
+            val ended =
+                ifCurrent(conn.id, generation) {
+                    conn.markDisconnected()
+                    if (retry) scheduleRetry(conn, server, intent, generation)
+                } != null
+            if (ended) emitErrorIfUserInitiated(intent, message)
         }
+
+        private suspend fun failUserHandshake(
+            conn: SatelliteConnection,
+            server: DiscoveredServer,
+            message: String,
+            generation: Int,
+        ) = failSession(conn, server, ConnectIntent.USER_INITIATED, message, retry = false, generation)
 
         private suspend fun emitErrorIfUserInitiated(
             intent: ConnectIntent,
@@ -1002,22 +1089,28 @@ class SatelliteConnectionManager
         }
 
         fun disconnect(id: String) {
-            // Stop any reverse-pairing poll and silent retry first: otherwise either could
-            // call openSession seconds after the user tore the connection down.
-            cancelApprovalPoll(id)
-            cancelPendingRetries(id)
-            disconnectGenerations.merge(id, 1, Int::plus)
-            val conn = _connections.value[id] ?: return
-            val srv = conn.server.value
-            val cid = conn.connectionId
-            conn.markDisconnected()
-            if (cid != null) {
-                val proof = credentialsFor(id)?.proof
-                if (proof != null) {
+            disconnectAt(id)
+        }
+
+        // Returns the generation this disconnect began: the one a retry scheduled after it is judged by.
+        private fun disconnectAt(id: String): Int =
+            synchronized(transitionLock) {
+                // Stop any reverse-pairing poll and silent retry first: otherwise either could
+                // call openSession seconds after the user tore the connection down.
+                cancelApprovalPoll(id)
+                cancelPendingRetries(id)
+                val generation = generationOf(id) + 1
+                disconnectGenerations[id] = generation
+                val conn = _connections.value[id] ?: return generation
+                val srv = conn.server.value
+                val cid = conn.connectionId
+                conn.markDisconnected()
+                val proof = cid?.let { credentialsFor(id)?.proof }
+                if (cid != null && proof != null) {
                     scope.launch(ioDispatcher) { releaseSession(srv, cid, proof) }
                 }
+                generation
             }
-        }
 
         // A session PUT that answered after a disconnect: whatever it was granted goes straight back.
         private suspend fun releaseStaleGrant(
@@ -1036,7 +1129,7 @@ class SatelliteConnectionManager
             connectionId: String,
             proof: String,
         ) {
-            runCatching { discoveryRepo.disconnect(server.ip, server.httpPort, connectionId, deviceId, proof) }
+            replyOrNull { discoveryRepo.disconnect(server.ip, server.httpPort, connectionId, deviceId, proof) }
         }
 
         fun forget(id: String) {
@@ -1048,7 +1141,7 @@ class SatelliteConnectionManager
             if (conn != null && proof != null) {
                 val srv = conn.server.value
                 scope.launch(ioDispatcher) {
-                    runCatching { discoveryRepo.unpair(srv.ip, srv.httpPort, deviceId, proof) }
+                    replyOrNull { discoveryRepo.unpair(srv.ip, srv.httpPort, deviceId, proof) }
                 }
             }
             disconnect(id)

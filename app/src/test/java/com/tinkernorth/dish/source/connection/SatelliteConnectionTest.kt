@@ -125,16 +125,18 @@ class SatelliteConnectionTest {
         callbacks: SatelliteConnection.SessionCallbacks = callbacks(),
     ) {
         target.markConnecting()
-        target.markConnected(
-            SatelliteConnection.SessionGrant(
-                handle = handle,
-                connectionId = "conn_abc",
-                epoch = epoch,
-                applied = applied,
-                mouseControlGranted = mouseControlGranted,
-            ),
-            callbacks,
-        )
+        val adopted =
+            target.markConnected(
+                SatelliteConnection.SessionGrant(
+                    handle = handle,
+                    connectionId = "conn_abc",
+                    epoch = epoch,
+                    applied = applied,
+                    mouseControlGranted = mouseControlGranted,
+                ),
+                callbacks,
+            )
+        assertTrue("a Linking connection takes the grant", adopted)
     }
 
     // Every callback defaults to a no-op here: a test wires only the one it watches.
@@ -888,8 +890,10 @@ class SatelliteConnectionTest {
 
     @Test
     fun `markConnected from IDLE is rejected and leaves state IDLE`() {
-        conn.markConnected(SatelliteConnection.SessionGrant(handle = 11, connectionId = "c", epoch = 0, applied = emptyList()), callbacks())
+        val grant = SatelliteConnection.SessionGrant(handle = 11, connectionId = "c", epoch = 0, applied = emptyList())
+        val adopted = conn.markConnected(grant, callbacks())
 
+        assertFalse(adopted)
         assertEquals(SatelliteSessionState.Idle, conn.state.value)
         assertEquals(-1, conn.handle)
         verify(exactly = 0) { repo.startHeartbeat(any()) }
@@ -900,11 +904,13 @@ class SatelliteConnectionTest {
         every { repo.isConnectionAlive(any()) } returns true
 
         connectLive(handle = 1)
-        conn.markConnected(
-            SatelliteConnection.SessionGrant(handle = 2, connectionId = "second", epoch = 0, applied = emptyList()),
-            callbacks(),
-        )
+        val adopted =
+            conn.markConnected(
+                SatelliteConnection.SessionGrant(handle = 2, connectionId = "second", epoch = 0, applied = emptyList()),
+                callbacks(),
+            )
 
+        assertFalse(adopted)
         assertEquals(SatelliteSessionState.Live, conn.state.value)
         assertEquals(1, conn.handle)
         assertEquals("conn_abc", conn.connectionId)

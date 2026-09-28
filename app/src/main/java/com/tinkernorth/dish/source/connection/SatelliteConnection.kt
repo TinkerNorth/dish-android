@@ -166,13 +166,15 @@ class SatelliteConnection(
 
     /**
      * Session PUT succeeded: adopt the UDP tuple + the applied state from the response
-     * ([grant]) and report the session's fate through [callbacks].
+     * ([grant]) and report the session's fate through [callbacks]. False when the connection
+     * was not Linking and so did not take the grant: its socket and session are the caller's to
+     * give back.
      */
     internal fun markConnected(
         grant: SessionGrant,
         callbacks: SessionCallbacks,
-    ) {
-        if (_state.value != SatelliteSessionState.Linking) return
+    ): Boolean {
+        if (_state.value != SatelliteSessionState.Linking) return false
         val handle = grant.handle
         val onDead = callbacks.onDead
         val onClosedByServer = callbacks.onClosedByServer
@@ -230,6 +232,7 @@ class SatelliteConnection(
                     }
                 }
             }
+        return true
     }
 
     // Heartbeat acks carry the server's (epoch, active-bitmap). A mismatch with
