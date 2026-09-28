@@ -151,10 +151,8 @@ class AndroidHidProxyClient(
 
     // Release runs from BluetoothHidSession.teardownLocked, which holds the session lock and is
     // reached from the profile callbacks on a binder thread, so it must not throw and must not
-    // stop half way: the three steps are independent, and a stack that has already gone away
-    // must not keep the ones after it from running.
-    // Every step is best-effort and independent: a stack that has already gone away, or a grant
-    // the user revoked, must not stop the rest of the release.
+    // stop half way: the three steps are independent, and a stack that has already gone away, or
+    // a grant the user revoked, must not keep the ones after it from running.
     override fun unregisterAndRelease() {
         hidDevice?.let { hid ->
             disconnectQuietly(hid)
