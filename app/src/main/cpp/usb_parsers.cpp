@@ -2154,7 +2154,7 @@ bool runSwitchProHandshake(const int fd, const uint8_t epOut) {
 
 // One OUT report, as built by the feedback builders: nothing to write is a refusal, not a no-op.
 bool writeOutReport(const int fd, const uint8_t epOut, const uint8_t* buf, const size_t n) {
-    if (epOut == 0 || n == 0) return false;
+    if (n == 0) return false;
     return bulkWrite(fd, epOut, buf, n, kOutWriteTimeoutMs);
 }
 
@@ -2188,6 +2188,7 @@ void runTeardown(const int fd, const int interfaceNumber, const Parser p) {
 
 bool runRumble(const int fd, const uint8_t epOut, const Parser p, const uint16_t strong,
                const uint16_t weak, const uint8_t seq) {
+    if (epOut == 0) return false;
     uint8_t buf[kOutReportMaxBytes];
     const size_t n = buildRumbleReport(p, strong, weak, seq, buf, sizeof(buf));
     return writeOutReport(fd, epOut, buf, n);
@@ -2195,6 +2196,7 @@ bool runRumble(const int fd, const uint8_t epOut, const Parser p, const uint16_t
 
 bool runMergedRumble(const int fd, const uint8_t epOut, const Parser p, FeedbackState& st,
                      const uint8_t seq) {
+    if (epOut == 0) return false;
     uint8_t buf[kOutReportMaxBytes];
     const size_t n = buildMergedRumbleReport(p, st, seq, buf, sizeof(buf));
     return writeOutReport(fd, epOut, buf, n);
@@ -2202,6 +2204,7 @@ bool runMergedRumble(const int fd, const uint8_t epOut, const Parser p, Feedback
 
 bool runLightbar(const int fd, const uint8_t epOut, const Parser p, FeedbackState& st,
                  const uint8_t r, const uint8_t g, const uint8_t b) {
+    if (epOut == 0) return false;
     uint8_t buf[kOutReportMaxBytes];
     const size_t n = buildLightbarReport(p, st, r, g, b, buf, sizeof(buf));
     return writeOutReport(fd, epOut, buf, n);
@@ -2209,6 +2212,7 @@ bool runLightbar(const int fd, const uint8_t epOut, const Parser p, FeedbackStat
 
 bool runPlayerLeds(const int fd, const uint8_t epOut, const Parser p, const FeedbackState& st,
                    const uint8_t ledMask, const uint8_t seq) {
+    if (epOut == 0) return false;
     uint8_t buf[kOutReportMaxBytes];
     const size_t n = buildPlayerLedsReport(p, st, ledMask, seq, buf, sizeof(buf));
     return writeOutReport(fd, epOut, buf, n);
@@ -2217,6 +2221,7 @@ bool runPlayerLeds(const int fd, const uint8_t epOut, const Parser p, const Feed
 bool runTriggerEffects(const int fd, const uint8_t epOut, const Parser p, const FeedbackState& st,
                        const uint8_t left[TRIGGER_EFFECT_BLOCK_LEN],
                        const uint8_t right[TRIGGER_EFFECT_BLOCK_LEN]) {
+    if (epOut == 0) return false;
     uint8_t buf[kOutReportMaxBytes];
     const size_t n = buildTriggerEffectsReport(p, st, left, right, buf, sizeof(buf));
     return writeOutReport(fd, epOut, buf, n);
@@ -2224,6 +2229,7 @@ bool runTriggerEffects(const int fd, const uint8_t epOut, const Parser p, const 
 
 bool runMicMuteLed(const int fd, const uint8_t epOut, const Parser p, FeedbackState& st,
                    const uint8_t state) {
+    if (epOut == 0) return false;
     uint8_t buf[kOutReportMaxBytes];
     const size_t n = buildMicMuteLedReport(p, st, state, buf, sizeof(buf));
     return writeOutReport(fd, epOut, buf, n);

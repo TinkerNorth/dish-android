@@ -233,7 +233,9 @@ void runTeardown(int fd, int interfaceNumber, Parser p);
 
 bool runRumble(int fd, uint8_t epOut, Parser p, uint16_t strong, uint16_t weak, uint8_t seq);
 
-// Android write wrappers over the feedback builders, mirroring runRumble.
+// Android write wrappers over the feedback builders, mirroring runRumble. Each refuses a device
+// with no OUT endpoint before it builds, so a builder never records in FeedbackState a write that
+// cannot happen.
 bool runMergedRumble(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t seq);
 bool runLightbar(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t r, uint8_t g,
                  uint8_t b);
