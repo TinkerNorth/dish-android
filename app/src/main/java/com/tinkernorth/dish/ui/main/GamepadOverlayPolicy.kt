@@ -26,14 +26,15 @@ internal fun motionGateOpen(
 // The trackpad zone appears only when the emulated type really carries one, and does only
 // what the wire can deliver: a satellite gets the full touch stream once the descriptor
 // declares a mode, a Moonlight host gets CONTROLLER_TOUCH events, and everything else hides it.
-internal fun trackpadShownFor(
+// Only the satellite case reads the wire mode, so the others never derive it.
+internal inline fun trackpadShownFor(
     kind: ConnectionKind?,
     typeHasTouchpad: Boolean,
-    wireMode: String,
+    wireMode: () -> String,
 ): Boolean {
     if (!typeHasTouchpad) return false
     return when (kind) {
-        ConnectionKind.SATELLITE -> wireMode != TOUCHPAD_MODE_OFF
+        ConnectionKind.SATELLITE -> wireMode() != TOUCHPAD_MODE_OFF
         ConnectionKind.MOONLIGHT -> true
         ConnectionKind.BLUETOOTH, null -> false
     }

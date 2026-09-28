@@ -19,6 +19,13 @@ import org.junit.Test
 // The on-screen pad's gates: when the phone IMU spins, when the trackpad zone shows, and
 // when a held mute button counts.
 class GamepadOverlayPolicyTest {
+    private var wireModeReads = 0
+
+    private fun countedWireMode(): String {
+        wireModeReads++
+        return TOUCHPAD_MODE_DS4
+    }
+
     private fun summary(
         kind: ConnectionKind,
         live: LinkState = LinkState.Connected,
@@ -70,29 +77,54 @@ class GamepadOverlayPolicyTest {
 
     @Test
     fun `a type without a trackpad shows none`() {
-        assertFalse(trackpadShownFor(ConnectionKind.SATELLITE, typeHasTouchpad = false, wireMode = TOUCHPAD_MODE_DS4))
-        assertFalse(trackpadShownFor(ConnectionKind.MOONLIGHT, typeHasTouchpad = false, wireMode = TOUCHPAD_MODE_DS4))
+        assertFalse(trackpadShownFor(ConnectionKind.SATELLITE, typeHasTouchpad = false) { TOUCHPAD_MODE_DS4 })
+        assertFalse(trackpadShownFor(ConnectionKind.MOONLIGHT, typeHasTouchpad = false) { TOUCHPAD_MODE_DS4 })
     }
 
     @Test
     fun `a satellite streams touch once the descriptor declares a mode`() {
-        assertTrue(trackpadShownFor(ConnectionKind.SATELLITE, typeHasTouchpad = true, wireMode = TOUCHPAD_MODE_DS4))
+        assertTrue(trackpadShownFor(ConnectionKind.SATELLITE, typeHasTouchpad = true) { TOUCHPAD_MODE_DS4 })
     }
 
     @Test
     fun `a satellite with touchpad mode off hides the trackpad`() {
-        assertFalse(trackpadShownFor(ConnectionKind.SATELLITE, typeHasTouchpad = true, wireMode = TOUCHPAD_MODE_OFF))
+        assertFalse(trackpadShownFor(ConnectionKind.SATELLITE, typeHasTouchpad = true) { TOUCHPAD_MODE_OFF })
     }
 
     @Test
     fun `a moonlight host always gets the touch stream`() {
-        assertTrue(trackpadShownFor(ConnectionKind.MOONLIGHT, typeHasTouchpad = true, wireMode = TOUCHPAD_MODE_OFF))
+        assertTrue(trackpadShownFor(ConnectionKind.MOONLIGHT, typeHasTouchpad = true) { TOUCHPAD_MODE_OFF })
     }
 
     @Test
     fun `bluetooth and an unresolved connection hide the trackpad`() {
-        assertFalse(trackpadShownFor(ConnectionKind.BLUETOOTH, typeHasTouchpad = true, wireMode = TOUCHPAD_MODE_DS4))
-        assertFalse(trackpadShownFor(null, typeHasTouchpad = true, wireMode = TOUCHPAD_MODE_DS4))
+        assertFalse(trackpadShownFor(ConnectionKind.BLUETOOTH, typeHasTouchpad = true) { TOUCHPAD_MODE_DS4 })
+        assertFalse(trackpadShownFor(null, typeHasTouchpad = true) { TOUCHPAD_MODE_DS4 })
+    }
+
+    @Test
+    fun `a type without a trackpad never derives the wire mode`() {
+        trackpadShownFor(ConnectionKind.SATELLITE, typeHasTouchpad = false) { countedWireMode() }
+        assertEquals(0, wireModeReads)
+    }
+
+    @Test
+    fun `a satellite with a trackpad derives the wire mode once`() {
+        trackpadShownFor(ConnectionKind.SATELLITE, typeHasTouchpad = true) { countedWireMode() }
+        assertEquals(1, wireModeReads)
+    }
+
+    @Test
+    fun `a moonlight host never derives the wire mode`() {
+        trackpadShownFor(ConnectionKind.MOONLIGHT, typeHasTouchpad = true) { countedWireMode() }
+        assertEquals(0, wireModeReads)
+    }
+
+    @Test
+    fun `bluetooth and an unresolved connection never derive the wire mode`() {
+        trackpadShownFor(ConnectionKind.BLUETOOTH, typeHasTouchpad = true) { countedWireMode() }
+        trackpadShownFor(null, typeHasTouchpad = true) { countedWireMode() }
+        assertEquals(0, wireModeReads)
     }
 
     @Test

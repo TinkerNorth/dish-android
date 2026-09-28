@@ -307,8 +307,7 @@ class GamepadOverlayActivity :
             trackpadShownFor(
                 kind = summary?.kind,
                 typeHasTouchpad = capability.typeOk(Feature.TOUCHPAD),
-                wireMode = capabilityComposer.touchpadWireMode(VIRTUAL_SLOT_ID),
-            )
+            ) { capabilityComposer.touchpadWireMode(VIRTUAL_SLOT_ID) }
         return if (shown) GamepadTouchView.TrackpadMode.TOUCH else GamepadTouchView.TrackpadMode.NONE
     }
 
