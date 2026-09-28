@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.ui.common
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.navigation.ActivityNavigator
@@ -32,6 +33,8 @@ import com.tinkernorth.dish.ui.setup.SetupInputActivity
 // every screen opened from a non-dashboard activity.
 class DishNavigator(
     private val activity: Activity,
+    // How a stack reset builds its intent; a test stands in a recorder to read the target screen.
+    private val newIntent: (Context, Class<*>) -> Intent = ::Intent,
 ) {
     private val navigator by lazy { ActivityNavigator(activity) }
 
@@ -191,7 +194,7 @@ class DishNavigator(
     }
 
     private fun reset(reset: StackReset) {
-        activity.startActivity(Intent(activity, reset.target).addFlags(reset.flags))
+        activity.startActivity(newIntent(activity, reset.target).addFlags(reset.flags))
     }
 
     fun toTouchpad(

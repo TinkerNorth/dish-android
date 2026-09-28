@@ -4,6 +4,7 @@
 package com.tinkernorth.dish.ui.common
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import com.tinkernorth.dish.ui.main.MainActivity
 import com.tinkernorth.dish.ui.setup.SetupInputActivity
@@ -31,7 +32,17 @@ class DishNavigatorTest {
     }
 
     private val activity = RecordingActivity()
-    private val nav = DishNavigator(activity)
+    private val targets = mutableListOf<Class<*>>()
+    private val nav = DishNavigator(activity, ::recordingIntent)
+
+    private fun recordingIntent(
+        context: Context,
+        target: Class<*>,
+    ): Intent {
+        check(context === activity) { "the reset intent must be built from the navigating screen" }
+        targets += target
+        return Intent()
+    }
 
     // The platform Intent is a stub here: addFlags has to hand back the intent itself, or the
     // navigator would start a null one.
@@ -69,6 +80,7 @@ class DishNavigatorTest {
         nav.finishSetupToDashboard()
 
         verify(exactly = 1) { anyConstructed<Intent>().addFlags(StackReset.SETUP_TO_DASHBOARD.flags) }
+        verifyIntentTargets(MainActivity::class.java)
         assertEquals(1, activity.starts)
         assertEquals(1, activity.finishes)
     }
@@ -78,7 +90,13 @@ class DishNavigatorTest {
         nav.rewindSetupToStart()
 
         verify(exactly = 1) { anyConstructed<Intent>().addFlags(StackReset.SETUP_TO_START.flags) }
+        verifyIntentTargets(SetupInputActivity::class.java)
         assertEquals(1, activity.starts)
         assertEquals(0, activity.finishes)
+    }
+
+    // The intent reset() builds names that screen, not only the right flags.
+    private fun verifyIntentTargets(target: Class<*>) {
+        assertEquals(listOf(target), targets)
     }
 }
