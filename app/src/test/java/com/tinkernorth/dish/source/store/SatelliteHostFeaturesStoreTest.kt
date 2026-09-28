@@ -203,6 +203,32 @@ class SatelliteHostFeaturesStoreTest {
         assertEquals(mapOf("sat-A" to HostFeatureSet.SATELLITE_DEFAULT.copy(controllerMic = true)), next)
     }
 
+    private val probedAudio = features.copy(controllerMic = true, controllerSpeaker = false)
+    private val catalog = features.copy(mouseControl = false, controllerMic = false, controllerSpeaker = true)
+
+    @Test
+    fun `a catalog read for an unknown host lands as read`() {
+        val next = withCatalogFeatures(emptyMap(), "sat-A", catalog)
+
+        assertEquals(mapOf("sat-A" to catalog), next)
+    }
+
+    @Test
+    fun `a catalog read for a known host wins its own fields and keeps the probed audio`() {
+        val next = withCatalogFeatures(mapOf("sat-A" to probedAudio), "sat-A", catalog)
+
+        assertEquals(catalog.copy(controllerMic = true, controllerSpeaker = false), next["sat-A"])
+    }
+
+    @Test
+    fun `a catalog read leaves the other hosts alone`() {
+        val other = HostFeatureSet.SATELLITE_DEFAULT
+
+        val next = withCatalogFeatures(mapOf("sat-B" to other), "sat-A", catalog)
+
+        assertSame(other, next["sat-B"])
+    }
+
     private val settledVersion = mapOf("sat-A" to features.copy(protocolVersion = 3))
 
     @Test

@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Test
 import java.util.concurrent.CyclicBarrier
 
@@ -116,6 +117,30 @@ class SlotBindingStoreTest {
         store.migrate("slot-A", "slot-B")
 
         assertEquals(mapOf("slot-B" to "conn-1"), store.bindings.value)
+    }
+
+    // ---- the migrate reducer ----
+
+    private val boundA = mapOf("slot-A" to "conn-1", "slot-C" to "conn-2")
+
+    @Test
+    fun `migrating a bound slot moves its connection and keeps the other bindings`() {
+        assertEquals(mapOf("slot-B" to "conn-1", "slot-C" to "conn-2"), withSlotMigrated(boundA, "slot-A", "slot-B"))
+    }
+
+    @Test
+    fun `migrating an unbound slot hands back the same map`() {
+        assertSame(boundA, withSlotMigrated(boundA, "ghost", "slot-B"))
+    }
+
+    @Test
+    fun `migrating onto a bound slot replaces its connection`() {
+        assertEquals(mapOf("slot-C" to "conn-1"), withSlotMigrated(boundA, "slot-A", "slot-C"))
+    }
+
+    @Test
+    fun `migrating a slot onto itself keeps its binding`() {
+        assertEquals(boundA, withSlotMigrated(boundA, "slot-A", "slot-A"))
     }
 
     @Test

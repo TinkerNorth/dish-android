@@ -47,10 +47,7 @@ class SatelliteMotionBackendStatusStore
             connectionId: String,
             slotId: String,
         ) {
-            setState {
-                val key = connectionId to slotId
-                if (key in it) it - key else it
-            }
+            setState { withoutEntry(it, connectionId to slotId) }
         }
 
         fun clearConnection(connectionId: String) {

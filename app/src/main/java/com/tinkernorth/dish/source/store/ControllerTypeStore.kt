@@ -28,20 +28,14 @@ class ControllerTypeStore
             slotId: String,
             type: Int,
         ) {
-            setState {
-                val key = connectionId to slotId
-                if (key in it) it else it + (key to type)
-            }
+            setState { withEntryIfAbsent(it, connectionId to slotId, type) }
         }
 
         fun clear(
             connectionId: String,
             slotId: String,
         ) {
-            setState {
-                val key = connectionId to slotId
-                if (key in it) it - key else it
-            }
+            setState { withoutEntry(it, connectionId to slotId) }
         }
 
         fun clearConnection(connectionId: String) {

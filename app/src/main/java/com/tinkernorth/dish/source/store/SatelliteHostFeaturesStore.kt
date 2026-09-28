@@ -19,19 +19,7 @@ class SatelliteHostFeaturesStore
             connectionId: String,
             features: HostFeatureSet,
         ) {
-            setState { current ->
-                val prior = current[connectionId]
-                val merged =
-                    if (prior == null) {
-                        features
-                    } else {
-                        features.copy(
-                            controllerMic = prior.controllerMic,
-                            controllerSpeaker = prior.controllerSpeaker,
-                        )
-                    }
-                current + (connectionId to merged)
-            }
+            setState { withCatalogFeatures(it, connectionId, features) }
         }
 
         // Pre-bind/pre-catalog publish: fills the host layer from a capabilities probe
@@ -69,6 +57,22 @@ class SatelliteHostFeaturesStore
             setState { if (connectionId in it) it - connectionId else it }
         }
     }
+
+// A host the store already holds keeps the audio verdict its capabilities probe read.
+internal fun withCatalogFeatures(
+    features: Map<String, HostFeatureSet>,
+    connectionId: String,
+    catalog: HostFeatureSet,
+): Map<String, HostFeatureSet> {
+    val prior = features[connectionId]
+    val merged =
+        if (prior == null) {
+            catalog
+        } else {
+            catalog.copy(controllerMic = prior.controllerMic, controllerSpeaker = prior.controllerSpeaker)
+        }
+    return features + (connectionId to merged)
+}
 
 // A host the store has not heard of starts from the default. A read that changes nothing hands
 // back the same map, so a re-probe that learned nothing builds no new one.
