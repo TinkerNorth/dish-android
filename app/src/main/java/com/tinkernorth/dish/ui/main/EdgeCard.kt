@@ -9,6 +9,9 @@ import androidx.annotation.StringRes
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.LinkState
 
+private const val DISCONNECTING_CARD_ALPHA = 0.5f
+private const val OPAQUE_ALPHA = 1f
+
 // The edge banner's primary button. RECONNECT_PENDING is the spinner: a reconnect is already
 // in flight somewhere, so offering another would only stack them.
 internal enum class EdgePrimary { RECONNECT, RECONNECT_PENDING, UNBIND, NONE }
@@ -26,6 +29,16 @@ internal data class EdgeCard(
     val secondary: EdgeSecondary,
     @ColorRes val accentRes: Int,
 )
+
+// A banner carries the news itself, so only a disconnecting card with none is faded.
+internal fun cardAlpha(
+    shownEdge: EdgeState,
+    isDisconnecting: Boolean,
+): Float {
+    val hasNoBanner = shownEdge == EdgeState.NONE
+    val fades = hasNoBanner && isDisconnecting
+    return if (fades) DISCONNECTING_CARD_ALPHA else OPAQUE_ALPHA
+}
 
 // Null is the quiet card with no banner at all.
 internal fun edgeCardFor(

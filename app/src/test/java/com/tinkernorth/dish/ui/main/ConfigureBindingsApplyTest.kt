@@ -358,6 +358,17 @@ class ConfigureBindingsApplyTest {
         }
 
     @Test
+    fun `a finished step and the active step are drawn opaque`() {
+        assertEquals(OPAQUE, applyStepAlpha(index = 0, doneCount = 1), EXACT)
+        assertEquals(OPAQUE, applyStepAlpha(index = 1, doneCount = 1), EXACT)
+    }
+
+    @Test
+    fun `a step still to come is faded to half`() {
+        assertEquals(HALF_FADED, applyStepAlpha(index = 2, doneCount = 1), EXACT)
+    }
+
+    @Test
     fun `the step counter advances once per real async action`() =
         runTest(dispatcher) {
             usbControllersFlow.value = controller(UsbPhase.Claiming)
@@ -477,5 +488,8 @@ class ConfigureBindingsApplyTest {
         const val PID = 0x0CE6
         const val KEY = (VID shl 16) or PID
         const val TYPE = 2
+        const val HALF_FADED = 0.5f
+        const val OPAQUE = 1f
+        const val EXACT = 0f
     }
 }

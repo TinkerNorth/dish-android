@@ -30,7 +30,6 @@ import com.tinkernorth.dish.databinding.BindingValueNoneBinding
 import com.tinkernorth.dish.databinding.BindingValueNotBoundBinding
 import com.tinkernorth.dish.databinding.ItemControllerBinding
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
-import com.tinkernorth.dish.ui.common.DIMMED_ALPHA
 import java.util.Locale
 
 interface SlotActionListener {
@@ -162,8 +161,7 @@ class ControllerAdapter(
             if (edge != EdgeState.UNSTEADY) dismissedUnsteady.remove(slot.id)
             val dismissed = edge == EdgeState.UNSTEADY && slot.id in dismissedUnsteady
             val shownEdge = if (dismissed) EdgeState.NONE else edge
-            val dimmed = shownEdge == EdgeState.NONE && slot.isDisconnecting
-            b.root.alpha = if (dimmed) DIMMED_ALPHA else 1f
+            b.root.alpha = cardAlpha(shownEdge, slot.isDisconnecting)
 
             val bound = slot.boundStatus
             if (bound == null || slot.boundConnectionId == null) {

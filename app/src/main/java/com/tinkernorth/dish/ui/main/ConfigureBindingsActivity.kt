@@ -431,7 +431,7 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
                 else -> stepB.vStepPending.visibility = View.VISIBLE
             }
             stepB.tvStepLabel.text = step.label
-            stepB.root.alpha = if (i > state.doneCount) DIMMED_ALPHA else 1f
+            stepB.root.alpha = applyStepAlpha(i, state.doneCount)
             binding.applySteps.addView(stepB.root)
         }
     }

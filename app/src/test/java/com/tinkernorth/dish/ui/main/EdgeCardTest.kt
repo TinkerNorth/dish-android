@@ -80,4 +80,26 @@ class EdgeCardTest {
         assertEquals(EdgeSecondary.DISMISS, card?.secondary)
         assertEquals(R.string.binding_edge_unsteady_title, card?.titleRes)
     }
+
+    @Test
+    fun `a disconnecting card with no banner fades to half`() {
+        assertEquals(HALF_FADED, cardAlpha(EdgeState.NONE, isDisconnecting = true), EXACT)
+    }
+
+    @Test
+    fun `a card that is not disconnecting stays opaque`() {
+        assertEquals(OPAQUE, cardAlpha(EdgeState.NONE, isDisconnecting = false), EXACT)
+    }
+
+    // The banner carries the news itself, so the card under it is not faded as well.
+    @Test
+    fun `a disconnecting card under a banner stays opaque`() {
+        assertEquals(OPAQUE, cardAlpha(EdgeState.INPUT_LOST, isDisconnecting = true), EXACT)
+    }
+
+    private companion object {
+        const val HALF_FADED = 0.5f
+        const val OPAQUE = 1f
+        const val EXACT = 0f
+    }
 }

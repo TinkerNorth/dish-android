@@ -284,6 +284,18 @@ data class ApplyStep(
     val label: String,
 )
 
+// The overlay draws what is done and what is running at full strength and fades what is to come.
+internal fun applyStepAlpha(
+    index: Int,
+    doneCount: Int,
+): Float {
+    val isStillToCome = index > doneCount
+    return if (isStillToCome) PENDING_STEP_ALPHA else OPAQUE_STEP_ALPHA
+}
+
+private const val PENDING_STEP_ALPHA = 0.5f
+private const val OPAQUE_STEP_ALPHA = 1f
+
 private data class ApplyTarget(
     val snapshot: BindingSnapshot,
     val draft: BindingDraft,
