@@ -12,12 +12,15 @@ import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.net.moonlight.AUTO
 import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
 import com.tinkernorth.dish.core.net.moonlight.XBOX
+import com.tinkernorth.dish.repository.TOUCHPAD_MODE_DS4
+import com.tinkernorth.dish.repository.TOUCHPAD_MODE_MOUSE
 import com.tinkernorth.dish.source.store.SatelliteHostRuntime
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -59,6 +62,83 @@ class CapabilityComposerLayersTest {
             testScheduler.runCurrent()
             assertEquals(moonlightTypeCapabilities(PLAYSTATION), withGyro.capabilityFor(VIRTUAL_SLOT_ID).type)
             assertEquals(moonlightTypeCapabilities(XBOX), withoutGyro.capabilityFor(VIRTUAL_SLOT_ID).type)
+        }
+
+    // A physical pad bound to a Moonlight host on Auto, on a phone whose own gyro is the
+    // opposite of the pad's: the pad's controller layer, never the phone, must decide.
+    private fun TestScope.moonlightAutoPad(
+        padHasGyro: Boolean,
+        padHasTouchpad: Boolean = false,
+    ): CapabilityComposer {
+        val onAuto = mapOf(PAD_SLOT to AUTO)
+        return composerFor(
+            phoneAvailable = !padHasGyro,
+            devices =
+                MutableStateFlow(
+                    mapOf(
+                        PAD_ID to
+                            device(
+                                PAD_ID,
+                                hasGyro = padHasGyro,
+                                touchpadDeviceId = PAD_SURFACE_ID.takeIf { padHasTouchpad },
+                            ),
+                    ),
+                ),
+            bindings = MutableStateFlow(mapOf(PAD_SLOT to "ml-A")),
+            connections =
+                MutableStateFlow(listOf(summary("ml-A", kind = ConnectionKind.MOONLIGHT, satelliteControllerTypes = onAuto))),
+            scope = backgroundScope,
+            stores = StoreStates(satTypes = MutableStateFlow(mapOf(("ml-A" to PAD_SLOT) to AUTO))),
+            model = ModelFacts(modelHasTouchpad = padHasTouchpad),
+        )
+    }
+
+    @Test
+    fun `a bound gyro pad on Auto announces as PlayStation even on a phone with no gyro`() =
+        composerTest {
+            val composer = moonlightAutoPad(padHasGyro = true)
+            composer.probe(this)
+            testScheduler.runCurrent()
+            assertEquals(moonlightTypeCapabilities(PLAYSTATION), composer.capabilityFor(PAD_SLOT).type)
+        }
+
+    @Test
+    fun `a bound pad with no gyro on Auto announces as Xbox even on a phone with one`() =
+        composerTest {
+            val composer = moonlightAutoPad(padHasGyro = false)
+            composer.probe(this)
+            testScheduler.runCurrent()
+            assertEquals(moonlightTypeCapabilities(XBOX), composer.capabilityFor(PAD_SLOT).type)
+        }
+
+    @Test
+    fun `a gyro pad as a moonlight candidate on Auto resolves to PlayStation on a gyro-less phone`() =
+        composerTest {
+            val composer = moonlightAutoPad(padHasGyro = true)
+            val caps = composer.capabilityForCandidate(PAD_SLOT, AUTO, ConnectionKind.MOONLIGHT, "ml-A")
+            assertEquals(moonlightTypeCapabilities(PLAYSTATION), caps.type)
+        }
+
+    @Test
+    fun `a pad with no gyro as a moonlight candidate on Auto resolves to Xbox on a gyro phone`() =
+        composerTest {
+            val composer = moonlightAutoPad(padHasGyro = false)
+            val caps = composer.capabilityForCandidate(PAD_SLOT, AUTO, ConnectionKind.MOONLIGHT, "ml-A")
+            assertEquals(moonlightTypeCapabilities(XBOX), caps.type)
+        }
+
+    @Test
+    fun `touchpadWireMode sends a gyro pad's touch as a trackpad, its Auto type being PlayStation`() =
+        composerTest {
+            val composer = moonlightAutoPad(padHasGyro = true, padHasTouchpad = true)
+            assertEquals(TOUCHPAD_MODE_DS4, composer.touchpadWireMode(PAD_SLOT))
+        }
+
+    @Test
+    fun `touchpadWireMode sends a gyro-less pad's touch as a mouse, its Auto type being Xbox`() =
+        composerTest {
+            val composer = moonlightAutoPad(padHasGyro = false, padHasTouchpad = true)
+            assertEquals(TOUCHPAD_MODE_MOUSE, composer.touchpadWireMode(PAD_SLOT))
         }
 
     @Test
@@ -356,4 +436,10 @@ class CapabilityComposerLayersTest {
             assertFalse(Feature.MOTION in composer.capabilityFor(VIRTUAL_SLOT_ID).live)
             assertEquals(before, projections.size)
         }
+
+    private companion object {
+        const val PAD_ID = 7
+        const val PAD_SLOT = "7"
+        const val PAD_SURFACE_ID = 70
+    }
 }
