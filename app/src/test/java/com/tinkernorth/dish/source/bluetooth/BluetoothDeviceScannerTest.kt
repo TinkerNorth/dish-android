@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import io.mockk.every
 import io.mockk.mockk
@@ -258,6 +259,20 @@ class BluetoothDeviceScannerTest {
 
         assertTrue(devices.isEmpty())
         assertFalse(scanning)
+    }
+
+    // Exported, any app could forge a found device into the scan list or end the scan.
+    @Test
+    fun `the discovery receiver is registered not exported`() {
+        mockkStatic(ContextCompat::class)
+        every { ContextCompat.registerReceiver(any(), any(), any(), any()) } returns null
+
+        scanner.start(canScan = true)
+
+        val registered = requireNotNull(receiverField())
+        verify(exactly = 1) {
+            ContextCompat.registerReceiver(context, registered, any(), ContextCompat.RECEIVER_NOT_EXPORTED)
+        }
     }
 
     @Test

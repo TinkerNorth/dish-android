@@ -13,6 +13,7 @@ import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.slot
 import io.mockk.unmockkAll
+import io.mockk.verify
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -29,7 +30,9 @@ class BluetoothConnectionsTest {
     @Before
     fun setUp() {
         mockkStatic(ContextCompat::class, IntentCompat::class)
-        every { ContextCompat.registerReceiver(any(), capture(receiverSlot), any(), any()) } returns null
+        every {
+            ContextCompat.registerReceiver(context, capture(receiverSlot), any(), ContextCompat.RECEIVER_NOT_EXPORTED)
+        } returns null
         changes = 0
         connections = BluetoothConnections(context)
         connections.start { changes++ }
@@ -56,6 +59,14 @@ class BluetoothConnectionsTest {
         action: String,
         deviceName: String?,
     ) = receiverSlot.captured.onReceive(context, aclEvent(action, deviceName))
+
+    // Exported, any app could forge an ACL broadcast and make a pad read as connected.
+    @Test
+    fun `the ACL receiver is registered not exported`() {
+        verify(exactly = 1) {
+            ContextCompat.registerReceiver(context, receiverSlot.captured, any(), ContextCompat.RECEIVER_NOT_EXPORTED)
+        }
+    }
 
     @Test
     fun `nothing is connected before any broadcast`() {
