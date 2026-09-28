@@ -114,8 +114,7 @@ class MoonlightMotionGate {
     private fun streamFor(
         controllerNumber: Int,
         motionType: Int,
-    ): MotionStream? =
-        streams.firstOrNull { it.controllerNumber == controllerNumber && it.motionType == motionType }
+    ): MotionStream? = streams.firstOrNull { it.controllerNumber == controllerNumber && it.motionType == motionType }
 }
 
 // One (controller number, motion type) the host asked for, and when a sample of it last went out.
