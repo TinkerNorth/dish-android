@@ -15,6 +15,19 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.net.HttpURLConnection.HTTP_UNAUTHORIZED
+
+// One heartbeat tick past the close-notify: the manager has seen it and torn the session down.
+private const val CLOSE_NOTIFY_SEEN_MS = 1100L
+
+// Twice the 60 s backoff cap: any retry still pending has fired by then.
+private const val PAST_EVERY_BACKOFF_MS = 120_000L
+
+// Past the first 1 s backoff: a retry scheduled by the first failure has fired.
+private const val PAST_FIRST_BACKOFF_MS = 1100L
+
+// The address a satellite with a stable machine id moved to.
+private const val MOVED_IP = "10.0.0.7"
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixture() {
@@ -61,7 +74,6 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
             coVerify(exactly = 2) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
             assertEquals(SatelliteSessionState.Live, mgr.get(serverId)?.state?.value)
             verify(exactly = 0) { store.forgetSatelliteSharedKey(serverId) }
-            endRetryChain()
         }
 
     @Test
@@ -69,6 +81,64 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
 
     @Test
     fun `a shutdown close-notify retries on the backoff curve`() = closeNotifyRetries(SatelliteConnection.CLOSE_REASON_SHUTDOWN)
+
+    @Test
+    fun `a user disconnect cancels the retry a close-notify left pending`() =
+        runMgrTest { mgr, _ ->
+            stubLiveSession()
+            var closeReason = -1
+            every { controllerRepo.getSessionCloseReason(any()) } answers { closeReason }
+            connectLive(mgr)
+            closeReason = SatelliteConnection.CLOSE_REASON_KICKED
+            scope.testScheduler.advanceTimeBy(CLOSE_NOTIFY_SEEN_MS)
+            scope.testScheduler.runCurrent()
+            closeReason = -1
+
+            mgr.disconnect(serverId)
+            scope.testScheduler.advanceTimeBy(PAST_EVERY_BACKOFF_MS)
+            scope.testScheduler.runCurrent()
+
+            coVerify(exactly = 1) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
+            assertEquals(SatelliteSessionState.Idle, mgr.get(serverId)?.state?.value)
+        }
+
+    @Test
+    fun `a user disconnect cancels the retry a failed silent connect left pending`() =
+        runMgrTest { mgr, _ ->
+            stubStoredKey()
+            coEvery {
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
+            } returns unreachable()
+            mgr.connect(server, ConnectIntent.AUTO_RECONNECT)
+            scope.testScheduler.runCurrent()
+
+            mgr.disconnect(serverId)
+            scope.testScheduler.advanceTimeBy(PAST_EVERY_BACKOFF_MS)
+            scope.testScheduler.runCurrent()
+
+            coVerify(exactly = 1) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
+        }
+
+    // Two failed silent connects leave two retries pending at once; the disconnect must cancel both.
+    @Test
+    fun `a user disconnect cancels every pending retry, not only the newest`() =
+        runMgrTest { mgr, _ ->
+            stubStoredKey()
+            coEvery {
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
+            } returns unreachable()
+            mgr.connect(server, ConnectIntent.AUTO_RECONNECT)
+            scope.testScheduler.runCurrent()
+            mgr.connect(server, ConnectIntent.AUTO_RECONNECT)
+            scope.testScheduler.runCurrent()
+            coVerify(exactly = 2) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
+
+            mgr.disconnect(serverId)
+            scope.testScheduler.advanceTimeBy(PAST_EVERY_BACKOFF_MS)
+            scope.testScheduler.runCurrent()
+
+            coVerify(exactly = 2) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
+        }
 
     @Test
     fun `a replaced close-notify stays down without a retry`() =
@@ -209,7 +279,9 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
             scope.testScheduler.runCurrent()
 
             // Before the 1 s retry fires, a user tap learns the satellite no longer knows us.
-            endRetryChain()
+            coEvery {
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
+            } returns reply(HTTP_UNAUTHORIZED, """{"error":"unauthorized","code":"NOT_PAIRED"}""")
             mgr.connect(server, ConnectIntent.USER_INITIATED)
             scope.testScheduler.runCurrent()
             assertTrue(serverId in mgr.staleSatelliteIds.value)
@@ -220,29 +292,44 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
             coVerify(exactly = 2) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
         }
 
-    @Test
-    fun `a silent retry is dropped when the connection is no longer idle meanwhile`() =
+    // A user tap re-dials the satellite at its new address before the retry from the old one
+    // fires. The retry must leave that connection pointed where the tap put it.
+    private fun staleRetryAgainst(
+        tapState: SatelliteSessionState,
+        tapPutSession: suspend () -> com.tinkernorth.dish.core.net.HttpReply,
+    ) =
         runMgrTest { mgr, _ ->
-            stubStoredKey()
+            val stable = server.copy(machineId = "m1")
+            val stableId = SatelliteConnection.idFor(stable)
+            every { store.satelliteSharedKey(stableId) } returns "aa".repeat(32)
+            every { controllerRepo.openSocket(any(), any()) } returns 5
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(server.ip, any(), any(), any(), any(), any(), any(), any())
             } returns unreachable()
-            mgr.connect(server, ConnectIntent.AUTO_RECONNECT)
-            scope.testScheduler.runCurrent()
-
-            // A user tap is mid-handshake when the 1 s retry fires.
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
-            } coAnswers { awaitCancellation() }
-            mgr.connect(server, ConnectIntent.USER_INITIATED)
+                discoveryRepo.putSession(MOVED_IP, any(), any(), any(), any(), any(), any(), any())
+            } coAnswers { tapPutSession() }
+            mgr.connect(stable, ConnectIntent.AUTO_RECONNECT)
             scope.testScheduler.runCurrent()
-            assertEquals(SatelliteSessionState.Linking, mgr.get(serverId)?.state?.value)
+            mgr.connect(stable.copy(ip = MOVED_IP), ConnectIntent.USER_INITIATED)
+            scope.testScheduler.runCurrent()
+            assertEquals(tapState, mgr.get(stableId)?.state?.value)
 
-            scope.testScheduler.advanceTimeBy(5000)
+            scope.testScheduler.advanceTimeBy(PAST_FIRST_BACKOFF_MS)
             scope.testScheduler.runCurrent()
 
+            assertEquals(MOVED_IP, mgr.get(stableId)?.server?.value?.ip)
+            assertEquals(tapState, mgr.get(stableId)?.state?.value)
             coVerify(exactly = 2) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
         }
+
+    @Test
+    fun `a silent retry leaves a connection mid-handshake at the address the tap dialled`() =
+        staleRetryAgainst(SatelliteSessionState.Linking) { awaitCancellation() }
+
+    @Test
+    fun `a silent retry leaves a live connection at the address the tap dialled`() =
+        staleRetryAgainst(SatelliteSessionState.Live) { ok(sessionGrantBody()) }
 
     @Test
     fun `the backoff doubles per attempt and caps at sixty seconds`() =
@@ -261,7 +348,6 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
             scope.testScheduler.runCurrent()
 
             assertEquals(listOf(0L, 1000L, 3000L, 7000L, 15_000L, 31_000L, 63_000L, 123_000L, 183_000L), putAtMs)
-            endRetryChain()
         }
 
     // The tap itself dials at once and schedules nothing; the silent retry already pending from the
@@ -289,7 +375,6 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
             scope.testScheduler.advanceTimeBy(7500)
             scope.testScheduler.runCurrent()
             assertEquals(listOf(0L, 1000L, 3000L, 3500L, 7000L, 8000L, 10_000L), putAtMs)
-            endRetryChain()
         }
 
     private fun stubSlotApplies() {
@@ -426,7 +511,6 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
 
             coVerify(exactly = 2) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
             assertTrue(events.isEmpty())
-            endRetryChain()
         }
 
     @Test

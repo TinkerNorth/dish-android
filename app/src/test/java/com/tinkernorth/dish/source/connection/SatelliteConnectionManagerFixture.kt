@@ -14,17 +14,17 @@ import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
-import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import org.junit.Before
-import java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 // What wireCaps resolves for a pad with nothing else on.
 internal const val BASE_WIRE_CAPS =
@@ -141,26 +141,17 @@ open class SatelliteConnectionManagerFixture {
         runTest(scope.testScheduler) {
             val mgr = manager()
             val events = mutableListOf<ConnectionEvent>()
-            val collector = scope.launch { mgr.events.collect { events += it } }
+            scope.launch { mgr.events.collect { events += it } }
             try {
                 block(mgr, events)
             } finally {
-                // A live session's heartbeat poll reschedules itself forever, and a silent retry
-                // chain against an unreachable satellite does the same, so the scheduler can never
-                // go idle while either exists. End the chain and tear all sessions down before the
-                // final drain — on assertion failure too, or the drain spins virtual time into OOM.
-                endRetryChain()
-                mgr.connections.value.keys
-                    .forEach(mgr::disconnect)
+                // A live session's heartbeat poll reschedules itself forever, and so does a silent
+                // retry chain against an unreachable satellite, so the scheduler never goes idle
+                // while either exists. Cancel everything the manager started before the final
+                // drain, on assertion failure too, or the drain spins virtual time into OOM. This
+                // runs after the body, so it cannot hide what the body asserted.
+                scope.coroutineContext.job.cancelChildren()
                 scope.testScheduler.advanceUntilIdle()
-                collector.cancel()
             }
         }
-
-    // A terminal reply, so a trailing drain never chases a retry chain into a live heartbeat.
-    protected fun endRetryChain() {
-        coEvery {
-            discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
-        } returns reply(HTTP_UNAUTHORIZED, """{"error":"unauthorized","code":"NOT_PAIRED"}""")
-    }
 }

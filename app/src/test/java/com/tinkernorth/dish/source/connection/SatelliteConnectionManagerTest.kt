@@ -209,12 +209,6 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
             coVerify(atLeast = 2) {
                 discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             }
-
-            // Terminate the retry chain (a coded 401 is terminal) so the
-            // trailing advanceUntilIdle can drain instead of chasing backoffs.
-            coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
-            } returns reply(401, """{"error":"unauthorized","code":"NOT_PAIRED"}""")
         }
 
     @Test
@@ -1063,10 +1057,6 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
             scope.testScheduler.runCurrent()
 
             coVerify { discoveryRepo.putSession("10.0.0.99", any(), any(), any(), any(), any(), any()) }
-
-            coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
-            } returns reply(401, """{"error":"unauthorized","code":"NOT_PAIRED"}""")
         }
 
     @Test

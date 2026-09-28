@@ -135,6 +135,10 @@ class SatelliteConnectionManager
         // exponential backoff. Reset on a successful session or any user action.
         private val retryAttempts = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
+        // Silent retries still waiting out their backoff, per satellite id: disconnect cancels
+        // them all, since one that fired afterwards would undo the disconnect.
+        private val pendingRetries = java.util.concurrent.ConcurrentHashMap<String, MutableSet<Job>>()
+
         // Single-flight reconcile guard per id: heartbeat ticks fire every
         // second, the reconcile round-trip can take longer.
         private val reconcileInFlight = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
@@ -744,15 +748,30 @@ class SatelliteConnectionManager
             val delayMs =
                 (RETRY_BASE_MS shl (attempt - 1).coerceAtMost(RETRY_MAX_SHIFT))
                     .coerceAtMost(RETRY_MAX_MS)
-            scope.launch {
-                kotlinx.coroutines.delay(delayMs)
-                if (_connections.value[id]?.state?.value == SatelliteSessionState.Idle &&
-                    id !in _staleSatelliteIds.value
-                ) {
-                    val target = store.remembered().firstOrNull { it.id == id }?.toDiscovered() ?: server
-                    connect(target, ConnectIntent.RETRY_AFTER_DEATH)
+            val retry =
+                scope.launch {
+                    kotlinx.coroutines.delay(delayMs)
+                    if (_connections.value[id]?.state?.value == SatelliteSessionState.Idle &&
+                        id !in _staleSatelliteIds.value
+                    ) {
+                        val target = store.remembered().firstOrNull { it.id == id }?.toDiscovered() ?: server
+                        connect(target, ConnectIntent.RETRY_AFTER_DEATH)
+                    }
                 }
-            }
+            trackPendingRetry(id, retry)
+        }
+
+        private fun trackPendingRetry(
+            id: String,
+            retry: Job,
+        ) {
+            val pending = pendingRetries.computeIfAbsent(id) { java.util.concurrent.ConcurrentHashMap.newKeySet() }
+            pending += retry
+            retry.invokeOnCompletion { pending -= retry }
+        }
+
+        private fun cancelPendingRetries(id: String) {
+            pendingRetries.remove(id)?.forEach { it.cancel() }
         }
 
         /**
@@ -951,9 +970,10 @@ class SatelliteConnectionManager
         }
 
         fun disconnect(id: String) {
-            // Stop any reverse-pairing poll first: otherwise it could call
-            // openSession seconds after the user tore the connection down.
+            // Stop any reverse-pairing poll and silent retry first: otherwise either could
+            // call openSession seconds after the user tore the connection down.
             cancelApprovalPoll(id)
+            cancelPendingRetries(id)
             val conn = _connections.value[id] ?: return
             val srv = conn.server.value
             val cid = conn.connectionId
