@@ -773,24 +773,42 @@ class GamepadGestureRecognizerTest {
     }
 
     @Test
-    fun `a centre button lift leaves a held stick click alone`() {
+    fun `an untracked pointer lift releases home and the mic mute`() {
+        // The mute pill sits at (900..960, 40..60), clear of the three centre circles.
+        val homeAndMute = centreLayout.copy(micMuteRect = box(900f, 40f, 960f, 60f))
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 750f, y = 120f, pid = POINTER_0), homeAndMute)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_POINTER_DOWN, x = 930f, y = 50f, pid = POINTER_1), homeAndMute)
+        assertEquals(HOME_AND_MUTE, recognizer.state.buttons and HOME_AND_MUTE)
+
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_POINTER_UP, x = 750f, y = 120f, pid = POINTER_0), homeAndMute)
+
+        assertEquals(0, recognizer.state.buttons and GamepadTouchView.BTN_HOME)
+        assertEquals(0, recognizer.state.buttons and GamepadTouchView.BTN_MIC_MUTE)
+    }
+
+    @Test
+    fun `a centre button lift leaves both held stick clicks alone`() {
         val clicksAndCentre = stickLayout.copy(selectCx = 700f, centerBtnCy = 50f, smallBtnRadius = 10f)
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 600f, y = 600f, pid = POINTER_0), clicksAndCentre)
-        recognizer.onTouchEvent(event(MotionEvent.ACTION_POINTER_DOWN, x = 700f, y = 50f, pid = POINTER_1), clicksAndCentre)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_POINTER_DOWN, x = 1200f, y = 600f, pid = POINTER_1), clicksAndCentre)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_POINTER_DOWN, x = 700f, y = 50f, pid = POINTER_2), clicksAndCentre)
 
-        recognizer.onTouchEvent(event(MotionEvent.ACTION_POINTER_UP, x = 700f, y = 50f, pid = POINTER_1), clicksAndCentre)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_POINTER_UP, x = 700f, y = 50f, pid = POINTER_2), clicksAndCentre)
 
         assertEquals(0, recognizer.state.buttons and GamepadTouchView.BTN_SELECT)
         assertEquals(GamepadTouchView.BTN_LS, recognizer.state.buttons and GamepadTouchView.BTN_LS)
+        assertEquals(GamepadTouchView.BTN_RS, recognizer.state.buttons and GamepadTouchView.BTN_RS)
     }
 
     private companion object {
         const val POINTER_0 = 0
         const val POINTER_1 = 1
+        const val POINTER_2 = 2
         const val FAR = 10_000f
         const val AXIS_EPSILON = 1e-4f
         const val SHOULDER_MASK = GamepadTouchView.BTN_LB or GamepadTouchView.BTN_RB
         const val CENTRE_PAIR = GamepadTouchView.BTN_SELECT or GamepadTouchView.BTN_START
+        const val HOME_AND_MUTE = GamepadTouchView.BTN_HOME or GamepadTouchView.BTN_MIC_MUTE
 
         val ABXY_MASK: Int =
             GamepadTouchView.BTN_A or GamepadTouchView.BTN_B or

@@ -439,8 +439,9 @@ internal class GamepadGestureRecognizer {
     }
 
     // The control a lifted pointer was holding. Button regions clear by pointer ID (never by
-    // position) so a drag-off before release doesn't leave the bit stuck; the centre and
-    // stick-click buttons are not pointer-tracked, which is what NONE ends up meaning.
+    // position) so a drag-off before release doesn't leave the bit stuck. The stick clicks are
+    // tracked like the rest; only the centre buttons and the mute pill are not, which is what
+    // NONE ends up meaning.
     private fun ownerOf(pid: Int): Region =
         when {
             pid == leftStickPointerId -> Region.LEFT_STICK
