@@ -234,6 +234,179 @@ class MoonlightSessionControllerTest {
             verify(exactly = 1) { moonlight.applyDesired(any()) }
         }
 
+    // The composer answers a candidate for a slot with no device behind it with no input at
+    // all (its controller layer is empty); this mirrors that, so a pad can leave the registry.
+    private fun capabilitiesFollowDevices() {
+        every { capabilities.capabilityForCandidate(any(), any(), any(), any(), any()) } answers {
+            val device = firstArg<String>().toIntOrNull()?.let { devices.value[it] }
+            when {
+                device == null -> SlotCapabilities.NONE
+                device.hasGyro -> motionCaps
+                else -> padCaps
+            }
+        }
+    }
+
+    private fun MutableList<MoonlightDesiredPads>.lastPadOn(hostId: String): MoonlightPadRequest? = last()[hostId]?.singleOrNull()
+
+    // A bound pad leaving the registry is followed by the binding observer's unbind, and the
+    // two collectors run independently: re-deriving the pad from its absent device announced a
+    // caps-0 Xbox pad in between, which replugged a held PlayStation pad or reopened a dropped
+    // session only for the unbind to close it again. An absent device leaves its request as it was.
+    @Test
+    fun `a bound pad leaving the registry asks the host for nothing new`() =
+        runTest(dispatcher) {
+            capabilitiesFollowDevices()
+            connections.value = listOf(summary("moonlight:pc"))
+            bindings.value = mapOf("1" to "moonlight:pc")
+            devices.value = mapOf(1 to PhysicalGamepadRegistry.Device(1, "Pad", hasGyro = true))
+            val desired = mutableListOf<MoonlightDesiredPads>()
+            every { moonlight.applyDesired(capture(desired)) } returns Unit
+            controller().onStart(owner)
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(PLAYSTATION, desired.lastPadOn("moonlight:pc")?.emulatedType)
+
+            devices.value = emptyMap()
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(1, desired.size)
+        }
+
+    @Test
+    fun `the unbind that follows a departed pad is what empties the host`() =
+        runTest(dispatcher) {
+            capabilitiesFollowDevices()
+            connections.value = listOf(summary("moonlight:pc"))
+            bindings.value = mapOf("1" to "moonlight:pc")
+            devices.value = mapOf(1 to PhysicalGamepadRegistry.Device(1, "Pad"))
+            val desired = mutableListOf<MoonlightDesiredPads>()
+            every { moonlight.applyDesired(capture(desired)) } returns Unit
+            controller().onStart(owner)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            devices.value = emptyMap()
+            dispatcher.scheduler.advanceUntilIdle()
+            bindings.value = emptyMap()
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(2, desired.size)
+            assertEquals(emptyMap<String, List<MoonlightPadRequest>>(), desired.last())
+        }
+
+    // Nothing was ever derived for it, so there is no request to leave as it was, and a pad
+    // resolved from no device at all would be the caps-0 Xbox pad.
+    @Test
+    fun `a binding whose device the registry has never shown asks for no pad`() =
+        runTest(dispatcher) {
+            capabilitiesFollowDevices()
+            connections.value = listOf(summary("moonlight:pc"))
+            bindings.value = mapOf("1" to "moonlight:pc", "2" to "moonlight:pc")
+            devices.value = mapOf(2 to PhysicalGamepadRegistry.Device(2, "Pad"))
+            val desired = mutableListOf<MoonlightDesiredPads>()
+            every { moonlight.applyDesired(capture(desired)) } returns Unit
+
+            controller().onStart(owner)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(listOf("2"), desired.last().getValue("moonlight:pc").map { it.slotId })
+        }
+
+    @Test
+    fun `a host whose only binding has no device is not asked for a session`() =
+        runTest(dispatcher) {
+            capabilitiesFollowDevices()
+            connections.value = listOf(summary("moonlight:pc"))
+            bindings.value = mapOf("1" to "moonlight:pc")
+            val desired = mutableListOf<MoonlightDesiredPads>()
+            every { moonlight.applyDesired(capture(desired)) } returns Unit
+
+            controller().onStart(owner)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(emptyMap<String, List<MoonlightPadRequest>>(), desired.last())
+            verify(exactly = 0) { context.startService(any()) }
+        }
+
+    // The request left as it was is the one the pad had on that host: a pad moved to another
+    // host while its device is away has nothing there to leave as it was.
+    @Test
+    fun `a departed pad moved to another host asks that host for nothing`() =
+        runTest(dispatcher) {
+            capabilitiesFollowDevices()
+            connections.value = listOf(summary("moonlight:pc"), summary("moonlight:den"))
+            bindings.value = mapOf("1" to "moonlight:pc")
+            devices.value = mapOf(1 to PhysicalGamepadRegistry.Device(1, "Pad"))
+            val desired = mutableListOf<MoonlightDesiredPads>()
+            every { moonlight.applyDesired(capture(desired)) } returns Unit
+            controller().onStart(owner)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            devices.value = emptyMap()
+            dispatcher.scheduler.advanceUntilIdle()
+            bindings.value = mapOf("1" to "moonlight:den")
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(emptyMap<String, List<MoonlightPadRequest>>(), desired.last())
+        }
+
+    // The type is resolved from one read of the slot and the bits from a second, and the device
+    // can leave or arrive between them: a pad is derived only when both reads saw it.
+    @Test
+    fun `a pad that leaves between the type read and the bits read asks for no pad`() =
+        runTest(dispatcher) {
+            every { capabilities.capabilityForCandidate(any(), XBOX, any(), any(), any()) } returns padCaps
+            every { capabilities.capabilityForCandidate(any(), PLAYSTATION, any(), any(), any()) } returns SlotCapabilities.NONE
+            connections.value = listOf(summary("moonlight:pc"))
+            bindings.value = mapOf("1" to "moonlight:pc")
+            satTypes.value = mapOf(("moonlight:pc" to "1") to PLAYSTATION)
+            val desired = mutableListOf<MoonlightDesiredPads>()
+            every { moonlight.applyDesired(capture(desired)) } returns Unit
+
+            controller().onStart(owner)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(emptyMap<String, List<MoonlightPadRequest>>(), desired.last())
+        }
+
+    @Test
+    fun `a pad that arrives between the type read and the bits read asks for no pad`() =
+        runTest(dispatcher) {
+            every { capabilities.capabilityForCandidate(any(), XBOX, any(), any(), any()) } returns SlotCapabilities.NONE
+            every { capabilities.capabilityForCandidate(any(), PLAYSTATION, any(), any(), any()) } returns motionCaps
+            connections.value = listOf(summary("moonlight:pc"))
+            bindings.value = mapOf("1" to "moonlight:pc")
+            satTypes.value = mapOf(("moonlight:pc" to "1") to PLAYSTATION)
+            val desired = mutableListOf<MoonlightDesiredPads>()
+            every { moonlight.applyDesired(capture(desired)) } returns Unit
+
+            controller().onStart(owner)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(emptyMap<String, List<MoonlightPadRequest>>(), desired.last())
+        }
+
+    // Only the device's absence is held back: a device that is present is derived again, so
+    // the late gyro above still reaches a pad the session acquires afterwards.
+    @Test
+    fun `a pad whose device comes back is derived from it again`() =
+        runTest(dispatcher) {
+            capabilitiesFollowDevices()
+            connections.value = listOf(summary("moonlight:pc"))
+            bindings.value = mapOf("1" to "moonlight:pc")
+            devices.value = mapOf(1 to PhysicalGamepadRegistry.Device(1, "Pad"))
+            val desired = mutableListOf<MoonlightDesiredPads>()
+            every { moonlight.applyDesired(capture(desired)) } returns Unit
+            controller().onStart(owner)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            devices.value = emptyMap()
+            dispatcher.scheduler.advanceUntilIdle()
+            devices.value = mapOf(1 to PhysicalGamepadRegistry.Device(1, "Pad", hasGyro = true))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(PLAYSTATION, desired.lastPadOn("moonlight:pc")?.emulatedType)
+        }
+
     @Test
     fun `a stored 0 from an older build is read back as Auto, not as unknown`() =
         runTest(dispatcher) {
