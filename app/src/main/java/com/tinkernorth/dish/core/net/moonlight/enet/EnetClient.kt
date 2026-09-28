@@ -393,7 +393,11 @@ class EnetClient(
         sampleRoundTrip(acked?.let { now - it.sentAtMs } ?: echoedSample)
     }
 
-    /** enet_protocol_handle_acknowledge's smoothed round-trip estimate. */
+    /**
+     * enet_protocol_handle_acknowledge's smoothed round-trip estimate, rounded the way
+     * cgutman/enet rounds it: every step rounds UP (`(diff + 7) / 8`, `(diff + 3) / 4`).
+     * Upstream lsalzman/enet truncates instead; the host runs the fork.
+     */
     private fun sampleRoundTrip(rawSample: Long) {
         val sample = rawSample.coerceIn(1L, EnetProtocol.TIMEOUT_MAXIMUM_MS.toLong())
         if (!sampledRtt) {
@@ -533,10 +537,10 @@ class EnetClient(
         // resent absurdly often; by then it has long since passed timeoutLimit.
         private const val MAX_ATTEMPT_SHIFT = 30
 
-        // ENet's fixed-point RTT estimator (enet_protocol_handle_acknowledge): the
-        // retransmit timeout weights the variance by four, the first sample seeds the
+        // ENet's fixed-point RTT estimator (cgutman/enet enet_protocol_handle_acknowledge):
+        // the retransmit timeout weights the variance by four, the first sample seeds the
         // variance at half itself, and every later sample moves the variance a quarter
-        // and the estimate an eighth of the way toward itself.
+        // and the estimate an eighth of the way toward itself, each rounded up.
         private const val RTT_VARIANCE_WEIGHT = 4
         private const val INITIAL_VARIANCE_DIV = 2
         private const val VARIANCE_DIV = 4

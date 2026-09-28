@@ -376,24 +376,51 @@ class EnetClientTest {
         assertTrue(client.disconnectReason.orEmpty().contains("stopped acknowledging"))
     }
 
-    @Test
-    fun `an acknowledgement clears the give-up clock`() {
+    /**
+     * Where a peer that never acknowledges is given up on, on the shared test clock: the
+     * clock is left where it started, so the next client runs through the same instants.
+     */
+    private fun silentPeerGiveUpTime(): Long {
+        val origin = clock
+        val silent = connectedClientWithOneUnackedSend()
+        while (silent.state == EnetClient.State.CONNECTED) {
+            clock += TICK_MS
+            silent.tick()
+        }
+        val giveUpAt = clock
+        clock = origin
+        return giveUpAt
+    }
+
+    private fun connectedClientWithOneUnackedSend(): EnetClient {
         val client = newClient()
         client.connect()
         client.onDatagram(verifyConnectDatagram())
         client.sendReliable("first".toByteArray())
-        repeat(BEFORE_MINIMUM_TICKS) {
+        return client
+    }
+
+    private fun tickUntil(
+        client: EnetClient,
+        until: Long,
+    ) {
+        while (clock < until) {
             clock += TICK_MS
             client.tick()
         }
-        client.onDatagram(ackDatagram(EnetClient.DATA_CHANNEL, reliableSeq = 1))
-        client.sendReliable("second".toByteArray())
-        // The clock restarts from that acknowledgement, so the same wait again
-        // is survivable.
-        repeat(BEFORE_MINIMUM_TICKS) {
-            clock += TICK_MS
-            client.tick()
-        }
+    }
+
+    @Test
+    fun `an acknowledgement restarts the give-up clock for the commands still unacknowledged`() {
+        val giveUpAt = silentPeerGiveUpTime()
+        val client = connectedClientWithOneUnackedSend()
+        tickUntil(client, giveUpAt - TICK_MS)
+        assertEquals(EnetClient.State.CONNECTED, client.state)
+
+        client.sendReliable("probe".toByteArray())
+        client.onDatagram(ackDatagram(EnetClient.DATA_CHANNEL, reliableSeq = PROBE_SEQ))
+        tickUntil(client, giveUpAt)
+
         assertEquals(EnetClient.State.CONNECTED, client.state)
     }
 
@@ -678,21 +705,16 @@ class EnetClientTest {
     }
 
     @Test
-    fun `an ack for an unknown seq still samples the echoed time and resets the give-up clock`() {
-        val client = newClient()
-        client.connect()
-        client.onDatagram(verifyConnectDatagram())
-        client.sendReliable("first".toByteArray())
-        repeat(BEFORE_MINIMUM_TICKS) {
-            clock += TICK_MS
-            client.tick()
-        }
+    fun `an ack for an unknown seq still samples the echoed time and restarts the give-up clock`() {
+        val giveUpAt = silentPeerGiveUpTime()
+        val client = connectedClientWithOneUnackedSend()
+        tickUntil(client, giveUpAt - TICK_MS)
+        assertEquals(EnetClient.State.CONNECTED, client.state)
+
         client.onDatagram(ackDatagram(EnetClient.DATA_CHANNEL, reliableSeq = UNKNOWN_SEQ))
         assertTrue(client.roundTripMs != null)
-        repeat(BEFORE_MINIMUM_TICKS) {
-            clock += TICK_MS
-            client.tick()
-        }
+        tickUntil(client, giveUpAt)
+
         assertEquals(EnetClient.State.CONNECTED, client.state)
     }
 
@@ -813,7 +835,9 @@ class EnetClientTest {
         const val TALKATIVE_ROUNDS = 60
 
         const val TICK_MS = 100L
-        const val BEFORE_MINIMUM_TICKS = 40 // 4.0 s
+
+        // "first" is seq 1 on the data channel, so the probe sent after it is seq 2.
+        const val PROBE_SEQ = 2
 
         // Past the 5.5 s at which the old fixed retransmit budget expired, and
         // past the 6.4 s at which a live host was ending the session.
@@ -822,8 +846,10 @@ class EnetClientTest {
         const val LYING_DATA_LENGTH = 100
         const val UNKNOWN_SEQ = 99
 
-        // enet_protocol_handle_acknowledge: the first sample is taken as-is, then each later sample
-        // moves the estimate an eighth of the way toward itself.
+        // cgutman/enet enet_protocol_handle_acknowledge (the fork Wolf and Sunshine build): the first
+        // sample is taken as-is, then each later sample moves the estimate an eighth of the way
+        // toward itself, rounded up: 100 + (100 + 7) / 8 = 113, then 113 - (103 + 7) / 8 = 100.
+        // Upstream lsalzman/enet truncates and would give 112.
         const val FIRST_SAMPLE_MS = 100L
         const val SLOWER_SAMPLE_MS = 200L
         const val SMOOTHED_UP_MS = 113L
