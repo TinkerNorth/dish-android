@@ -35,6 +35,20 @@ class TouchpadSurfaceView
         ) {
             fun anyFingerDown(): Boolean = finger0Active || finger1Active
 
+            // Takes every field of [other] in place, for a holder that must not allocate per frame.
+            fun copyFrom(other: TouchpadState) {
+                finger0Active = other.finger0Active
+                finger1Active = other.finger1Active
+                buttonPressed = other.buttonPressed
+                finger0TrackingId = other.finger0TrackingId
+                finger0X = other.finger0X
+                finger0Y = other.finger0Y
+                finger1TrackingId = other.finger1TrackingId
+                finger1X = other.finger1X
+                finger1Y = other.finger1Y
+                eventTimeMs = other.eventTimeMs
+            }
+
             // The wire frame for this surface state. The click and the mouse-mode fields are the
             // caller's: a pad surface sends its own click, the mouse surface its buttons and wheel.
             fun toReport(

@@ -59,4 +59,25 @@ class TouchpadStateTest {
         assertEquals(1_234_567L, set.eventTimeMs)
         assertTrue(set.anyFingerDown())
     }
+
+    // Every field differs from its default, so copying any one of them wrong shows.
+    @Test
+    fun `copyFrom takes every field of the other state in place`() {
+        val source =
+            TouchpadSurfaceView.TouchpadState(
+                finger0Active = true,
+                finger1Active = true,
+                buttonPressed = true,
+                finger0TrackingId = 7,
+                finger0X = 1200,
+                finger0Y = -300,
+                finger1TrackingId = 8,
+                finger1X = -1500,
+                finger1Y = 900,
+                eventTimeMs = 1_234_567L,
+            )
+        val target = TouchpadSurfaceView.TouchpadState()
+        target.copyFrom(source)
+        assertEquals(source, target)
+    }
 }

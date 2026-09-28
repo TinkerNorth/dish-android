@@ -48,15 +48,8 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
 
     private lateinit var views: MouseViews
 
-    private data class MouseWireState(
-        val fingers: TouchpadSurfaceView.TouchpadState,
-        val leftHeld: Boolean,
-        val rightHeld: Boolean,
-        val middleHeld: Boolean,
-    )
-
-    // @Volatile for main-thread write / resend-thread read.
-    @Volatile private var lastReported: MouseWireState? = null
+    // Main-thread write per frame / resend-thread read per tick, with nothing allocated on either.
+    private val reportLatch = MouseReportLatch()
 
     private var slotId: String = VIRTUAL_SLOT_ID
     private var leftHeld = false
@@ -89,9 +82,6 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
             )
         }
     }
-
-    // Resend-thread-only (single-threaded Handler dispatcher).
-    private var lastResentSnapshot: MouseWireState? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -193,11 +183,7 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
         mouseMover.releaseButtons(moonlightMouseSinkOn(conn))
     }
 
-    private fun latestFingers(): TouchpadSurfaceView.TouchpadState {
-        val frame = lastReported?.fingers?.copy() ?: TouchpadSurfaceView.TouchpadState()
-        frame.eventTimeMs = SystemClock.uptimeMillis()
-        return frame
-    }
+    private fun latestFingers(): TouchpadSurfaceView.TouchpadState = reportLatch.latestFingersAt(SystemClock.uptimeMillis())
 
     // A middle tap replays as a short press-and-release so the edge survives frame pacing.
     private fun pulseMiddleClick() {
@@ -216,7 +202,7 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
         scrollNotches: Int = 0,
     ) {
         inputRateStore.recordScreenSample()
-        lastReported = MouseWireState(fingers, leftHeld, rightHeld, middleHeld)
+        reportLatch.record(fingers, leftHeld, rightHeld, middleHeld)
         when (pointerRouteFor(hub.summary(connectionId))) {
             PointerRoute.SATELLITE -> sendMouseReport(fingers, leftHeld, rightHeld, middleHeld, scrollNotches)
             PointerRoute.MOONLIGHT -> sendMoonlightMouse(fingers, scrollNotches)
@@ -224,17 +210,19 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
         }
     }
 
+    // Scroll is an event, never state, so a resend always carries zero scroll.
     override fun resendOneIfReady() {
-        val state = lastReported ?: return
+        if (!reportLatch.hasReported) return
         if (!pointerResendAllowed(hub.summary(connectionId))) return
-        // The fingers object mutates on the UI thread: copy() is the stable
-        // comparison base (a torn read just costs one extra burst). Scroll is an
-        // event, never state, so a resend always carries zero scroll.
-        val snapshot = state.copy(fingers = state.fingers.copy())
-        val changed = snapshot != lastResentSnapshot
-        if (changed) lastResentSnapshot = snapshot
+        val changed = reportLatch.refreshResendSnapshot()
         if (!resendDue(changed)) return
-        sendMouseReport(snapshot.fingers, snapshot.leftHeld, snapshot.rightHeld, snapshot.middleHeld, scrollNotches = 0)
+        sendMouseReport(
+            reportLatch.resentFingers,
+            reportLatch.resentLeftHeld,
+            reportLatch.resentRightHeld,
+            reportLatch.resentMiddleHeld,
+            scrollNotches = 0,
+        )
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
