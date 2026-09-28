@@ -29,7 +29,25 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicIntegerArray
 import java.util.concurrent.atomic.AtomicLongArray
+
+// One pad frame as the connection remembers it, FRAME_FIELDS ints per controller number.
+private const val FRAME_BUTTONS = 0
+private const val FRAME_LEFT_TRIGGER = 1
+private const val FRAME_RIGHT_TRIGGER = 2
+private const val FRAME_LEFT_X = 3
+private const val FRAME_LEFT_Y = 4
+private const val FRAME_RIGHT_X = 5
+private const val FRAME_RIGHT_Y = 6
+private const val FRAME_FIELDS = 7
+
+// A pad's touchpad click as its last touch report said it; unknown until one has.
+private const val CLICK_UNKNOWN = 0
+private const val CLICK_UP = 1
+private const val CLICK_DOWN = 2
+
+private fun padMaskOf(pads: Map<String, MoonlightPad>): Int = pads.values.fold(0) { mask, pad -> mask or (1 shl pad.number) }
 
 /**
  * One Moonlight host session, the sibling of
@@ -57,6 +75,9 @@ class MoonlightConnection(
 
     private val _pads = MutableStateFlow<Map<String, MoonlightPad>>(emptyMap())
     val pads: StateFlow<Map<String, MoonlightPad>> = _pads.asStateFlow()
+
+    // The active mask of [_pads], kept beside it so a frame reads an Int instead of walking the map.
+    @Volatile private var padMask = 0
 
     @Volatile private var session: MoonlightControlSession? = null
     private var pumpJob: Job? = null
@@ -117,7 +138,7 @@ class MoonlightConnection(
                         capabilities = capabilities,
                         supportedButtons = supportedButtons,
                     )
-                _pads.value = _pads.value + (slotId to fresh)
+                publishPads(_pads.value + (slotId to fresh))
                 fresh
             } ?: return null
         announce(pad)
@@ -131,7 +152,7 @@ class MoonlightConnection(
             synchronized(padLock) {
                 released = _pads.value[slotId]
                 if (released == null) return@synchronized _pads.value.size
-                _pads.value = _pads.value - slotId
+                publishPads(_pads.value - slotId)
                 _pads.value.size
             }
         released?.let { pad ->
@@ -157,12 +178,18 @@ class MoonlightConnection(
             synchronized(padLock) {
                 val held = _pads.value[slotId] ?: return@synchronized null
                 val next = held.copy(emulatedType = emulatedType, capabilities = capabilities, supportedButtons = supportedButtons)
-                _pads.value = _pads.value + (slotId to next)
+                publishPads(_pads.value + (slotId to next))
                 next
             } ?: return null
         forgetHostPadState(slotId, pad.number)
         replug(pad)
         return pad
+    }
+
+    // Under [padLock].
+    private fun publishPads(next: Map<String, MoonlightPad>) {
+        _pads.value = next
+        padMask = padMaskOf(next)
     }
 
     // What the host asked of, or was told about, the pad that held [number]: a pad it plugs in
@@ -173,8 +200,13 @@ class MoonlightConnection(
     ) {
         motionGate.clear(number)
         touchDiffers.remove(slotId)
-        lastPadFrames.remove(number)
-        touchClickByNumber.remove(number)
+        forgetFrame(number)
+        touchClickByNumber.set(number, CLICK_UNKNOWN)
+    }
+
+    private fun forgetFrame(number: Int) {
+        val first = number * FRAME_FIELDS
+        for (field in first until first + FRAME_FIELDS) lastPadFrames.set(field, 0)
     }
 
     fun padFor(slotId: String): MoonlightPad? = _pads.value[slotId]
@@ -183,7 +215,7 @@ class MoonlightConnection(
 
     val hasRoom: Boolean get() = _pads.value.size < MAX_PADS
 
-    fun activeMask(): Int = _pads.value.values.fold(0) { mask, pad -> mask or (1 shl pad.number) }
+    fun activeMask(): Int = padMask
 
     /**
      * Start pinging the host's media ports. Runs from the moment the stream
@@ -306,11 +338,13 @@ class MoonlightConnection(
         rightY: Int,
     ) {
         val live = session ?: return
-        val frame = PadFrame(buttons, leftTrigger, rightTrigger, leftX, leftY, rightX, rightY)
-        lastPadFrames[controllerNumber] = frame
-        if (controllerNumber in 0 until MAX_PADS) sentByNumber.incrementAndGet(controllerNumber)
-        val clickBit =
-            if (touchClickByNumber[controllerNumber] == true) BTN_TOUCHPAD else 0
+        val isAPad = controllerNumber in 0 until MAX_PADS
+        if (isAPad) {
+            rememberFrame(controllerNumber, buttons, leftTrigger, rightTrigger, leftX, leftY, rightX, rightY)
+            sentByNumber.incrementAndGet(controllerNumber)
+        }
+        val isClickHeld = isAPad && touchClickByNumber.get(controllerNumber) == CLICK_DOWN
+        val clickBit = if (isClickHeld) BTN_TOUCHPAD else 0
         live.sendControllerState(
             controllerNumber = controllerNumber,
             activeMask = activeMask(),
@@ -321,6 +355,42 @@ class MoonlightConnection(
             leftStickY = leftY,
             rightStickX = rightX,
             rightStickY = rightY,
+        )
+    }
+
+    private fun rememberFrame(
+        number: Int,
+        buttons: Int,
+        leftTrigger: Int,
+        rightTrigger: Int,
+        leftX: Int,
+        leftY: Int,
+        rightX: Int,
+        rightY: Int,
+    ) {
+        val first = number * FRAME_FIELDS
+        lastPadFrames.set(first + FRAME_BUTTONS, buttons)
+        lastPadFrames.set(first + FRAME_LEFT_TRIGGER, leftTrigger)
+        lastPadFrames.set(first + FRAME_RIGHT_TRIGGER, rightTrigger)
+        lastPadFrames.set(first + FRAME_LEFT_X, leftX)
+        lastPadFrames.set(first + FRAME_LEFT_Y, leftY)
+        lastPadFrames.set(first + FRAME_RIGHT_X, rightX)
+        lastPadFrames.set(first + FRAME_RIGHT_Y, rightY)
+    }
+
+    // The pad's last frame again, at rest before it has sent one, so a click edge with no stick or
+    // button change still reaches the host.
+    private fun replayLastFrame(number: Int) {
+        val first = number * FRAME_FIELDS
+        sendControllerState(
+            controllerNumber = number,
+            buttons = lastPadFrames.get(first + FRAME_BUTTONS),
+            leftTrigger = lastPadFrames.get(first + FRAME_LEFT_TRIGGER),
+            rightTrigger = lastPadFrames.get(first + FRAME_RIGHT_TRIGGER),
+            leftX = lastPadFrames.get(first + FRAME_LEFT_X),
+            leftY = lastPadFrames.get(first + FRAME_LEFT_Y),
+            rightX = lastPadFrames.get(first + FRAME_RIGHT_X),
+            rightY = lastPadFrames.get(first + FRAME_RIGHT_Y),
         )
     }
 
@@ -352,18 +422,11 @@ class MoonlightConnection(
     private val motionGate = MoonlightMotionGate()
     private val touchDiffers = java.util.concurrent.ConcurrentHashMap<String, MoonlightTouchDiffer>()
 
-    private data class PadFrame(
-        val buttons: Int,
-        val leftTrigger: Int,
-        val rightTrigger: Int,
-        val leftX: Int,
-        val leftY: Int,
-        val rightX: Int,
-        val rightY: Int,
-    )
-
-    private val lastPadFrames = java.util.concurrent.ConcurrentHashMap<Int, PadFrame>()
-    private val touchClickByNumber = java.util.concurrent.ConcurrentHashMap<Int, Boolean>()
+    // Each pad's last frame and click, indexed by controller number. Each field is set and read
+    // on its own, so a replay racing another thread's frame for that pad can mix the two frames:
+    // the same one-frame staleness that replay already had, and the next frame supersedes it.
+    private val lastPadFrames = AtomicIntegerArray(MAX_PADS * FRAME_FIELDS)
+    private val touchClickByNumber = AtomicIntegerArray(MAX_PADS)
 
     override fun motionWanted(slotId: String): Boolean {
         val pad = padFor(slotId) ?: return false
@@ -435,13 +498,10 @@ class MoonlightConnection(
         val live = session ?: return
         val pad = padFor(slotId) ?: return
         // The pad-surface click has no packet of its own: it is BTN_TOUCHPAD in
-        // the pad report. On an edge, replay the last cached frame with the bit
-        // merged so a click with no stick/button change still reaches the host.
-        if (touchClickByNumber[pad.number] != report.buttonPressed) {
-            touchClickByNumber[pad.number] = report.buttonPressed
-            val f = lastPadFrames[pad.number] ?: PadFrame(0, 0, 0, 0, 0, 0, 0)
-            sendControllerState(pad.number, f.buttons, f.leftTrigger, f.rightTrigger, f.leftX, f.leftY, f.rightX, f.rightY)
-        }
+        // the pad report, so an edge replays the pad's last frame with the bit merged.
+        val click = if (report.buttonPressed) CLICK_DOWN else CLICK_UP
+        val isAClickEdge = touchClickByNumber.getAndSet(pad.number, click) != click
+        if (isAClickEdge) replayLastFrame(pad.number)
         val differ = touchDiffers.getOrPut(slotId) { MoonlightTouchDiffer() }
         val events =
             differ.diff(
@@ -491,8 +551,8 @@ class MoonlightConnection(
     private fun teardown() {
         motionGate.clearAll()
         touchDiffers.clear()
-        lastPadFrames.clear()
-        touchClickByNumber.clear()
+        for (number in 0 until MAX_PADS) forgetFrame(number)
+        for (number in 0 until MAX_PADS) touchClickByNumber.set(number, CLICK_UNKNOWN)
         pumpJob?.cancel()
         pumpJob = null
         pingJob?.cancel()
