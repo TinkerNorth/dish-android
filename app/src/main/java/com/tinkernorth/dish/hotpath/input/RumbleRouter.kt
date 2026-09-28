@@ -9,6 +9,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.view.InputDevice
+import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.annotation.RequiresApi
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnection
@@ -43,28 +44,38 @@ sealed interface RumbleTarget {
 
 @Singleton
 class RumbleRouter
-    @Inject
-    constructor(
-        @ApplicationContext context: Context,
+    internal constructor(
+        context: Context,
         private val satellite: SatelliteConnectionManager,
         private val native: PhysicalInputNative,
         private val scope: CoroutineScope,
         private val rumbleEnabled: RumbleEnabledStore,
         private val feedbackActivity: FeedbackActivityStore,
+        private val sdkInt: Int,
     ) {
+        @Inject
+        constructor(
+            @ApplicationContext context: Context,
+            satellite: SatelliteConnectionManager,
+            native: PhysicalInputNative,
+            scope: CoroutineScope,
+            rumbleEnabled: RumbleEnabledStore,
+            feedbackActivity: FeedbackActivityStore,
+        ) : this(context, satellite, native, scope, rumbleEnabled, feedbackActivity, Build.VERSION.SDK_INT)
+
         // A claimed USB pad has no oneshot duration, so a dropped session could leave it buzzing;
         // each rumble schedules a stop at the clamped duration, cancelled by the next rumble.
         private val usbStopJobs = ConcurrentHashMap<Int, Job>()
 
         private val phoneVibratorManager: VibratorManager? =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (atLeast(Build.VERSION_CODES.S)) {
                 context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager?
             } else {
                 null
             }
 
         private val phoneVibrator: Vibrator? =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (atLeast(Build.VERSION_CODES.S)) {
                 null
             } else {
                 context.getSystemService(Vibrator::class.java)
@@ -158,14 +169,14 @@ class RumbleRouter
         ) {
             when (target) {
                 RumbleTarget.Phone ->
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    if (atLeast(Build.VERSION_CODES.S)) {
                         phoneVibratorManager?.let { vibrateManager(it, strongMagnitude, weakMagnitude, durationMs) }
                     } else {
                         phoneVibrator?.let { vibrateSingle(it, strongMagnitude, weakMagnitude, durationMs) }
                     }
                 is RumbleTarget.Framework -> {
                     val dev = InputDevice.getDevice(target.deviceId) ?: return
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    if (atLeast(Build.VERSION_CODES.S)) {
                         vibrateManager(dev.vibratorManager, strongMagnitude, weakMagnitude, durationMs)
                     } else {
                         dev.legacyVibrator()?.let { vibrateSingle(it, strongMagnitude, weakMagnitude, durationMs) }
@@ -196,7 +207,7 @@ class RumbleRouter
         }
 
         private fun cancelPhone() {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (atLeast(Build.VERSION_CODES.S)) {
                 phoneVibratorManager?.cancel()
             } else {
                 phoneVibrator?.cancel()
@@ -205,7 +216,7 @@ class RumbleRouter
 
         private fun cancelFramework(deviceId: Int) {
             val dev = InputDevice.getDevice(deviceId) ?: return
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (atLeast(Build.VERSION_CODES.S)) {
                 dev.vibratorManager.cancel()
             } else {
                 dev.legacyVibrator()?.cancel()
@@ -251,7 +262,7 @@ class RumbleRouter
             if (!vibrator.hasVibrator()) return
             val amp = rumbleMagnitudeTo255(maxOf(strongMagnitude, weakMagnitude))
             if (amp == 0) return
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (atLeast(Build.VERSION_CODES.O)) {
                 vibrator.vibrate(VibrationEffect.createOneShot(durationMs, amp))
             } else {
                 vibrateLegacy(vibrator, durationMs)
@@ -269,6 +280,11 @@ class RumbleRouter
         ) {
             vibrator.vibrate(durationMs)
         }
+
+        // Every vibrator API branch reads the release through here: lint takes it as the gate,
+        // and a test can build the router for any release.
+        @ChecksSdkIntAtLeast(parameter = 0)
+        private fun atLeast(api: Int): Boolean = sdkInt >= api
     }
 
 // Flat, immutable view of one connection captured once per dispatch so resolveRumble stays pure.

@@ -3,7 +3,11 @@
 package com.tinkernorth.dish.hotpath.input
 
 import android.content.Context
+import android.os.Build
+import android.os.CombinedVibration
+import android.os.VibrationEffect
 import android.os.Vibrator
+import android.os.VibratorManager
 import android.view.InputDevice
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnection
@@ -195,11 +199,13 @@ class RumbleRouterTest {
         controllerIndex: Int,
         rumbleOn: Boolean,
         scope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined),
+        sdkInt: Int = Build.VERSION_CODES.N,
     ) {
         val native = mockk<PhysicalInputNative>(relaxed = true)
 
-        // SDK_INT is 0 under the JVM stub, so the router takes the legacy single-vibrator phone path.
+        // The phone's single vibrator below 31 and its vibrator manager from 31.
         val vibrator = mockk<Vibrator>(relaxed = true) { every { hasVibrator() } returns true }
+        val vibratorManager = mockk<VibratorManager>(relaxed = true) { every { vibratorIds } returns intArrayOf(PHONE_MOTOR) }
         val rumbleEnabled =
             mockk<RumbleEnabledStore> { every { isEnabled(any()) } returns rumbleOn }
         val feedbackActivity = FeedbackActivityStore()
@@ -207,6 +213,7 @@ class RumbleRouterTest {
         private val context =
             mockk<Context>(relaxed = true) {
                 every { getSystemService(Vibrator::class.java) } returns vibrator
+                every { getSystemService(Context.VIBRATOR_MANAGER_SERVICE) } returns vibratorManager
             }
         private val connection =
             mockk<SatelliteConnection> {
@@ -230,6 +237,7 @@ class RumbleRouterTest {
                 scope = scope,
                 rumbleEnabled = rumbleEnabled,
                 feedbackActivity = feedbackActivity,
+                sdkInt = sdkInt,
             )
     }
 
@@ -251,7 +259,7 @@ class RumbleRouterTest {
         h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 500, durationMs = 100)
 
         verify { h.rumbleEnabled.isEnabled(VIRTUAL_SLOT_ID) }
-        verifyLegacyVibrate(h.vibrator)
+        verifyLegacyVibrate(h.vibrator, calls = 1)
     }
 
     @Test
@@ -295,7 +303,7 @@ class RumbleRouterTest {
         h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 0, weakMagnitude = 0, durationMs = 100)
 
         verify { h.vibrator.cancel() }
-        verifyNoLegacyVibrate(h.vibrator)
+        verifyLegacyVibrate(h.vibrator, calls = 0)
     }
 
     @Test
@@ -364,7 +372,7 @@ class RumbleRouterTest {
 
         h.router.testBuzz(VIRTUAL_SLOT_ID, strongMagnitude = 500, weakMagnitude = 500, durationMs = 100)
 
-        verifyLegacyVibrate(h.vibrator)
+        verifyLegacyVibrate(h.vibrator, calls = 1)
         verify(exactly = 0) { h.rumbleEnabled.isEnabled(any()) }
     }
 
@@ -384,7 +392,7 @@ class RumbleRouterTest {
 
         h.router.testBuzz(VIRTUAL_SLOT_ID, strongMagnitude = 0, weakMagnitude = 0, durationMs = 100)
 
-        verifyNoLegacyVibrate(h.vibrator)
+        verifyLegacyVibrate(h.vibrator, calls = 0)
     }
 
     @Test
@@ -393,7 +401,7 @@ class RumbleRouterTest {
 
         h.router.testBuzz(VIRTUAL_SLOT_ID, strongMagnitude = 500, weakMagnitude = 500, durationMs = 5_000)
 
-        verifyLegacyVibrateFor(h.vibrator, RUMBLE_MAX_MS.toLong())
+        verifyLegacyVibrate(h.vibrator, calls = 1, durationMs = RUMBLE_MAX_MS.toLong())
     }
 
     @Test
@@ -413,7 +421,7 @@ class RumbleRouterTest {
 
         h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 500, durationMs = 100)
 
-        verifyNoLegacyVibrate(h.vibrator)
+        verifyLegacyVibrate(h.vibrator, calls = 0)
     }
 
     // ---- a framework pad's own motor ----
@@ -427,7 +435,7 @@ class RumbleRouterTest {
             h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 250, durationMs = 100)
         }
 
-        verifyLegacyVibrateFor(motor, 100L)
+        verifyLegacyVibrate(motor, calls = 1, durationMs = 100L)
         verify { h.vibrator wasNot Called }
     }
 
@@ -470,29 +478,143 @@ class RumbleRouterTest {
         }
     }
 
-    // Marker: InputDevice.getVibrator is the only vibrator a pad exposes below 31 (see
-    // InputDeviceVibrators.kt), and the JVM stub reports SDK 0, so the router reads exactly it.
-    @Suppress("DEPRECATION")
-    private fun padWithMotor(motor: Vibrator): InputDevice = mockk { every { vibrator } returns motor }
+    // ---- which vibrator API each release takes ----
 
-    // Marker: under the JVM stub SDK_INT is 0, so the router takes its API 24/25 branch, and the
-    // only thing that branch can call is the deprecated Vibrator.vibrate(long) (RumbleRouter has
-    // the reason). Verifying that branch means naming that overload; it is named here, once.
-    @Suppress("DEPRECATION")
-    private fun verifyLegacyVibrate(vibrator: Vibrator) {
-        verify { vibrator.vibrate(any<Long>()) }
+    @Test
+    fun `on API 25 the phone takes the legacy vibrate`() {
+        val h = DispatchHarness(slotId = VIRTUAL_SLOT_ID, controllerIndex = 0, rumbleOn = true, sdkInt = Build.VERSION_CODES.N_MR1)
+
+        withOneShotEffects {
+            h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = FULL, weakMagnitude = HALF, durationMs = 100)
+        }
+
+        verifyLegacyVibrate(h.vibrator, calls = 1, durationMs = 100L)
+        verify(exactly = 0) { h.vibrator.vibrate(any<VibrationEffect>()) }
     }
 
-    @Suppress("DEPRECATION")
-    private fun verifyLegacyVibrateFor(
-        vibrator: Vibrator,
-        durationMs: Long,
-    ) {
-        verify { vibrator.vibrate(durationMs) }
+    @Test
+    fun `from API 26 the phone vibrates a one-shot effect at the louder motor's amplitude`() {
+        val h = DispatchHarness(slotId = VIRTUAL_SLOT_ID, controllerIndex = 0, rumbleOn = true, sdkInt = Build.VERSION_CODES.O)
+
+        withOneShotEffects {
+            h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = FULL, weakMagnitude = HALF, durationMs = 100)
+        }
+
+        verify { h.vibrator.vibrate(strongEffect) }
+        verifyLegacyVibrate(h.vibrator, calls = 0)
     }
 
-    @Suppress("DEPRECATION")
-    private fun verifyNoLegacyVibrate(vibrator: Vibrator) {
-        verify(exactly = 0) { vibrator.vibrate(any<Long>()) }
+    @Test
+    fun `through API 30 the phone keeps its single vibrator`() {
+        val h = DispatchHarness(slotId = VIRTUAL_SLOT_ID, controllerIndex = 0, rumbleOn = true, sdkInt = Build.VERSION_CODES.R)
+
+        withOneShotEffects {
+            h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = FULL, weakMagnitude = HALF, durationMs = 100)
+        }
+
+        verify { h.vibrator.vibrate(strongEffect) }
+        verify { h.vibratorManager wasNot Called }
+    }
+
+    @Test
+    fun `from API 31 the phone drives its vibrator manager`() {
+        val h = DispatchHarness(slotId = VIRTUAL_SLOT_ID, controllerIndex = 0, rumbleOn = true, sdkInt = Build.VERSION_CODES.S)
+
+        withOneShotEffects {
+            h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = FULL, weakMagnitude = HALF, durationMs = 100)
+        }
+
+        verify { combination.addVibrator(PHONE_MOTOR, strongEffect) }
+        verify { h.vibratorManager.vibrate(combined) }
+        verify { h.vibrator wasNot Called }
+    }
+
+    @Test
+    fun `from API 31 a phone stop cancels the vibrator manager`() {
+        val h = DispatchHarness(slotId = VIRTUAL_SLOT_ID, controllerIndex = 0, rumbleOn = true, sdkInt = Build.VERSION_CODES.S)
+
+        h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 0, weakMagnitude = 0, durationMs = 100)
+
+        verify { h.vibratorManager.cancel() }
+        verify { h.vibrator wasNot Called }
+    }
+
+    @Test
+    fun `through API 30 a framework pad rumbles its own legacy vibrator with an effect`() {
+        val h = DispatchHarness(slotId = "1234", controllerIndex = 0, rumbleOn = true, sdkInt = Build.VERSION_CODES.R)
+        val motor = mockk<Vibrator>(relaxed = true) { every { hasVibrator() } returns true }
+        val pad = padWithMotor(motor)
+
+        withOneShotEffects {
+            withListedDevice(1234, pad) {
+                h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = FULL, weakMagnitude = HALF, durationMs = 100)
+            }
+        }
+
+        verify { motor.vibrate(strongEffect) }
+        verify(exactly = 0) { pad.vibratorManager }
+    }
+
+    @Test
+    fun `from API 31 a framework pad splits the motors across its own vibrator manager`() {
+        val h = DispatchHarness(slotId = "1234", controllerIndex = 0, rumbleOn = true, sdkInt = Build.VERSION_CODES.S)
+        val padManager = mockk<VibratorManager>(relaxed = true) { every { vibratorIds } returns intArrayOf(PAD_STRONG, PAD_WEAK) }
+        val pad = mockk<InputDevice> { every { vibratorManager } returns padManager }
+
+        withOneShotEffects {
+            withListedDevice(1234, pad) {
+                h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = FULL, weakMagnitude = HALF, durationMs = 100)
+            }
+        }
+
+        verify { combination.addVibrator(PAD_STRONG, strongEffect) }
+        verify { combination.addVibrator(PAD_WEAK, weakEffect) }
+        verify { padManager.vibrate(combined) }
+    }
+
+    @Test
+    fun `from API 31 a framework stop cancels the pad's vibrator manager`() {
+        val h = DispatchHarness(slotId = "1234", controllerIndex = 0, rumbleOn = true, sdkInt = Build.VERSION_CODES.S)
+        val padManager = mockk<VibratorManager>(relaxed = true)
+        val pad = mockk<InputDevice> { every { vibratorManager } returns padManager }
+
+        withListedDevice(1234, pad) {
+            h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 0, weakMagnitude = 0, durationMs = 100)
+        }
+
+        verify { padManager.cancel() }
+    }
+
+    private val strongEffect = mockk<VibrationEffect>()
+    private val weakEffect = mockk<VibrationEffect>()
+    private val combined = mockk<CombinedVibration>()
+    private val combination =
+        mockk<CombinedVibration.ParallelCombination> {
+            every { addVibrator(any(), any()) } returns this
+            every { combine() } returns combined
+        }
+
+    // The platform's effect factories are stubs on the JVM; these hand back effects a test can
+    // name, one per amplitude, at the 100 ms every case here asks for.
+    private inline fun withOneShotEffects(block: () -> Unit) {
+        mockkStatic(VibrationEffect::class, CombinedVibration::class)
+        try {
+            every { VibrationEffect.createOneShot(100L, rumbleMagnitudeTo255(FULL)) } returns strongEffect
+            every { VibrationEffect.createOneShot(100L, rumbleMagnitudeTo255(HALF)) } returns weakEffect
+            every { CombinedVibration.startParallel() } returns combination
+            block()
+        } finally {
+            unmockkStatic(VibrationEffect::class, CombinedVibration::class)
+        }
+    }
+
+    private fun padWithMotor(motor: Vibrator): InputDevice = mockk<InputDevice>().also { stubLegacyVibrator(it, motor) }
+
+    private companion object {
+        const val PHONE_MOTOR = 1
+        const val PAD_STRONG = 10
+        const val PAD_WEAK = 11
+        const val FULL = 65_535
+        const val HALF = 32_768
     }
 }
