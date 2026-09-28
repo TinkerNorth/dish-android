@@ -58,7 +58,8 @@ a deprecated framework call that is the only one on the older Android
 versions the app still supports (the fix is a minSdk bump), a protocol the
 app does not own (AES-ECB in Moonlight pairing), a trust manager that no
 platform-managed form can replace (`TofuTrustManager`), a parameter list
-that a native upcall's JNI signature fixes, or a lint layout check whose
+that a JNI signature fixes (a native upcall's, or an `external fun` on the
+input hot path whose flat primitive arguments keep each event allocation-free), or a lint layout check whose
 suggested form cannot do what the layout does (`UseCompoundDrawables` where
 a compound drawable could neither top-align nor rotate its glyph). There the
 suppression sits on the one function, class or view that needs it, under a
