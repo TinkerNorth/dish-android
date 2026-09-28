@@ -134,8 +134,10 @@ class MoonlightConnection(
                 _pads.value = _pads.value - slotId
                 _pads.value.size
             }
-        released?.let { pad -> forgetHostPadState(slotId, pad.number) }
-        withdraw()
+        released?.let { pad ->
+            forgetHostPadState(slotId, pad.number)
+            unplug(pad.number)
+        }
         return remaining
     }
 
@@ -267,18 +269,15 @@ class MoonlightConnection(
         )
     }
 
-    // Clearing the pad's bit from the active mask is how the host is told to
-    // unplug it; the number is only free once that has gone out.
-    private fun withdraw() {
+    // The CONTROLLER_MULTI that names [number] with its bit cleared from the active mask: Wolf
+    // unplugs that pad on it and on nothing else (a packet naming another pad leaves this one
+    // plugged in), and the number is only free once it has gone out. Called once [number] has
+    // left the table, so the active mask no longer carries it.
+    private fun unplug(number: Int) {
         val live = session ?: return
-        val mask = activeMask()
-        val survivor =
-            _pads.value.values
-                .firstOrNull()
-                ?.number ?: 0
         live.sendControllerState(
-            controllerNumber = survivor,
-            activeMask = mask,
+            controllerNumber = number,
+            activeMask = activeMask(),
             buttons = 0,
             leftTrigger = 0,
             rightTrigger = 0,

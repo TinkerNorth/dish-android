@@ -169,8 +169,9 @@ class MoonlightSessionLifecycleTest {
             assertEquals(1, connection().padCount)
             assertNotNull(connection().padFor("a"))
             assertNull(connection().padFor("b"))
-            // Bit 1 cleared, bit 0 still set: the pad that stayed is still plugged in.
-            verify { session.sendControllerState(0, 0b01, 0, 0, 0, 0, 0, 0, 0) }
+            // The unplug names pad 1, the one that left, with its bit cleared (Wolf drops a pad
+            // only on a packet naming its own number); bit 0 still set keeps pad 0 plugged in.
+            verify { session.sendControllerState(1, 0b01, 0, 0, 0, 0, 0, 0, 0) }
         }
 
     // B8. A later binding on a live host is a controller arrival and nothing else. An

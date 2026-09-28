@@ -100,6 +100,51 @@ class MoonlightConnectionReplugTest {
         assertFalse(conn.motionWanted("a"))
     }
 
+    // Wolf removes a pad only on the CONTROLLER_MULTI that names the pad's own number with its
+    // bit cleared; one naming another pad leaves the released pad plugged in on the host.
+    @Test
+    fun `releasing a pad unplugs its own number while the others stay`() {
+        val conn = connection()
+        conn.take("a")
+        conn.take("b")
+        conn.markLive(session, appId = null, appName = null)
+        clearMocks(session, answers = false)
+
+        conn.releasePad("b")
+
+        verify(exactly = 1) { session.sendControllerState(1, 0b0001, 0, 0, 0, 0, 0, 0, 0) }
+        verify(exactly = 1) { session.sendControllerState(any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+    }
+
+    // With no pad left there is no survivor to name; pad 0's number would make Wolf plug a
+    // default pad in for it.
+    @Test
+    fun `releasing the last pad unplugs its own number`() {
+        val conn = connection()
+        conn.take("a")
+        conn.take("b")
+        conn.markLive(session, appId = null, appName = null)
+        conn.releasePad("a")
+        clearMocks(session, answers = false)
+
+        conn.releasePad("b")
+
+        verify(exactly = 1) { session.sendControllerState(1, 0, 0, 0, 0, 0, 0, 0, 0) }
+        verify(exactly = 1) { session.sendControllerState(any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `releasing a slot that holds no pad sends nothing`() {
+        val conn = connection()
+        conn.take("a")
+        conn.markLive(session, appId = null, appName = null)
+        clearMocks(session, answers = false)
+
+        conn.releasePad("nobody")
+
+        verify(exactly = 0) { session.sendControllerState(any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+    }
+
     private companion object {
         const val XBOX_CAPS = 0x03
         const val XBOX_BUTTONS = 0xFFFF
