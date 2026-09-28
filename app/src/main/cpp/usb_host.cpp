@@ -405,12 +405,12 @@ void fetchHidLayout(int fd, int interfaceNumber, usbhid::HidLayout& out) {
     if (interfaceNumber < 0) return;
     uint8_t desc[512];
     struct usbdevfs_ctrltransfer ct = {};
-    ct.bRequestType = 0x81;            // IN | Standard | Interface
-    ct.bRequest = 0x06;                // GET_DESCRIPTOR
-    ct.wValue = (uint16_t)(0x22 << 8); // HID report descriptor type, index 0
+    ct.bRequestType = usbparsers::USB_REQUEST_TYPE_IN_STANDARD_INTERFACE;
+    ct.bRequest = usbparsers::USB_REQUEST_GET_DESCRIPTOR;
+    ct.wValue = (uint16_t)(usbparsers::HID_DESCRIPTOR_TYPE_REPORT << 8); // index 0
     ct.wIndex = (uint16_t)interfaceNumber;
     ct.wLength = sizeof(desc);
-    ct.timeout = 250;
+    ct.timeout = usbparsers::USB_CONTROL_TIMEOUT_MS;
     ct.data = desc;
     int n = ioctl(fd, USBDEVFS_CONTROL, &ct);
     if (n <= 0) return;
@@ -424,12 +424,12 @@ void fetchPsCalibration(int fd, int interfaceNumber, uint8_t reportId,
     if (interfaceNumber < 0) return;
     uint8_t buf[64];
     struct usbdevfs_ctrltransfer ct = {};
-    ct.bRequestType = 0xA1;                         // IN | Class | Interface
-    ct.bRequest = 0x01;                             // GET_REPORT
-    ct.wValue = (uint16_t)((0x03 << 8) | reportId); // Feature report
+    ct.bRequestType = usbparsers::USB_REQUEST_TYPE_IN_CLASS_INTERFACE;
+    ct.bRequest = usbparsers::USB_REQUEST_GET_REPORT;
+    ct.wValue = (uint16_t)((usbparsers::HID_REPORT_TYPE_FEATURE << 8) | reportId);
     ct.wIndex = (uint16_t)interfaceNumber;
     ct.wLength = sizeof(buf);
-    ct.timeout = 250;
+    ct.timeout = usbparsers::USB_CONTROL_TIMEOUT_MS;
     ct.data = buf;
     int n = ioctl(fd, USBDEVFS_CONTROL, &ct);
     if (n < 35) return;
