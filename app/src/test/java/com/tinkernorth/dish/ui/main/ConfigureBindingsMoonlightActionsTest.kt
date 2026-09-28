@@ -40,6 +40,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -459,4 +460,80 @@ class ConfigureBindingsMoonlightActionsTest {
 
             assertEquals(MoonlightSessionUi.Unreachable, vm.ui.value.moonlightSession)
         }
+
+    // The card's memory (the pairing dialog, the last refusal) rides on a probe's answer, never
+    // on the two placeholders the screen writes itself: Checking while it asks again, and
+    // Unreachable when no host is behind the id any more.
+
+    // Try again on a forgotten host re-renders the card; were the remembered failure drawn over
+    // Unreachable, the button would be Try again once more, and it would loop forever.
+    @Test
+    fun `try again after a failed pairing on a host that has gone lands on unreachable`() =
+        runTest(dispatcher) {
+            openOn(MoonlightTrustState.NOT_PAIRED)
+            events.emit(MoonlightConnectionEvent.PairingFailed(host, "timeout"))
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(MoonlightSessionUi.PairFailed, vm.ui.value.moonlightSession)
+            every { moonlight.rememberedHost(host.id) } returns null
+
+            vm.onMoonlightAction(MoonlightAction.TRY_AGAIN)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(MoonlightSessionUi.Unreachable, vm.ui.value.moonlightSession)
+            coVerify(exactly = 0) { moonlight.pairHost(any()) }
+        }
+
+    // Only a probe's answer carries the memory, so an event cannot bring the loop back either.
+    @Test
+    fun `a pairing event does not cover a host that has gone`() =
+        runTest(dispatcher) {
+            every { moonlight.rememberedHost(host.id) } returns null
+            openOn(MoonlightTrustState.PAIRED)
+
+            events.emit(MoonlightConnectionEvent.PairingFailed(host, "timeout"))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(MoonlightSessionUi.Unreachable, vm.ui.value.moonlightSession)
+        }
+
+    @Test
+    fun `a failed pairing waits behind checking while the host is asked again, then returns`() =
+        runTest(dispatcher) {
+            openOn(MoonlightTrustState.NOT_PAIRED)
+            events.emit(MoonlightConnectionEvent.PairingFailed(host, "timeout"))
+            dispatcher.scheduler.advanceUntilIdle()
+            val answer = holdTheNextProbe()
+
+            vm.onMoonlightAction(MoonlightAction.TRY_AGAIN)
+            dispatcher.scheduler.runCurrent()
+            assertEquals(MoonlightSessionUi.Checking, vm.ui.value.moonlightSession)
+
+            answer.complete(MoonlightProbe(trust = MoonlightTrustState.NOT_PAIRED))
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(MoonlightSessionUi.PairFailed, vm.ui.value.moonlightSession)
+        }
+
+    @Test
+    fun `a remembered refusal waits behind checking while the host is asked again, then returns`() =
+        runTest(dispatcher) {
+            openOn(MoonlightTrustState.PAIRED)
+            events.emit(MoonlightConnectionEvent.SetupFailed(host))
+            dispatcher.scheduler.advanceUntilIdle()
+            val answer = holdTheNextProbe()
+
+            vm.refreshMoonlight()
+            dispatcher.scheduler.runCurrent()
+            assertEquals(MoonlightSessionUi.Checking, vm.ui.value.moonlightSession)
+
+            answer.complete(MoonlightProbe(trust = MoonlightTrustState.PAIRED))
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(MoonlightSessionUi.SetupFailed, vm.ui.value.moonlightSession)
+        }
+
+    // The next probe suspends until the test answers it, so the placeholder can be read.
+    private fun holdTheNextProbe(): CompletableDeferred<MoonlightProbe> {
+        val answer = CompletableDeferred<MoonlightProbe>()
+        coEvery { moonlight.probe(any()) } coAnswers { answer.await() }
+        return answer
+    }
 }

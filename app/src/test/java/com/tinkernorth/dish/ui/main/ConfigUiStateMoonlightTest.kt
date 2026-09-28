@@ -132,4 +132,56 @@ class ConfigUiStateMoonlightTest {
     fun `a Moonlight host with nothing probed yet renders the checking state, not nothing`() {
         assertEquals(MoonlightSessionUi.Checking, state(moonlight = null).moonlightSession)
     }
+
+    // The card's memory rides on a probe's answer and never on the screen's own placeholders.
+    private fun remembering(
+        moonlight: MoonlightSessionInput,
+        answered: Boolean,
+        pairing: MoonlightPairingUi? = null,
+        failure: MoonlightFailure? = null,
+    ) = state(moonlight = moonlight).copy(
+        moonlightAnswered = answered,
+        moonlightPairing = pairing,
+        moonlightFailure = failure,
+    )
+
+    // Picking another host clears the answer but not the flag; nothing is an answer until a probe gives one.
+    @Test
+    fun `a host with nothing probed yet is not covered by a remembered pin`() {
+        val cleared = state(moonlight = null).copy(moonlightAnswered = true, moonlightPairing = MoonlightPairingUi.Pin("1234"))
+        assertEquals(MoonlightSessionUi.Checking, cleared.moonlightSession)
+    }
+
+    @Test
+    fun `the unreachable placeholder is not covered by a remembered failed pairing`() {
+        val unreachable = MoonlightSessionInput(trust = MoonlightTrustState.UNREACHABLE)
+        val shown = remembering(unreachable, answered = false, pairing = MoonlightPairingUi.Failed)
+        assertEquals(MoonlightSessionUi.Unreachable, shown.moonlightSession)
+    }
+
+    @Test
+    fun `the checking placeholder is not covered by a remembered pin`() {
+        val shown = remembering(MoonlightSessionInput(), answered = false, pairing = MoonlightPairingUi.Pin("1234"))
+        assertEquals(MoonlightSessionUi.Checking, shown.moonlightSession)
+    }
+
+    @Test
+    fun `a probe's answer carries the remembered pairing`() {
+        val notPaired = MoonlightSessionInput(trust = MoonlightTrustState.NOT_PAIRED)
+        val shown = remembering(notPaired, answered = true, pairing = MoonlightPairingUi.Failed)
+        assertEquals(MoonlightSessionUi.PairFailed, shown.moonlightSession)
+    }
+
+    @Test
+    fun `a probe's answer carries the remembered refusal`() {
+        val shown = remembering(paired(), answered = true, failure = MoonlightFailure.SetupFailed)
+        assertEquals(MoonlightSessionUi.SetupFailed, shown.moonlightSession)
+    }
+
+    @Test
+    fun `a full host in the probe's answer outranks the remembered refusal`() {
+        val full = paired(failure = MoonlightFailure.HostFull)
+        val shown = remembering(full, answered = true, failure = MoonlightFailure.SetupFailed)
+        assertEquals(MoonlightSessionUi.HostFull, shown.moonlightSession)
+    }
 }

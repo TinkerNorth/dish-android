@@ -173,6 +173,9 @@ data class ConfigUiState(
     val typeFetchFailed: Boolean = false,
     // What the chosen Moonlight host last told us. Null for every other kind of destination.
     val moonlight: MoonlightSessionInput? = null,
+    // Whether `moonlight`, when set, is a probe's answer rather than a placeholder the screen wrote itself
+    // (Checking while it asks again, Unreachable when no host is behind the id).
+    val moonlightAnswered: Boolean = false,
     // Per-connection protocol verdict (satellite hosts only), for the update chips.
     val hostCompat: Map<String, DishProtocolCompat> = emptyMap(),
     // RECORD_AUDIO, re-read on every resume: the OS says nothing when a grant is revoked.
@@ -211,19 +214,22 @@ data class ConfigUiState(
         }
 
     // Rendered by the Moonlight session section; every state it can be in is in MoonlightSessionUi.
-    // What the probe answered is merged with what the card remembers; a full host, re-derived by
-    // every probe, outranks the remembered refusal.
+    // What the card remembers rides only on a probe's answer: over a placeholder, a remembered
+    // failed pairing would hide Unreachable and offer a Try again that only re-renders it.
     val moonlightSession: MoonlightSessionUi?
         get() {
             if (!isMoonlightHost) return null
-            val probed = moonlight ?: MoonlightSessionInput()
-            val remembered =
-                probed.copy(
-                    pairing = probed.pairing ?: moonlightPairing,
-                    failure = probed.failure ?: moonlightFailure,
-                )
-            return moonlightSessionUi(remembered)
+            val shown = moonlight ?: return moonlightSessionUi(MoonlightSessionInput())
+            val input = if (moonlightAnswered) withCardMemory(shown) else shown
+            return moonlightSessionUi(input)
         }
+
+    // A full host, re-derived by every probe, outranks the remembered refusal.
+    private fun withCardMemory(answer: MoonlightSessionInput): MoonlightSessionInput =
+        answer.copy(
+            pairing = answer.pairing ?: moonlightPairing,
+            failure = answer.failure ?: moonlightFailure,
+        )
 
     private val moonlightBlocked: Boolean get() = moonlightSession?.blocksApply == true
 
@@ -494,14 +500,18 @@ class ConfigureBindingsViewModel
                 // spinner forever, which is the shape of every silent failure on this
                 // path. Unreachable is the honest word and it carries a Retry.
                 Log.w(TAG, "no Moonlight host behind $hostId; rendering it unreachable")
-                _ui.update { it.copy(moonlight = MoonlightSessionInput(trust = MoonlightTrustState.UNREACHABLE)) }
+                showMoonlightPlaceholder(MoonlightSessionInput(trust = MoonlightTrustState.UNREACHABLE))
                 return
             }
-            _ui.update { it.copy(moonlight = MoonlightSessionInput()) }
+            showMoonlightPlaceholder(MoonlightSessionInput())
             viewModelScope.launch {
                 val probe = moonlight.probe(host)
-                _ui.update { state -> state.copy(moonlight = moonlightInputFrom(probe, hostId)) }
+                _ui.update { state -> state.copy(moonlight = moonlightInputFrom(probe, hostId), moonlightAnswered = true) }
             }
+        }
+
+        private fun showMoonlightPlaceholder(placeholder: MoonlightSessionInput) {
+            _ui.update { it.copy(moonlight = placeholder, moonlightAnswered = false) }
         }
 
         private fun moonlightInputFrom(
