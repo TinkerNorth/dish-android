@@ -520,7 +520,8 @@ class MoonlightConnectionFrameTest {
         cycle.run()
         val allocatedBytes = fewestAllocatedBytesDuring(MEASURED_RUNS, cycle::run)
         assertEquals(((1 + MEASURED_RUNS) * SLOT_LOOKUPS_PER_CYCLE).toLong(), (lookups as LongSupplier).asLong)
-        assertTrue("$allocatedBytes bytes over $SLOT_LOOKUPS_PER_CYCLE lookups", allocatedBytes < SLOT_LOOKUPS_PER_CYCLE * BYTES_PER_CYCLE_BOUND)
+        val bound = SLOT_LOOKUPS_PER_CYCLE * BYTES_PER_CYCLE_BOUND
+        assertTrue("$allocatedBytes bytes over $SLOT_LOOKUPS_PER_CYCLE lookups", allocatedBytes < bound)
     }
 
     private companion object {
