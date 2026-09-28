@@ -57,6 +57,47 @@ class CapabilityTest {
     }
 
     @Test
+    fun `a host with every flag off still passes each host-wide feature and nothing else`() {
+        // The per-type surfaces pass the host layer so the type layer alone decides them: a host
+        // that crossed one out would hide a capable type's trigger effects or LEDs.
+        val bare =
+            HostFeatureSet(
+                hasCatalog = false,
+                mouseControl = false,
+                keyboardControl = false,
+                rumbleReturn = false,
+            ).toCapabilitySet()
+        val hostWide =
+            CapabilitySet.of(
+                Feature.GAMEPAD,
+                Feature.ANALOG_TRIGGERS,
+                Feature.MOTION,
+                Feature.TOUCHPAD,
+                Feature.BATTERY,
+                Feature.LIGHTBAR,
+                Feature.TRIGGER_EFFECTS,
+                Feature.PLAYER_LEDS,
+            )
+        assertEquals(hostWide, bare)
+    }
+
+    @Test
+    fun `a host with every flag on carries everything but the Moonlight-only trigger rumble`() {
+        val full =
+            HostFeatureSet(
+                hasCatalog = true,
+                mouseControl = true,
+                keyboardControl = true,
+                rumbleReturn = true,
+                controllerMic = true,
+                controllerSpeaker = true,
+                controllerHapticAudio = true,
+            ).toCapabilitySet()
+        val everythingButTriggerRumble = CapabilitySet(Feature.entries.toSet() - Feature.TRIGGER_RUMBLE)
+        assertEquals(everythingButTriggerRumble, full)
+    }
+
+    @Test
     fun `toCapabilitySet adds MOUSE when mouseControl is granted`() {
         val withMouse =
             HostFeatureSet(
