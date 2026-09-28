@@ -82,8 +82,13 @@ class ConnectionsCopyTest {
     }
 
     @Test
-    fun `a deadline already passed clamps to zero`() {
-        assertEquals(0, secondsLeft(untilMs = NOW_MS - 1L, nowMs = NOW_MS))
+    fun `a deadline a whole second or more past clamps to zero`() {
+        assertEquals(0, secondsLeft(untilMs = NOW_MS - ONE_SECOND_MS, nowMs = NOW_MS))
+    }
+
+    @Test
+    fun `a deadline reached this instant has no seconds left`() {
+        assertEquals(0, secondsLeft(untilMs = NOW_MS, nowMs = NOW_MS))
     }
 
     @Test
@@ -115,6 +120,7 @@ class ConnectionsCopyTest {
 
     private companion object {
         const val NOW_MS = 1_000_000L
+        const val ONE_SECOND_MS = 1_000L
         const val THIRTEEN_OH_SEVEN_UTC_MS = (13 * 3600 + 7 * 60) * 1000L
     }
 }
