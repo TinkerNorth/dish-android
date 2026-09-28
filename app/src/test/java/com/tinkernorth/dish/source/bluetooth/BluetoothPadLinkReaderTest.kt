@@ -7,11 +7,13 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.util.Log
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
+import io.mockk.verify
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -94,5 +96,16 @@ class BluetoothPadLinkReaderTest {
         every { adapter.bondedDevices } throws SecurityException("revoked")
 
         assertEquals(BluetoothLinkType.UNKNOWN, BluetoothPadLinkReader(context).linkType("DualSense"))
+    }
+
+    @Test
+    fun `a denied BLUETOOTH_CONNECT reads unknown without touching the bonded list`() {
+        mockkStatic(Context::checkBluetoothConnectPermission)
+        every { context.checkBluetoothConnectPermission(any()) } returns PackageManager.PERMISSION_DENIED
+        every { context.getSystemService(Context.BLUETOOTH_SERVICE) } returns manager
+        every { adapter.bondedDevices } returns setOf(bonded("DualSense", BluetoothDevice.DEVICE_TYPE_CLASSIC))
+
+        assertEquals(BluetoothLinkType.UNKNOWN, BluetoothPadLinkReader(context).linkType("DualSense"))
+        verify(exactly = 0) { adapter.bondedDevices }
     }
 }
