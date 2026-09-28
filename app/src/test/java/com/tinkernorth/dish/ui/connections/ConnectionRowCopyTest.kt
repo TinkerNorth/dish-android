@@ -38,10 +38,15 @@ class ConnectionRowCopyTest {
     }
 
     @Test
-    fun `every link state has exactly one primary action`() {
-        val actions = LinkState.entries.map { primaryActionFor(it) }
-        assertEquals(LinkState.entries.size, actions.size)
-        assertEquals(RowAction.entries.toSet(), actions.toSet())
+    fun `the action table names every link state`() {
+        assertEquals(LinkState.entries.toSet(), ACTION_BY_STATE.keys)
+    }
+
+    @Test
+    fun `every link state gets the primary action its table row names`() {
+        for ((state, action) in ACTION_BY_STATE) {
+            assertEquals("primary action for $state", action, primaryActionFor(state))
+        }
     }
 
     @Test
@@ -79,5 +84,18 @@ class ConnectionRowCopyTest {
                 boundSlotIds = List(controllerCount) { it.toString() },
             )
         return MoonlightRow.Known(summary = summary, trust = trust, controllerCount = controllerCount)
+    }
+
+    private companion object {
+        val ACTION_BY_STATE =
+            mapOf(
+                LinkState.Connected to RowAction.DISCONNECT,
+                LinkState.Unstable to RowAction.DISCONNECT,
+                LinkState.Connecting to RowAction.CONNECTING,
+                LinkState.Stale to RowAction.REPAIR,
+                LinkState.Saved to RowAction.CONNECT,
+                LinkState.Ready to RowAction.CONNECT,
+                LinkState.Found to RowAction.CONNECT,
+            )
     }
 }
