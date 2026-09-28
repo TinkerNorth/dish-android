@@ -10,7 +10,7 @@ import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
 import com.tinkernorth.dish.core.net.moonlight.MoonlightReferenceServer
 import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
-import com.tinkernorth.dish.core.net.moonlight.ThrowawayIdentity
+import com.tinkernorth.dish.core.net.moonlight.throwawayIdentity
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -303,7 +303,7 @@ class MoonlightPairFlowTest {
 
         // Minted once for the whole class: RSA-2048 keygen is the slowest thing here and
         // JUnit builds a fresh test instance per method.
-        val CLIENT: MoonlightIdentity = ThrowawayIdentity.named("dish-pair-flow-client")
-        val HOST: MoonlightIdentity = ThrowawayIdentity.named("dish-pair-flow-host")
+        val CLIENT: MoonlightIdentity = throwawayIdentity("dish-pair-flow-client")
+        val HOST: MoonlightIdentity = throwawayIdentity("dish-pair-flow-host")
     }
 }

@@ -4,7 +4,8 @@
 package com.tinkernorth.dish.source.connection.moonlight
 
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
-import com.tinkernorth.dish.core.net.moonlight.ThrowawayIdentity
+import com.tinkernorth.dish.core.net.moonlight.identityOf
+import com.tinkernorth.dish.core.net.moonlight.throwawayCertificate
 import com.tinkernorth.dish.repository.SatellitePinRepository
 import com.tinkernorth.dish.repository.sha256FingerprintHex
 import io.mockk.every
@@ -43,11 +44,11 @@ import javax.net.ssl.X509TrustManager
  * one to resume.
  */
 class MoonlightHttpGatewayTest {
-    private val clientHeld = ThrowawayIdentity.heldCertificate("dish-gateway-test-client")
-    private val hostHeld = ThrowawayIdentity.heldCertificate("Sunshine Gamestream Host")
-    private val impostorHeld = ThrowawayIdentity.heldCertificate("Sunshine Gamestream Host")
+    private val clientHeld = throwawayCertificate("dish-gateway-test-client")
+    private val hostHeld = throwawayCertificate("Sunshine Gamestream Host")
+    private val impostorHeld = throwawayCertificate("Sunshine Gamestream Host")
 
-    private val identity: MoonlightIdentity = ThrowawayIdentity.of(clientHeld)
+    private val identity: MoonlightIdentity = identityOf(clientHeld)
 
     private val pinned = mutableMapOf<String, String>()
     private val pins =

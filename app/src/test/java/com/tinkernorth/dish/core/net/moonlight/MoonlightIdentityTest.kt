@@ -12,7 +12,7 @@ import org.junit.Test
 import java.security.cert.CertificateException
 
 class MoonlightIdentityTest {
-    private val held = ThrowawayIdentity.heldCertificate("dish-identity-test")
+    private val held = throwawayCertificate("dish-identity-test")
     private val pem = held.certificatePem()
 
     @Test

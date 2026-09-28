@@ -146,8 +146,5 @@ class MoonlightPairingTest {
         // method and RSA-2048 keygen is the slowest thing in this file.
         val CLIENT = throwawayIdentity("dish-pairing-test-client")
         val SERVER = throwawayIdentity("dish-pairing-test-server")
-
-        /** A disposable self-signed identity that lives only for this test run. */
-        fun throwawayIdentity(commonName: String): MoonlightIdentity = ThrowawayIdentity.named(commonName)
     }
 }
