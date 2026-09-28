@@ -284,7 +284,7 @@ class MoonlightControlSession(
     private fun sendControlPlaintextLocked(plaintext: ByteArray) {
         if (state != State.CONNECTED) return
         // Route every outbound packet through the sealer so the whole control
-        // stream shares one monotonic seq (no GCM IV reuse).
+        // stream shares one seq, the one the host derives each packet's IV from.
         val sealed = sealer.seal(plaintext)
         enet.sendReliable(sealed)?.let(transport::send)
     }

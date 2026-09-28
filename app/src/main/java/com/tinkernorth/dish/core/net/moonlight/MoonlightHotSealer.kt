@@ -17,9 +17,9 @@ import javax.crypto.spec.SecretKeySpec
  * satellite_jni.cpp fixed-buffer discipline).
  *
  * NOT thread-safe: one instance per control session, driven from the single
- * input-dispatch thread. The AES-GCM IV comes from the monotonically increasing
- * ENet-level control seq (Wolf control.hpp), so [nextSeq] must advance once per
- * sealed packet.
+ * input-dispatch thread. The AES-GCM IV comes from the low byte of the
+ * monotonically increasing control seq (Wolf control.hpp), so [nextSeq] must
+ * advance once per sealed packet.
  */
 class MoonlightHotSealer(
     gcmKey: ByteArray,
@@ -71,8 +71,7 @@ class MoonlightHotSealer(
             rightStickY,
         )
         val currentSeq = seq
-        writeIv(currentSeq)
-        cipher.init(Cipher.ENCRYPT_MODE, keySpec, GCMParameterSpec(GCM_TAG_BITS, iv))
+        initCipherFor(currentSeq)
         // doFinal(ByteBuffer, ByteBuffer-free) form: input from the flipped plaintext
         // into the reused cipherOut array; returns ct||tag.
         val written = cipher.doFinal(plaintext.array(), 0, plaintext.limit(), cipherOut, 0)
@@ -94,22 +93,37 @@ class MoonlightHotSealer(
     }
 
     /**
-     * Seal an arbitrary control plaintext (arrival, ping, termination) with the
-     * SAME advancing seq as the hot path, so the whole outbound control stream
-     * carries one monotonic sequence and never reuses a GCM IV. Not on the hot
-     * path, so a small allocation here is fine.
+     * Seal an arbitrary control plaintext (arrival, ping, motion, touch,
+     * termination) with the SAME advancing seq as the hot path, so the whole
+     * outbound control stream carries one sequence. The IV is only that
+     * sequence's low byte, as the host's is (see controlIv), so it repeats
+     * every 256 packets under the session's rikey. Not on the hot path, so a
+     * small allocation here is fine.
      */
     fun seal(plaintext: ByteArray): ByteArray {
         val currentSeq = seq
-        val tagThenCt = controlSeal(keySpec.encoded, currentSeq, plaintext)
+        initCipherFor(currentSeq)
+        val ctThenTag = cipher.doFinal(plaintext)
         seq = currentSeq + 1
-        val len = SEQ_LEN + tagThenCt.size
+        val ctLen = ctThenTag.size - GCM_TAG_LEN
+        val len = SEQ_LEN + ctThenTag.size
         val out = ByteBuffer.allocate(FRAME_HEADER_LEN + len).order(ByteOrder.LITTLE_ENDIAN)
         out.putShort(PACKET_TYPE_ENCRYPTED.toShort())
         out.putShort(len.toShort())
         out.putInt(currentSeq)
-        out.put(tagThenCt)
+        // Moonlight wants the tag first, then the ciphertext.
+        out.put(ctThenTag, ctLen, GCM_TAG_LEN)
+        out.put(ctThenTag, 0, ctLen)
         return out.array()
+    }
+
+    // Hot and cold seals share this one cipher, so every init follows the one for the previous
+    // seq and never repeats the IV the cipher saw last. JCA refuses to re-init GCM encryption
+    // under the key and IV it was last given, which a second cipher for the cold path would hit
+    // whenever a whole IV cycle of cold packets fell between two hot ones.
+    private fun initCipherFor(currentSeq: Int) {
+        writeIv(currentSeq)
+        cipher.init(Cipher.ENCRYPT_MODE, keySpec, GCMParameterSpec(GCM_TAG_BITS, iv))
     }
 
     /** The low byte of the seq and nothing else; see controlIv. */

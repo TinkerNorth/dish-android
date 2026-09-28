@@ -82,6 +82,26 @@ class MoonlightHotSealerTest {
         assertEquals(bytesToHex(periodicPing()), bytesToHex(receiver.open(last)!!))
     }
 
+    /**
+     * Motion, touch and pings take the cold seal, so an idle stick can see a whole
+     * IV cycle of cold packets between two hot ones. The hot path then seals under
+     * the same key and the same IV its cipher saw last, which a JCA GCM cipher
+     * refuses on reinitialisation.
+     */
+    @Test
+    fun `the hot path seals again after a whole IV cycle of cold packets`() {
+        val sealer = MoonlightHotSealer(key)
+        val receiver = MoonlightControlPacket(key)
+        sealer.sealControllerMulti(0, 1, BTN_A, 0, 0, 0, 0, 0, 0)
+        repeat(IV_CYCLE - 1) { sealer.seal(periodicPing()) }
+        val sameIvAsTheLastHotPacket = sealer.sealControllerMulti(0, 1, BTN_B, 0, 0, 0, 0, 0, 0)
+        assertEquals(IV_CYCLE, seqOf(sameIvAsTheLastHotPacket))
+        assertEquals(
+            bytesToHex(controllerMulti(0, 1, BTN_B, 0, 0, 0, 0, 0, 0)),
+            bytesToHex(receiver.open(sameIvAsTheLastHotPacket)!!),
+        )
+    }
+
     @Test
     fun `the hot path and the cold seal share one sequence`() {
         val sealer = MoonlightHotSealer(key)
@@ -100,6 +120,7 @@ class MoonlightHotSealerTest {
 
     private companion object {
         const val PAST_THE_WRAP = 257
+        const val IV_CYCLE = 256
         const val FRAME_HEADER_LEN = 4
     }
 }
