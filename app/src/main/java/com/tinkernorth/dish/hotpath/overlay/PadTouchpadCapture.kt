@@ -15,16 +15,11 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.PhysicalReachabilityComposer
-import com.tinkernorth.dish.hotpath.input.PadTouchFrame
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.capturedSurfaceTableOf
-import com.tinkernorth.dish.hotpath.input.frame
 import com.tinkernorth.dish.hotpath.input.routes
 import com.tinkernorth.dish.hotpath.input.shouldCapture
 import com.tinkernorth.dish.hotpath.input.slotForEvent
-import com.tinkernorth.dish.source.connection.TelemetrySink
-import com.tinkernorth.dish.ui.common.ResendPacer
-import com.tinkernorth.dish.ui.common.TouchpadReportBuffer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.android.asCoroutineDispatcher
@@ -35,7 +30,6 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * A framework pad's own touch surface, read through pointer capture and forwarded as the slot's
@@ -46,11 +40,11 @@ import java.util.concurrent.ConcurrentHashMap
  * capture is the platform's door to the surface itself: while a view holds it, the touchpad
  * arrives "unscaled" as SOURCE_TOUCHPAD events carrying each finger's raw position, and the
  * cursor stops moving. [shouldCapture] says when that trade is worth making (a routed pad, a
- * focused window); this class makes the platform calls, maps each event through [frame], and
- * heals a lost final frame the way the phone-screen overlays do, with the same [ResendPacer]
- * burst on a thread of its own. The frames go to the slot's [TelemetrySink] exactly as the
- * on-screen touchpad's would, so the satellite and a Moonlight host see one shape whichever
- * surface produced it.
+ * focused window); this class makes the platform calls and hands each event to
+ * [CapturedTouchFrames], which maps it, sends it and heals a lost final frame the way the
+ * phone-screen overlays do, with the same resend burst on a thread of its own. The frames go to
+ * the slot's sink exactly as the on-screen touchpad's would, so the satellite and a Moonlight
+ * host see one shape whichever surface produced it.
  *
  * The events are taken at the activity's `dispatchGenericMotionEvent`, not through a view's
  * captured-pointer listener: the platform hands a captured touchpad event down the FOCUS chain
@@ -78,9 +72,7 @@ class PadTouchpadCapture(
 
     @Volatile private var focused = false
 
-    // Last frame per slot: written on the main thread (the captured event), read on the resend
-    // thread. Frames are immutable, so a reader never sees a torn one.
-    private val lastFrame = ConcurrentHashMap<String, PadTouchFrame>()
+    private val frames = CapturedTouchFrames { slotId -> reachability.state.value[slotId] }
 
     // Dedicated URGENT_AUDIO thread so edge-burst resends aren't jittered by the shared Default
     // pool, the same shape as the overlays'. Started on the first capture, since every screen
@@ -88,15 +80,6 @@ class PadTouchpadCapture(
     private var resendThread: HandlerThread? = null
 
     @Volatile private var resendJob: Job? = null
-
-    // Resend-thread-only.
-    private val pacers = HashMap<String, ResendPacer>()
-    private val lastResent = HashMap<String, PadTouchFrame>()
-
-    // The wire frame, one per sending thread: the main thread's captured events and lifts, and
-    // the resend thread's ticks.
-    private val mainReport = TouchpadReportBuffer()
-    private val resendReport = TouchpadReportBuffer()
 
     private var warnedNoRange = false
 
@@ -161,15 +144,13 @@ class PadTouchpadCapture(
             return true
         }
         touchpad.bind(event, xRange, yRange)
-        val frame =
-            frame(
-                event = touchpad,
-                liftingIndex = liftingIndexOf(event.actionMasked, event.actionIndex),
-                buttonPressed = event.buttonState and MotionEvent.BUTTON_PRIMARY != 0,
-                eventTimeMs = event.eventTime,
-            )
-        lastFrame[slotId] = frame
-        reachability.state.value[slotId]?.let { send(it, slotId, frame, mainReport) }
+        frames.onCaptured(
+            slotId = slotId,
+            event = touchpad,
+            liftingIndex = liftingIndexOf(event.actionMasked, event.actionIndex),
+            buttonPressed = event.buttonState and MotionEvent.BUTTON_PRIMARY != 0,
+            eventTimeMs = event.eventTime,
+        )
         return true
     }
 
@@ -181,11 +162,7 @@ class PadTouchpadCapture(
     }
 
     private fun liftAll() {
-        val now = SystemClock.uptimeMillis()
-        for ((slotId, lifted) in liftedFrames(lastFrame, now)) {
-            lastFrame[slotId] = lifted
-            reachability.state.value[slotId]?.let { send(it, slotId, lifted, mainReport) }
-        }
+        frames.liftAll(SystemClock.uptimeMillis())
     }
 
     private fun startResend() {
@@ -214,40 +191,11 @@ class PadTouchpadCapture(
         resendJob = null
     }
 
-    // Resend thread. A changed frame is re-sent EDGE_BURST_RESENDS ticks in a row, then on the
-    // slow keepalive, so a lost finger-up heals at the next tick; the receiver drops a duplicate
-    // by its equal event time. With every slot forgotten the loop stops itself; the next capture
-    // starts it again.
+    // Resend thread. With every slot forgotten the loop stops itself; the next capture starts it
+    // again.
     internal fun resendDue() {
-        val routedSurfaces = surfaces
-        for ((slotId, frame) in lastFrame) {
-            val sink = reachability.state.value[slotId]
-            val changed = frame != lastResent[slotId]
-            if (changed) lastResent[slotId] = frame
-            val pacer = pacers.getOrPut(slotId) { ResendPacer() }
-            val due = pacer.resendDue(changed)
-            when (resendStepFor(due, hasSink = sink != null, routed = routedSurfaces.isRouted(slotId))) {
-                ResendStep.SEND -> if (sink != null) send(sink, slotId, frame, resendReport)
-                ResendStep.FORGET -> forgetSlot(slotId)
-                ResendStep.KEEP -> Unit
-            }
-        }
-        if (lastFrame.isEmpty() && !shouldCapture(routes, focused)) stopResend()
-    }
-
-    private fun forgetSlot(slotId: String) {
-        lastFrame.remove(slotId)
-        lastResent.remove(slotId)
-        pacers.remove(slotId)
-    }
-
-    private fun send(
-        sink: TelemetrySink,
-        slotId: String,
-        frame: PadTouchFrame,
-        buffer: TouchpadReportBuffer,
-    ) {
-        sink.sendTouchpad(slotId, buffer.reportOf(frame))
+        val holdsAFrame = frames.resendDue(surfaces)
+        if (!holdsAFrame && !shouldCapture(routes, focused)) stopResend()
     }
 
     private companion object {
