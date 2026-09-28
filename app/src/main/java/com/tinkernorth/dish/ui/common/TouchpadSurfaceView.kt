@@ -177,15 +177,14 @@ class TouchpadSurfaceView
             if (changed) emit()
         }
 
-        /** Answers whether that lift ended a tap the view should report as a click. */
+        /** Answers whether that lift ended a gesture the view should report as a click. */
         private fun onFingerUp(event: MotionEvent): Boolean {
             val pointerId = event.getPointerId(event.actionIndex)
-            val lastFingerLifted = fingers.fingerUp(pointerId)
+            val lift = fingers.fingerLifted(event.actionMasked, pointerId)
             emit()
-
-            if (!lastFingerLifted) return false
-            listener?.onTouchActivityChanged(false)
-            return event.actionMasked != MotionEvent.ACTION_CANCEL
+            val gestureEnded = lift != TouchpadLift.FINGERS_REMAIN
+            if (gestureEnded) listener?.onTouchActivityChanged(false)
+            return lift == TouchpadLift.LAST_FINGER_LIFTED
         }
 
         override fun performClick(): Boolean {

@@ -3,6 +3,16 @@
 
 package com.tinkernorth.dish.ui.common
 
+import android.view.MotionEvent
+
+// What one lift did to the gesture: a finger is still down, the last one left, or the platform
+// took the whole gesture away.
+internal enum class TouchpadLift {
+    FINGERS_REMAIN,
+    LAST_FINGER_LIFTED,
+    CANCELLED,
+}
+
 // The on-screen touchpad's two finger slots, kept off the View so the slot bookkeeping and the
 // int16 normalisation are pinned on the JVM. Android pointer ids are stable across one DOWN..UP but
 // can be reused after a lift, so each maps to a slot of its own and keeps it until its UP.
@@ -48,6 +58,26 @@ internal class TouchpadFingerTracker {
         if (!isOneOfOurs) return false
         writePointer(pointerId, x, y, width, height, eventTimeMs)
         return true
+    }
+
+    /**
+     * An UP, a POINTER_UP or a CANCEL, as the view receives it. A CANCEL names one pointer but
+     * ends the whole gesture, so it lifts every finger and the click, not only that pointer's.
+     */
+    fun fingerLifted(
+        actionMasked: Int,
+        pointerId: Int,
+    ): TouchpadLift =
+        if (actionMasked == MotionEvent.ACTION_CANCEL) cancelGesture() else liftFinger(pointerId)
+
+    private fun cancelGesture(): TouchpadLift {
+        liftAll()
+        return TouchpadLift.CANCELLED
+    }
+
+    private fun liftFinger(pointerId: Int): TouchpadLift {
+        val surfaceClear = fingerUp(pointerId)
+        return if (surfaceClear) TouchpadLift.LAST_FINGER_LIFTED else TouchpadLift.FINGERS_REMAIN
     }
 
     /** True when the surface is clear after this lift. */

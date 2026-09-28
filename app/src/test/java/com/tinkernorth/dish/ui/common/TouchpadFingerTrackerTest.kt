@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.ui.common
 
+import android.view.MotionEvent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -190,6 +191,63 @@ class TouchpadFingerTrackerTest {
         assertTrue(state.finger0Active)
         assertFalse(state.finger1Active)
         assertEquals(2, state.finger0TrackingId)
+    }
+
+    // ---- the lift the view hands over: UP, POINTER_UP or CANCEL ----
+
+    @Test
+    fun `a pointer up with another finger down leaves the gesture running`() {
+        down(FIRST)
+        down(SECOND)
+
+        assertEquals(TouchpadLift.FINGERS_REMAIN, tracker.fingerLifted(MotionEvent.ACTION_POINTER_UP, FIRST))
+        assertTrue(state.finger1Active)
+    }
+
+    @Test
+    fun `an up of the last finger ends the gesture as a lift`() {
+        down(FIRST)
+
+        assertEquals(TouchpadLift.LAST_FINGER_LIFTED, tracker.fingerLifted(MotionEvent.ACTION_UP, FIRST))
+    }
+
+    @Test
+    fun `a cancel with two fingers down lifts both fingers and the click`() {
+        down(FIRST, x = WIDTH.toFloat(), y = HEIGHT.toFloat())
+        down(SECOND, x = WIDTH.toFloat(), y = HEIGHT.toFloat())
+
+        val lift = tracker.fingerLifted(MotionEvent.ACTION_CANCEL, FIRST)
+
+        assertEquals(TouchpadLift.CANCELLED, lift)
+        assertFalse(state.finger0Active)
+        assertFalse(state.finger1Active)
+        assertFalse(state.buttonPressed)
+        assertEquals(0.toShort(), state.finger1X)
+    }
+
+    @Test
+    fun `a cancel with one finger down ends the gesture without a click`() {
+        down(FIRST)
+
+        assertEquals(TouchpadLift.CANCELLED, tracker.fingerLifted(MotionEvent.ACTION_CANCEL, FIRST))
+        assertFalse(state.anyFingerDown())
+    }
+
+    @Test
+    fun `a cancel on an idle surface still ends the gesture`() {
+        assertEquals(TouchpadLift.CANCELLED, tracker.fingerLifted(MotionEvent.ACTION_CANCEL, FIRST))
+    }
+
+    @Test
+    fun `after a cancel a returning pointer takes slot 0 again`() {
+        down(FIRST)
+        down(SECOND)
+        tracker.fingerLifted(MotionEvent.ACTION_CANCEL, FIRST)
+
+        assertTrue(down(SECOND))
+
+        assertTrue(state.finger0Active)
+        assertFalse(state.finger1Active)
     }
 
     private companion object {
