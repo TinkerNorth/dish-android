@@ -180,10 +180,23 @@ uint16_t switchLayoutKeycodeToXusb(int32_t androidKeycode);
 
 bool switchLayoutConsumesKey(int32_t androidKeycode);
 
-// The key filter every JNI entry point shares: true exactly when applyKey would consume the key
-// under this quirk. Allocation-free; the standard layout counts L2/R2 and BUTTON_7/8 as the
-// trigger keys, the Switch layout answers for its own key set.
+// The key filter every JNI entry point shares through keyVerdict: true exactly when applyKey would
+// consume the key under this quirk. Allocation-free; the standard layout counts L2/R2 and
+// BUTTON_7/8 as the trigger keys, the Switch layout answers for its own key set.
 bool consumesKey(int32_t androidKeycode, uint8_t quirk);
+
+// Mirrored from <android/input.h> (AKEY_EVENT_ACTION_DOWN / _UP); satellite_jni.cpp asserts that
+// they agree.
+constexpr int32_t KEY_ACTION_DOWN = 0;
+constexpr int32_t KEY_ACTION_UP = 1;
+
+// What a JNI key entry point does with one framework key event: hand it back to the framework,
+// consume it without touching the pad, or consume it and apply it with applyKey.
+enum class KeyVerdict : uint8_t { PASS, SWALLOW, APPLY };
+
+// A key consumesKey rejects passes; a key it accepts is always consumed, so it cannot move View
+// focus, and only its down and up edges change the pad.
+KeyVerdict keyVerdict(int32_t androidKeycode, uint8_t quirk, int32_t action);
 
 uint16_t applyButtonQuirk(uint16_t xusbBit, uint8_t quirk);
 

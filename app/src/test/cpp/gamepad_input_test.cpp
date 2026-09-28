@@ -1060,3 +1060,44 @@ TEST(ConsumesKey, AgreesWithApplyKeyForEveryKeycodeAndLayout) {
         }
     }
 }
+
+// ── keyVerdict: what both JNI key entry points do with one framework key event ──
+
+namespace {
+
+// AKEY_EVENT_ACTION_MULTIPLE, the one other action <android/input.h> defines.
+constexpr int32_t kActionMultiple = 2;
+
+} // namespace
+
+TEST(KeyVerdict, TheActionsMatchTheAndroidValues) {
+    EXPECT_EQ(0, KEY_ACTION_DOWN);
+    EXPECT_EQ(1, KEY_ACTION_UP);
+}
+
+TEST(KeyVerdict, AKeyNoLayoutMapsPassesToTheFrameworkWhateverItsAction) {
+    const int32_t actions[] = {KEY_ACTION_DOWN, KEY_ACTION_UP, kActionMultiple};
+    for (const int32_t action : actions) {
+        EXPECT_EQ(KeyVerdict::PASS, keyVerdict(62, 0, action)) << action;
+        EXPECT_EQ(KeyVerdict::PASS, keyVerdict(KC_BUTTON_C, 0, action)) << action;
+        EXPECT_EQ(KeyVerdict::PASS, keyVerdict(KC_BUTTON_7, QUIRK_SWITCH_LAYOUT, action)) << action;
+    }
+}
+
+TEST(KeyVerdict, AMappedKeysDownAndUpEdgesApply) {
+    EXPECT_EQ(KeyVerdict::APPLY, keyVerdict(KC_BUTTON_A, 0, KEY_ACTION_DOWN));
+    EXPECT_EQ(KeyVerdict::APPLY, keyVerdict(KC_BUTTON_A, 0, KEY_ACTION_UP));
+    EXPECT_EQ(KeyVerdict::APPLY, keyVerdict(KC_BUTTON_7, 0, KEY_ACTION_DOWN));
+    EXPECT_EQ(KeyVerdict::APPLY, keyVerdict(KC_BUTTON_8, 0, KEY_ACTION_UP));
+    EXPECT_EQ(KeyVerdict::APPLY, keyVerdict(KC_BUTTON_L1, QUIRK_SWITCH_LAYOUT, KEY_ACTION_DOWN));
+}
+
+TEST(KeyVerdict, AMappedKeyThatIsNotAnEdgeIsSwallowedWithoutApplying) {
+    // Consumed so it cannot move View focus, the same as every mapped key's edges; BUTTON_7/8 are
+    // mapped keys like the rest.
+    EXPECT_EQ(KeyVerdict::SWALLOW, keyVerdict(KC_BUTTON_A, 0, kActionMultiple));
+    EXPECT_EQ(KeyVerdict::SWALLOW, keyVerdict(KC_BUTTON_7, 0, kActionMultiple));
+    EXPECT_EQ(KeyVerdict::SWALLOW, keyVerdict(KC_BUTTON_8, 0, kActionMultiple));
+    EXPECT_EQ(KeyVerdict::SWALLOW, keyVerdict(KC_BUTTON_L1, QUIRK_SWITCH_LAYOUT, kActionMultiple));
+    EXPECT_EQ(KeyVerdict::SWALLOW, keyVerdict(KC_BUTTON_A, 0, -1));
+}

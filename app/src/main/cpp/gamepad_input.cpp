@@ -210,6 +210,13 @@ bool consumesKey(const int32_t androidKeycode, const uint8_t quirk) {
     return standardLayoutConsumesKey(androidKeycode);
 }
 
+KeyVerdict keyVerdict(const int32_t androidKeycode, const uint8_t quirk, const int32_t action) {
+    if (!consumesKey(androidKeycode, quirk)) return KeyVerdict::PASS;
+    const bool isAnEdge = action == KEY_ACTION_DOWN || action == KEY_ACTION_UP;
+    if (!isAnEdge) return KeyVerdict::SWALLOW;
+    return KeyVerdict::APPLY;
+}
+
 uint16_t applyButtonQuirk(const uint16_t xusbBit, const uint8_t quirk) {
     const bool swapsAb = (quirk & QUIRK_SWAP_AB) != 0;
     if (swapsAb) {

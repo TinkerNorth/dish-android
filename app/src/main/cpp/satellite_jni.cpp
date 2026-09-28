@@ -887,23 +887,29 @@ static uint8_t quirkFor(const int32_t deviceId) {
     return it->second.quirk;
 }
 
+static_assert(gamepad::KEY_ACTION_DOWN == AKEY_EVENT_ACTION_DOWN &&
+                  gamepad::KEY_ACTION_UP == AKEY_EVENT_ACTION_UP,
+              "gamepad_input.h mirrors the NDK's key actions");
+
+// Caller holds g_devicesMtx; action is a down or up edge, the events keyVerdict answers APPLY.
+static void applyFrameworkKey(const int32_t deviceId, const int32_t keyCode, const int32_t action) {
+    g_frameworkEventCounts[deviceId]++;
+    auto& state = g_devices[deviceId];
+    if (gamepad::applyKey(state, keyCode, action == AKEY_EVENT_ACTION_DOWN)) {
+        publishIfChanged(deviceId, state);
+    }
+}
+
 static bool gamepadKeyFilter(const GameActivityKeyEvent* ev) {
     if (!isGamepadSource(ev->source)) return false;
     const int32_t kc = ev->keyCode;
     const int32_t deviceId = ev->deviceId;
+    const int32_t action = ev->action;
 
     std::lock_guard<std::mutex> lock(g_devicesMtx);
-    if (!gamepad::consumesKey(kc, quirkFor(deviceId))) return false;
-
-    const int32_t action = ev->action;
-    const bool isEdge = action == AKEY_EVENT_ACTION_DOWN || action == AKEY_EVENT_ACTION_UP;
-    if (!isEdge) return true;
-
-    g_frameworkEventCounts[deviceId]++;
-    auto& state = g_devices[deviceId];
-    if (gamepad::applyKey(state, kc, action == AKEY_EVENT_ACTION_DOWN)) {
-        publishIfChanged(deviceId, state);
-    }
+    const gamepad::KeyVerdict verdict = gamepad::keyVerdict(kc, quirkFor(deviceId), action);
+    if (verdict == gamepad::KeyVerdict::PASS) return false;
+    if (verdict == gamepad::KeyVerdict::APPLY) applyFrameworkKey(deviceId, kc, action);
     return true;
 }
 
@@ -1703,15 +1709,9 @@ Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_processGamepadKeyEvent(
     JNIEnv*, jobject, jint deviceId, jint /*source*/, jint action, jint keyCode) {
     // Source bits are unreliable; gate on the mapped-keycode check instead.
     std::lock_guard<std::mutex> lock(g_devicesMtx);
-    auto it = g_devices.find(deviceId);
-    const uint8_t quirk = it != g_devices.end() ? it->second.quirk : 0;
-    if (!gamepad::consumesKey(keyCode, quirk)) return JNI_FALSE;
-    if (action != AKEY_EVENT_ACTION_DOWN && action != AKEY_EVENT_ACTION_UP) return JNI_FALSE;
-    g_frameworkEventCounts[deviceId]++;
-    auto& state = g_devices[deviceId];
-    if (gamepad::applyKey(state, keyCode, action == AKEY_EVENT_ACTION_DOWN)) {
-        publishIfChanged(deviceId, state);
-    }
+    const gamepad::KeyVerdict verdict = gamepad::keyVerdict(keyCode, quirkFor(deviceId), action);
+    if (verdict == gamepad::KeyVerdict::PASS) return JNI_FALSE;
+    if (verdict == gamepad::KeyVerdict::APPLY) applyFrameworkKey(deviceId, keyCode, action);
     return JNI_TRUE;
 }
 
