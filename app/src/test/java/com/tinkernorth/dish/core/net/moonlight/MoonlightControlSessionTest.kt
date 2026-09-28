@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.core.net.moonlight
 
+import com.tinkernorth.dish.core.net.bytesToHex
 import com.tinkernorth.dish.core.net.hexToBytes
 import com.tinkernorth.dish.core.net.moonlight.enet.EnetClient
 import com.tinkernorth.dish.core.net.moonlight.enet.EnetProtocol
@@ -13,6 +14,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.lang.management.ManagementFactory
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -364,6 +366,102 @@ class MoonlightControlSessionTest {
         assertNull(session.disconnectReason)
     }
 
+    private fun plaintextOf(sealedReliableDatagram: ByteArray): ByteArray {
+        val payloadStart = EnetProtocol.FULL_HEADER_LEN + EnetProtocol.SEND_RELIABLE_HEADER_LEN
+        val sealed = sealedReliableDatagram.copyOfRange(payloadStart, sealedReliableDatagram.size)
+        return MoonlightControlPacket(key).open(sealed)!!
+    }
+
+    // A controller packet goes first so a mouse packet sealed after it, in a shorter message,
+    // shows any byte or length the longer one left behind.
+    @Test
+    fun `each mouse send goes out sealed with exactly the encoder's plaintext`() {
+        val transport = FakeTransport()
+        val session = connectedSession(transport)
+        session.sendControllerState(0, 1, BTN_A, 0, 0, 0, 0, 0, 0)
+        session.sendMouseButton(true, MOUSE_BUTTON_RIGHT)
+        session.sendMouseButton(false, MOUSE_BUTTON_LEFT)
+        session.sendMouseScroll(-WHEEL_NOTCH)
+        session.sendMouseMoveRel(MOVE_DX, MOVE_DY)
+        val expected =
+            listOf(
+                mouseButton(true, MOUSE_BUTTON_RIGHT),
+                mouseButton(false, MOUSE_BUTTON_LEFT),
+                mouseScroll(-WHEEL_NOTCH),
+                mouseMoveRel(MOVE_DX, MOVE_DY),
+            )
+        val sent = transport.sent.drop(1)
+        assertEquals(expected.map(::bytesToHex), sent.map { bytesToHex(plaintextOf(it)) })
+        assertEquals(listOf(1, 2, 3, 4), sent.map { controlSeqOf(it) })
+    }
+
+    // The host derives each packet's IV from the seq, so one burnt by a send nobody saw would
+    // leave the host a packet behind from the first real one.
+    @Test
+    fun `a mouse send dropped before the session connects spends no seq`() {
+        val transport = FakeTransport()
+        transport.inbound.addLast(verifyConnectDatagram())
+        val session = MoonlightControlSession(key, 0x1234, transport, { clock })
+        session.sendMouseMoveRel(MOVE_DX, MOVE_DY)
+        session.sendMouseButton(true, MOUSE_BUTTON_LEFT)
+        session.sendMouseScroll(WHEEL_NOTCH)
+        assertTrue(session.connect())
+        transport.sent.clear()
+        session.sendControllerState(0, 1, BTN_A, 0, 0, 0, 0, 0, 0)
+        assertEquals(0, controlSeqOf(transport.sent.single()))
+    }
+
+    // Counts datagrams without keeping them, so an allocation count sees only the session.
+    private class CountingTransport : MoonlightControlSession.Transport {
+        var sent = 0
+            private set
+        val inbound = ArrayDeque<ByteArray>()
+
+        override fun send(datagram: ByteArray) {
+            sent++
+        }
+
+        override fun receive(timeoutMs: Int): ByteArray? = inbound.removeFirstOrNull()
+
+        override fun close() = Unit
+    }
+
+    private val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
+
+    // What one send allocates on average, on a fresh connected session so every kind of send
+    // starts from the same ENet state and grows the same unacked-send table.
+    private fun bytesPerSend(send: (MoonlightControlSession) -> Unit): Long {
+        val transport = CountingTransport()
+        transport.inbound.addLast(verifyConnectDatagram())
+        val session = MoonlightControlSession(key, 0x1234, transport, { clock })
+        assertTrue(session.connect())
+        repeat(WARMUP_SENDS) { send(session) }
+        val sentBefore = transport.sent
+        val measureOnlyStart = threads.currentThreadAllocatedBytes
+        val measureOnlyEnd = threads.currentThreadAllocatedBytes
+        val measurementCost = measureOnlyEnd - measureOnlyStart
+        val start = threads.currentThreadAllocatedBytes
+        repeat(MEASURED_SENDS) { send(session) }
+        val end = threads.currentThreadAllocatedBytes
+        assertEquals(MEASURED_SENDS, transport.sent - sentBefore)
+        return (end - start - measurementCost) / MEASURED_SENDS
+    }
+
+    // A reliable send cannot be allocation-free: ENet keeps each command until the host acks it
+    // and the cipher re-inits for every IV. The controller path builds nothing else, and a mouse
+    // packet, shorter than a controller one, must not cost more than it.
+    @Test
+    fun `a mouse send allocates no more than a controller state send`() {
+        val controller = bytesPerSend { it.sendControllerState(0, 1, BTN_A, 0, 0, 0, 0, 0, 0) }
+        val move = bytesPerSend { it.sendMouseMoveRel(MOVE_DX, MOVE_DY) }
+        val button = bytesPerSend { it.sendMouseButton(true, MOUSE_BUTTON_LEFT) }
+        val scroll = bytesPerSend { it.sendMouseScroll(WHEEL_NOTCH) }
+        val perSend = "controller $controller, move $move, button $button, scroll $scroll bytes per send"
+        assertTrue(perSend, move <= controller)
+        assertTrue(perSend, button <= controller)
+        assertTrue(perSend, scroll <= controller)
+    }
+
     private fun controlSeqOf(sealedReliableDatagram: ByteArray): Int {
         val seqStart = EnetProtocol.FULL_HEADER_LEN + EnetProtocol.SEND_RELIABLE_HEADER_LEN + CONTROL_HEADER_LEN
         return ByteBuffer.wrap(sealedReliableDatagram, seqStart, Int.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).int
@@ -375,5 +473,13 @@ class MoonlightControlSessionTest {
         const val PING_INTERVAL_MS = 500L
         const val HANDSHAKE_STEP_MS = 300L
         const val HANDSHAKE_BUDGET_MS = 3000
+        const val WHEEL_NOTCH = 120
+        const val MOVE_DX = 3
+        const val MOVE_DY = -4
+        const val WARMUP_SENDS = 50
+
+        // Few enough sends that C2 never compiles the send path: its escape analysis would hide
+        // an allocation that ART, which has none, still makes.
+        const val MEASURED_SENDS = 500
     }
 }

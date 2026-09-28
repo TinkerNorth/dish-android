@@ -10,11 +10,13 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * The hot-path sealer for the control stream: encodes a CONTROLLER_MULTI packet
- * and seals it into a full ENet-ready encrypted control packet with a single
- * reused [Cipher] and reused buffers, so a steady stream of input changes does
- * not allocate per packet (the brief's hot-path rule; mirrors the repo's
- * satellite_jni.cpp fixed-buffer discipline).
+ * The hot-path sealer for the control stream: encodes a CONTROLLER_MULTI or a
+ * mouse packet and seals it into a full ENet-ready encrypted control packet with
+ * a single reused [Cipher] and reused buffers, so the encode and encrypt stages
+ * build nothing per packet (the brief's hot-path rule; mirrors the repo's
+ * satellite_jni.cpp fixed-buffer discipline). What a packet still allocates is
+ * the returned frame and the cipher's re-init for the packet's IV, which JCA
+ * takes as a fresh parameter spec.
  *
  * NOT thread-safe: one instance per control session, driven from the single
  * input-dispatch thread. The AES-GCM IV comes from the low byte of the
@@ -27,8 +29,8 @@ class MoonlightHotSealer(
     private val keySpec = SecretKeySpec(gcmKey, "AES")
     private val cipher: Cipher = Cipher.getInstance("AES/GCM/NoPadding")
 
-    // Reused across every packet: the plaintext scratch, the GCM output, and the
-    // final framed datagram body.
+    // Reused across every packet: the plaintext scratch (sized for the longest hot
+    // message, CONTROLLER_MULTI), the GCM output, and the final framed datagram body.
     private val plaintext = ByteBuffer.allocate(CONTROLLER_MULTI_LEN).order(ByteOrder.LITTLE_ENDIAN)
     private val plaintextWriter = ControllerMultiWriter(plaintext)
     private val cipherOut = ByteArray(CONTROLLER_MULTI_LEN + GCM_TAG_LEN)
@@ -45,8 +47,8 @@ class MoonlightHotSealer(
     /**
      * Encode [controllerNumber]'s state and return a freshly framed encrypted
      * control packet (`[type][len][seq][tag][ciphertext]`) ready to hand to the
-     * ENet reliable send. Only the returned array is allocated; the encode and
-     * encrypt stages reuse buffers. Advances the seq.
+     * ENet reliable send. The encode and encrypt stages reuse buffers. Advances
+     * the seq.
      */
     fun sealControllerMulti(
         controllerNumber: Int,
@@ -70,6 +72,35 @@ class MoonlightHotSealer(
             rightStickX,
             rightStickY,
         )
+        return sealPlaintextScratch()
+    }
+
+    /** MOUSE_MOVE_REL, encoded and sealed as [sealControllerMulti] does. */
+    fun sealMouseMoveRel(
+        deltaX: Int,
+        deltaY: Int,
+    ): ByteArray {
+        writeMouseMoveRel(plaintext, deltaX, deltaY)
+        return sealPlaintextScratch()
+    }
+
+    /** MOUSE_BUTTON_DOWN/UP, encoded and sealed as [sealControllerMulti] does. */
+    fun sealMouseButton(
+        down: Boolean,
+        button: Int,
+    ): ByteArray {
+        writeMouseButton(plaintext, down, button)
+        return sealPlaintextScratch()
+    }
+
+    /** MOUSE_SCROLL, encoded and sealed as [sealControllerMulti] does. */
+    fun sealMouseScroll(amount: Int): ByteArray {
+        writeMouseScroll(plaintext, amount)
+        return sealPlaintextScratch()
+    }
+
+    // Seals the message the plaintext scratch was just flipped to, under the next seq.
+    private fun sealPlaintextScratch(): ByteArray {
         val currentSeq = seq
         initCipherFor(currentSeq)
         // doFinal(ByteBuffer, ByteBuffer-free) form: input from the flipped plaintext

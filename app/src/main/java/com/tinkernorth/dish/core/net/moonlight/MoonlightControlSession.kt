@@ -13,8 +13,11 @@ import com.tinkernorth.dish.core.net.moonlight.enet.EnetClient
  * a swappable [Transport] so the whole lifecycle unit-tests with a fake
  * transport and a controllable clock; production plugs in a UDP socket.
  *
- * The hot path ([sendControllerState]) reuses the sealer's buffers and only the
- * ENet framing allocates.
+ * The hot paths ([sendControllerState] and the mouse sends) encode and seal in
+ * the sealer's reused buffers. They cannot be allocation-free: the cipher
+ * re-inits for every packet's IV, and ENet keeps each reliable command, as sent,
+ * until the host acks it, so the pump thread's retransmit has an immutable copy
+ * whatever the input thread sends next. Each packet's own frame is that copy.
  *
  * ONE LOCK OVER THE WHOLE PROTOCOL STATE, and it has to be. Input arrives on the
  * dispatch thread while [pump] runs the receive/ping loop on an IO thread, and
@@ -107,9 +110,10 @@ class MoonlightControlSession(
     private fun enetState(): EnetClient.State = synchronized(lock) { enet.state }
 
     /**
-     * HOT PATH: seal and send the controller state on channel 0. No allocation
-     * beyond the ENet frame. Silently drops when not connected so a dead session
-     * never blocks the input thread.
+     * HOT PATH: seal and send the controller state on channel 0. Nothing is built
+     * beyond the sealed frame and what ENet keeps for a retransmit (see the class
+     * comment). Silently drops when not connected so a dead session never blocks
+     * the input thread.
      */
     fun sendControllerState(
         controllerNumber: Int,
@@ -156,12 +160,16 @@ class MoonlightControlSession(
         }
     }
 
+    // The mouse sends run per touch frame, so they seal in the sealer's reused buffers like
+    // the controller state rather than building a plaintext first. The state check comes
+    // before the seal, as on the cold path, so a dropped send never spends a seq.
     fun sendMouseMoveRel(
         deltaX: Int,
         deltaY: Int,
     ) {
         synchronized(lock) {
-            sendControlPlaintextLocked(mouseMoveRel(deltaX, deltaY))
+            if (state != State.CONNECTED) return
+            sendSealedLocked(sealer.sealMouseMoveRel(deltaX, deltaY))
         }
     }
 
@@ -170,13 +178,15 @@ class MoonlightControlSession(
         button: Int,
     ) {
         synchronized(lock) {
-            sendControlPlaintextLocked(mouseButton(down, button))
+            if (state != State.CONNECTED) return
+            sendSealedLocked(sealer.sealMouseButton(down, button))
         }
     }
 
     fun sendMouseScroll(amount: Int) {
         synchronized(lock) {
-            sendControlPlaintextLocked(mouseScroll(amount))
+            if (state != State.CONNECTED) return
+            sendSealedLocked(sealer.sealMouseScroll(amount))
         }
     }
 
@@ -285,8 +295,12 @@ class MoonlightControlSession(
         if (state != State.CONNECTED) return
         // Route every outbound packet through the sealer so the whole control
         // stream shares one seq, the one the host derives each packet's IV from.
-        val sealed = sealer.seal(plaintext)
-        enet.sendReliable(sealed)?.let(transport::send)
+        sendSealedLocked(sealer.seal(plaintext))
+    }
+
+    private fun sendSealedLocked(sealed: ByteArray) {
+        val datagram = enet.sendReliable(sealed) ?: return
+        transport.send(datagram)
     }
 
     /** Graceful teardown: TERMINATION then ENet disconnect. */
