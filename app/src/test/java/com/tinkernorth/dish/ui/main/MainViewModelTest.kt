@@ -509,7 +509,7 @@ class MainViewModelTest {
         runTest(dispatcher) {
             every {
                 capabilityComposer.capabilityForCandidate(VIRTUAL_SLOT_ID, XBOX, ConnectionKind.MOONLIGHT, "c:1")
-            } returns SlotCapabilities.NONE.copy(controller = CapabilitySet.of(Feature.MOTION))
+            } returns SlotCapabilities.NONE.copy(controller = capabilitySetOf(Feature.MOTION))
             bindToKind(ConnectionKind.MOONLIGHT, emptyMap())
             holdPadAs(VIRTUAL_SLOT_ID, XBOX)
             assertEquals(GamepadSkin.Xbox, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
