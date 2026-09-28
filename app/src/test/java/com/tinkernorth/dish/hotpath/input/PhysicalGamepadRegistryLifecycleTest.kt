@@ -7,7 +7,9 @@ import android.content.Context
 import android.hardware.input.InputManager
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
+import android.os.Build
 import android.os.Vibrator
+import android.os.VibratorManager
 import android.view.InputDevice
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.bluetooth.BluetoothConnections
@@ -35,8 +37,9 @@ import org.junit.Test
 
 // The InputDevice lifecycle callbacks and the model mutators the USB path drives: what the
 // registry publishes when Android adds, changes or removes a pad, and what a path switch holds.
-// Build.VERSION.SDK_INT is 0 here, so the gyro, light-bar and touch-surface probes always read
-// absent; the rumble probe takes the legacy vibrator and is the capability these flows exercise.
+// The registry is built for API 24 unless a case says otherwise, so the touch-surface probe reads
+// absent and the rumble probe takes the legacy vibrator, the capability these flows exercise. The
+// gyro and light-bar probes read Build.VERSION.SDK_INT, which is 0 here, and always read absent.
 @OptIn(ExperimentalCoroutinesApi::class)
 class PhysicalGamepadRegistryLifecycleTest {
     private val dispatcher = StandardTestDispatcher()
@@ -57,32 +60,61 @@ class PhysicalGamepadRegistryLifecycleTest {
         unmockkStatic(InputDevice::class)
     }
 
-    private fun buildRegistry(scope: CoroutineScope = CoroutineScope(dispatcher)): PhysicalGamepadRegistry {
+    private fun buildRegistry(
+        scope: CoroutineScope = CoroutineScope(dispatcher),
+        sdkInt: Int = Build.VERSION_CODES.N,
+    ): PhysicalGamepadRegistry {
         val ctx = mockk<Context>()
         every { ctx.getSystemService(Context.INPUT_SERVICE) } returns inputManager
         every { ctx.getSystemService(Context.USB_SERVICE) } returns usb
-        return PhysicalGamepadRegistry(ctx, scope, native, btConnections)
+        return PhysicalGamepadRegistry(ctx, scope, native, btConnections, sdkInt)
     }
 
-    // Marker: InputDevice.getVibrator is the only vibrator a pad exposes below 31 (see
-    // InputDeviceVibrators.kt), and the JVM stub reports SDK 0, so the probe reads exactly it.
-    @Suppress("DEPRECATION")
     private fun frameworkPad(
         deviceId: Int,
         vid: Int = VID,
         pid: Int = PID,
         name: String = NAME,
         motor: Vibrator = motor(present = false),
+    ): InputDevice {
+        val pad =
+            mockk<InputDevice>(relaxed = true) {
+                every { id } returns deviceId
+                every { this@mockk.name } returns name
+                every { sources } returns (InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK)
+                every { keyboardType } returns InputDevice.KEYBOARD_TYPE_NON_ALPHABETIC
+                every { vendorId } returns vid
+                every { productId } returns pid
+            }
+        stubLegacyVibrator(pad, motor)
+        return pad
+    }
+
+    // A pad's touch surface enumerated as a device of its own: a mouse of the pad's model.
+    private fun surfaceOf(
+        deviceId: Int,
+        vid: Int = VID,
+        pid: Int = PID,
     ): InputDevice =
         mockk(relaxed = true) {
             every { id } returns deviceId
-            every { this@mockk.name } returns name
-            every { sources } returns (InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK)
-            every { keyboardType } returns InputDevice.KEYBOARD_TYPE_NON_ALPHABETIC
+            every { sources } returns InputDevice.SOURCE_MOUSE
+            every { keyboardType } returns InputDevice.KEYBOARD_TYPE_NONE
             every { vendorId } returns vid
             every { productId } returns pid
-            every { vibrator } returns motor
         }
+
+    private fun actuators(vararg ids: Int): VibratorManager = mockk { every { vibratorIds } returns ids }
+
+    private fun surfaceOfPad(registry: PhysicalGamepadRegistry): Int? =
+        registry.devices.value
+            .getValue(PAD)
+            .touchpadDeviceId
+
+    private fun rumbleOfPad(registry: PhysicalGamepadRegistry): Boolean =
+        registry.devices.value
+            .getValue(PAD)
+            .hasRumble
 
     private fun motor(present: Boolean): Vibrator = mockk { every { hasVibrator() } returns present }
 
@@ -172,6 +204,46 @@ class PhysicalGamepadRegistryLifecycleTest {
     }
 
     @Test
+    fun `a separately enumerated surface arriving lands on its pad's card`() {
+        val registry = buildRegistry(sdkInt = Build.VERSION_CODES.O)
+        addPad(registry, frameworkPad(PAD))
+        assertNull(surfaceOfPad(registry))
+        every { InputDevice.getDeviceIds() } returns intArrayOf(PAD, MOUSE)
+        every { InputDevice.getDevice(MOUSE) } returns surfaceOf(MOUSE)
+
+        registry.onInputDeviceAdded(MOUSE)
+
+        assertEquals(MOUSE, surfaceOfPad(registry))
+    }
+
+    @Test
+    fun `a surface of another model arriving leaves the pad without one`() {
+        val registry = buildRegistry(sdkInt = Build.VERSION_CODES.O)
+        addPad(registry, frameworkPad(PAD))
+        every { InputDevice.getDeviceIds() } returns intArrayOf(PAD, MOUSE)
+        every { InputDevice.getDevice(MOUSE) } returns surfaceOf(MOUSE, pid = OTHER_PID)
+
+        registry.onInputDeviceAdded(MOUSE)
+
+        assertNull(surfaceOfPad(registry))
+    }
+
+    @Test
+    fun `the pad's surface going away clears it from the card`() {
+        val registry = buildRegistry(sdkInt = Build.VERSION_CODES.O)
+        every { InputDevice.getDeviceIds() } returns intArrayOf(PAD, MOUSE)
+        every { InputDevice.getDevice(MOUSE) } returns surfaceOf(MOUSE)
+        addPad(registry, frameworkPad(PAD))
+        assertEquals(MOUSE, surfaceOfPad(registry))
+        every { InputDevice.getDeviceIds() } returns intArrayOf(PAD)
+        every { InputDevice.getDevice(MOUSE) } returns null
+
+        registry.onInputDeviceRemoved(MOUSE)
+
+        assertNull(surfaceOfPad(registry))
+    }
+
+    @Test
     fun `a pad re-added during the disconnect countdown keeps its card with no countdown`() =
         runTest(dispatcher) {
             val registry = buildRegistry(scope = this)
@@ -258,6 +330,39 @@ class PhysicalGamepadRegistryLifecycleTest {
                 .getValue(PAD)
                 .hasRumble,
         )
+    }
+
+    @Test
+    fun `through API 30 the rumble probe asks the pad's legacy vibrator`() {
+        val registry = buildRegistry(sdkInt = Build.VERSION_CODES.R)
+        val pad = frameworkPad(PAD, motor = motor(present = true))
+        every { pad.vibratorManager } returns actuators()
+
+        addPad(registry, pad)
+
+        assertTrue(rumbleOfPad(registry))
+    }
+
+    @Test
+    fun `from API 31 a pad with an actuator reports rumble`() {
+        val registry = buildRegistry(sdkInt = Build.VERSION_CODES.S)
+        val pad = frameworkPad(PAD, motor = motor(present = false))
+        every { pad.vibratorManager } returns actuators(ACTUATOR)
+
+        addPad(registry, pad)
+
+        assertTrue(rumbleOfPad(registry))
+    }
+
+    @Test
+    fun `from API 31 a pad with no actuator reports no rumble whatever its legacy vibrator says`() {
+        val registry = buildRegistry(sdkInt = Build.VERSION_CODES.S)
+        val pad = frameworkPad(PAD, motor = motor(present = true))
+        every { pad.vibratorManager } returns actuators()
+
+        addPad(registry, pad)
+
+        assertFalse(rumbleOfPad(registry))
     }
 
     // ---- transport ----
@@ -578,6 +683,7 @@ class PhysicalGamepadRegistryLifecycleTest {
         const val KEYBOARD = 20
         const val MOUSE = 21
         const val SYNTHETIC = -1000
+        const val ACTUATOR = 1
         const val VID = 0x054C
         const val PID = 0x0CE6
         const val OTHER_PID = 0x09CC

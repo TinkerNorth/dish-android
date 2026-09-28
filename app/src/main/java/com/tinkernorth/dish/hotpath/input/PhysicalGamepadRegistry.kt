@@ -9,6 +9,7 @@ import android.os.Build
 import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
+import androidx.annotation.ChecksSdkIntAtLeast
 import com.tinkernorth.dish.core.input.resolveGamepadQuirk
 import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
@@ -54,13 +55,21 @@ private val LOGGED_AXES =
 
 @Singleton
 class PhysicalGamepadRegistry
-    @Inject
-    constructor(
-        @ApplicationContext context: Context,
+    internal constructor(
+        context: Context,
         private val scope: CoroutineScope,
         private val native: PhysicalInputNative,
         private val btConnections: BluetoothConnections,
+        private val sdkInt: Int,
     ) : InputManager.InputDeviceListener {
+        @Inject
+        constructor(
+            @ApplicationContext context: Context,
+            scope: CoroutineScope,
+            native: PhysicalInputNative,
+            btConnections: BluetoothConnections,
+        ) : this(context, scope, native, btConnections, Build.VERSION.SDK_INT)
+
         data class Device(
             val id: Int,
             val name: String,
@@ -254,7 +263,7 @@ class PhysicalGamepadRegistry
             dev: InputDevice,
             vid: Int,
             pid: Int,
-        ): Int? = resolveTouchpadSurface(Build.VERSION.SDK_INT, deviceId, dev.sources, vid, pid, ::siblingDevices)
+        ): Int? = resolveTouchpadSurface(sdkInt, deviceId, dev.sources, vid, pid, ::siblingDevices)
 
         // Every InputDevice Android lists, flattened to the facts the surface resolution reads.
         private fun siblingDevices(): List<SiblingDevice> =
@@ -292,12 +301,16 @@ class PhysicalGamepadRegistry
             val pid = dev.productIdOrZero()
             // The Switch Pro protocol exposes a framework vibrator Android can't drive; only Direct can.
             if (native.modelFrameworkRumbleUnreliable(vid, pid)) return false
-            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            return if (atLeast(Build.VERSION_CODES.S)) {
                 dev.vibratorManager.vibratorIds.isNotEmpty()
             } else {
                 dev.legacyVibrator()?.hasVibrator() == true
             }
         }
+
+        // The release the probes branch on, through the one gate lint reads as an API check.
+        @ChecksSdkIntAtLeast(parameter = 0)
+        private fun atLeast(api: Int): Boolean = sdkInt >= api
 
         private fun resolveTransport(
             name: String,
