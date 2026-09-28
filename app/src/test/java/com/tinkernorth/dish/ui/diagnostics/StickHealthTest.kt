@@ -103,9 +103,14 @@ class StickHealthTest {
     }
 
     @Test
-    fun `a running capture counts whole seconds rounded up`() {
+    fun `a running capture counts one above its whole seconds left`() {
         assertEquals(CaptureTick.Counting(3), captureTick(CaptureKind.DRIFT, leftMs = 2500L))
         assertEquals(CaptureTick.Counting(1), captureTick(CaptureKind.RANGE, leftMs = 1L))
+    }
+
+    @Test
+    fun `a running capture at an exact second still counts one above it`() {
+        assertEquals(CaptureTick.Counting(3), captureTick(CaptureKind.DRIFT, leftMs = 2000L))
     }
 
     @Test

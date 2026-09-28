@@ -113,8 +113,8 @@ internal sealed interface CaptureTick {
     ) : CaptureTick
 }
 
-// A capture still running shows the whole seconds left, rounded up so it never reads zero
-// while samples are still being taken; one that ran out finishes as the kind it was.
+// A capture still running shows its whole seconds left plus one, so it never reads zero while
+// samples are still being taken; one that ran out finishes as the kind it was.
 internal fun captureTick(
     kind: CaptureKind,
     leftMs: Long,
