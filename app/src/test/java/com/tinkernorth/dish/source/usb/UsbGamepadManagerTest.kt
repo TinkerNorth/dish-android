@@ -13,6 +13,7 @@ import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
 import android.util.Log
+import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
@@ -78,7 +79,7 @@ class UsbGamepadManagerTest {
         every { hub.bindings } returns MutableStateFlow(emptyMap())
         every { hub.satTypes } returns MutableStateFlow(emptyMap())
         mockkStatic(Log::class)
-        mockkStatic(IntentCompat::class)
+        mockkStatic(ContextCompat::class, IntentCompat::class)
         every { Log.i(any(), any()) } returns 0
         every { Log.w(any(), any<String>(), any<Throwable>()) } returns 0
         Dispatchers.setMain(dispatcher)
@@ -756,7 +757,7 @@ class UsbGamepadManagerTest {
 
     private fun installedReceiver(m: UsbGamepadManager): BroadcastReceiver {
         val receiver = slot<BroadcastReceiver>()
-        every { ctx.registerReceiver(capture(receiver), any(), any<Int>()) } returns null
+        every { ContextCompat.registerReceiver(ctx, capture(receiver), any(), any()) } returns null
         m.install()
         return receiver.captured
     }

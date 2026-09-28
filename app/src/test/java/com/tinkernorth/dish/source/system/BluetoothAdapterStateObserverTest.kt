@@ -8,12 +8,17 @@ import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import io.mockk.slot
+import io.mockk.unmockkStatic
 import io.mockk.verify
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Before
 import org.junit.Test
 
 class BluetoothAdapterStateObserverTest {
@@ -21,6 +26,18 @@ class BluetoothAdapterStateObserverTest {
     private val manager = mockk<BluetoothManager> { every { this@mockk.adapter } returns this@BluetoothAdapterStateObserverTest.adapter }
     private val context = mockk<Context>(relaxed = true)
     private val owner = mockk<LifecycleOwner>()
+
+    // Registration goes through the compat static, so that is what the tests stand in for; the
+    // platform overload it lands on depends on the SDK level a unit test does not have.
+    @Before
+    fun setUp() {
+        mockkStatic(ContextCompat::class)
+    }
+
+    @After
+    fun tearDown() {
+        unmockkStatic(ContextCompat::class)
+    }
 
     private fun adapterEnabled(enabled: Boolean) {
         every { context.getSystemService(BluetoothManager::class.java) } returns manager
@@ -50,7 +67,7 @@ class BluetoothAdapterStateObserverTest {
 
     private fun startAndCaptureReceiver(observer: BluetoothAdapterStateObserver): BroadcastReceiver {
         val receiver = slot<BroadcastReceiver>()
-        every { context.registerReceiver(capture(receiver), any(), any<Int>()) } returns null
+        every { ContextCompat.registerReceiver(context, capture(receiver), any(), any()) } returns null
         observer.onStart(owner)
         return receiver.captured
     }
@@ -101,10 +118,10 @@ class BluetoothAdapterStateObserverTest {
         adapterEnabled(true)
         val observer = BluetoothAdapterStateObserver(context)
 
-        observer.onStart(owner)
+        startAndCaptureReceiver(observer)
         observer.onStart(owner)
 
-        verify(exactly = 1) { context.registerReceiver(any(), any(), any<Int>()) }
+        verify(exactly = 1) { ContextCompat.registerReceiver(context, any(), any(), any()) }
     }
 
     @Test

@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 import io.mockk.every
 import io.mockk.mockk
@@ -33,7 +34,7 @@ class PhoneBatterySourceTest {
 
     @Before
     fun setUp() {
-        mockkStatic(Log::class)
+        mockkStatic(Log::class, ContextCompat::class)
         every { Log.d(any(), any()) } returns 0
     }
 
@@ -102,7 +103,7 @@ class PhoneBatterySourceTest {
     // only the receiver path produces samples.
     private fun startWithSticky(sticky: Intent?): BroadcastReceiver {
         val receiver = slot<BroadcastReceiver>()
-        every { context.registerReceiver(capture(receiver), any(), any<Int>()) } returns sticky
+        every { ContextCompat.registerReceiver(context, capture(receiver), any(), any()) } returns sticky
         every { context.registerReceiver(null, any<IntentFilter>()) } returns null
         PhoneBatterySource(context).start(scope, emit)
         return receiver.captured
