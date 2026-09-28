@@ -78,7 +78,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         super.onCreate(savedInstanceState)
         binding = setScaffoldContent(ActivitySetupConfigureBinding::inflate)
         setupDishToolbar(binding.toolbar)
-        wireSetupSkip(binding.toolbar, onboarding)
+        wireSetupSkip(binding.toolbar, onboarding, nav)
         binding.breadcrumb.applyStep(SETUP_STEP_BINDING)
 
         val slotId = intent.getStringExtra(EXTRA_SLOT_ID)
@@ -388,7 +388,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
             is ApplyState.Finished -> {
                 setBindBusy(false)
                 if (state.errorMessage != null) {
-                    showSetupError(this, state.errorMessage) { viewModel.apply() }
+                    showSetupError(this, nav, state.errorMessage) { viewModel.apply() }
                 } else {
                     finishToDashboard(state)
                 }

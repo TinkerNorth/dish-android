@@ -46,7 +46,7 @@ class SetupBluetoothControllerActivity : BaseGamepadHostActivity() {
         super.onCreate(savedInstanceState)
         binding = setScaffoldContent(ActivitySetupBluetoothControllerBinding::inflate)
         setupDishToolbar(binding.toolbar)
-        wireSetupSkip(binding.toolbar, onboarding)
+        wireSetupSkip(binding.toolbar, onboarding, nav)
         binding.toolbar.setNavigationOnClickListener { handleBack() }
         binding.breadcrumb.applyStep(SETUP_STEP_INPUT)
 

@@ -24,6 +24,7 @@ import com.tinkernorth.dish.ui.main.TouchpadOverlayActivity
 import com.tinkernorth.dish.ui.setup.EXTRA_CONNECTION_ID
 import com.tinkernorth.dish.ui.setup.EXTRA_INPUT_TYPE
 import com.tinkernorth.dish.ui.setup.EXTRA_SLOT_ID
+import com.tinkernorth.dish.ui.setup.SetupInputActivity
 
 // Activity destinations can't carry <action> children, so navigate by destination id, not action id.
 // Drives ActivityNavigator directly instead of NavController: setGraph() auto-navigates to the start
@@ -180,13 +181,17 @@ class DishNavigator(
         )
     }
 
-    // Setup flow handoff to the dashboard: the setup task is over, so the back stack resets.
     fun finishSetupToDashboard() {
-        activity.startActivity(
-            Intent(activity, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
-        )
+        reset(StackReset.SETUP_TO_DASHBOARD)
         activity.finish()
+    }
+
+    fun rewindSetupToStart() {
+        reset(StackReset.SETUP_TO_START)
+    }
+
+    private fun reset(reset: StackReset) {
+        activity.startActivity(Intent(activity, reset.target).addFlags(reset.flags))
     }
 
     fun toTouchpad(
@@ -231,4 +236,17 @@ class DishNavigator(
     fun toNativeUnavailable() {
         go(R.id.nativeUnavailableActivity)
     }
+}
+
+// A launch that resets the back stack, which a nav-graph destination cannot express.
+internal enum class StackReset(
+    val target: Class<out Activity>,
+    val flags: Int,
+) {
+    // The setup task is over, so the dashboard starts a fresh task.
+    SETUP_TO_DASHBOARD(MainActivity::class.java, Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+
+    // SetupInputActivity sits at the root of the setup task, so CLEAR_TOP rewinds to it and
+    // drops every screen stacked above.
+    SETUP_TO_START(SetupInputActivity::class.java, Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
 }

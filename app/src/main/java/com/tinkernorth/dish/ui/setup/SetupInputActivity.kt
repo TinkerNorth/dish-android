@@ -30,7 +30,7 @@ class SetupInputActivity : BaseGamepadHostActivity() {
         super.onCreate(savedInstanceState)
         binding = setScaffoldContent(ActivitySetupInputBinding::inflate)
         setupDishToolbar(binding.toolbar)
-        wireSetupSkip(binding.toolbar, onboarding)
+        wireSetupSkip(binding.toolbar, onboarding, nav)
         binding.breadcrumb.applyStep(SETUP_STEP_INPUT)
         bindInputChoices()
     }

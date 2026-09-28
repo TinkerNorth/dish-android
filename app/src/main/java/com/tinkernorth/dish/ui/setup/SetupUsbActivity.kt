@@ -30,7 +30,7 @@ class SetupUsbActivity : BaseGamepadHostActivity() {
         super.onCreate(savedInstanceState)
         binding = setScaffoldContent(ActivitySetupUsbBinding::inflate)
         setupDishToolbar(binding.toolbar)
-        wireSetupSkip(binding.toolbar, onboarding)
+        wireSetupSkip(binding.toolbar, onboarding, nav)
         binding.toolbar.setNavigationOnClickListener { handleBack() }
         binding.breadcrumb.applyStep(SETUP_STEP_INPUT)
 
@@ -116,7 +116,7 @@ class SetupUsbActivity : BaseGamepadHostActivity() {
     // start over / exit are handled by the dialog.
     private fun showRecovery(reason: DirectClaimFailure?) {
         val message = reason?.let { getString(directFailureReasonRes(it)) }
-        showSetupError(this, message) { retryAfterRecovery() }
+        showSetupError(this, nav, message) { retryAfterRecovery() }
     }
 
     private fun retryAfterRecovery() {

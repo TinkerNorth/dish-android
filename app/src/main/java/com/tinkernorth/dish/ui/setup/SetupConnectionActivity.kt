@@ -69,7 +69,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
             resume?.invoke()
             return
         }
-        showSetupError(this, getString(R.string.setup_conn_local_network_denied)) {
+        showSetupError(this, nav, getString(R.string.setup_conn_local_network_denied)) {
             withLocalNetwork(resume ?: { viewModel.startDiscovery() })
         }
     }
@@ -78,7 +78,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
         super.onCreate(savedInstanceState)
         binding = setScaffoldContent(ActivitySetupConnectionBinding::inflate)
         setupDishToolbar(binding.toolbar)
-        wireSetupSkip(binding.toolbar, onboarding)
+        wireSetupSkip(binding.toolbar, onboarding, nav)
         binding.toolbar.setNavigationOnClickListener { handleBack() }
         binding.breadcrumb.applyStep(SETUP_STEP_DESTINATION)
 
@@ -292,7 +292,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
     // message through the dialog; otherwise surface the generic error sheet.
     private fun onConnectionError(message: String) {
         if (pairing.showError(message)) return
-        showSetupError(this, message) { withLocalNetwork { viewModel.startDiscovery() } }
+        showSetupError(this, nav, message) { withLocalNetwork { viewModel.startDiscovery() } }
     }
 
     private fun openGitHub() {
