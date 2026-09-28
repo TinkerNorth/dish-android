@@ -67,8 +67,10 @@ internal class TouchpadFingerTracker {
     fun fingerLifted(
         actionMasked: Int,
         pointerId: Int,
-    ): TouchpadLift =
-        if (actionMasked == MotionEvent.ACTION_CANCEL) cancelGesture() else liftFinger(pointerId)
+    ): TouchpadLift {
+        val isCancel = actionMasked == MotionEvent.ACTION_CANCEL
+        return if (isCancel) cancelGesture() else liftFinger(pointerId)
+    }
 
     private fun cancelGesture(): TouchpadLift {
         liftAll()
