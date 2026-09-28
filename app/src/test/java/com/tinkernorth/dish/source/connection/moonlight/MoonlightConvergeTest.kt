@@ -3,6 +3,9 @@
 
 package com.tinkernorth.dish.source.connection.moonlight
 
+import com.tinkernorth.dish.core.net.moonlight.NINTENDO
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
+import com.tinkernorth.dish.core.net.moonlight.XBOX
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -47,6 +50,33 @@ class MoonlightConvergeTest {
         ).forEach { state ->
             assertEquals(state.name, MoonlightConverge.RELEASE, moonlightConverge(state, wantedPads = 0))
         }
+    }
+
+    private fun request(type: Int) = MoonlightPadRequest(slotId = "a", emulatedType = type, capabilities = 0x03, supportedButtons = 0xFFFF)
+
+    private fun held(type: Int) = MoonlightPad(slotId = "a", number = 0, emulatedType = type, capabilities = 0x03, supportedButtons = 0xFFFF)
+
+    @Test
+    fun `a slot that holds no pad acquires one`() {
+        assertEquals(PadPlacement.ACQUIRE, padPlacement(held = null, wanted = request(XBOX)))
+    }
+
+    @Test
+    fun `a held pad asked for as the type it was announced as is kept`() {
+        assertEquals(PadPlacement.KEEP, padPlacement(held(XBOX), request(XBOX)))
+    }
+
+    // The bits alone do not earn a replug: it unplugs the pad in the game, and the host builds
+    // the same pad for the same type.
+    @Test
+    fun `a held pad asked for with other bits but the same type is kept`() {
+        assertEquals(PadPlacement.KEEP, padPlacement(held(XBOX), request(XBOX).copy(capabilities = 0x3F, supportedButtons = 0x10FFFF)))
+    }
+
+    @Test
+    fun `a held pad asked for as another type is re-announced`() {
+        assertEquals(PadPlacement.REANNOUNCE, padPlacement(held(XBOX), request(PLAYSTATION)))
+        assertEquals(PadPlacement.REANNOUNCE, padPlacement(held(PLAYSTATION), request(NINTENDO)))
     }
 
     @Test

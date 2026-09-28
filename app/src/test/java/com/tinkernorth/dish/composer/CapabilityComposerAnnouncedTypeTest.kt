@@ -20,10 +20,10 @@ import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-// A Moonlight host hears a pad's type once, in the CONTROLLER_ARRIVAL sent when the session
-// acquires the pad, and never again while the pad is held. The composer shows that type for a
-// held pad, whatever Auto or the stored pick would resolve to now, and resolves live only for
-// a pad the session has not acquired.
+// A Moonlight host hears a pad's type in the CONTROLLER_ARRIVAL sent when the session acquires
+// the pad, and again only when the session replugs the pad as another type. The composer shows
+// the type the session holds the pad as, whatever Auto or the stored pick would resolve to now,
+// and resolves live only for a pad the session has not acquired.
 class CapabilityComposerAnnouncedTypeTest {
     private val host = MoonlightHost(name = "PC", address = "10.0.0.5", uniqueId = "abc")
 
@@ -115,6 +115,19 @@ class CapabilityComposerAnnouncedTypeTest {
 
             assertEquals(moonlightTypeCapabilities(PLAYSTATION), rig.composer.capabilityFor(PAD_SLOT).type)
             assertEquals(TOUCHPAD_MODE_DS4, rig.composer.touchpadWireMode(PAD_SLOT))
+        }
+
+    @Test
+    fun `a pad the session replugs as another type re-publishes the dashboard with it`() =
+        composerTest {
+            val rig = rig(padHasGyro = false, storedType = NINTENDO)
+            rig.session.acquire(PAD_SLOT, PLAYSTATION)
+            testScheduler.runCurrent()
+
+            rig.session.reannouncePad(PAD_SLOT, NINTENDO, capabilities = 0, supportedButtons = 0)
+            testScheduler.runCurrent()
+
+            assertEquals(moonlightTypeCapabilities(NINTENDO), rig.composer.capabilityFor(PAD_SLOT).type)
         }
 
     @Test

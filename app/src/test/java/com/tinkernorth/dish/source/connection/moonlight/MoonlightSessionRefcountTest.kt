@@ -6,6 +6,7 @@ package com.tinkernorth.dish.source.connection.moonlight
 import android.content.Context
 import android.content.SharedPreferences
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
 import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
 import com.tinkernorth.dish.core.net.moonlight.XBOX
 import io.mockk.every
@@ -56,6 +57,11 @@ class MoonlightSessionRefcountTest {
             capabilities = 0x03,
             supportedButtons = 0xFFFF,
         )
+
+    private fun padAs(
+        slotId: String,
+        type: Int,
+    ) = pad(slotId).copy(emulatedType = type)
 
     private fun reply(body: String) = MoonlightHttpGateway.Reply(status = 200, body = body)
 
@@ -150,6 +156,22 @@ class MoonlightSessionRefcountTest {
             assertEquals(MoonlightSessionState.Idle, manager.get(remembered.id)?.state?.value)
             assertEquals(emptySet<String>(), manager.sessionHostIds.value)
             verify(exactly = 0) { gateway.getHttps(match { it.contains("/cancel") }, any()) }
+        }
+
+    // The launch is refused, so the session is reopened with the pad its slot still holds:
+    // the new pick must reach that pad rather than the type it was first seeded with.
+    @Test
+    fun `a new pick on a held pad reaches the pad the reopened session announces`() =
+        runTest(dispatcher) {
+            manager.applyDesired(mapOf(remembered.id to listOf(pad("a"))))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            manager.applyDesired(mapOf(remembered.id to listOf(padAs("a", PLAYSTATION))))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            val held = manager.get(remembered.id)?.padFor("a")
+            assertEquals(PLAYSTATION, held?.emulatedType)
+            assertEquals(0, held?.number)
         }
 
     @Test

@@ -134,14 +134,45 @@ class MoonlightConnection(
                 _pads.value = _pads.value - slotId
                 _pads.value.size
             }
-        released?.let { pad ->
-            motionGate.clear(pad.number)
-            touchDiffers.remove(slotId)
-            lastPadFrames.remove(pad.number)
-            touchClickByNumber.remove(pad.number)
-        }
+        released?.let { pad -> forgetHostPadState(slotId, pad.number) }
         withdraw()
         return remaining
+    }
+
+    /**
+     * Re-announce the pad [slotId] holds as [emulatedType], under the same number, and return it
+     * as it now stands; null when [slotId] holds no pad. On a live session the host unplugs the
+     * number and plugs the new type in (see [MoonlightControlSession.sendControllerReplug]); on
+     * one not yet live only the table changes, and markLive announces the new type.
+     */
+    fun reannouncePad(
+        slotId: String,
+        emulatedType: Int,
+        capabilities: Int,
+        supportedButtons: Int,
+    ): MoonlightPad? {
+        val pad =
+            synchronized(padLock) {
+                val held = _pads.value[slotId] ?: return@synchronized null
+                val next = held.copy(emulatedType = emulatedType, capabilities = capabilities, supportedButtons = supportedButtons)
+                _pads.value = _pads.value + (slotId to next)
+                next
+            } ?: return null
+        forgetHostPadState(slotId, pad.number)
+        replug(pad)
+        return pad
+    }
+
+    // What the host asked of, or was told about, the pad that held [number]: a pad it plugs in
+    // under that number next starts from nothing.
+    private fun forgetHostPadState(
+        slotId: String,
+        number: Int,
+    ) {
+        motionGate.clear(number)
+        touchDiffers.remove(slotId)
+        lastPadFrames.remove(number)
+        touchClickByNumber.remove(number)
     }
 
     fun padFor(slotId: String): MoonlightPad? = _pads.value[slotId]
@@ -208,8 +239,23 @@ class MoonlightConnection(
     private fun announce(pad: MoonlightPad) {
         val live = session ?: return
         live.sendControllerArrival(pad.number, pad.emulatedType, pad.capabilities, pad.supportedButtons)
+        sendNeutral(live, pad.number)
+    }
+
+    private fun replug(pad: MoonlightPad) {
+        val live = session ?: return
+        val otherPads = activeMask() and (1 shl pad.number).inv()
+        live.sendControllerReplug(pad.number, otherPads, pad.emulatedType, pad.capabilities, pad.supportedButtons)
+        sendNeutral(live, pad.number)
+    }
+
+    // A just-plugged pad at rest, with the active mask it now belongs to.
+    private fun sendNeutral(
+        live: MoonlightControlSession,
+        number: Int,
+    ) {
         live.sendControllerState(
-            controllerNumber = pad.number,
+            controllerNumber = number,
             activeMask = activeMask(),
             buttons = 0,
             leftTrigger = 0,

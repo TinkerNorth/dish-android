@@ -146,6 +146,22 @@ internal fun moonlightConverge(
         else -> MoonlightConverge.OPEN
     }
 
+/** What converging one requested pad does with the pad its slot already holds on the session. */
+enum class PadPlacement { ACQUIRE, KEEP, REANNOUNCE }
+
+// A held pad is re-announced only for another type, which is the pad the host builds: a replug
+// unplugs the pad in the game, and the host would build the same pad for the same type, so a
+// change in the bits alone keeps the pad as it is.
+internal fun padPlacement(
+    held: MoonlightPad?,
+    wanted: MoonlightPadRequest,
+): PadPlacement =
+    when {
+        held == null -> PadPlacement.ACQUIRE
+        held.emulatedType == wanted.emulatedType -> PadPlacement.KEEP
+        else -> PadPlacement.REANNOUNCE
+    }
+
 /** One binding's claim on a host session: which slot, and what pad to announce for it. */
 data class MoonlightPadRequest(
     val slotId: String,
@@ -422,29 +438,43 @@ class MoonlightConnectionManager
             }
         }
 
+        // A pad that found no room is the user's to hear about: the host already carries four.
         private suspend fun announcePads(
             conn: MoonlightConnection,
             host: MoonlightHost,
             pads: Collection<MoonlightPadRequest>,
         ) {
-            for (pad in pads) {
-                if (conn.padFor(pad.slotId) != null) continue
-                if (!conn.hasRoom) {
-                    _events.emit(MoonlightConnectionEvent.HostFull(host))
-                    continue
-                }
-                conn.acquirePad(pad.slotId, pad.emulatedType, pad.capabilities, pad.supportedButtons)
-            }
+            for (pad in placePads(conn, pads)) _events.emit(MoonlightConnectionEvent.HostFull(host))
         }
 
+        // Before the stream opens nothing is on the wire yet: markLive announces what is placed.
         private fun seedPads(
             conn: MoonlightConnection,
             pads: Collection<MoonlightPadRequest>,
         ) {
+            placePads(conn, pads)
+        }
+
+        // Places every requested pad on the session and answers the ones that found no room. A
+        // held pad the binding now asks for as another type is re-announced (on a live stream the
+        // host replugs it; before, only the table changes), so a re-pick takes effect without an
+        // unbind.
+        private fun placePads(
+            conn: MoonlightConnection,
+            pads: Collection<MoonlightPadRequest>,
+        ): List<MoonlightPadRequest> {
+            val unplaced = mutableListOf<MoonlightPadRequest>()
             for (pad in pads) {
-                if (!conn.hasRoom) break
-                conn.acquirePad(pad.slotId, pad.emulatedType, pad.capabilities, pad.supportedButtons)
+                when (padPlacement(conn.padFor(pad.slotId), pad)) {
+                    PadPlacement.ACQUIRE -> {
+                        val acquired = conn.acquirePad(pad.slotId, pad.emulatedType, pad.capabilities, pad.supportedButtons)
+                        if (acquired == null) unplaced += pad
+                    }
+                    PadPlacement.REANNOUNCE -> conn.reannouncePad(pad.slotId, pad.emulatedType, pad.capabilities, pad.supportedButtons)
+                    PadPlacement.KEEP -> Unit
+                }
             }
+            return unplaced
         }
 
         private suspend fun releaseHost(hostId: String) {

@@ -395,6 +395,36 @@ class MoonlightControlSessionTest {
         assertEquals(listOf(1, 2, 3, 4), sent.map { controlSeqOf(it) })
     }
 
+    // Wolf skips a CONTROLLER_ARRIVAL for a number it still holds, and drops a pad on the
+    // CONTROLLER_MULTI that names its number with its bit cleared, so a replug is that unplug
+    // and then the arrival, in this order on the one reliable channel.
+    @Test
+    fun `a replug sends the pad's unplug and then its arrival as the new type`() {
+        val transport = FakeTransport()
+        val session = connectedSession(transport)
+        session.sendControllerReplug(REPLUG_NUMBER, OTHER_PADS_MASK, PLAYSTATION, REPLUG_CAPS, REPLUG_BUTTONS)
+        val expected =
+            listOf(
+                controllerMulti(REPLUG_NUMBER, OTHER_PADS_MASK, 0, 0, 0, 0, 0, 0, 0),
+                controllerArrival(REPLUG_NUMBER, PLAYSTATION, REPLUG_CAPS, REPLUG_BUTTONS),
+            )
+        assertEquals(expected.map(::bytesToHex), transport.sent.map { bytesToHex(plaintextOf(it)) })
+        assertEquals(listOf(0, 1), transport.sent.map { controlSeqOf(it) })
+    }
+
+    @Test
+    fun `a replug is dropped while not connected and spends no seq`() {
+        val transport = FakeTransport()
+        transport.inbound.addLast(verifyConnectDatagram())
+        val session = MoonlightControlSession(key, 0x1234, transport, { clock })
+        session.sendControllerReplug(REPLUG_NUMBER, OTHER_PADS_MASK, PLAYSTATION, REPLUG_CAPS, REPLUG_BUTTONS)
+        assertTrue(transport.sent.isEmpty())
+        assertTrue(session.connect())
+        transport.sent.clear()
+        session.sendControllerState(0, 1, BTN_A, 0, 0, 0, 0, 0, 0)
+        assertEquals(0, controlSeqOf(transport.sent.single()))
+    }
+
     // The host derives each packet's IV from the seq, so one burnt by a send nobody saw would
     // leave the host a packet behind from the first real one.
     @Test
@@ -476,6 +506,10 @@ class MoonlightControlSessionTest {
         const val WHEEL_NOTCH = 120
         const val MOVE_DX = 3
         const val MOVE_DY = -4
+        const val REPLUG_NUMBER = 2
+        const val OTHER_PADS_MASK = 0b0001
+        const val REPLUG_CAPS = 0x3F
+        const val REPLUG_BUTTONS = 0x10FFFF
         const val WARMUP_SENDS = 50
 
         // Few enough sends that C2 never compiles the send path: its escape analysis would hide

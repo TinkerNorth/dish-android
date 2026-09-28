@@ -160,6 +160,28 @@ class MoonlightControlSession(
         }
     }
 
+    /**
+     * Plug [controllerNumber] back in as [emulatedType]. Wolf skips a CONTROLLER_ARRIVAL for a
+     * number it still holds, and drops the pad on the CONTROLLER_MULTI that names its number
+     * with its bit cleared from the active mask, so this sends that unplug ([otherPadsMask] is
+     * every other pad the session holds) and then the arrival. Both go under one hold of the
+     * lock: an input frame for the number landing between them would make Wolf plug a default
+     * Xbox pad for it, and the arrival would then be skipped.
+     */
+    fun sendControllerReplug(
+        controllerNumber: Int,
+        otherPadsMask: Int,
+        emulatedType: Int,
+        capabilities: Int,
+        supportedButtons: Int,
+    ) {
+        synchronized(lock) {
+            if (state != State.CONNECTED) return
+            sendSealedLocked(sealer.sealControllerMulti(controllerNumber, otherPadsMask, 0, 0, 0, 0, 0, 0, 0))
+            sendControlPlaintextLocked(controllerArrival(controllerNumber, emulatedType, capabilities, supportedButtons))
+        }
+    }
+
     // The mouse sends run per touch frame, so they seal in the sealer's reused buffers like
     // the controller state rather than building a plaintext first. The state check comes
     // before the seal, as on the cold path, so a dropped send never spends a seq.

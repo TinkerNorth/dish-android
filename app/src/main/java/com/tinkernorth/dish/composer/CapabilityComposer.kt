@@ -90,11 +90,12 @@ private fun mergedPadTypes(perSession: Array<Map<Pair<String, String>, Int>>): M
     perSession.fold(emptyMap()) { all, one -> all + one }
 
 /**
- * The Moonlight type a bound slot shows. A pad the session holds was announced once, in its
- * CONTROLLER_ARRIVAL, and the host is never told of a change while it is held, so its
- * [announcedType] wins over whatever the pick or Auto would resolve to now. A pad the session
- * does not hold resolves the way the session will when it acquires it: a missing type row is
- * Auto, and Auto follows the pad's own motion.
+ * The Moonlight type a bound slot shows. A pad the session holds is the type its host was told:
+ * in the CONTROLLER_ARRIVAL sent when the session acquired it, or in the replug a later request
+ * for another type sends (the pad table changes with it). Until that replug has gone out the
+ * host still has the old pad, so the [announcedType] wins over whatever the pick or Auto would
+ * resolve to now. A pad the session does not hold resolves the way the session will when it
+ * acquires it: a missing type row is Auto, and Auto follows the pad's own motion.
  */
 internal fun boundMoonlightType(
     storedType: Int?,
