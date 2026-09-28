@@ -5,12 +5,11 @@ package com.tinkernorth.dish.core.net
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-/**
- * Client side of the contract's crypto (satellite docs/contract.md §Crypto /
- * §hmacProof). Pure JVM so it unit-tests against the satellite's pinned
- * interop vectors; the derived session key is handed to the native layer,
- * which only ever sees per-session material, never the pairing key.
- */
+// Client side of the contract's crypto (satellite docs/contract.md §Crypto /
+// §hmacProof). Pure JVM so it unit-tests against the satellite's pinned
+// interop vectors; the derived session key is handed to the native layer,
+// which only ever sees per-session material, never the pairing key.
+
 private const val HMAC_ALGORITHM = "HmacSHA256"
 private const val PROOF_CONTEXT = "satellite-proof:"
 private const val HKDF_INFO_LABEL = "satellite-session-v1"

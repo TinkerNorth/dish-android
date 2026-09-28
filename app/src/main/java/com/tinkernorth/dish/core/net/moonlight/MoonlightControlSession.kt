@@ -9,7 +9,7 @@ import com.tinkernorth.dish.core.net.moonlight.enet.EnetClient
  * Drives the Moonlight control stream: the ENet connect handshake, the reliable
  * CONTROLLER_MULTI / ping / termination sends, and the inbound rumble / trigger
  * / motion / LED events. Composes the pure pieces ([EnetClient],
- * [MoonlightHotSealer], [MoonlightControlPacket], [MoonlightEventDecoder]) over
+ * [MoonlightHotSealer], [MoonlightControlPacket], [decodeMoonlightEvent]) over
  * a swappable [Transport] so the whole lifecycle unit-tests with a fake
  * transport and a controllable clock; production plugs in a UDP socket.
  *

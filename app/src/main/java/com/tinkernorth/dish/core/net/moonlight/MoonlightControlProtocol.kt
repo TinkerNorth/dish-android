@@ -7,6 +7,7 @@ package com.tinkernorth.dish.core.net.moonlight
 // protocols/control-specs.adoc and protocols/input-data.adoc, cross-checked
 // against Wolf src/moonlight-protocol/moonlight/control.hpp). All values are
 // protocol constants and never localized.
+
 // Encrypted control packet header type (control-specs.adoc): fixed 0x0001.
 const val PACKET_TYPE_ENCRYPTED = 0x0001
 

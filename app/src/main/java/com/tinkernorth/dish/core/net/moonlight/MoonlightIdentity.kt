@@ -19,7 +19,7 @@ import java.security.cert.X509Certificate
  * Certificate GENERATION is platform-specific (Android keystore / provider) and
  * lives behind this interface; the crypto that consumes it stays pure and
  * host-testable. This mirrors how the repo keeps TLS/identity at the edges and
- * the protocol crypto ([MoonlightCrypto]) pure.
+ * the protocol crypto (MoonlightCrypto.kt) pure.
  */
 interface MoonlightIdentity {
     /** PEM of the self-signed client certificate (sent as hex in phase 1). */

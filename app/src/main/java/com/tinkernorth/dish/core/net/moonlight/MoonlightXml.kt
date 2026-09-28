@@ -8,11 +8,10 @@ import org.xml.sax.InputSource
 import java.io.ByteArrayInputStream
 import javax.xml.parsers.DocumentBuilderFactory
 
-/**
- * Parses the XML the Moonlight host returns from /serverinfo, /pair and
- * /applist (Wolf moonlight.cpp). Uses the platform DOM parser (present on
- * Android and the host JVM), so it is exercised in unit tests with no network.
- */
+// Parses the XML the Moonlight host returns from /serverinfo, /pair and
+// /applist (Wolf moonlight.cpp). Uses the platform DOM parser (present on
+// Android and the host JVM), so it is exercised in unit tests with no network.
+
 data class ServerInfo(
     val hostname: String,
     val uniqueId: String,

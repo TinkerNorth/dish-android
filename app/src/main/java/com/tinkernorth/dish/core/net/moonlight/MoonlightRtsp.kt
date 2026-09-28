@@ -3,19 +3,18 @@
 
 package com.tinkernorth.dish.core.net.moonlight
 
-/**
- * Plaintext RTSP request formatting and response parsing for the Moonlight
- * stream setup handshake (Wolf protocols/rtsp.adoc, cross-checked against Wolf
- * src/moonlight-protocol/rtsp/parser.hpp). Requests are
- * `<CMD> <target> RTSP/1.0` + option lines (CSeq always) + blank line +
- * optional payload, CRLF-terminated. Responses start with `RTSP/1.0 <code>
- * <msg>`.
- *
- * Pure string work so it unit-tests without a socket. The transport writes the
- * bytes and reads the reply; this class owns the wire text only. Video config
- * is kept minimal on purpose: the dish negotiates the streams then discards
- * their payloads (no decoding).
- */
+// Plaintext RTSP request formatting and response parsing for the Moonlight
+// stream setup handshake (Wolf protocols/rtsp.adoc, cross-checked against Wolf
+// src/moonlight-protocol/rtsp/parser.hpp). Requests are
+// `<CMD> <target> RTSP/1.0` + option lines (CSeq always) + blank line +
+// optional payload, CRLF-terminated. Responses start with `RTSP/1.0 <code>
+// <msg>`.
+//
+// Pure string work so it unit-tests without a socket. The transport writes the
+// bytes and reads the reply; this file owns the wire text only. Video config
+// is kept minimal on purpose: the dish negotiates the streams then discards
+// their payloads (no decoding).
+
 internal const val CRLF = "\r\n"
 
 internal data class Request(
@@ -149,11 +148,6 @@ internal fun play(
     cseq: Int,
 ): Request = Request("PLAY", target, cseq, listOf("Session" to "DEADBEEFCAFE"))
 
-/**
- * Parse an RTSP response. Returns null when the first line is not an
- * `RTSP/1.0`-style status line, so a truncated or non-RTSP reply is
- * rejected rather than misparsed.
- */
 private class RawResponse(
     val headerLines: List<String>,
     val payload: String,
@@ -207,6 +201,11 @@ private fun parseHeaders(lines: List<String>): ParsedHeaders {
     return ParsedHeaders(cseq, options)
 }
 
+/**
+ * Parse an RTSP response. Returns null when the first line is not an
+ * `RTSP/1.0`-style status line, so a truncated or non-RTSP reply is
+ * rejected rather than misparsed.
+ */
 internal fun parseResponse(raw: String): Response? {
     val split = splitHeadersAndPayload(raw)
     val first = split.headerLines.firstOrNull() ?: return null

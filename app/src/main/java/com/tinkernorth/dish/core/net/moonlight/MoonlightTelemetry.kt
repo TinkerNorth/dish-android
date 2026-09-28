@@ -7,6 +7,7 @@ import java.util.concurrent.ConcurrentHashMap
 // Pure translation from the satellite wire conventions the app's sources
 // already speak (docs/contract.md scales) onto the Moonlight control-stream
 // ones (Wolf control.hpp), so the two transports share every source.
+
 // Satellite wire: gyro int16 at ±2000 deg/s full scale, accel int16 at
 // ±4 g. Moonlight wants floats: gyro in deg/s, accel in m/s^2.
 private const val GYRO_SCALE_DEG_S = 2000.0f / 32767.0f

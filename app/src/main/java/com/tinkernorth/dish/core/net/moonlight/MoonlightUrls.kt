@@ -5,14 +5,13 @@ package com.tinkernorth.dish.core.net.moonlight
 
 import java.net.URLEncoder
 
-/**
- * Builds the Moonlight HTTP/HTTPS request URLs and query strings (Wolf
- * rest/servers.cpp routes). Pure string work so it is unit-tested without a
- * socket; the gateway opens the connections.
- *
- * Ports are never hardcoded here: the caller passes the port it read from
- * /serverinfo (HTTP 47989 and HTTPS 47984 are only the documented defaults).
- */
+// Builds the Moonlight HTTP/HTTPS request URLs and query strings (Wolf
+// rest/servers.cpp routes). Pure string work so it is unit-tested without a
+// socket; the gateway opens the connections.
+//
+// Ports are never hardcoded here: the caller passes the port it read from
+// /serverinfo (HTTP 47989 and HTTPS 47984 are only the documented defaults).
+
 fun serverInfoHttp(
     address: String,
     httpPort: Int,

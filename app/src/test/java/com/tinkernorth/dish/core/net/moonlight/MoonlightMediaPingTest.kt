@@ -12,7 +12,7 @@ import org.junit.Test
 /**
  * The host decides whether a media ping is a ping by counting its bytes, so
  * these tests are about length first and content second. See
- * [MoonlightMediaPing] for the dead zone between the two accepted sizes.
+ * MoonlightMediaPing.kt for the dead zone between the two accepted sizes.
  */
 class MoonlightMediaPingTest {
     // The payload a live Sunshine host handed out in a video SETUP reply. It

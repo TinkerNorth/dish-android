@@ -146,24 +146,6 @@ class EnetClient(
         return wrapRaw(command, nowMs())
     }
 
-    /**
-     * Feed a received datagram. Returns any datagrams to send in response
-     * (acknowledgements). Delivered host payloads are appended to [received].
-     *
-     * EVERY COMMAND IN THE DATAGRAM GETS WALKED, not just the ones this client
-     * knows what to do with. A peer packs acknowledgements and control commands
-     * into one datagram, so a command we cannot measure is not one command
-     * skipped, it is every command behind it in that datagram dropped. This
-     * cost us the whole session once already: a live Sunshine host sends a
-     * reliable BANDWIDTH_LIMIT (command 10) about a second after the peer
-     * connects, off enet_host_bandwidth_throttle's 1000 ms tick. An earlier
-     * revision of this parser bailed on it as unsupported and so never
-     * acknowledged it. The host's sent-reliable queue then never empties, which
-     * both stops its pings and freezes its lastReceiveTime, and
-     * enet_protocol_check_timeouts drops the peer ENET_PEER_TIMEOUT_MINIMUM
-     * (5000 ms) later. It read as "CLIENT DISCONNECTED about 6.4 seconds in"
-     * with controller input flowing right up to the cut.
-     */
     private class DatagramHeader(
         val sentTime: Int,
         val hasSentTime: Boolean,
@@ -182,6 +164,24 @@ class EnetClient(
         return DatagramHeader(buf.short.toInt() and EnetProtocol.U16_MASK, true)
     }
 
+    /**
+     * Feed a received datagram. Returns any datagrams to send in response
+     * (acknowledgements). Delivered host payloads are appended to [received].
+     *
+     * EVERY COMMAND IN THE DATAGRAM GETS WALKED, not just the ones this client
+     * knows what to do with. A peer packs acknowledgements and control commands
+     * into one datagram, so a command we cannot measure is not one command
+     * skipped, it is every command behind it in that datagram dropped. This
+     * cost us the whole session once already: a live Sunshine host sends a
+     * reliable BANDWIDTH_LIMIT (command 10) about a second after the peer
+     * connects, off enet_host_bandwidth_throttle's 1000 ms tick. An earlier
+     * revision of this parser bailed on it as unsupported and so never
+     * acknowledged it. The host's sent-reliable queue then never empties, which
+     * both stops its pings and freezes its lastReceiveTime, and
+     * enet_protocol_check_timeouts drops the peer ENET_PEER_TIMEOUT_MINIMUM
+     * (5000 ms) later. It read as "CLIENT DISCONNECTED about 6.4 seconds in"
+     * with controller input flowing right up to the cut.
+     */
     fun onDatagram(datagram: ByteArray): List<ByteArray> {
         if (datagram.size < EnetProtocol.NO_SENT_TIME_HEADER_LEN) return emptyList()
         val buf = ByteBuffer.wrap(datagram).order(ByteOrder.BIG_ENDIAN)

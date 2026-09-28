@@ -11,16 +11,15 @@ import java.security.Signature
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
 
-/**
- * Client side of the Moonlight (GameStream) crypto (Wolf docs
- * protocols/http-pairing.adoc and control-specs.adoc). Pure JVM APIs (JCA
- * only, no BouncyCastle) so every step unit-tests against Wolf's captured
- * vectors. X.509 identity generation is deliberately NOT here: this object
- * only consumes cert-signature bytes and keys the caller supplies, so it stays
- * host-testable with no Android keystore. The Moonlight path mirrors how
- * [com.tinkernorth.dish.core.net.SessionCrypto] keeps the protocol-1 crypto
- * pure and pushes identity to the edges.
- */
+// Client side of the Moonlight (GameStream) crypto (Wolf docs
+// protocols/http-pairing.adoc and control-specs.adoc). Pure JVM APIs (JCA
+// only, no BouncyCastle) so every step unit-tests against Wolf's captured
+// vectors. X.509 identity generation is deliberately NOT here: this file
+// only consumes cert-signature bytes and keys the caller supplies, so it stays
+// host-testable with no Android keystore. The Moonlight path mirrors how
+// core/net/SessionCrypto.kt keeps the protocol-1 crypto
+// pure and pushes identity to the edges.
+
 private const val AES_KEY_LEN = 16
 const val GCM_TAG_LEN = 16
 

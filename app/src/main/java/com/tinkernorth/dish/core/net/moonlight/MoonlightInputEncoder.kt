@@ -9,15 +9,18 @@ import java.nio.ByteOrder
 // Builds the DECRYPTED control-stream plaintext for the input messages the dish
 // sends to a Moonlight host. Layout comes from Wolf input-data.adoc (byte-exact
 // network fixtures) and control.hpp struct definitions.
+//
 // The plaintext always begins with the control header `[ptype u16 LE][plen u16
 // LE]`, then for INPUT_DATA the wrapper `[input size u32 BE][input type u32
-// LE]`, then the message body. This class only produces plaintext; sealing
+// LE]`, then the message body. This file only produces plaintext; sealing
 // (AES-GCM) and ENet framing happen in the transport.
-// HOT PATH: [encodeControllerMulti] writes into a caller-owned, reused
+//
+// HOT PATH: ControllerMultiWriter.encode writes into a caller-owned, reused
 // [ByteBuffer] at fixed offsets with no allocation and no intermediate objects,
 // mirroring the repo's satellite_jni.cpp fixed-buffer discipline. Everything is
 // little-endian except the two big-endian fields the protocol mandates (INPUT
 // size and the mouse deltas).
+
 // Full plaintext length of a CONTROLLER_MULTI message: 4 control header + 8
 // wrapper + 26 struct body.
 const val CONTROLLER_MULTI_LEN = 38
@@ -273,7 +276,7 @@ internal fun putShortBE(
     buf.put(value.toByte())
 }
 
-// Flip-then-copy for the allocating builders; encodeControllerMulti has
+// Flip-then-copy for the allocating builders; ControllerMultiWriter.encode has
 // already flipped, so its remaining() is the message itself.
 internal fun ByteBuffer.toByteArray(): ByteArray {
     if (position() != 0) flip()

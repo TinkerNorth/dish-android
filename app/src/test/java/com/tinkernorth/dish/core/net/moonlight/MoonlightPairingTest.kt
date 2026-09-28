@@ -20,7 +20,7 @@ import org.junit.Test
  * The two RSA identities are throwaway ones generated when the class loads, the
  * way the androidTest FakeSatellite mints its cert: no key material is committed
  * to the repo. Nothing below is pinned to specific key bytes (the assertions are
- * round-trips through [MoonlightCrypto]), so a fresh pair each run is fine.
+ * round-trips through MoonlightCrypto.kt), so a fresh pair each run is fine.
  */
 class MoonlightPairingTest {
     private val clientIdentity: MoonlightIdentity = CLIENT

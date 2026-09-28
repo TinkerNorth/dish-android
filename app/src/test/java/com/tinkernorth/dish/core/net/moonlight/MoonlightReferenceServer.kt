@@ -7,7 +7,7 @@ import com.tinkernorth.dish.core.net.bytesToHex
 import com.tinkernorth.dish.core.net.hexToBytes
 
 /**
- * A minimal Wolf-equivalent pairing server, driven purely by [MoonlightCrypto].
+ * A minimal Wolf-equivalent pairing server, driven purely by MoonlightCrypto.kt.
  * The host half of the five phases, so the client half can be exercised for real
  * rather than against stubbed hex: every value below is one the live host would
  * have had to produce, and a client that skips a check fails here.
