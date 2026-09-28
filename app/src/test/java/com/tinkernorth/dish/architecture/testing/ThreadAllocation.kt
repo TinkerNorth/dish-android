@@ -13,7 +13,9 @@ private val threads =
 /**
  * What the calling thread allocated while [block] ran, less what reading the counter costs. The
  * test JVM runs with escape analysis off, so this counts every allocation the source makes,
- * whichever JIT tier earlier test classes left the code in (ThreadAllocationTest pins that).
+ * whichever JIT tier earlier test classes left the code in (ThreadAllocationTest pins that). It
+ * also counts what MockK's rewrite of a class another test mocked allocates on every call, so a
+ * test of an app class that is mocked anywhere measures a copy from [freshAppInstanceOf].
  */
 fun allocatedBytesDuring(block: () -> Unit): Long {
     val readOnlyStart = threads.currentThreadAllocatedBytes

@@ -3,6 +3,8 @@
 
 package com.tinkernorth.dish.source.connection.moonlight
 
+import com.tinkernorth.dish.architecture.testing.allocatedBytesDuring
+import com.tinkernorth.dish.architecture.testing.freshAppInstanceOf
 import com.tinkernorth.dish.core.net.moonlight.BTN_A
 import com.tinkernorth.dish.core.net.moonlight.BTN_TOUCHPAD
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
@@ -16,7 +18,7 @@ import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.lang.management.ManagementFactory
+import java.util.function.LongSupplier
 
 // One pad frame as the connection hands it to the session.
 private data class SentFrame(
@@ -43,11 +45,50 @@ private class SilentTransport : MoonlightControlSession.Transport {
 // An AES-128 key's length; the idle session never seals with it.
 private const val IDLE_SESSION_KEY_BYTES = 16
 
+// The idle session never reads its clock past construction.
+private const val IDLE_SESSION_NOW_MS = 0L
+
+// Any pad will do: the frame path never reads what a pad can do.
+private const val CYCLE_CAPS = 0xFF
+private const val CYCLE_BUTTONS = 0x10FFFF
+
+// Every pad's frame, over a real session that is not connected: it drops an unconnected send
+// before building anything, so what is measured is the connection's own path. Reached through
+// Runnable (one cycle) and LongSupplier (the frames the last pad has counted) because the
+// allocation test makes it in a class loader of its own (freshAppInstanceOf).
+internal class MoonlightFrameCycles :
+    Runnable,
+    LongSupplier {
+    private val dispatcher = StandardTestDispatcher()
+    private val connection =
+        MoonlightConnection(
+            id = "moonlight:uid:abc",
+            host = MoonlightHost(name = "PC", address = "10.0.0.5", uniqueId = "abc"),
+            scope = TestScope(dispatcher),
+            ioDispatcher = dispatcher,
+        )
+
+    init {
+        for (number in 0 until MoonlightConnection.MAX_PADS) connection.acquirePad("slot-$number", PLAYSTATION, CYCLE_CAPS, CYCLE_BUTTONS)
+        val idle = MoonlightControlSession(ByteArray(IDLE_SESSION_KEY_BYTES), 0, SilentTransport(), { IDLE_SESSION_NOW_MS })
+        connection.markLive(idle, appId = null, appName = null)
+    }
+
+    override fun run() {
+        for (number in 0 until MoonlightConnection.MAX_PADS) sendFrame(number)
+    }
+
+    private fun sendFrame(number: Int) {
+        connection.sendControllerState(number, BTN_A or number, number, number, number, -number, number, -number)
+    }
+
+    override fun getAsLong(): Long = connection.reportsSentFor(MoonlightConnection.MAX_PADS - 1)
+}
+
 // The connection's per-frame path: what it remembers of each pad's last frame, and that
 // remembering it allocates nothing.
 class MoonlightConnectionFrameTest {
     private val dispatcher = StandardTestDispatcher()
-    private val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
     private val sent = mutableListOf<SentFrame>()
 
     private fun connection(): MoonlightConnection =
@@ -291,50 +332,15 @@ class MoonlightConnectionFrameTest {
         assertEquals(listOf(ALL_PADS_MASK and SECOND_PAD_BIT.inv(), ALL_PADS_MASK), framesForFirst.map { it.activeMask })
     }
 
-    // Every pad's frame, over a real session that is not connected: it drops an unconnected send
-    // before building anything.
-    private fun runFrameCycle(conn: MoonlightConnection) {
-        for (number in 0 until ALL_PADS) sendFrame(conn, number, number)
-    }
-
-    // The same sends made on the session directly. A test that mocks the session class makes
-    // MockK instrument it for the rest of the JVM, and that instrumentation allocates on every
-    // call, so the connection's cost is what it adds on top of this.
-    private fun runSessionCycle(session: MoonlightControlSession) {
-        for (number in 0 until ALL_PADS) sendSessionFrame(session, number)
-    }
-
-    private fun sendSessionFrame(
-        session: MoonlightControlSession,
-        number: Int,
-    ) {
-        session.sendControllerState(number, ALL_PADS_MASK, number, number, number, number, number, number, number)
-    }
-
-    private inline fun bytesAllocatedBy(cycle: () -> Unit): Long {
-        val measureOnlyStart = threads.currentThreadAllocatedBytes
-        val measureOnlyEnd = threads.currentThreadAllocatedBytes
-        val measurementCost = measureOnlyEnd - measureOnlyStart
-        val start = threads.currentThreadAllocatedBytes
-        repeat(MEASURED_CYCLES) { cycle() }
-        val end = threads.currentThreadAllocatedBytes
-        return end - start - measurementCost
-    }
-
     @Test
-    fun `a controller frame allocates nothing`() {
-        val conn = connection()
-        val session = MoonlightControlSession(ByteArray(IDLE_SESSION_KEY_BYTES), 0, SilentTransport(), { 0L })
-        repeat(ALL_PADS) { conn.acquirePad("slot-$it", PLAYSTATION, CAPS, BUTTONS) }
-        conn.markLive(session, appId = null, appName = null)
-        repeat(WARMUP_CYCLES) { runFrameCycle(conn) }
-        repeat(WARMUP_CYCLES) { runSessionCycle(session) }
-        val sentBefore = conn.reportsSentFor(LAST_NUMBER)
-        val sessionBytes = bytesAllocatedBy { runSessionCycle(session) }
-        val connectionBytes = bytesAllocatedBy { runFrameCycle(conn) }
-        val addedBytes = connectionBytes - sessionBytes
-        assertEquals(MEASURED_CYCLES.toLong(), conn.reportsSentFor(LAST_NUMBER) - sentBefore)
-        assertTrue("$addedBytes bytes over $MEASURED_CYCLES cycles", addedBytes < MEASURED_CYCLES * BYTES_PER_CYCLE_BOUND)
+    fun `a controller frame allocates nothing, even once MockK has rewritten the connection class`() {
+        mockk<MoonlightConnection>(relaxed = true).activeMask()
+        val frames = freshAppInstanceOf(MoonlightFrameCycles::class.java)
+        val cycle = frames as Runnable
+        repeat(WARMUP_CYCLES) { cycle.run() }
+        val allocatedBytes = allocatedBytesDuring { repeat(MEASURED_CYCLES) { cycle.run() } }
+        assertEquals((WARMUP_CYCLES + MEASURED_CYCLES).toLong(), (frames as LongSupplier).asLong)
+        assertTrue("$allocatedBytes bytes over $MEASURED_CYCLES cycles", allocatedBytes < MEASURED_CYCLES * BYTES_PER_CYCLE_BOUND)
     }
 
     private companion object {
@@ -353,8 +359,6 @@ class MoonlightConnectionFrameTest {
         const val NOT_A_BUTTON = 0x200000
         const val WARMUP_CYCLES = 50
 
-        // Few enough calls that C2 never compiles the send path: its escape analysis would hide an
-        // allocation that ART, which has none, still makes.
         const val MEASURED_CYCLES = 250
 
         // Half the smallest object: one allocation in any frame costs 16 bytes or more every
