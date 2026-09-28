@@ -8,7 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SlotCapabilitiesTest {
-    private val everything = CapabilitySet.of(Feature.GAMEPAD, Feature.RUMBLE, Feature.MOTION)
+    private val everything = capabilitySetOf(Feature.GAMEPAD, Feature.RUMBLE, Feature.MOTION)
 
     private fun slot(
         controller: CapabilitySet = everything,
@@ -27,16 +27,16 @@ class SlotCapabilitiesTest {
 
     @Test
     fun `any one inherent layer missing a feature crosses it out of available`() {
-        assertFalse(slot(controller = CapabilitySet.of(Feature.GAMEPAD)).isAvailable(Feature.RUMBLE))
-        assertFalse(slot(transport = CapabilitySet.of(Feature.GAMEPAD)).isAvailable(Feature.RUMBLE))
-        assertFalse(slot(type = CapabilitySet.of(Feature.GAMEPAD)).isAvailable(Feature.RUMBLE))
-        assertFalse(slot(host = CapabilitySet.of(Feature.GAMEPAD)).isAvailable(Feature.RUMBLE))
+        assertFalse(slot(controller = capabilitySetOf(Feature.GAMEPAD)).isAvailable(Feature.RUMBLE))
+        assertFalse(slot(transport = capabilitySetOf(Feature.GAMEPAD)).isAvailable(Feature.RUMBLE))
+        assertFalse(slot(type = capabilitySetOf(Feature.GAMEPAD)).isAvailable(Feature.RUMBLE))
+        assertFalse(slot(host = capabilitySetOf(Feature.GAMEPAD)).isAvailable(Feature.RUMBLE))
     }
 
     @Test
     fun `enabled is available narrowed by the user's toggles`() {
-        val s = slot(userEnabled = CapabilitySet.of(Feature.RUMBLE))
-        assertEquals(CapabilitySet.of(Feature.RUMBLE), s.enabled)
+        val s = slot(userEnabled = capabilitySetOf(Feature.RUMBLE))
+        assertEquals(capabilitySetOf(Feature.RUMBLE), s.enabled)
         assertTrue(s.isEnabled(Feature.RUMBLE))
         assertFalse(s.isEnabled(Feature.MOTION))
     }
@@ -49,20 +49,20 @@ class SlotCapabilitiesTest {
 
     @Test
     fun `live is enabled minus whatever is down right now`() {
-        val s = slot(runtimeDown = CapabilitySet.of(Feature.RUMBLE))
-        assertEquals(CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION), s.live)
+        val s = slot(runtimeDown = capabilitySetOf(Feature.RUMBLE))
+        assertEquals(capabilitySetOf(Feature.GAMEPAD, Feature.MOTION), s.live)
     }
 
     @Test
     fun `a runtime outage does not change enabled, only live`() {
-        val s = slot(runtimeDown = CapabilitySet.of(Feature.RUMBLE))
+        val s = slot(runtimeDown = capabilitySetOf(Feature.RUMBLE))
         assertTrue(s.isEnabled(Feature.RUMBLE))
         assertFalse(Feature.RUMBLE in s.live)
     }
 
     @Test
     fun `userWants reads the raw toggle, independent of whether the path can carry it`() {
-        val s = slot(host = CapabilitySet.EMPTY, userEnabled = CapabilitySet.of(Feature.MOTION))
+        val s = slot(host = CapabilitySet.EMPTY, userEnabled = capabilitySetOf(Feature.MOTION))
         assertTrue(s.userWants(Feature.MOTION))
         assertFalse(s.isAvailable(Feature.MOTION))
     }
@@ -71,10 +71,10 @@ class SlotCapabilitiesTest {
     fun `the column helpers each report one limiting layer`() {
         val s =
             slot(
-                controller = CapabilitySet.of(Feature.GAMEPAD),
-                transport = CapabilitySet.of(Feature.GAMEPAD, Feature.RUMBLE),
-                type = CapabilitySet.of(Feature.RUMBLE),
-                host = CapabilitySet.of(Feature.GAMEPAD, Feature.RUMBLE),
+                controller = capabilitySetOf(Feature.GAMEPAD),
+                transport = capabilitySetOf(Feature.GAMEPAD, Feature.RUMBLE),
+                type = capabilitySetOf(Feature.RUMBLE),
+                host = capabilitySetOf(Feature.GAMEPAD, Feature.RUMBLE),
             )
         assertTrue(s.inputOk(Feature.GAMEPAD))
         assertFalse(s.inputOk(Feature.RUMBLE))
@@ -99,7 +99,7 @@ class SlotCapabilitiesTest {
 
     @Test
     fun `sends and receives split a set by direction and lose nothing`() {
-        val set = CapabilitySet.of(Feature.GAMEPAD, Feature.RUMBLE, Feature.MIC, Feature.SPEAKER)
+        val set = capabilitySetOf(Feature.GAMEPAD, Feature.RUMBLE, Feature.MIC, Feature.SPEAKER)
         assertEquals(setOf(Feature.GAMEPAD, Feature.MIC), set.sends().toSet())
         assertEquals(setOf(Feature.RUMBLE, Feature.SPEAKER), set.receives().toSet())
         assertEquals(set.features, (set.sends() + set.receives()).toSet())

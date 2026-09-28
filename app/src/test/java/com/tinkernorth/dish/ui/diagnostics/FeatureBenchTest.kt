@@ -2,16 +2,16 @@
 
 package com.tinkernorth.dish.ui.diagnostics
 
-import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FeatureBenchTest {
-    private fun caps(vararg features: Feature) = SlotCapabilities.NONE.copy(controller = CapabilitySet.of(*features))
+    private fun caps(vararg features: Feature) = SlotCapabilities.NONE.copy(controller = capabilitySetOf(*features))
 
     @Test
     fun `the virtual pad benches rumble, sound and microphone only`() {

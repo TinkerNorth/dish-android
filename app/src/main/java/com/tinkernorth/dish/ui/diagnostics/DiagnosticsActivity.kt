@@ -17,8 +17,8 @@ import com.tinkernorth.dish.databinding.ActivityDiagnosticsBinding
 import com.tinkernorth.dish.databinding.DiagnosticsCardActionsBinding
 import com.tinkernorth.dish.source.store.DiagnosticsLogEntry
 import com.tinkernorth.dish.source.store.LatencyProfilingStore
-import com.tinkernorth.dish.source.system.WifiBand
 import com.tinkernorth.dish.source.system.WifiLink
+import com.tinkernorth.dish.source.system.wifiBandForFrequency
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.observeWhileStarted
@@ -246,7 +246,7 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
                     getString(
                         R.string.diagnostics_wifi_value,
                         link.rssiDbm,
-                        wifiBandLabel(WifiBand.fromFrequencyMhz(link.frequencyMhz)),
+                        wifiBandLabel(wifiBandForFrequency(link.frequencyMhz)),
                         link.linkSpeedMbps,
                     )
             }

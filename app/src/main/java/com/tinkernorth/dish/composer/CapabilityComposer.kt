@@ -8,6 +8,7 @@ import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.core.net.moonlight.AUTO
 import com.tinkernorth.dish.core.net.moonlight.fromStored
 import com.tinkernorth.dish.core.net.moonlight.resolveMoonlightEmulatedType
@@ -543,7 +544,7 @@ class CapabilityComposer
         ): CapabilitySet {
             connId ?: return CapabilitySet.EMPTY
             val status = backendMap[connId to slotId] ?: return CapabilitySet.EMPTY
-            return if (!status.backendOk) CapabilitySet.of(Feature.MOTION) else CapabilitySet.EMPTY
+            return if (!status.backendOk) capabilitySetOf(Feature.MOTION) else CapabilitySet.EMPTY
         }
 
         // Pre-bind sibling of runtimeDownLayer: the post-bind per-controller backend status
@@ -555,7 +556,7 @@ class CapabilityComposer
         ): CapabilitySet {
             if (kind != ConnectionKind.SATELLITE) return CapabilitySet.EMPTY
             val runtime = hostId?.let { hostFacts.runtime.runtimeFor(it) } ?: return CapabilitySet.EMPTY
-            return if (!runtime.motionBackendOk) CapabilitySet.of(Feature.MOTION) else CapabilitySet.EMPTY
+            return if (!runtime.motionBackendOk) capabilitySetOf(Feature.MOTION) else CapabilitySet.EMPTY
         }
 
         private companion object {

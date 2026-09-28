@@ -4,6 +4,7 @@ package com.tinkernorth.dish.composer
 
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.core.net.moonlight.CAP_ACCELEROMETER
 import com.tinkernorth.dish.core.net.moonlight.CAP_ANALOG_TRIGGERS
 import com.tinkernorth.dish.core.net.moonlight.CAP_BATTERY
@@ -22,7 +23,7 @@ import com.tinkernorth.dish.core.net.moonlight.capabilityBits
 // The type ceiling and what the local input can actually feed are what narrow the set.
 // Mouse is native to the control stream (no advertisement), so it always passes.
 internal val HOST_LAYER =
-    CapabilitySet.of(
+    capabilitySetOf(
         Feature.GAMEPAD,
         Feature.ANALOG_TRIGGERS,
         Feature.MOTION,

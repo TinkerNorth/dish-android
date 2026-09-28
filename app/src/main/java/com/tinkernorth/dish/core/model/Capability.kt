@@ -66,10 +66,10 @@ value class CapabilitySet(
 
     companion object {
         val EMPTY = CapabilitySet(emptySet())
-
-        fun of(vararg features: Feature): CapabilitySet = CapabilitySet(features.toSet())
     }
 }
+
+fun capabilitySetOf(vararg features: Feature): CapabilitySet = CapabilitySet(features.toSet())
 
 // Every host advertises these; the per-type surfaces are the type layer's job and the host layer
 // passes them through. Only the flags below toCapabilitySet vary per host.

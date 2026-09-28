@@ -3,8 +3,8 @@
 
 package com.tinkernorth.dish.composer
 
-import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.core.net.moonlight.BTN_TOUCHPAD
 import com.tinkernorth.dish.core.net.moonlight.CAP_ACCELEROMETER
 import com.tinkernorth.dish.core.net.moonlight.CAP_ANALOG_TRIGGERS
@@ -32,7 +32,7 @@ import java.nio.ByteOrder
 // actually builds per type, and the type cards render straight off it.
 class MoonlightCatalogTest {
     private val everything =
-        CapabilitySet.of(
+        capabilitySetOf(
             Feature.GAMEPAD,
             Feature.ANALOG_TRIGGERS,
             Feature.MOTION,
@@ -108,7 +108,7 @@ class MoonlightCatalogTest {
             CAP_BATTERY,
             sourceBits(everything) and CAP_BATTERY,
         )
-        val noBattery = everything - CapabilitySet.of(Feature.BATTERY)
+        val noBattery = everything - capabilitySetOf(Feature.BATTERY)
         assertEquals(0, sourceBits(noBattery) and CAP_BATTERY)
     }
 
@@ -122,14 +122,14 @@ class MoonlightCatalogTest {
     @Test
     fun `trigger rumble and battery ride only when the source really has them`() {
         val noExtras =
-            CapabilitySet.of(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE)
+            capabilitySetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE)
         val bits = capabilityBits(XBOX, noExtras)
         // Rumble no longer drags CAP_TRIGGER_RUMBLE along: a pad without the
         // trigger motors must not invite RUMBLE_TRIGGERS events it would eat.
         assertEquals(0, bits and CAP_TRIGGER_RUMBLE)
         assertEquals(0, bits and CAP_BATTERY)
         val withExtras =
-            CapabilitySet.of(
+            capabilitySetOf(
                 Feature.GAMEPAD,
                 Feature.ANALOG_TRIGGERS,
                 Feature.RUMBLE,
@@ -143,7 +143,7 @@ class MoonlightCatalogTest {
 
     @Test
     fun `a source without motion does not let a PlayStation type ask for gyro reports`() {
-        val noMotion = CapabilitySet.of(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE)
+        val noMotion = capabilitySetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE)
         val bits = capabilityBits(PLAYSTATION, noMotion)
         assertEquals(0, bits and CAP_GYRO)
         assertEquals(0, bits and CAP_ACCELEROMETER)

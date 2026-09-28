@@ -13,6 +13,7 @@ import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.core.net.DISH_PROTOCOL_CURRENT
 import com.tinkernorth.dish.core.net.DishProtocolCompat
 import com.tinkernorth.dish.core.net.moonlight.NINTENDO
@@ -248,10 +249,10 @@ class MainViewModelTest {
 
     private fun capsAvailable(vararg features: Feature): SlotCapabilities =
         SlotCapabilities(
-            controller = CapabilitySet.of(*features),
-            transport = CapabilitySet.of(*features),
-            type = CapabilitySet.of(*features),
-            host = CapabilitySet.of(*features),
+            controller = capabilitySetOf(*features),
+            transport = capabilitySetOf(*features),
+            type = capabilitySetOf(*features),
+            host = capabilitySetOf(*features),
             userEnabled = CapabilitySet.EMPTY,
             runtimeDown = CapabilitySet.EMPTY,
         )
@@ -463,7 +464,7 @@ class MainViewModelTest {
                     ConnectionKind.MOONLIGHT,
                     "c:1",
                 )
-            } returns SlotCapabilities.NONE.copy(controller = CapabilitySet.of(Feature.MOTION))
+            } returns SlotCapabilities.NONE.copy(controller = capabilitySetOf(Feature.MOTION))
             bindToKind(ConnectionKind.MOONLIGHT, emptyMap())
             assertEquals(GamepadSkin.PlayStation, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
 

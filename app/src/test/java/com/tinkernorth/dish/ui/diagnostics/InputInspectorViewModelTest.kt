@@ -11,6 +11,7 @@ import com.tinkernorth.dish.source.audio.MicLevelProbe
 import com.tinkernorth.dish.source.audio.MicProbeReading
 import com.tinkernorth.dish.source.audio.SpeakerTestTone
 import com.tinkernorth.dish.source.store.StickTestHistoryStore
+import com.tinkernorth.dish.source.store.stickHistoryKeyFor
 import com.tinkernorth.dish.source.system.MicPermissionGate
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import io.mockk.coEvery
@@ -248,7 +249,7 @@ class InputInspectorViewModelTest {
 
             vm.noteDrift(0.1f, 0.2f, 0.15f)
 
-            verify { stickHistory.noteDrift(StickTestHistoryStore.keyFor(0x054C, 0x0CE6, "DualSense"), 0.1f, 0.2f, 0.15f, any()) }
+            verify { stickHistory.noteDrift(stickHistoryKeyFor(0x054C, 0x0CE6, "DualSense"), 0.1f, 0.2f, 0.15f, any()) }
             job.cancel()
         }
 
@@ -261,7 +262,7 @@ class InputInspectorViewModelTest {
 
             vm.noteRange(0.9f, 0.8f, 0.7f, null)
 
-            verify { stickHistory.noteRange(StickTestHistoryStore.keyFor(0x054C, 0x0CE6, "DualSense"), 0.9f, 0.8f, 0.7f, null, any()) }
+            verify { stickHistory.noteRange(stickHistoryKeyFor(0x054C, 0x0CE6, "DualSense"), 0.9f, 0.8f, 0.7f, null, any()) }
             job.cancel()
         }
 

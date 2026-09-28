@@ -9,7 +9,7 @@ import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.bluetooth.BluetoothLinkType
-import com.tinkernorth.dish.source.store.StickTestHistoryStore
+import com.tinkernorth.dish.source.store.stickHistoryKeyFor
 import com.tinkernorth.dish.ui.main.BatteryUi
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import com.tinkernorth.dish.ui.main.routedTwinIdsHiddenBySynthetics
@@ -136,7 +136,7 @@ internal fun padFacts(
         lastInputAtMs = world.rates[device.id.toString()]?.lastInputAtMs ?: 0L,
         directTiming = pads.deviceLatency[device.id],
         frameworkTiming = pads.frameworkTiming[device.id],
-        stickHistory = pads.stickHistory[StickTestHistoryStore.keyFor(device.vendorId, device.productId, device.name)],
+        stickHistory = pads.stickHistory[stickHistoryKeyFor(device.vendorId, device.productId, device.name)],
     )
 }
 

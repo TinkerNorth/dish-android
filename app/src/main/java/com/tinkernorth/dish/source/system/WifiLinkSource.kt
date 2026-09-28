@@ -33,22 +33,19 @@ enum class WifiBand {
     GHZ_5,
     GHZ_6,
     UNKNOWN,
-    ;
-
-    companion object {
-        private val BAND_2_4_GHZ_MHZ = 2400..2500
-        private val BAND_5_GHZ_MHZ = 4900..5899
-        private val BAND_6_GHZ_MHZ = 5925..7125
-
-        fun fromFrequencyMhz(frequencyMhz: Int): WifiBand =
-            when (frequencyMhz) {
-                in BAND_2_4_GHZ_MHZ -> GHZ_2_4
-                in BAND_5_GHZ_MHZ -> GHZ_5
-                in BAND_6_GHZ_MHZ -> GHZ_6
-                else -> UNKNOWN
-            }
-    }
 }
+
+private val BAND_2_4_GHZ_MHZ = 2400..2500
+private val BAND_5_GHZ_MHZ = 4900..5899
+private val BAND_6_GHZ_MHZ = 5925..7125
+
+fun wifiBandForFrequency(frequencyMhz: Int): WifiBand =
+    when (frequencyMhz) {
+        in BAND_2_4_GHZ_MHZ -> WifiBand.GHZ_2_4
+        in BAND_5_GHZ_MHZ -> WifiBand.GHZ_5
+        in BAND_6_GHZ_MHZ -> WifiBand.GHZ_6
+        else -> WifiBand.UNKNOWN
+    }
 
 enum class WifiGeneration {
     UNKNOWN,
@@ -57,26 +54,23 @@ enum class WifiGeneration {
     WIFI_5,
     WIFI_6,
     WIFI_7,
-    ;
-
-    companion object {
-        private const val STANDARD_LEGACY = 1
-        private const val STANDARD_11N = 4
-        private const val STANDARD_11AC = 5
-        private const val STANDARD_11AX = 6
-        private const val STANDARD_11BE = 8
-
-        fun fromWifiStandard(standard: Int): WifiGeneration =
-            when (standard) {
-                STANDARD_LEGACY -> LEGACY
-                STANDARD_11N -> WIFI_4
-                STANDARD_11AC -> WIFI_5
-                STANDARD_11AX -> WIFI_6
-                STANDARD_11BE -> WIFI_7
-                else -> UNKNOWN
-            }
-    }
 }
+
+private const val STANDARD_LEGACY = 1
+private const val STANDARD_11N = 4
+private const val STANDARD_11AC = 5
+private const val STANDARD_11AX = 6
+private const val STANDARD_11BE = 8
+
+fun wifiGenerationForStandard(standard: Int): WifiGeneration =
+    when (standard) {
+        STANDARD_LEGACY -> WifiGeneration.LEGACY
+        STANDARD_11N -> WifiGeneration.WIFI_4
+        STANDARD_11AC -> WifiGeneration.WIFI_5
+        STANDARD_11AX -> WifiGeneration.WIFI_6
+        STANDARD_11BE -> WifiGeneration.WIFI_7
+        else -> WifiGeneration.UNKNOWN
+    }
 
 private const val IPV4_BITS = 32
 private const val OCTET_BITS = 8
@@ -157,7 +151,7 @@ class WifiLinkSource
 
         private fun generationOf(info: WifiInfo): WifiGeneration =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                WifiGeneration.fromWifiStandard(info.wifiStandard)
+                wifiGenerationForStandard(info.wifiStandard)
             } else {
                 WifiGeneration.UNKNOWN
             }

@@ -5,6 +5,7 @@ package com.tinkernorth.dish.ui.main
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -12,10 +13,10 @@ import org.junit.Test
 class ConfigUiStateCapabilityGatesTest {
     private fun capsWith(vararg available: Feature): SlotCapabilities =
         SlotCapabilities(
-            controller = CapabilitySet.of(*available),
-            transport = CapabilitySet.of(*available),
-            type = CapabilitySet.of(*available),
-            host = CapabilitySet.of(*available),
+            controller = capabilitySetOf(*available),
+            transport = capabilitySetOf(*available),
+            type = capabilitySetOf(*available),
+            host = capabilitySetOf(*available),
             userEnabled = CapabilitySet.EMPTY,
             runtimeDown = CapabilitySet.EMPTY,
         )

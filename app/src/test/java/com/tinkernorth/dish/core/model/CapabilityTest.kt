@@ -12,23 +12,23 @@ import org.junit.Test
 class CapabilityTest {
     @Test
     fun `contains checks membership`() {
-        val set = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION)
+        val set = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION)
         assertTrue(Feature.MOTION in set)
         assertFalse(Feature.RUMBLE in set)
     }
 
     @Test
     fun `intersect keeps only shared features`() {
-        val a = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION, Feature.RUMBLE)
-        val b = CapabilitySet.of(Feature.MOTION, Feature.RUMBLE, Feature.TOUCHPAD)
-        assertEquals(CapabilitySet.of(Feature.MOTION, Feature.RUMBLE), a intersect b)
+        val a = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION, Feature.RUMBLE)
+        val b = capabilitySetOf(Feature.MOTION, Feature.RUMBLE, Feature.TOUCHPAD)
+        assertEquals(capabilitySetOf(Feature.MOTION, Feature.RUMBLE), a intersect b)
     }
 
     @Test
     fun `minus removes the right-hand features`() {
-        val a = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION, Feature.RUMBLE)
-        val b = CapabilitySet.of(Feature.MOTION)
-        assertEquals(CapabilitySet.of(Feature.GAMEPAD, Feature.RUMBLE), a - b)
+        val a = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION, Feature.RUMBLE)
+        val b = capabilitySetOf(Feature.MOTION)
+        assertEquals(capabilitySetOf(Feature.GAMEPAD, Feature.RUMBLE), a - b)
     }
 
     @Test
@@ -68,7 +68,7 @@ class CapabilityTest {
                 rumbleReturn = false,
             ).toCapabilitySet()
         val hostWide =
-            CapabilitySet.of(
+            capabilitySetOf(
                 Feature.GAMEPAD,
                 Feature.ANALOG_TRIGGERS,
                 Feature.MOTION,

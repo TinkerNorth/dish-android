@@ -78,14 +78,14 @@ class StickTestHistoryStore
         companion object {
             const val PREFS_NAME = "stick_test_history"
             const val KEY = "records"
-
-            fun keyFor(
-                vendorId: Int,
-                productId: Int,
-                name: String,
-            ): String = if (vendorId != 0 && productId != 0) "$vendorId:$productId" else name
         }
     }
+
+fun stickHistoryKeyFor(
+    vendorId: Int,
+    productId: Int,
+    name: String,
+): String = if (vendorId != 0 && productId != 0) "$vendorId:$productId" else name
 
 private val STICK_HISTORY_SERIALIZER = MapSerializer(String.serializer(), StickTestRecord.serializer())
 

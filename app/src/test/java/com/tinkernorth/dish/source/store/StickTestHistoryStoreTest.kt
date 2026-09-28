@@ -14,14 +14,14 @@ class StickTestHistoryStoreTest {
     private val json = Json { ignoreUnknownKeys = true }
 
     @Test
-    fun `keyFor uses the vendor and product ids`() {
-        assertEquals("1118:654", StickTestHistoryStore.keyFor(1118, 654, "Pad"))
+    fun `stickHistoryKeyFor uses the vendor and product ids`() {
+        assertEquals("1118:654", stickHistoryKeyFor(1118, 654, "Pad"))
     }
 
     @Test
-    fun `keyFor falls back to the name when the model has no ids`() {
-        assertEquals("Pad", StickTestHistoryStore.keyFor(0, 654, "Pad"))
-        assertEquals("Pad", StickTestHistoryStore.keyFor(1118, 0, "Pad"))
+    fun `stickHistoryKeyFor falls back to the name when the model has no ids`() {
+        assertEquals("Pad", stickHistoryKeyFor(0, 654, "Pad"))
+        assertEquals("Pad", stickHistoryKeyFor(1118, 0, "Pad"))
     }
 
     @Test

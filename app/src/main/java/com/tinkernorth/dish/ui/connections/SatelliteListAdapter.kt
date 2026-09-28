@@ -31,7 +31,7 @@ interface SatelliteRowListener {
 
 class SatelliteListAdapter(
     private val listener: SatelliteRowListener,
-) : ListAdapter<SatelliteRow, RecyclerView.ViewHolder>(Diff) {
+) : ListAdapter<SatelliteRow, RecyclerView.ViewHolder>(SatelliteRowDiff()) {
     override fun getItemViewType(position: Int): Int = if (getItem(position) is SatelliteRow.Empty) TYPE_EMPTY else TYPE_ROW
 
     override fun onCreateViewHolder(
@@ -151,8 +151,6 @@ class SatelliteListAdapter(
     companion object {
         private const val TYPE_ROW = 0
         private const val TYPE_EMPTY = 1
-
-        private val Diff = SatelliteRowDiff()
     }
 }
 

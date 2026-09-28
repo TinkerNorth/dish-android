@@ -222,7 +222,7 @@ class BluetoothGamepadRegistry
             currentId: String,
             state: BluetoothSessionState.Connected,
         ) {
-            val stableId = idFor(state.mac)
+            val stableId = bluetoothConnectionIdFor(state.mac)
             val name = state.name ?: state.mac
             store.rememberBt(
                 RememberedBt(
@@ -250,8 +250,6 @@ class BluetoothGamepadRegistry
                 }
             }
         }
-
-        companion object {
-            fun idFor(mac: String): String = "bt:$mac"
-        }
     }
+
+fun bluetoothConnectionIdFor(mac: String): String = "bt:$mac"

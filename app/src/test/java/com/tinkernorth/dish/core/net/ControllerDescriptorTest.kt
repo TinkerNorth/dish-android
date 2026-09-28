@@ -55,17 +55,17 @@ class ControllerDescriptorTest {
     }
 
     @Test
-    fun `arrayJson builds the controllers array for the session PUT`() {
+    fun `controllersArrayJson builds the controllers array for the session PUT`() {
         val list =
             listOf(
                 ControllerDescriptor(0, 0, 0, "off"),
                 ControllerDescriptor(1, 1, ControllerDescriptor.CAP_RUMBLE, "mouse"),
             )
-        val json = ControllerDescriptor.arrayJson(list)
+        val json = controllersArrayJson(list)
         assertTrue(json.startsWith("[{") && json.endsWith("}]"))
         assertTrue(json.contains("\"ctrlIdx\":0"))
         assertTrue(json.contains("\"ctrlIdx\":1"))
-        assertEquals("[]", ControllerDescriptor.arrayJson(emptyList()))
+        assertEquals("[]", controllersArrayJson(emptyList()))
     }
 
     @Test

@@ -30,7 +30,7 @@ interface MoonlightRowListener {
 
 class MoonlightListAdapter(
     private val listener: MoonlightRowListener,
-) : ListAdapter<MoonlightRow, RecyclerView.ViewHolder>(Diff) {
+) : ListAdapter<MoonlightRow, RecyclerView.ViewHolder>(MoonlightRowDiff()) {
     override fun getItemViewType(position: Int): Int = if (getItem(position) is MoonlightRow.Empty) TYPE_EMPTY else TYPE_ROW
 
     override fun onCreateViewHolder(
@@ -130,8 +130,6 @@ class MoonlightListAdapter(
     companion object {
         private const val TYPE_ROW = 0
         private const val TYPE_EMPTY = 1
-
-        private val Diff = MoonlightRowDiff()
     }
 }
 

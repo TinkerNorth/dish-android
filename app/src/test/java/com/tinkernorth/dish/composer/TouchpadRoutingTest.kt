@@ -4,6 +4,7 @@ package com.tinkernorth.dish.composer
 
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.repository.TOUCHPAD_MODE_DS4
 import com.tinkernorth.dish.repository.TOUCHPAD_MODE_MOUSE
 import com.tinkernorth.dish.repository.TOUCHPAD_MODE_OFF
@@ -57,9 +58,9 @@ class TouchpadRoutingTest {
     // ── wireMode: the descriptor's derived touchpadMode for one slot ─────────
 
     private val none = CapabilitySet.EMPTY
-    private val touch = CapabilitySet.of(Feature.TOUCHPAD)
-    private val mouse = CapabilitySet.of(Feature.MOUSE)
-    private val both = CapabilitySet.of(Feature.TOUCHPAD, Feature.MOUSE)
+    private val touch = capabilitySetOf(Feature.TOUCHPAD)
+    private val mouse = capabilitySetOf(Feature.MOUSE)
+    private val both = capabilitySetOf(Feature.TOUCHPAD, Feature.MOUSE)
 
     @Test
     fun `the pad surface wins whenever the type carries one`() {

@@ -10,6 +10,7 @@ import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.TOUCHPAD_MODE_DS4
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
@@ -32,11 +33,11 @@ class RatePillFactsTest {
 
     private val motionOn =
         SlotCapabilities(
-            controller = CapabilitySet.of(Feature.MOTION),
-            transport = CapabilitySet.of(Feature.MOTION),
-            type = CapabilitySet.of(Feature.MOTION),
-            host = CapabilitySet.of(Feature.MOTION),
-            userEnabled = CapabilitySet.of(Feature.MOTION),
+            controller = capabilitySetOf(Feature.MOTION),
+            transport = capabilitySetOf(Feature.MOTION),
+            type = capabilitySetOf(Feature.MOTION),
+            host = capabilitySetOf(Feature.MOTION),
+            userEnabled = capabilitySetOf(Feature.MOTION),
             runtimeDown = CapabilitySet.EMPTY,
         )
 

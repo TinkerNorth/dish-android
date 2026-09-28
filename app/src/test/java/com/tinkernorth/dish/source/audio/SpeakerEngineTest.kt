@@ -123,7 +123,7 @@ class SpeakerEngineTest {
 
     private fun plan(vararg targets: SpeakerTarget) =
         SpeakerPlayoutPlan(
-            targets.associateBy { SpeakerPlayoutPlan.routeKey(it.sessionHandle, it.controllerIndex, it.lane) },
+            targets.associateBy { speakerRouteKey(it.sessionHandle, it.controllerIndex, it.lane) },
         )
 
     private fun window(fill: Short = TONE) = ShortArray(SpeakerEngine.FRAME_SAMPLES) { fill }

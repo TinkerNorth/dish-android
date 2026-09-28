@@ -9,6 +9,7 @@ import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.repository.TOUCHPAD_MODE_DS4
 import com.tinkernorth.dish.repository.TOUCHPAD_MODE_OFF
 import org.junit.Assert.assertEquals
@@ -35,7 +36,7 @@ class GamepadOverlayPolicyTest {
         input: Boolean = true,
         userWants: Boolean = true,
     ): SlotCapabilities {
-        fun motion(present: Boolean) = if (present) CapabilitySet.of(Feature.MOTION) else CapabilitySet.EMPTY
+        fun motion(present: Boolean) = if (present) capabilitySetOf(Feature.MOTION) else CapabilitySet.EMPTY
         return SlotCapabilities(
             controller = motion(input),
             transport = motion(true),

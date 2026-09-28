@@ -21,6 +21,7 @@ import com.tinkernorth.dish.core.net.PAIRING_KEY_BYTES
 import com.tinkernorth.dish.core.net.PAIRING_KEY_HEX_LEN
 import com.tinkernorth.dish.core.net.SESSION_SALT_BYTES
 import com.tinkernorth.dish.core.net.TOKEN_BYTES
+import com.tinkernorth.dish.core.net.controllersArrayJson
 import com.tinkernorth.dish.core.net.deriveSessionKey
 import com.tinkernorth.dish.core.net.dishProtocolSpeakFor
 import com.tinkernorth.dish.core.net.hexToBytes
@@ -268,7 +269,7 @@ class SatelliteConnectionManager
                     deviceId,
                     deviceName,
                     proof,
-                    ControllerDescriptor.arrayJson(descriptors),
+                    controllersArrayJson(descriptors),
                     conn.wantsMouseControl(),
                     version,
                 )

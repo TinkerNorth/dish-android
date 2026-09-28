@@ -56,8 +56,8 @@ class BluetoothGamepadRegistryTest {
     }
 
     @Test
-    fun `idFor derives bt-mac id`() {
-        assertEquals("bt:AA:BB:CC", BluetoothGamepadRegistry.idFor("AA:BB:CC"))
+    fun `bluetoothConnectionIdFor derives bt-mac id`() {
+        assertEquals("bt:AA:BB:CC", bluetoothConnectionIdFor("AA:BB:CC"))
     }
 
     @Test

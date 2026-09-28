@@ -28,14 +28,14 @@ class UsbPathPreferenceStore
         fun choiceFor(
             vendorId: Int,
             productId: Int,
-        ): PathChoice? = state.value[keyFor(vendorId, productId)]
+        ): PathChoice? = state.value[usbPathKeyFor(vendorId, productId)]
 
         fun setChoice(
             vendorId: Int,
             productId: Int,
             choice: PathChoice,
         ) {
-            val key = keyFor(vendorId, productId)
+            val key = usbPathKeyFor(vendorId, productId)
             if (state.value[key] == choice) return
             val next = state.value + (key to choice)
             persist(next)
@@ -46,7 +46,7 @@ class UsbPathPreferenceStore
             vendorId: Int,
             productId: Int,
         ) {
-            val key = keyFor(vendorId, productId)
+            val key = usbPathKeyFor(vendorId, productId)
             if (key !in state.value) return
             val next = state.value - key
             persist(next)
@@ -61,13 +61,13 @@ class UsbPathPreferenceStore
         companion object {
             const val PREFS_NAME = "user_preferences"
             const val KEY_CHOICES = "usb_path_choices"
-
-            fun keyFor(
-                vendorId: Int,
-                productId: Int,
-            ): String = "%04x:%04x".format(vendorId and 0xFFFF, productId and 0xFFFF)
         }
     }
+
+private fun usbPathKeyFor(
+    vendorId: Int,
+    productId: Int,
+): String = "%04x:%04x".format(vendorId and 0xFFFF, productId and 0xFFFF)
 
 // A value this build cannot read drops that one model's pick, and an unreadable blob drops them all.
 private fun readInitialPathChoices(context: Context): Map<String, PathChoice> {

@@ -5,17 +5,17 @@ package com.tinkernorth.dish.ui.diagnostics
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
-import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
-import com.tinkernorth.dish.source.store.StickTestHistoryStore
 import com.tinkernorth.dish.source.store.StickTestRecord
+import com.tinkernorth.dish.source.store.stickHistoryKeyFor
 import com.tinkernorth.dish.source.system.WifiLink
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import org.junit.Assert.assertEquals
@@ -60,7 +60,7 @@ class DiagnosticsMappersTest {
         satelliteControllerTypes = types,
     )
 
-    private fun caps(vararg features: Feature) = SlotCapabilities.NONE.copy(controller = CapabilitySet.of(*features))
+    private fun caps(vararg features: Feature) = SlotCapabilities.NONE.copy(controller = capabilitySetOf(*features))
 
     private fun world(
         devices: List<PhysicalGamepadRegistry.Device> = emptyList(),
@@ -222,7 +222,7 @@ class DiagnosticsMappersTest {
     fun `stick history is looked up by the model key`() {
         val device = device(3, "DualSense")
         val record = StickTestRecord(driftAtMs = 5L, driftLeft = 0.1f)
-        val key = StickTestHistoryStore.keyFor(device.vendorId, device.productId, device.name)
+        val key = stickHistoryKeyFor(device.vendorId, device.productId, device.name)
         val w = world().copy(pads = PadWorld(stickHistory = mapOf(key to record)))
         assertEquals(record, padFacts(device, w).stickHistory)
         assertNull(padFacts(device.copy(productId = 0x0DF2), w).stickHistory)

@@ -5,9 +5,9 @@ package com.tinkernorth.dish.ui.setup
 
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
-import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.core.net.DishProtocolCompat
 import com.tinkernorth.dish.ui.main.StringLookup
 import org.junit.Assert.assertEquals
@@ -27,7 +27,7 @@ class ReviewGraphTest {
     ): String = "$res|" + args.joinToString(",")
 
     private fun caps(vararg features: Feature): SlotCapabilities {
-        val set = CapabilitySet.of(*features)
+        val set = capabilitySetOf(*features)
         return SlotCapabilities.NONE.copy(controller = set, transport = set, type = set, host = set, userEnabled = set)
     }
 

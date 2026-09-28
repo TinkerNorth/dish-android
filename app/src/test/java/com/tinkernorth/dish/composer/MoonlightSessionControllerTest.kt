@@ -10,6 +10,7 @@ import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEvent
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.core.net.moonlight.NINTENDO
@@ -54,17 +55,17 @@ class MoonlightSessionControllerTest {
 
     private val padCaps =
         SlotCapabilities(
-            controller = CapabilitySet.of(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE),
-            transport = CapabilitySet.of(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE),
-            type = CapabilitySet.of(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE),
-            host = CapabilitySet.of(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE),
-            userEnabled = CapabilitySet.of(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE),
+            controller = capabilitySetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE),
+            transport = capabilitySetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE),
+            type = capabilitySetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE),
+            host = capabilitySetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE),
+            userEnabled = capabilitySetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE),
             runtimeDown = CapabilitySet.EMPTY,
         )
 
     private val motionCaps =
         padCaps.copy(
-            controller = CapabilitySet.of(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE, Feature.MOTION),
+            controller = capabilitySetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE, Feature.MOTION),
         )
 
     private fun summary(

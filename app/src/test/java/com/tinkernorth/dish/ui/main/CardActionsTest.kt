@@ -9,6 +9,7 @@ import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.TOUCHPAD_MODE_DS4
 import com.tinkernorth.dish.repository.TOUCHPAD_MODE_MOUSE
@@ -212,7 +213,7 @@ class CardActionsTest {
         SlotCapabilities(
             controller = CapabilitySet.EMPTY,
             transport = CapabilitySet.EMPTY,
-            type = CapabilitySet.of(Feature.TOUCHPAD),
+            type = capabilitySetOf(Feature.TOUCHPAD),
             host = CapabilitySet.EMPTY,
             userEnabled = CapabilitySet.EMPTY,
             runtimeDown = CapabilitySet.EMPTY,

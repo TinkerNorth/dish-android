@@ -63,8 +63,8 @@ data class ControllerDescriptor(
         const val TOUCHPAD_MODE_DS4 = "ds4"
         const val TOUCHPAD_MODE_MOUSE = "mouse"
         const val TOUCHPAD_MODE_OFF = "off"
-
-        fun arrayJson(descriptors: List<ControllerDescriptor>): String =
-            descriptors.joinToString(prefix = "[", postfix = "]", separator = ",") { it.toJson() }
     }
 }
+
+fun controllersArrayJson(descriptors: List<ControllerDescriptor>): String =
+    descriptors.joinToString(prefix = "[", postfix = "]", separator = ",") { it.toJson() }

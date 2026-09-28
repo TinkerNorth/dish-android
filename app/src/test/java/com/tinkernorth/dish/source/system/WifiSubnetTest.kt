@@ -24,12 +24,12 @@ class WifiSubnetTest {
 
     @Test
     fun `wifi generation maps the platform standard constants`() {
-        assertEquals(WifiGeneration.WIFI_4, WifiGeneration.fromWifiStandard(4))
-        assertEquals(WifiGeneration.WIFI_5, WifiGeneration.fromWifiStandard(5))
-        assertEquals(WifiGeneration.WIFI_6, WifiGeneration.fromWifiStandard(6))
-        assertEquals(WifiGeneration.WIFI_7, WifiGeneration.fromWifiStandard(8))
-        assertEquals(WifiGeneration.LEGACY, WifiGeneration.fromWifiStandard(1))
-        assertEquals(WifiGeneration.UNKNOWN, WifiGeneration.fromWifiStandard(0))
+        assertEquals(WifiGeneration.WIFI_4, wifiGenerationForStandard(4))
+        assertEquals(WifiGeneration.WIFI_5, wifiGenerationForStandard(5))
+        assertEquals(WifiGeneration.WIFI_6, wifiGenerationForStandard(6))
+        assertEquals(WifiGeneration.WIFI_7, wifiGenerationForStandard(8))
+        assertEquals(WifiGeneration.LEGACY, wifiGenerationForStandard(1))
+        assertEquals(WifiGeneration.UNKNOWN, wifiGenerationForStandard(0))
     }
 
     @Test
@@ -45,10 +45,10 @@ class WifiSubnetTest {
 
     @Test
     fun `wifi band maps a frequency to its marketing band`() {
-        assertEquals(WifiBand.GHZ_2_4, WifiBand.fromFrequencyMhz(2412))
-        assertEquals(WifiBand.GHZ_5, WifiBand.fromFrequencyMhz(5180))
-        assertEquals(WifiBand.GHZ_6, WifiBand.fromFrequencyMhz(5955))
-        assertEquals(WifiBand.UNKNOWN, WifiBand.fromFrequencyMhz(5900))
-        assertEquals(WifiBand.UNKNOWN, WifiBand.fromFrequencyMhz(0))
+        assertEquals(WifiBand.GHZ_2_4, wifiBandForFrequency(2412))
+        assertEquals(WifiBand.GHZ_5, wifiBandForFrequency(5180))
+        assertEquals(WifiBand.GHZ_6, wifiBandForFrequency(5955))
+        assertEquals(WifiBand.UNKNOWN, wifiBandForFrequency(5900))
+        assertEquals(WifiBand.UNKNOWN, wifiBandForFrequency(0))
     }
 }

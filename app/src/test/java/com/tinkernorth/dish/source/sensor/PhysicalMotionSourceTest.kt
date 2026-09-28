@@ -5,6 +5,7 @@ package com.tinkernorth.dish.source.sensor
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
@@ -19,7 +20,7 @@ class PhysicalMotionSourceTest {
         gyro: Boolean,
         userMotion: Boolean,
     ): SlotCapabilities {
-        fun motionSet(present: Boolean) = if (present) CapabilitySet.of(Feature.MOTION) else CapabilitySet.EMPTY
+        fun motionSet(present: Boolean) = if (present) capabilitySetOf(Feature.MOTION) else CapabilitySet.EMPTY
         val all = CapabilitySet(Feature.entries.toSet())
         return SlotCapabilities(
             controller = motionSet(gyro),

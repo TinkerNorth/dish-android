@@ -8,6 +8,7 @@ import com.tinkernorth.dish.core.model.CatalogTypeDto
 import com.tinkernorth.dish.core.model.Direction
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.core.net.ControllerDescriptor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -96,9 +97,9 @@ class CapabilityResolverTest {
         val all = CapabilitySet(Feature.entries.toSet())
         val resolved =
             resolve(
-                controller = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION, Feature.RUMBLE),
+                controller = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION, Feature.RUMBLE),
                 transport = all,
-                type = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
+                type = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION),
                 host = all,
                 userEnabled = CapabilitySet.EMPTY,
                 runtimeDown = CapabilitySet.EMPTY,
@@ -118,7 +119,7 @@ class CapabilityResolverTest {
                 transport = all,
                 type = all,
                 host = all,
-                userEnabled = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
+                userEnabled = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION),
                 runtimeDown = CapabilitySet.EMPTY,
             )
         assertTrue(resolved.isEnabled(Feature.MOTION))
@@ -134,8 +135,8 @@ class CapabilityResolverTest {
                 transport = all,
                 type = all,
                 host = all,
-                userEnabled = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
-                runtimeDown = CapabilitySet.of(Feature.MOTION),
+                userEnabled = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION),
+                runtimeDown = capabilitySetOf(Feature.MOTION),
             )
         assertTrue(Feature.MOTION in resolved.enabled)
         assertFalse(Feature.MOTION in resolved.live)
@@ -146,10 +147,10 @@ class CapabilityResolverTest {
     fun `column helpers report the limiting layer per feature`() {
         val resolved =
             resolve(
-                controller = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
-                transport = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
-                type = CapabilitySet.of(Feature.GAMEPAD),
-                host = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
+                controller = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION),
+                transport = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION),
+                type = capabilitySetOf(Feature.GAMEPAD),
+                host = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION),
                 userEnabled = CapabilitySet.EMPTY,
                 runtimeDown = CapabilitySet.EMPTY,
             )
@@ -163,9 +164,9 @@ class CapabilityResolverTest {
     fun `destinationOk requires both transport and host`() {
         val resolved =
             resolve(
-                controller = CapabilitySet.of(Feature.MOTION),
-                transport = CapabilitySet.of(Feature.MOTION),
-                type = CapabilitySet.of(Feature.MOTION),
+                controller = capabilitySetOf(Feature.MOTION),
+                transport = capabilitySetOf(Feature.MOTION),
+                type = capabilitySetOf(Feature.MOTION),
                 host = CapabilitySet.EMPTY,
                 userEnabled = CapabilitySet.EMPTY,
                 runtimeDown = CapabilitySet.EMPTY,
@@ -175,7 +176,7 @@ class CapabilityResolverTest {
 
     @Test
     fun `sends and receives partition by direction`() {
-        val set = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION, Feature.RUMBLE, Feature.LIGHTBAR)
+        val set = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION, Feature.RUMBLE, Feature.LIGHTBAR)
         assertTrue(set.sends().all { it.direction == Direction.SEND })
         assertTrue(set.receives().all { it.direction == Direction.RECEIVE })
         assertTrue(Feature.RUMBLE in set.receives())
@@ -194,7 +195,7 @@ class CapabilityResolverTest {
         typeMotion: Boolean = !gyro,
         runtimeMotionDown: Boolean = gyro,
     ): SlotCapabilities {
-        fun motionSet(present: Boolean) = if (present) CapabilitySet.of(Feature.MOTION) else CapabilitySet.EMPTY
+        fun motionSet(present: Boolean) = if (present) capabilitySetOf(Feature.MOTION) else CapabilitySet.EMPTY
         return SlotCapabilities(
             controller = motionSet(gyro),
             transport = CapabilitySet(Feature.entries.toSet()),
@@ -244,14 +245,14 @@ class CapabilityResolverTest {
         val ds5 =
             SlotCapabilities(
                 controller =
-                    CapabilitySet.of(
+                    capabilitySetOf(
                         Feature.GAMEPAD,
                         Feature.LIGHTBAR,
                         Feature.TRIGGER_EFFECTS,
                         Feature.PLAYER_LEDS,
                     ),
                 transport = CapabilitySet(Feature.entries.toSet()),
-                type = CapabilitySet.of(Feature.GAMEPAD),
+                type = capabilitySetOf(Feature.GAMEPAD),
                 host = CapabilitySet(Feature.entries.toSet()),
                 userEnabled = CapabilitySet.EMPTY,
                 runtimeDown = CapabilitySet.EMPTY,
@@ -432,11 +433,11 @@ class CapabilityResolverTest {
         // probe) lands in the controller layer the same way, so the wire advertises CAP_MOTION.
         val staticDbPad =
             SlotCapabilities(
-                controller = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
+                controller = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION),
                 transport = CapabilitySet(Feature.entries.toSet()),
-                type = CapabilitySet.of(Feature.GAMEPAD),
+                type = capabilitySetOf(Feature.GAMEPAD),
                 host = CapabilitySet(Feature.entries.toSet()),
-                userEnabled = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
+                userEnabled = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION),
                 runtimeDown = CapabilitySet.EMPTY,
             )
         assertEquals(
@@ -457,8 +458,8 @@ class CapabilityResolverTest {
         controllerHaptics: Boolean,
         userSpeaker: Boolean,
     ): SlotCapabilities {
-        val controller = if (controllerHaptics) CapabilitySet.of(Feature.HAPTIC_AUDIO) else CapabilitySet.EMPTY
-        val userEnabled = if (userSpeaker) CapabilitySet.of(Feature.SPEAKER, Feature.HAPTIC_AUDIO) else CapabilitySet.EMPTY
+        val controller = if (controllerHaptics) capabilitySetOf(Feature.HAPTIC_AUDIO) else CapabilitySet.EMPTY
+        val userEnabled = if (userSpeaker) capabilitySetOf(Feature.SPEAKER, Feature.HAPTIC_AUDIO) else CapabilitySet.EMPTY
         return SlotCapabilities(
             controller = controller,
             transport = CapabilitySet(Feature.entries.toSet()),
@@ -488,11 +489,11 @@ class CapabilityResolverTest {
     fun `wireCaps decisive case - a DualSense on a four-channel endpoint is 0x01C3`() {
         val fourChannelDualSense =
             SlotCapabilities(
-                controller = CapabilitySet.of(Feature.MIC, Feature.SPEAKER, Feature.HAPTIC_AUDIO),
+                controller = capabilitySetOf(Feature.MIC, Feature.SPEAKER, Feature.HAPTIC_AUDIO),
                 transport = CapabilitySet(Feature.entries.toSet()),
                 type = CapabilitySet.EMPTY,
                 host = CapabilitySet.EMPTY,
-                userEnabled = CapabilitySet.of(Feature.MIC, Feature.SPEAKER, Feature.HAPTIC_AUDIO),
+                userEnabled = capabilitySetOf(Feature.MIC, Feature.SPEAKER, Feature.HAPTIC_AUDIO),
                 runtimeDown = CapabilitySet.EMPTY,
             )
         assertEquals(0x01C3, wireCaps(fourChannelDualSense))

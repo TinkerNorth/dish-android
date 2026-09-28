@@ -54,7 +54,7 @@ interface SlotActionListener {
 
 class ControllerAdapter(
     private val listener: SlotActionListener,
-) : ListAdapter<ControllerRow, ControllerAdapter.VH>(Diff) {
+) : ListAdapter<ControllerRow, ControllerAdapter.VH>(ControllerRowDiff()) {
     private val dismissedUnsteady = mutableSetOf<String>()
 
     fun submitSlots(
@@ -496,18 +496,18 @@ class ControllerAdapter(
         holder: VH,
         position: Int,
     ) = holder.bind(getItem(position))
+}
 
-    companion object Diff : DiffUtil.ItemCallback<ControllerRow>() {
-        override fun areItemsTheSame(
-            o: ControllerRow,
-            n: ControllerRow,
-        ) = o.slot.id == n.slot.id
+private class ControllerRowDiff : DiffUtil.ItemCallback<ControllerRow>() {
+    override fun areItemsTheSame(
+        o: ControllerRow,
+        n: ControllerRow,
+    ) = o.slot.id == n.slot.id
 
-        override fun areContentsTheSame(
-            o: ControllerRow,
-            n: ControllerRow,
-        ) = o == n
-    }
+    override fun areContentsTheSame(
+        o: ControllerRow,
+        n: ControllerRow,
+    ) = o == n
 }
 
 private class PillPool(

@@ -54,12 +54,12 @@ class SpeakerPlayoutPolicyTest {
     @Test
     fun `an eligible slot is keyed by the address its frames carry`() {
         val plan = speakerPlayoutPlanFor(listOf(slot()))
-        val target = plan.voices[SpeakerPlayoutPlan.routeKey(HANDLE, CTRL_IDX)]!!
+        val target = plan.voices[speakerRouteKey(HANDLE, CTRL_IDX)]!!
         assertEquals(VIRTUAL_SLOT_ID, target.slotId)
         assertEquals(HANDLE, target.sessionHandle)
         assertEquals(CTRL_IDX, target.controllerIndex)
-        assertNull(plan.voices[SpeakerPlayoutPlan.routeKey(HANDLE, CTRL_IDX + 1)])
-        assertNull(plan.voices[SpeakerPlayoutPlan.routeKey(HANDLE + 1, CTRL_IDX)])
+        assertNull(plan.voices[speakerRouteKey(HANDLE, CTRL_IDX + 1)])
+        assertNull(plan.voices[speakerRouteKey(HANDLE + 1, CTRL_IDX)])
     }
 
     @Test
@@ -75,8 +75,8 @@ class SpeakerPlayoutPolicyTest {
                 listOf(slot(), slot(slotId = "-1000", index = CTRL_IDX + 1, playbackDeviceId = 11)),
             )
         assertEquals(2, plan.voices.size)
-        assertEquals(NO_AUDIO_DEVICE, plan.voices[SpeakerPlayoutPlan.routeKey(HANDLE, CTRL_IDX)]!!.playbackDeviceId)
-        assertEquals(11, plan.voices[SpeakerPlayoutPlan.routeKey(HANDLE, CTRL_IDX + 1)]!!.playbackDeviceId)
+        assertEquals(NO_AUDIO_DEVICE, plan.voices[speakerRouteKey(HANDLE, CTRL_IDX)]!!.playbackDeviceId)
+        assertEquals(11, plan.voices[speakerRouteKey(HANDLE, CTRL_IDX + 1)]!!.playbackDeviceId)
     }
 
     @Test
@@ -93,7 +93,7 @@ class SpeakerPlayoutPolicyTest {
                 for (lane in PlayoutLane.entries) {
                     assertTrue(
                         "handle=$handle index=$index lane=$lane collided",
-                        seen.add(SpeakerPlayoutPlan.routeKey(handle, index, lane)),
+                        seen.add(speakerRouteKey(handle, index, lane)),
                     )
                 }
             }
@@ -102,16 +102,16 @@ class SpeakerPlayoutPolicyTest {
 
     @Test
     fun `the two lanes of one pad are different voices, so haptics never overwrites the speaker`() {
-        val speaker = SpeakerPlayoutPlan.routeKey(HANDLE, CTRL_IDX, PlayoutLane.SPEAKER)
-        val haptics = SpeakerPlayoutPlan.routeKey(HANDLE, CTRL_IDX, PlayoutLane.HAPTICS)
+        val speaker = speakerRouteKey(HANDLE, CTRL_IDX, PlayoutLane.SPEAKER)
+        val haptics = speakerRouteKey(HANDLE, CTRL_IDX, PlayoutLane.HAPTICS)
         assertNotEquals(speaker, haptics)
     }
 
     @Test
     fun `the lane defaults to the speaker, which is what a protocol-2 host addresses`() {
         assertEquals(
-            SpeakerPlayoutPlan.routeKey(HANDLE, CTRL_IDX, PlayoutLane.SPEAKER),
-            SpeakerPlayoutPlan.routeKey(HANDLE, CTRL_IDX),
+            speakerRouteKey(HANDLE, CTRL_IDX, PlayoutLane.SPEAKER),
+            speakerRouteKey(HANDLE, CTRL_IDX),
         )
     }
 
@@ -156,8 +156,8 @@ class SpeakerPlayoutPolicyTest {
                 ),
             )
         assertEquals(2, quad.voices.size)
-        val speaker = quad.voices.getValue(SpeakerPlayoutPlan.routeKey(1, 0, PlayoutLane.SPEAKER))
-        val haptic = quad.voices.getValue(SpeakerPlayoutPlan.routeKey(1, 0, PlayoutLane.HAPTICS))
+        val speaker = quad.voices.getValue(speakerRouteKey(1, 0, PlayoutLane.SPEAKER))
+        val haptic = quad.voices.getValue(speakerRouteKey(1, 0, PlayoutLane.HAPTICS))
         assertEquals(PlayoutLane.SPEAKER, speaker.lane)
         assertEquals(4, speaker.deviceChannels) // the speaker opens at the pad's width too
         assertEquals(PlayoutLane.HAPTICS, haptic.lane)

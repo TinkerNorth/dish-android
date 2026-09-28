@@ -44,7 +44,7 @@ interface SpeakerFrameSource {
 }
 
 /** Installs into the native dispatch path, which also starts the thread behind it. */
-object NativeSpeakerFrameSource : SpeakerFrameSource {
+class NativeSpeakerFrameSource : SpeakerFrameSource {
     override fun install(sink: SpeakerAudioBridge.Sink) = SpeakerAudioBridge.install(sink)
 
     override fun uninstall() = SpeakerAudioBridge.uninstall()
@@ -83,7 +83,7 @@ class SpeakerEngine
             plans: SpeakerPlayoutComposer,
             sink: AudioTrackSpeakerSink,
             scope: CoroutineScope,
-        ) : this(plans, sink, NativeSpeakerFrameSource, scope)
+        ) : this(plans, sink, NativeSpeakerFrameSource(), scope)
 
         private val _state = MutableStateFlow(SpeakerPlayoutState.Idle)
         val state: StateFlow<SpeakerPlayoutState> = _state.asStateFlow()
@@ -100,7 +100,7 @@ class SpeakerEngine
             sessionHandle: Int,
             controllerIndex: Int,
             lane: PlayoutLane = PlayoutLane.SPEAKER,
-        ): Long = droppedByRoute[SpeakerPlayoutPlan.routeKey(sessionHandle, controllerIndex, lane)]?.get() ?: 0L
+        ): Long = droppedByRoute[speakerRouteKey(sessionHandle, controllerIndex, lane)]?.get() ?: 0L
 
         private class Voice(
             val target: SpeakerTarget,
@@ -237,7 +237,7 @@ class SpeakerEngine
                     SpeakerAudioBridge.LANE_HAPTICS -> PlayoutLane.HAPTICS
                     else -> return
                 }
-            val key = SpeakerPlayoutPlan.routeKey(sessionHandle, controllerIndex, playoutLane)
+            val key = speakerRouteKey(sessionHandle, controllerIndex, playoutLane)
             val voice = voices[key] ?: return
             val written = voice.session.write(pcmStereo)
             if (written < pcmStereo.size) {

@@ -14,6 +14,7 @@ import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
+import com.tinkernorth.dish.source.bluetooth.bluetoothConnectionIdFor
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -38,7 +39,7 @@ private const val EVENT_BUFFER = 4
 // re-pairing is the only way to change it), drives the system discoverable +
 // passkey prompts from the Activity, and proceeds once the registry reports the
 // host link connected. The connectionId handed forward is the registry's stable
-// id (idFor(mac) == "bt:<mac>"), which is also the coordinator's summary id, so
+// id (bluetoothConnectionIdFor(mac) == "bt:<mac>"), which is also the coordinator's summary id, so
 // the configure screen resolves the same host. The input slotId rides in from
 // the prior step's extras unchanged.
 @HiltViewModel
@@ -182,7 +183,7 @@ class SetupBluetoothHostViewModel
                 registry.states.value
                     .filterValues { it.connected || it.registered }
                     .keys
-            val connId = autoConnectMac?.let { BluetoothGamepadRegistry.idFor(it) } ?: pendingId()
+            val connId = autoConnectMac?.let { bluetoothConnectionIdFor(it) } ?: pendingId()
             activeConnId = connId
             registry.start(connId, profile, autoConnectMac)
             _state.update {

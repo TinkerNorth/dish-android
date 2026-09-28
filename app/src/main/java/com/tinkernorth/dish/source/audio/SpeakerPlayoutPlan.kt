@@ -74,21 +74,21 @@ data class SpeakerPlayoutPlan(
 
     companion object {
         val IDLE = SpeakerPlayoutPlan(emptyMap())
-
-        /** (handle, controller index, lane) as one key; the unpack is never needed. */
-        fun routeKey(
-            sessionHandle: Int,
-            controllerIndex: Int,
-            lane: PlayoutLane = PlayoutLane.SPEAKER,
-        ): Long =
-            (sessionHandle.toLong() shl HANDLE_SHIFT) or
-                (lane.ordinal.toLong() shl Int.SIZE_BITS) or
-                (controllerIndex.toLong() and INDEX_MASK)
-
-        private const val INDEX_MASK = 0xFFFFFFFFL
-        private const val HANDLE_SHIFT = Int.SIZE_BITS + 1
     }
 }
+
+private const val INDEX_MASK = 0xFFFFFFFFL
+private const val HANDLE_SHIFT = Int.SIZE_BITS + 1
+
+/** (handle, controller index, lane) as one key; the unpack is never needed. */
+fun speakerRouteKey(
+    sessionHandle: Int,
+    controllerIndex: Int,
+    lane: PlayoutLane = PlayoutLane.SPEAKER,
+): Long =
+    (sessionHandle.toLong() shl HANDLE_SHIFT) or
+        (lane.ordinal.toLong() shl Int.SIZE_BITS) or
+        (controllerIndex.toLong() and INDEX_MASK)
 
 /**
  * The speaker eligibility rule, in one place and with nothing else in it.
@@ -130,7 +130,7 @@ private fun MutableMap<Long, SpeakerTarget>.putVoice(
     lane: PlayoutLane,
     channels: Int,
 ) {
-    this[SpeakerPlayoutPlan.routeKey(slot.sessionHandle, slot.controllerIndex, lane)] =
+    this[speakerRouteKey(slot.sessionHandle, slot.controllerIndex, lane)] =
         SpeakerTarget(
             slotId = slot.slotId,
             sessionHandle = slot.sessionHandle,

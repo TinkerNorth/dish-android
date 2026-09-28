@@ -11,6 +11,7 @@ import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
+import com.tinkernorth.dish.source.bluetooth.bluetoothConnectionIdFor
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
 import com.tinkernorth.dish.source.system.BluetoothPermissionState
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
@@ -223,7 +224,7 @@ class SetupBluetoothHostViewModelTest {
     @Test
     fun `a remembered host already registered when we start finishes once its own key connects`() =
         runTest(dispatcher) {
-            val hostId = BluetoothGamepadRegistry.idFor(REMEMBERED_MAC)
+            val hostId = bluetoothConnectionIdFor(REMEMBERED_MAC)
             states.value = mapOf(hostId to slot(isConnected = false, isRegistered = true))
             dispatcher.scheduler.runCurrent()
             vm.bindArgs("42")

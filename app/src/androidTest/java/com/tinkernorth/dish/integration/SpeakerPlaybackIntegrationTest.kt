@@ -179,7 +179,7 @@ class SpeakerPlaybackIntegrationTest {
                 SlotAudioRoutes.NONE,
                 engineScope,
             )
-        return SpeakerEngine(composer, sink, NativeSpeakerFrameSource, engineScope).also {
+        return SpeakerEngine(composer, sink, NativeSpeakerFrameSource(), engineScope).also {
             engine = it
             owner.registry.addObserver(it)
             owner.registry.currentState = Lifecycle.State.STARTED

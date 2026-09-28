@@ -28,7 +28,7 @@ interface BluetoothRowListener {
 
 class BluetoothListAdapter(
     private val listener: BluetoothRowListener,
-) : ListAdapter<BluetoothRow, RecyclerView.ViewHolder>(Diff) {
+) : ListAdapter<BluetoothRow, RecyclerView.ViewHolder>(BluetoothRowDiff()) {
     override fun getItemViewType(position: Int): Int = if (getItem(position) is BluetoothRow.Empty) TYPE_EMPTY else TYPE_ROW
 
     override fun onCreateViewHolder(
@@ -108,8 +108,6 @@ class BluetoothListAdapter(
     companion object {
         private const val TYPE_ROW = 0
         private const val TYPE_EMPTY = 1
-
-        private val Diff = BluetoothRowDiff()
     }
 }
 
