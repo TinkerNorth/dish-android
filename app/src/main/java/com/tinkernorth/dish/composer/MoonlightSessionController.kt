@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.architecture.abstracts.AbstractController
 import com.tinkernorth.dish.core.model.Feature
@@ -180,11 +181,7 @@ class MoonlightSessionController
             val intent = Intent(context, MoonlightSessionService::class.java)
             serviceRunning =
                 try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        context.startForegroundService(intent)
-                    } else {
-                        context.startService(intent)
-                    }
+                    startSessionService(context, intent, Build.VERSION.SDK_INT)
                     true
                 } catch (e: IllegalStateException) {
                     Log.w(TAG, "foreground service start refused: ${e.message}")
@@ -202,3 +199,22 @@ class MoonlightSessionController
             const val RUMBLE_HOLD_MS = 1500
         }
     }
+
+// From API 26 a start from the background must promise the foreground notification or the
+// system refuses it; below 26 that call does not exist and a plain start is allowed from anywhere.
+internal fun startSessionService(
+    context: Context,
+    intent: Intent,
+    sdkInt: Int,
+) {
+    if (hasForegroundServiceStart(sdkInt)) {
+        context.startForegroundService(intent)
+    } else {
+        context.startService(intent)
+    }
+}
+
+// The annotation is what lets lint read a caller-supplied API level as the gate the 26+ call
+// above needs; a bare `sdkInt >= api` comparison it cannot see through.
+@ChecksSdkIntAtLeast(api = Build.VERSION_CODES.O)
+private fun hasForegroundServiceStart(sdkInt: Int): Boolean = sdkInt >= Build.VERSION_CODES.O

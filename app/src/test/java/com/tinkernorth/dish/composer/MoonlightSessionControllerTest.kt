@@ -4,6 +4,8 @@
 package com.tinkernorth.dish.composer
 
 import android.content.Context
+import android.content.Intent
+import android.os.Build
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
@@ -464,4 +466,26 @@ class MoonlightSessionControllerTest {
 
             verify(exactly = 1) { context.startService(any()) }
         }
+
+    // The controller's own tests run at the stub's SDK level of 0, so they only ever take the
+    // plain start; the choice is pinned here at both edges of API 26.
+    @Test
+    fun `from API 26 the session service starts as a foreground service`() {
+        val intent: Intent = mockk()
+
+        startSessionService(context, intent, Build.VERSION_CODES.O)
+
+        verify(exactly = 1) { context.startForegroundService(intent) }
+        verify(exactly = 0) { context.startService(any()) }
+    }
+
+    @Test
+    fun `below API 26 the session service starts as a plain service`() {
+        val intent: Intent = mockk()
+
+        startSessionService(context, intent, Build.VERSION_CODES.N_MR1)
+
+        verify(exactly = 1) { context.startService(intent) }
+        verify(exactly = 0) { context.startForegroundService(any()) }
+    }
 }
