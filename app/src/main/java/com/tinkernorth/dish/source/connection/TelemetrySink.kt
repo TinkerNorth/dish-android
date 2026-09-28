@@ -36,6 +36,10 @@ interface TelemetrySink {
         status: Int,
     )
 
+    /**
+     * [report] is the caller's, and a per-frame caller refills the same one for its next frame:
+     * read it during the call and keep nothing of it.
+     */
     fun sendTouchpad(
         slotId: String,
         report: TouchpadReport,

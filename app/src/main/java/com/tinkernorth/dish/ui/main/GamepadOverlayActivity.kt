@@ -32,6 +32,7 @@ import com.tinkernorth.dish.source.store.MicMuteStore
 import com.tinkernorth.dish.source.store.VirtualPadFeedback
 import com.tinkernorth.dish.ui.common.GamepadTouchView
 import com.tinkernorth.dish.ui.common.ResendPacer
+import com.tinkernorth.dish.ui.common.TouchpadReportBuffer
 import com.tinkernorth.dish.ui.common.TouchpadSurfaceView
 import com.tinkernorth.dish.ui.common.gamepadSkinFromName
 import com.tinkernorth.dish.ui.common.observeWhileStarted
@@ -72,6 +73,10 @@ class GamepadOverlayActivity :
     @Volatile private var lastReportedState: GamepadTouchView.GamepadState? = null
 
     @Volatile private var lastReportedTrackpad: TouchpadSurfaceView.TouchpadState? = null
+
+    // The trackpad's wire frame, one per sending thread.
+    private val uiTrackpadReport = TouchpadReportBuffer()
+    private val resendTrackpadReport = TouchpadReportBuffer()
 
     // Mute is STATE on the wire, so every frame carries it, including the resend loop's: hence a
     // volatile snapshot rather than a store read on the send path.
@@ -196,7 +201,7 @@ class GamepadOverlayActivity :
         lastReportedTrackpad?.let { touch ->
             val changed = touch != lastResentTrackpadSnapshot
             if (changed) lastResentTrackpadSnapshot = touch.copy()
-            if (trackpadResendPacer.resendDue(changed)) sendSatelliteTrackpadReport(touch)
+            if (trackpadResendPacer.resendDue(changed)) sendSatelliteTrackpadReport(touch, resendTrackpadReport)
         }
     }
 
@@ -408,16 +413,19 @@ class GamepadOverlayActivity :
         inputRateStore.recordScreenSample()
         lastReportedTrackpad = state
         when (pointerRouteFor(hub.summary(connectionId))) {
-            PointerRoute.SATELLITE -> sendSatelliteTrackpadReport(state)
+            PointerRoute.SATELLITE -> sendSatelliteTrackpadReport(state, uiTrackpadReport)
             // Same frame, translated to CONTROLLER_TOUCH events by the connection;
             // the click stays on the pad report's button flags.
-            PointerRoute.MOONLIGHT -> moonlight.get(connectionId)?.let { sendTrackpadReport(it, state) }
+            PointerRoute.MOONLIGHT -> moonlight.get(connectionId)?.let { sendTrackpadReport(it, state, uiTrackpadReport) }
             PointerRoute.NONE -> Unit
         }
     }
 
-    private fun sendSatelliteTrackpadReport(state: TouchpadSurfaceView.TouchpadState) {
-        satellite.get(connectionId)?.let { sendTrackpadReport(it, state) }
+    private fun sendSatelliteTrackpadReport(
+        state: TouchpadSurfaceView.TouchpadState,
+        buffer: TouchpadReportBuffer,
+    ) {
+        satellite.get(connectionId)?.let { sendTrackpadReport(it, state, buffer) }
     }
 
     // The virtual slot's telemetry destination: whichever manager holds this
@@ -428,8 +436,9 @@ class GamepadOverlayActivity :
     private fun sendTrackpadReport(
         sink: com.tinkernorth.dish.source.connection.TelemetrySink,
         state: TouchpadSurfaceView.TouchpadState,
+        buffer: TouchpadReportBuffer,
     ) {
-        sink.sendTouchpad(VIRTUAL_SLOT_ID, state.toReport(buttonPressed = state.buttonPressed))
+        sink.sendTouchpad(VIRTUAL_SLOT_ID, buffer.reportOf(state, buttonPressed = state.buttonPressed))
     }
 
     /**

@@ -10,6 +10,7 @@ import android.view.View
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.databinding.ActivityTouchpadOverlayBinding
+import com.tinkernorth.dish.ui.common.TouchpadReportBuffer
 import com.tinkernorth.dish.ui.common.TouchpadSurfaceView
 import com.tinkernorth.dish.ui.common.paintConnectionMenuItem
 import com.tinkernorth.dish.ui.common.setupDishToolbar
@@ -25,6 +26,10 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
 
     // @Volatile for main-thread write / resend-thread read.
     @Volatile private var lastReportedState: TouchpadSurfaceView.TouchpadState? = null
+
+    // The wire frame, one per sending thread.
+    private val uiReport = TouchpadReportBuffer()
+    private val resendReport = TouchpadReportBuffer()
 
     private var slotId: String = VIRTUAL_SLOT_ID
     private var clickHeld = false
@@ -101,8 +106,8 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
         inputRateStore.recordScreenSample()
         lastReportedState = state
         when (pointerRouteFor(hub.summary(connectionId))) {
-            PointerRoute.SATELLITE -> sendSatelliteTouchpadReport(state)
-            PointerRoute.MOONLIGHT -> moonlight.get(connectionId)?.let { sendTouchpadReport(it, state) }
+            PointerRoute.SATELLITE -> sendSatelliteTouchpadReport(state, uiReport)
+            PointerRoute.MOONLIGHT -> moonlight.get(connectionId)?.let { sendTouchpadReport(it, state, uiReport) }
             PointerRoute.NONE -> Unit
         }
     }
@@ -115,7 +120,7 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
         val changed = state != lastResentSnapshot
         if (changed) lastResentSnapshot = state.copy()
         if (!resendDue(changed)) return
-        sendSatelliteTouchpadReport(state)
+        sendSatelliteTouchpadReport(state, resendReport)
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -140,15 +145,19 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
     }
 
     // Resolves connection by id each call so reconnects after alive-poll death pick up new session handle.
-    private fun sendSatelliteTouchpadReport(state: TouchpadSurfaceView.TouchpadState) {
-        satellite.get(connectionId)?.let { sendTouchpadReport(it, state) }
+    private fun sendSatelliteTouchpadReport(
+        state: TouchpadSurfaceView.TouchpadState,
+        buffer: TouchpadReportBuffer,
+    ) {
+        satellite.get(connectionId)?.let { sendTouchpadReport(it, state, buffer) }
     }
 
     private fun sendTouchpadReport(
         sink: com.tinkernorth.dish.source.connection.TelemetrySink,
         state: TouchpadSurfaceView.TouchpadState,
+        buffer: TouchpadReportBuffer,
     ) {
-        sink.sendTouchpad(slotId, state.toReport(buttonPressed = state.buttonPressed))
+        sink.sendTouchpad(slotId, buffer.reportOf(state, buttonPressed = state.buttonPressed))
     }
 
     companion object {

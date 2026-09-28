@@ -18,6 +18,7 @@ import com.tinkernorth.dish.source.store.MouseSurfaceStore
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.ui.common.HoldButtonView
 import com.tinkernorth.dish.ui.common.ScrollStripView
+import com.tinkernorth.dish.ui.common.TouchpadReportBuffer
 import com.tinkernorth.dish.ui.common.TouchpadSurfaceView
 import com.tinkernorth.dish.ui.common.paintConnectionMenuItem
 import com.tinkernorth.dish.ui.common.setupDishToolbar
@@ -50,6 +51,10 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
 
     // Main-thread write per frame / resend-thread read per tick, with nothing allocated on either.
     private val reportLatch = MouseReportLatch()
+
+    // The satellite's wire frame, one per sending thread.
+    private val uiReport = TouchpadReportBuffer()
+    private val resendReport = TouchpadReportBuffer()
 
     private var slotId: String = VIRTUAL_SLOT_ID
     private var leftHeld = false
@@ -204,7 +209,7 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
         inputRateStore.recordScreenSample()
         reportLatch.record(fingers, leftHeld, rightHeld, middleHeld)
         when (pointerRouteFor(hub.summary(connectionId))) {
-            PointerRoute.SATELLITE -> sendMouseReport(fingers, leftHeld, rightHeld, middleHeld, scrollNotches)
+            PointerRoute.SATELLITE -> sendMouseReport(uiReport, fingers, leftHeld, rightHeld, middleHeld, scrollNotches)
             PointerRoute.MOONLIGHT -> sendMoonlightMouse(fingers, scrollNotches)
             PointerRoute.NONE -> Unit
         }
@@ -217,6 +222,7 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
         val changed = reportLatch.refreshResendSnapshot()
         if (!resendDue(changed)) return
         sendMouseReport(
+            resendReport,
             reportLatch.resentFingers,
             reportLatch.resentLeftHeld,
             reportLatch.resentRightHeld,
@@ -263,6 +269,7 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
     }
 
     private fun sendMouseReport(
+        buffer: TouchpadReportBuffer,
         fingers: TouchpadSurfaceView.TouchpadState,
         left: Boolean,
         right: Boolean,
@@ -272,7 +279,7 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
         val scroll = wheelDeltaFor(scrollNotches).toShort()
         satellite.get(connectionId)?.sendTouchpad(
             slotId,
-            fingers.toReport(buttonPressed = left, rightPressed = right, middlePressed = middle, scrollDelta = scroll),
+            buffer.reportOf(fingers, buttonPressed = left, rightPressed = right, middlePressed = middle, scrollDelta = scroll),
         )
     }
 
