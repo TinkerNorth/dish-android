@@ -64,6 +64,9 @@ constexpr uint8_t kGlobalPop = 0xB;
 constexpr uint8_t kLocalUsage = 0x0;
 constexpr uint8_t kLocalUsageMin = 0x1;
 constexpr uint8_t kLocalUsageMax = 0x2;
+// An extended usage packs its page into the high half and its id into the low half.
+constexpr uint32_t kUsagePageShift = 16;
+constexpr uint32_t kUsageIdMask = 0xFFFF;
 
 int32_t signExtend(const uint32_t v, const uint8_t bytes) {
     const bool isAlreadyFullWidth = bytes == 0 || bytes >= kBytesPerU32;
@@ -286,6 +289,31 @@ HidItem readHidItem(const uint8_t* desc, const size_t len, size_t& i) {
     return readShortItem(desc, len, prefix, i);
 }
 
+// A Usage (or Usage Minimum) item as declared. Four data bytes make it an extended usage that
+// carries its own page; any other size names an id on whichever Usage Page is current when the
+// Main item arrives (HID 1.11 §6.2.2.8).
+struct DeclaredUsage {
+    uint32_t value;
+    bool isExtended;
+};
+
+DeclaredUsage declareUsage(const HidItem& item) {
+    const bool isExtended = item.dataLen == kBytesPerU32;
+    return DeclaredUsage{item.data, isExtended};
+}
+
+struct Usage {
+    uint32_t page;
+    uint32_t id;
+};
+
+Usage resolveUsage(const DeclaredUsage& declared, const uint32_t currentPage) {
+    if (declared.isExtended) {
+        return Usage{declared.value >> kUsagePageShift, declared.value & kUsageIdMask};
+    }
+    return Usage{currentPage, declared.value};
+}
+
 // The global item state table: what Push saves and Pop restores (HID 1.11 §6.2.2.7).
 struct HidGlobals {
     uint32_t usagePage;
@@ -306,9 +334,9 @@ struct HidParseState {
     uint32_t bitCursorByReportId[kReportIdCount];
     bool locked;
     uint8_t lockedReportId;
-    uint32_t usages[kMaxUsages];
+    DeclaredUsage usages[kMaxUsages];
     size_t usageCount;
-    uint32_t usageMin;
+    DeclaredUsage usageMin;
     bool haveRange;
 };
 
@@ -363,10 +391,10 @@ bool applyGlobalItem(const HidItem& item, HidParseState& st) {
 void applyLocalItem(const HidItem& item, HidParseState& st) {
     switch (item.tag) {
     case kLocalUsage:
-        if (st.usageCount < kMaxUsages) st.usages[st.usageCount++] = item.data;
+        if (st.usageCount < kMaxUsages) st.usages[st.usageCount++] = declareUsage(item);
         break;
     case kLocalUsageMin:
-        st.usageMin = item.data;
+        st.usageMin = declareUsage(item);
         st.haveRange = true;
         break;
     case kLocalUsageMax:
@@ -385,20 +413,33 @@ void takeButtonField(const HidParseState& st, const uint32_t startBit, HidLayout
     out.buttonCount = (uint8_t)count;
 }
 
-// A usage range names every field; a usage list names the first fields and its last entry stands
-// for the rest.
+bool namesAUsage(const HidParseState& st) { return st.haveRange || st.usageCount > 0; }
+
+// The usage field f of an Input names, when the Input names any: a usage range counts up from its
+// minimum on the minimum's page; a usage list names the first fields and its last entry stands for
+// the rest.
+Usage fieldUsage(const HidParseState& st, const uint32_t f) {
+    const uint32_t currentPage = st.globals.usagePage;
+    if (st.haveRange) {
+        const Usage first = resolveUsage(st.usageMin, currentPage);
+        return Usage{first.page, first.id + f};
+    }
+    const size_t listed = std::min<size_t>(f, st.usageCount - 1);
+    return resolveUsage(st.usages[listed], currentPage);
+}
+
+// An Input that names no usage has its fields on the current page.
+uint32_t firstFieldPage(const HidParseState& st) {
+    if (!namesAUsage(st)) return st.globals.usagePage;
+    return fieldUsage(st, 0).page;
+}
+
 void takeAxisFields(const HidParseState& st, const uint32_t startBit, HidLayout& out) {
+    if (!namesAUsage(st)) return;
     const HidGlobals& g = st.globals;
     for (uint32_t f = 0; f < g.reportCount; f++) {
-        uint32_t usage;
-        if (st.haveRange) {
-            usage = st.usageMin + f;
-        } else if (st.usageCount == 0) {
-            break;
-        } else {
-            usage = st.usages[f < st.usageCount ? f : st.usageCount - 1];
-        }
-        assignUsage(out, g.usagePage, usage, startBit + f * g.reportSize, g.reportSize, g.logMin,
+        const Usage usage = fieldUsage(st, f);
+        assignUsage(out, usage.page, usage.id, startBit + f * g.reportSize, g.reportSize, g.logMin,
                     g.logMax);
     }
 }
@@ -422,20 +463,18 @@ void applyInputItem(const HidItem& item, HidParseState& st, HidLayout& out) {
     const bool isTheLockedReport = g.currentReportId == st.lockedReportId;
     if (!isTheLockedReport) return;
 
-    const bool isButtonPage = g.usagePage == kUsagePageButton;
+    const bool isButtonPage = firstFieldPage(st) == kUsagePageButton;
     if (isButtonPage) {
         takeButtonField(st, startBit, out);
         return;
     }
-    const bool isAxisPage =
-        g.usagePage == kUsagePageGenericDesktop || g.usagePage == kUsagePageSimulation;
-    if (isAxisPage) takeAxisFields(st, startBit, out);
+    takeAxisFields(st, startBit, out);
 }
 
 void clearLocalItems(HidParseState& st) {
     st.usageCount = 0;
     st.haveRange = false;
-    st.usageMin = 0;
+    st.usageMin = DeclaredUsage{0, false};
 }
 
 // A Main item consumes whatever the Global and Local items have accumulated and then clears the

@@ -1113,3 +1113,137 @@ TEST(HidDescriptor, PushesNestAsDeepAsTheStackAndOneMoreEndsTheParse) {
     EXPECT_TRUE(overflowed.lx.present);
     EXPECT_FALSE(overflowed.ly.present);
 }
+
+// ---- Extended usages (HID 1.11 §6.2.2.8): a four-byte Usage carries its own page --------------
+
+namespace {
+
+// The Button page is current, but X and Y arrive as extended Generic Desktop usages: {X, Y}.
+const uint8_t kExtendedAxesOnTheButtonPageDescriptor[] = {
+    0x05, 0x01,                   // Usage Page (Generic Desktop)
+    0x09, 0x05,                   // Usage (Game Pad)
+    0xA1, 0x01,                   // Collection (Application)
+    0x05, 0x09,                   //   Usage Page (Button)
+    0x0B, 0x30, 0x00, 0x01, 0x00, //   Usage (Generic Desktop X), extended
+    0x0B, 0x31, 0x00, 0x01, 0x00, //   Usage (Generic Desktop Y), extended
+    0x15, 0x00,                   //   Logical Minimum (0)
+    0x26, 0xFF, 0x00,             //   Logical Maximum (255)
+    0x75, 0x08,                   //   Report Size (8)
+    0x95, 0x02,                   //   Report Count (2)
+    0x81, 0x02,                   //   Input (Data,Var,Abs)
+    0xC0,                         // End Collection
+};
+
+// One Input on the Generic Desktop page naming X, then an extended Simulation Brake: {X, brake}.
+const uint8_t kMixedPagesInOneInputDescriptor[] = {
+    0x05, 0x01,                   // Usage Page (Generic Desktop)
+    0x09, 0x05,                   // Usage (Game Pad)
+    0xA1, 0x01,                   // Collection (Application)
+    0x09, 0x30,                   //   Usage (X)
+    0x0B, 0xC5, 0x00, 0x02, 0x00, //   Usage (Simulation Controls Brake), extended
+    0x15, 0x00,                   //   Logical Minimum (0)
+    0x26, 0xFF, 0x00,             //   Logical Maximum (255)
+    0x75, 0x08,                   //   Report Size (8)
+    0x95, 0x02,                   //   Report Count (2)
+    0x81, 0x02,                   //   Input (Data,Var,Abs)
+    0xC0,                         // End Collection
+};
+
+// X, then eight buttons named by an extended Button-page range while Generic Desktop is current.
+const uint8_t kExtendedButtonRangeDescriptor[] = {
+    0x05, 0x01,                   // Usage Page (Generic Desktop)
+    0x09, 0x05,                   // Usage (Game Pad)
+    0xA1, 0x01,                   // Collection (Application)
+    0x09, 0x30,                   //   Usage (X)
+    0x15, 0x00,                   //   Logical Minimum (0)
+    0x26, 0xFF, 0x00,             //   Logical Maximum (255)
+    0x75, 0x08,                   //   Report Size (8)
+    0x95, 0x01,                   //   Report Count (1)
+    0x81, 0x02,                   //   Input (Data,Var,Abs)
+    0x1B, 0x01, 0x00, 0x09, 0x00, //   Usage Minimum (Button 1), extended
+    0x2B, 0x08, 0x00, 0x09, 0x00, //   Usage Maximum (Button 8), extended
+    0x25, 0x01,                   //   Logical Maximum (1)
+    0x75, 0x01,                   //   Report Size (1)
+    0x95, 0x08,                   //   Report Count (8)
+    0x81, 0x02,                   //   Input (Data,Var,Abs)
+    0xC0,                         // End Collection
+};
+
+// Generic Desktop is current, and a four-byte Usage spells 0x00000030: page 0 (Undefined), id
+// 0x30, which is not X however it looks. Then a real X: {undefined, X}.
+const uint8_t kExtendedUndefinedPageDescriptor[] = {
+    0x05, 0x01,                   // Usage Page (Generic Desktop)
+    0x09, 0x05,                   // Usage (Game Pad)
+    0xA1, 0x01,                   // Collection (Application)
+    0x0B, 0x30, 0x00, 0x00, 0x00, //   Usage (Undefined page, id 0x30), extended
+    0x09, 0x30,                   //   Usage (X)
+    0x15, 0x00,                   //   Logical Minimum (0)
+    0x26, 0xFF, 0x00,             //   Logical Maximum (255)
+    0x75, 0x08,                   //   Report Size (8)
+    0x95, 0x02,                   //   Report Count (2)
+    0x81, 0x02,                   //   Input (Data,Var,Abs)
+    0xC0,                         // End Collection
+};
+
+// A short Usage declared while the Button page is current, then the Usage Page switched to
+// Generic Desktop before the Input: {X}.
+const uint8_t kUsagePageAfterTheUsageDescriptor[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x05,       // Usage (Game Pad)
+    0xA1, 0x01,       // Collection (Application)
+    0x05, 0x09,       //   Usage Page (Button)
+    0x09, 0x30,       //   Usage (0x30)
+    0x05, 0x01,       //   Usage Page (Generic Desktop)
+    0x15, 0x00,       //   Logical Minimum (0)
+    0x26, 0xFF, 0x00, //   Logical Maximum (255)
+    0x75, 0x08,       //   Report Size (8)
+    0x95, 0x01,       //   Report Count (1)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xC0,             // End Collection
+};
+
+} // namespace
+
+TEST(HidDescriptor, AnExtendedUsageOverridesTheCurrentUsagePage) {
+    const HidLayout L = parsed(kExtendedAxesOnTheButtonPageDescriptor,
+                               sizeof(kExtendedAxesOnTheButtonPageDescriptor));
+    EXPECT_EQ(0, L.buttonCount);
+    ASSERT_TRUE(L.lx.present);
+    ASSERT_TRUE(L.ly.present);
+    EXPECT_EQ(0, L.lx.bitOffset);
+    EXPECT_EQ(8, L.ly.bitOffset);
+    EXPECT_EQ(32767, decoded(L, {0xFF, 0x80}).sLX);
+}
+
+TEST(HidDescriptor, OneInputCanMixAShortAndAnExtendedUsage) {
+    const HidLayout L =
+        parsed(kMixedPagesInOneInputDescriptor, sizeof(kMixedPagesInOneInputDescriptor));
+    ASSERT_TRUE(L.lx.present);
+    EXPECT_EQ(0, L.lx.bitOffset);
+    ASSERT_TRUE(L.lt.present);
+    EXPECT_EQ(8, L.lt.bitOffset);
+    EXPECT_EQ(255, decoded(L, {0x80, 0xFF}).bLT);
+}
+
+TEST(HidDescriptor, AnExtendedUsageRangeOnTheButtonPageIsTheButtonBlock) {
+    const HidLayout L =
+        parsed(kExtendedButtonRangeDescriptor, sizeof(kExtendedButtonRangeDescriptor));
+    EXPECT_EQ(8, L.buttonBitOffset);
+    EXPECT_EQ(8, L.buttonCount);
+    EXPECT_EQ(XUSB_B, decoded(L, {0x80, 0x02}).wButtons);
+}
+
+TEST(HidDescriptor, AFourByteUsageTakesItsPageFromItsHighHalfEvenWhenThatIsZero) {
+    const HidLayout L =
+        parsed(kExtendedUndefinedPageDescriptor, sizeof(kExtendedUndefinedPageDescriptor));
+    ASSERT_TRUE(L.lx.present);
+    EXPECT_EQ(8, L.lx.bitOffset);
+}
+
+TEST(HidDescriptor, AShortUsageTakesThePageCurrentAtTheMainItem) {
+    const HidLayout L =
+        parsed(kUsagePageAfterTheUsageDescriptor, sizeof(kUsagePageAfterTheUsageDescriptor));
+    ASSERT_TRUE(L.lx.present);
+    EXPECT_EQ(0, L.lx.bitOffset);
+    EXPECT_EQ(0, L.buttonCount);
+}
