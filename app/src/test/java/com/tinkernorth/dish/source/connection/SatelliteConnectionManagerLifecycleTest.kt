@@ -26,6 +26,10 @@ private const val PAST_EVERY_BACKOFF_MS = 120_000L
 // Past the first 1 s backoff: a retry scheduled by the first failure has fired.
 private const val PAST_FIRST_BACKOFF_MS = 1100L
 
+// What openSocket answers: a handle, or the refusal.
+private const val OPEN_SOCKET = 5
+private const val NO_SOCKET = -1
+
 // The address a satellite with a stable machine id moved to.
 private const val MOVED_IP = "10.0.0.7"
 
@@ -162,24 +166,63 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
             assertFalse(serverId in mgr.staleSatelliteIds.value)
         }
 
+    // The satellite granted a session (it holds a slot for conn_1) but the wire never came up here.
+    private fun grantWithoutWire(
+        grantBody: String,
+        socketHandle: Int,
+        intent: ConnectIntent,
+        expectedEvents: (List<ConnectionEvent>) -> Unit,
+    ) = runMgrTest { mgr, events ->
+        stubStoredKey()
+        coEvery {
+            discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
+        } returns ok(grantBody)
+        every { controllerRepo.openSocket(any(), any()) } returns socketHandle
+
+        mgr.connect(server, intent)
+        scope.testScheduler.advanceTimeBy(PAST_EVERY_BACKOFF_MS)
+        scope.testScheduler.runCurrent()
+
+        assertEquals(SatelliteSessionState.Idle, mgr.get(serverId)?.state?.value)
+        coVerify(exactly = 1) { discoveryRepo.disconnect("10.0.0.5", 9877, "conn_1", "test-device-id", any()) }
+        coVerify(exactly = 1) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { controllerRepo.setConnectionParams(any(), any(), any(), any()) }
+        expectedEvents(events)
+    }
+
+    private fun reportsWireFailure(events: List<ConnectionEvent>) {
+        assertEquals(listOf(ConnectionEvent.Error(SatelliteConnectionManager.WIRE_FAILED_MSG)), events)
+    }
+
+    private fun staysQuiet(events: List<ConnectionEvent>) {
+        assertTrue("a silent connect must not raise a banner: $events", events.isEmpty())
+    }
+
     @Test
-    fun `a socket that will not open settles idle without an error or retry`() =
-        runMgrTest { mgr, events ->
-            stubStoredKey()
-            coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
-            } returns ok(sessionGrantBody())
-            every { controllerRepo.openSocket(any(), any()) } returns -1
+    fun `a user tap whose socket will not open reports it and releases the granted session`() =
+        grantWithoutWire(sessionGrantBody(), NO_SOCKET, ConnectIntent.USER_INITIATED, ::reportsWireFailure)
 
-            mgr.connect(server, ConnectIntent.USER_INITIATED)
-            scope.testScheduler.advanceTimeBy(120_000)
-            scope.testScheduler.runCurrent()
+    @Test
+    fun `a silent connect whose socket will not open releases the granted session quietly`() =
+        grantWithoutWire(sessionGrantBody(), NO_SOCKET, ConnectIntent.AUTO_RECONNECT, ::staysQuiet)
 
-            assertEquals(SatelliteSessionState.Idle, mgr.get(serverId)?.state?.value)
-            assertTrue("a failed socket is silent today: $events", events.isEmpty())
-            coVerify(exactly = 1) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
-            verify(exactly = 0) { controllerRepo.setConnectionParams(any(), any(), any(), any()) }
-        }
+    @Test
+    fun `a granted token of the wrong length is reported and the session released`() =
+        grantWithoutWire(
+            sessionGrantBody().replace(""""token":"00000001"""", """"token":"0001""""),
+            OPEN_SOCKET,
+            ConnectIntent.USER_INITIATED,
+            ::reportsWireFailure,
+        )
+
+    @Test
+    fun `a granted salt of the wrong length is reported and the session released`() =
+        grantWithoutWire(
+            sessionGrantBody().replace(""""sessionSalt":"0102030405060708"""", """"sessionSalt":"0102""""),
+            OPEN_SOCKET,
+            ConnectIntent.USER_INITIATED,
+            ::reportsWireFailure,
+        )
 
     @Test
     fun `a declined approval reports the decline and settles idle`() =

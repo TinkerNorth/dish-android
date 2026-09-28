@@ -650,8 +650,8 @@ class SatelliteConnectionManager
             val negotiated = resp.protocolVersion.takeIf { it > 0 } ?: speak
             val handle = openWire(server, creds.pairingKey, tokenHex, saltHex, negotiated)
             if (handle == null) {
-                conn.markDisconnected()
-                return@withContext
+                releaseSession(server, connId, creds.proof)
+                return@withContext failSession(conn, server, intent, WIRE_FAILED_MSG, retry = false)
             }
             noteNegotiated(id, negotiated)
             conn.protocolVersion = negotiated
@@ -981,11 +981,17 @@ class SatelliteConnectionManager
             if (cid != null) {
                 val proof = credentialsFor(id)?.proof
                 if (proof != null) {
-                    scope.launch(ioDispatcher) {
-                        runCatching { discoveryRepo.disconnect(srv.ip, srv.httpPort, cid, deviceId, proof) }
-                    }
+                    scope.launch(ioDispatcher) { releaseSession(srv, cid, proof) }
                 }
             }
+        }
+
+        private suspend fun releaseSession(
+            server: DiscoveredServer,
+            connectionId: String,
+            proof: String,
+        ) {
+            runCatching { discoveryRepo.disconnect(server.ip, server.httpPort, connectionId, deviceId, proof) }
         }
 
         fun forget(id: String) {
@@ -1039,6 +1045,9 @@ class SatelliteConnectionManager
 
             internal const val IDENTITY_CHANGED_MSG =
                 "This satellite's security identity changed. If it was reinstalled, forget it here and pair again."
+
+            internal const val WIRE_FAILED_MSG =
+                "The satellite accepted, but the controller link would not open. Try again."
 
             internal const val SATELLITE_UPDATE_REQUIRED_MSG =
                 "This satellite is too old for this app. Update Satellite on the receiving machine."
