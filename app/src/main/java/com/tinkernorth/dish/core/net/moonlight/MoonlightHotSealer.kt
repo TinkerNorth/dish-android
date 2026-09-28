@@ -10,8 +10,8 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * The hot-path sealer for the control stream: encodes a CONTROLLER_MULTI or a
- * mouse packet and seals it into a full ENet-ready encrypted control packet with
+ * The hot-path sealer for the control stream: encodes a CONTROLLER_MULTI, a
+ * CONTROLLER_TOUCH or a mouse packet and seals it into a full ENet-ready encrypted control packet with
  * a single reused [Cipher] and reused buffers, so the encode and encrypt stages
  * build nothing per packet (the brief's hot-path rule; mirrors the repo's
  * satellite_jni.cpp fixed-buffer discipline). What a packet still allocates is
@@ -99,6 +99,19 @@ class MoonlightHotSealer(
         return sealPlaintextScratch()
     }
 
+    /** CONTROLLER_TOUCH, encoded and sealed as [sealControllerMulti] does. */
+    fun sealControllerTouch(
+        controllerNumber: Int,
+        eventType: Int,
+        pointerId: Int,
+        x: Float,
+        y: Float,
+        pressure: Float,
+    ): ByteArray {
+        writeControllerTouch(plaintext, controllerNumber, eventType, pointerId, x, y, pressure)
+        return sealPlaintextScratch()
+    }
+
     // Seals the message the plaintext scratch was just flipped to, under the next seq.
     private fun sealPlaintextScratch(): ByteArray {
         val currentSeq = seq
@@ -124,7 +137,7 @@ class MoonlightHotSealer(
     }
 
     /**
-     * Seal an arbitrary control plaintext (arrival, ping, motion, touch,
+     * Seal an arbitrary control plaintext (arrival, ping, motion,
      * termination) with the SAME advancing seq as the hot path, so the whole
      * outbound control stream carries one sequence. The IV is only that
      * sequence's low byte, as the host's is (see controlIv), so it repeats

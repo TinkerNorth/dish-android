@@ -13,11 +13,13 @@ import com.tinkernorth.dish.core.net.moonlight.enet.EnetClient
  * a swappable [Transport] so the whole lifecycle unit-tests with a fake
  * transport and a controllable clock; production plugs in a UDP socket.
  *
- * The hot paths ([sendControllerState] and the mouse sends) encode and seal in
- * the sealer's reused buffers. They cannot be allocation-free: the cipher
- * re-inits for every packet's IV, and ENet keeps each reliable command, as sent,
- * until the host acks it, so the pump thread's retransmit has an immutable copy
- * whatever the input thread sends next. Each packet's own frame is that copy.
+ * The hot paths ([sendControllerState], [sendControllerTouch] and the mouse
+ * sends) encode and seal in the sealer's reused buffers. A connected send cannot
+ * be allocation-free: the cipher re-inits for every packet's IV, and ENet keeps
+ * each reliable command, as sent, until the host acks it, so the pump thread's
+ * retransmit has an immutable copy whatever the input thread sends next. Each
+ * packet's own frame is that copy. A send dropped while not connected builds
+ * nothing.
  *
  * ONE LOCK OVER THE WHOLE PROTOCOL STATE, and it has to be. Input arrives on the
  * dispatch thread while [pump] runs the receive/ping loop on an IO thread, and
@@ -212,6 +214,8 @@ class MoonlightControlSession(
         }
     }
 
+    // A touch event is per pad-touch frame too, so it seals in the sealer's reused buffers like the
+    // mouse sends, and a dropped send, checked first, encodes nothing and spends no seq.
     override fun sendControllerTouch(
         controllerNumber: Int,
         eventType: Int,
@@ -221,9 +225,8 @@ class MoonlightControlSession(
         pressure: Float,
     ) {
         synchronized(lock) {
-            sendControlPlaintextLocked(
-                controllerTouch(controllerNumber, eventType, pointerId, x, y, pressure),
-            )
+            if (state != State.CONNECTED) return
+            sendSealedLocked(sealer.sealControllerTouch(controllerNumber, eventType, pointerId, x, y, pressure))
         }
     }
 

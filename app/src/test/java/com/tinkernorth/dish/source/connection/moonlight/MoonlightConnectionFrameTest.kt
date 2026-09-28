@@ -11,7 +11,6 @@ import com.tinkernorth.dish.core.net.moonlight.BTN_TOUCHPAD
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
-import com.tinkernorth.dish.core.net.moonlight.TOUCH_EVENT_MOVE
 import com.tinkernorth.dish.core.net.moonlight.XBOX
 import com.tinkernorth.dish.source.connection.TouchpadReport
 import io.mockk.every
@@ -126,7 +125,6 @@ internal class MoonlightSlotLookups :
 private const val CYCLE_TOUCH_ID = 9
 private const val CYCLE_TOUCH_X: Short = -1000
 private const val CYCLE_MOVED_TOUCH_X: Short = 1000
-private const val CYCLE_TOUCH_EVENTS = 3
 
 // The idle session one touch cycle is measured over.
 private fun idleSession() = MoonlightControlSession(ByteArray(IDLE_SESSION_KEY_BYTES), 0, SilentTransport(), { IDLE_SESSION_NOW_MS })
@@ -137,7 +135,7 @@ private fun cycleTouchReport(
 ) = TouchpadReport(active, false, false, false, false, CYCLE_TOUCH_ID, x, 0, 0, 0, 0, 0L, 0)
 
 // One pad's contact landing, moving and lifting through the connection: three events, over a real
-// session that is not connected. Reached through Runnable because the allocation test makes it in
+// session that is not connected, which drops each before encoding it. Reached through Runnable because the allocation test makes it in
 // a class loader of its own.
 internal class MoonlightTouchCycles : Runnable {
     private val dispatcher = StandardTestDispatcher()
@@ -161,15 +159,6 @@ internal class MoonlightTouchCycles : Runnable {
         connection.sendTouchpad("slot-0", landing)
         connection.sendTouchpad("slot-0", moving)
         connection.sendTouchpad("slot-0", lifting)
-    }
-}
-
-// The same three events sent on an idle session directly: the session's own cost.
-internal class MoonlightSessionTouchCycles : Runnable {
-    private val session = idleSession()
-
-    override fun run() {
-        repeat(CYCLE_TOUCH_EVENTS) { session.sendControllerTouch(0, TOUCH_EVENT_MOVE, CYCLE_TOUCH_ID, 0f, 0f, 1f) }
     }
 }
 
@@ -460,20 +449,14 @@ class MoonlightConnectionFrameTest {
         assertEquals(listOf(LAST_NUMBER to TOUCH_ID, LAST_NUMBER to SECOND_TOUCH_ID), touches)
     }
 
-    // The session's own touch send builds its packet, connected or not; that is the session's
-    // cost, measured on its own copy and taken off, and what is left is the connection's.
     @Test
-    fun `a touch frame allocates nothing past the session's own send, even once MockK has rewritten both classes`() {
+    fun `a touch frame allocates nothing, even once MockK has rewritten the connection and session classes`() {
         mockk<MoonlightConnection>(relaxed = true).activeMask()
         mockk<MoonlightControlSession>(relaxed = true).sendControllerTouch(0, 0, 0, 0f, 0f, 0f)
         val touches = freshAppInstanceOf(MoonlightTouchCycles::class.java) as Runnable
-        val sessionTouches = freshAppInstanceOf(MoonlightSessionTouchCycles::class.java) as Runnable
         repeat(WARMUP_CYCLES) { touches.run() }
-        repeat(WARMUP_CYCLES) { sessionTouches.run() }
-        val sessionBytes = fewestAllocatedBytesDuring(MEASURED_RUNS) { repeat(MEASURED_CYCLES) { sessionTouches.run() } }
-        val connectionBytes = fewestAllocatedBytesDuring(MEASURED_RUNS) { repeat(MEASURED_CYCLES) { touches.run() } }
-        val addedBytes = connectionBytes - sessionBytes
-        assertTrue("$addedBytes bytes over $MEASURED_CYCLES cycles", addedBytes < MEASURED_CYCLES * BYTES_PER_CYCLE_BOUND)
+        val allocatedBytes = fewestAllocatedBytesDuring(MEASURED_RUNS) { repeat(MEASURED_CYCLES) { touches.run() } }
+        assertTrue("$allocatedBytes bytes over $MEASURED_CYCLES cycles", allocatedBytes < MEASURED_CYCLES * BYTES_PER_CYCLE_BOUND)
     }
 
     // ---- the slot a bridge upcall's controller number names ----

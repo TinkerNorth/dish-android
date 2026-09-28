@@ -46,7 +46,6 @@ const val CONTROLLER_BATTERY_LEN = 16
 // field to the end of the message.
 private const val MULTI_DATA_SIZE = 30
 private const val ARRIVAL_DATA_SIZE = 12
-private const val CONTROLLER_TOUCH_DATA_SIZE = 24
 private const val CONTROLLER_MOTION_DATA_SIZE = 20
 private const val CONTROLLER_BATTERY_DATA_SIZE = 8
 
@@ -161,35 +160,6 @@ fun controllerArrival(
     buf.put(0) // reserved, and the struct's alignment padding
     // supportedButtons is little-endian in the arrival struct.
     buf.putInt(supportedButtons)
-    return buf.toByteArray()
-}
-
-/**
- * CONTROLLER_TOUCH: one pointer event on the emulated pad's touch surface.
- * [x]/[y] are normalized 0..1 across the pad (the host multiplies by its
- * emulated touchpad's resolution); netfloats are little-endian IEEE-754
- * (Wolf utils::from_netfloat). [pressure] is 1.0 for a solid contact.
- */
-fun controllerTouch(
-    controllerNumber: Int,
-    eventType: Int,
-    pointerId: Int,
-    x: Float,
-    y: Float,
-    pressure: Float,
-): ByteArray {
-    val buf = ByteBuffer.allocate(CONTROLLER_TOUCH_LEN).order(ByteOrder.LITTLE_ENDIAN)
-    buf.putShort(CTRL_INPUT_DATA.toShort())
-    buf.putShort((CONTROLLER_TOUCH_LEN - CONTROL_HEADER_LEN).toShort())
-    putIntBE(buf, CONTROLLER_TOUCH_DATA_SIZE)
-    buf.putInt(INPUT_CONTROLLER_TOUCH)
-    buf.put((controllerNumber and 0xFF).toByte())
-    buf.put((eventType and 0xFF).toByte())
-    buf.putShort(0) // reserved/alignment
-    buf.putInt(pointerId)
-    buf.putFloat(x)
-    buf.putFloat(y)
-    buf.putFloat(pressure)
     return buf.toByteArray()
 }
 

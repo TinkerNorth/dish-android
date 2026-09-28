@@ -4,12 +4,15 @@
 package com.tinkernorth.dish.core.net.moonlight
 
 import com.tinkernorth.dish.architecture.testing.allocatedBytesDuring
+import com.tinkernorth.dish.architecture.testing.fewestAllocatedBytesDuring
+import com.tinkernorth.dish.architecture.testing.freshAppInstanceOf
 import com.tinkernorth.dish.core.net.bytesToHex
 import com.tinkernorth.dish.core.net.hexToBytes
 import com.tinkernorth.dish.core.net.moonlight.enet.EnetClient
 import com.tinkernorth.dish.core.net.moonlight.enet.EnetProtocol
 import com.tinkernorth.dish.core.net.moonlight.enet.EnetWriter
 import com.tinkernorth.dish.core.net.moonlight.enet.commandHeader
+import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -17,6 +20,34 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+
+// The key an idle session is made with; it never seals with it.
+private const val IDLE_TOUCH_KEY_BYTES = 16
+
+// A transport that never carries anything, so a session over it never connects.
+private class NeverConnectedTransport : MoonlightControlSession.Transport {
+    override fun send(datagram: ByteArray) = Unit
+
+    override fun receive(timeoutMs: Int): ByteArray? = null
+
+    override fun close() = Unit
+}
+
+// How many touch sends one IdleSessionTouches run makes.
+internal const val IDLE_TOUCHES_PER_RUN = 500
+
+// Touch sends to a session that never connected, which drops each one. Reached through Runnable
+// because the allocation test makes it in a class loader of its own (freshAppInstanceOf).
+internal class IdleSessionTouches : Runnable {
+    private val session = MoonlightControlSession(ByteArray(IDLE_TOUCH_KEY_BYTES), 0, NeverConnectedTransport(), { IDLE_NOW_MS })
+
+    override fun run() {
+        repeat(IDLE_TOUCHES_PER_RUN) { session.sendControllerTouch(1, TOUCH_EVENT_MOVE, 2, 0.25f, 0.5f, 1f) }
+    }
+}
+
+// The idle session never reads its clock past construction.
+private const val IDLE_NOW_MS = 0L
 
 /**
  * Lifecycle tests for [MoonlightControlSession] driven by a scripted fake
@@ -485,6 +516,64 @@ class MoonlightControlSessionTest {
         assertTrue(perSend, scroll <= controller)
     }
 
+    // A controller packet goes first so a touch packet sealed after it, in a shorter message,
+    // shows any byte or length the longer one left behind; a mouse button, shorter still, goes
+    // between them so the touch must take the whole scratch back.
+    @Test
+    fun `each touch send goes out sealed with exactly the encoder's plaintext`() {
+        val transport = FakeTransport()
+        val session = connectedSession(transport)
+        session.sendControllerState(0, 1, BTN_A, 0, 0, 0, 0, 0, 0)
+        session.sendMouseButton(true, MOUSE_BUTTON_LEFT)
+        session.sendControllerTouch(TOUCH_NUMBER, TOUCH_EVENT_DOWN, TOUCH_POINTER, TOUCH_X, TOUCH_Y, 1f)
+        session.sendControllerTouch(TOUCH_NUMBER, TOUCH_EVENT_UP, TOUCH_POINTER, TOUCH_Y, TOUCH_X, 0f)
+        val expected =
+            listOf(
+                controllerTouch(TOUCH_NUMBER, TOUCH_EVENT_DOWN, TOUCH_POINTER, TOUCH_X, TOUCH_Y, 1f),
+                controllerTouch(TOUCH_NUMBER, TOUCH_EVENT_UP, TOUCH_POINTER, TOUCH_Y, TOUCH_X, 0f),
+            )
+        val sent = transport.sent.drop(2)
+        assertEquals(expected.map(::bytesToHex), sent.map { bytesToHex(plaintextOf(it)) })
+        assertEquals(listOf(2, 3), sent.map { controlSeqOf(it) })
+    }
+
+    // The encoder's bytes as the host reads them (Wolf control.hpp CONTROLLER_TOUCH_PACKET), so a
+    // change to the encoder cannot move the wire with the test that compares against it.
+    @Test
+    fun `a touch packet's plaintext is the wire layout`() {
+        val touch = controllerTouch(TOUCH_NUMBER, TOUCH_EVENT_DOWN, TOUCH_POINTER, TOUCH_X, TOUCH_Y, 1f)
+        assertEquals(TOUCH_WIRE_HEX, bytesToHex(touch))
+    }
+
+    @Test
+    fun `a touch send dropped before the session connects spends no seq`() {
+        val transport = FakeTransport()
+        transport.inbound.addLast(verifyConnectDatagram())
+        val session = MoonlightControlSession(key, 0x1234, transport, { clock })
+        session.sendControllerTouch(TOUCH_NUMBER, TOUCH_EVENT_DOWN, TOUCH_POINTER, TOUCH_X, TOUCH_Y, 1f)
+        assertTrue(transport.sent.isEmpty())
+        assertTrue(session.connect())
+        transport.sent.clear()
+        session.sendControllerState(0, 1, BTN_A, 0, 0, 0, 0, 0, 0)
+        assertEquals(0, controlSeqOf(transport.sent.single()))
+    }
+
+    @Test
+    fun `a touch send allocates no more than a controller state send`() {
+        val controller = bytesPerSend { it.sendControllerState(0, 1, BTN_A, 0, 0, 0, 0, 0, 0) }
+        val touch = bytesPerSend { it.sendControllerTouch(TOUCH_NUMBER, TOUCH_EVENT_MOVE, TOUCH_POINTER, TOUCH_X, TOUCH_Y, 1f) }
+        assertTrue("controller $controller, touch $touch bytes per send", touch <= controller)
+    }
+
+    @Test
+    fun `a touch send dropped while not connected allocates nothing, even once MockK has rewritten the session class`() {
+        mockk<MoonlightControlSession>(relaxed = true).sendControllerTouch(0, 0, 0, 0f, 0f, 0f)
+        val touches = freshAppInstanceOf(IdleSessionTouches::class.java) as Runnable
+        touches.run()
+        val allocated = fewestAllocatedBytesDuring(MEASURED_RUNS, touches::run)
+        assertTrue("$allocated bytes over $IDLE_TOUCHES_PER_RUN sends", allocated < IDLE_TOUCHES_PER_RUN * BYTES_PER_SEND_BOUND)
+    }
+
     private fun controlSeqOf(sealedReliableDatagram: ByteArray): Int {
         val seqStart = EnetProtocol.FULL_HEADER_LEN + EnetProtocol.SEND_RELIABLE_HEADER_LEN + CONTROL_HEADER_LEN
         return ByteBuffer.wrap(sealedReliableDatagram, seqStart, Int.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).int
@@ -505,5 +594,17 @@ class MoonlightControlSessionTest {
         const val REPLUG_BUTTONS = 0x10FFFF
         const val WARMUP_SENDS = 50
         const val MEASURED_SENDS = 500
+        const val MEASURED_RUNS = 3
+        const val TOUCH_NUMBER = 2
+        const val TOUCH_POINTER = 0x01020304
+        const val TOUCH_X = 0.25f
+        const val TOUCH_Y = 0.75f
+
+        // Half the smallest object: one allocation a send costs 16 bytes or more.
+        const val BYTES_PER_SEND_BOUND = 8
+
+        // type 0x0206 LE, length 28 LE, wrapper size 24 BE, INPUT_CONTROLLER_TOUCH LE, number,
+        // event type, two reserved bytes, pointer id LE, x, y and pressure as LE floats.
+        const val TOUCH_WIRE_HEX = "06021c00000000180500005502010000040302010000803e0000403f0000803f"
     }
 }
