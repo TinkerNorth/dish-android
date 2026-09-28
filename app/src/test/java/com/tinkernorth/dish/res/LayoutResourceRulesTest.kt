@@ -38,10 +38,22 @@ class LayoutResourceRulesTest {
     }
 
     @Test
+    fun `the raw size rule catches every unit and sign a literal can take`() {
+        for (literal in RAW_LITERALS) {
+            assertEquals(literal, listOf("=\"$literal\""), rawSizes("android:layout_width=\"$literal\""))
+        }
+    }
+
+    @Test
+    fun `the raw size rule lets 0dp and a named dimen through`() {
+        assertEquals(emptyList<String>(), rawSizes("""android:layout_width="0dp" android:padding="@dimen/space_2""""))
+    }
+
+    @Test
     fun `no layout carries a raw size, because every dimension is a named dimen`() {
         val offenders =
             layouts().flatMap { file ->
-                RAW_SIZE.findAll(file.readText()).map { "${file.name}: ${it.value}" }
+                rawSizes(file.readText()).map { "${file.name}: $it" }
             }
         assertEquals("a size in a layout must be a @dimen, not a literal", emptyList<String>(), offenders)
     }
@@ -60,10 +72,18 @@ class LayoutResourceRulesTest {
         assertEquals(emptyList<String>(), missing.distinct())
     }
 
+    private fun rawSizes(xml: String): List<String> =
+        RAW_SIZE
+            .findAll(xml)
+            .map { it.value }
+            .toList()
+
     private companion object {
+        val RAW_LITERALS = listOf("16dp", "-4dp", "0.5dp", ".5dp", "3dip", "14sp", "12px", "1pt", "2mm", "1in", "0px", "0sp")
+
         // 0dp is how a constrained or weighted child asks its parent for the size, not a magic
         // number, so it is the one literal allowed.
-        val RAW_SIZE = Regex("""="(?:[1-9]\d*(?:\.\d+)?)(?:dp|sp)"""")
+        val RAW_SIZE = Regex("""="(?!0dp")-?(?:\d+(?:\.\d+)?|\.\d+)(?:dp|dip|sp|px|pt|mm|in)"""")
         val DIMEN_REF = Regex("""@dimen/([a-zA-Z0-9_]+)""")
         val DIMEN_DECL = Regex("""<dimen name="([a-zA-Z0-9_]+)"""")
     }
