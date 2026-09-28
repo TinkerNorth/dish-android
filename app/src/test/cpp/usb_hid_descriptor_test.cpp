@@ -933,3 +933,49 @@ TEST(HidDescriptor, ASignedThirtyTwoBitFieldReadsItsTopBitAsTheSign) {
     EXPECT_EQ(32767, decoded(L, {0xFF, 0xFF, 0xFF, 0x7F}).sLX);
     EXPECT_EQ(0, decoded(L, {0x00, 0x00, 0x00, 0x00}).sLX);
 }
+
+namespace {
+
+// Report 1 carries X, report 2 two bytes of buttons, then report 1 resumes with Y: report 1 is
+// {0x01, X, Y} whatever report 2 declared in between.
+const uint8_t kReportResumedDescriptor[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x05,       // Usage (Game Pad)
+    0xA1, 0x01,       // Collection (Application)
+    0x15, 0x00,       //   Logical Minimum (0)
+    0x26, 0xFF, 0x00, //   Logical Maximum (255)
+    0x75, 0x08,       //   Report Size (8)
+    0x95, 0x01,       //   Report Count (1)
+    0x85, 0x01,       //   Report ID (1)
+    0x09, 0x30,       //   Usage (X)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0x85, 0x02,       //   Report ID (2)
+    0x05, 0x09,       //   Usage Page (Button)
+    0x19, 0x01,       //   Usage Minimum (1)
+    0x29, 0x10,       //   Usage Maximum (16)
+    0x75, 0x01,       //   Report Size (1)
+    0x95, 0x10,       //   Report Count (16)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0x85, 0x01,       //   Report ID (1)
+    0x05, 0x01,       //   Usage Page (Generic Desktop)
+    0x09, 0x31,       //   Usage (Y)
+    0x75, 0x08,       //   Report Size (8)
+    0x95, 0x01,       //   Report Count (1)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xC0,             // End Collection
+};
+
+} // namespace
+
+TEST(HidDescriptor, AReportIdThatReturnsResumesWhereItsReportLeftOff) {
+    const HidLayout L = parsed(kReportResumedDescriptor, sizeof(kReportResumedDescriptor));
+    EXPECT_EQ(1, L.reportId);
+    EXPECT_EQ(0, L.lx.bitOffset);
+    ASSERT_TRUE(L.ly.present);
+    EXPECT_EQ(8, L.ly.bitOffset);
+    EXPECT_EQ(0, L.buttonCount);
+
+    const DeviceState s = decoded(L, {0x01, 0xFF, 0x00});
+    EXPECT_EQ(32767, s.sLX);
+    EXPECT_EQ(32767, s.sLY); // Y is inverted: raw 0 is full up
+}

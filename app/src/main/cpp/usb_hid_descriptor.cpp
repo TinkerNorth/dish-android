@@ -21,6 +21,8 @@ constexpr uint8_t kTriggerFull = 255;
 constexpr uint8_t kBitsPerByte = 8;
 constexpr uint8_t kBitsPerU32 = 32;
 constexpr uint8_t kBytesPerU32 = 4;
+// Report ID is a one-byte item, so every id has a slot; 0 is the device that sends no id at all.
+constexpr size_t kReportIdCount = 256;
 
 // The usage pages and usages this parser maps (USB HID Usage Tables 1.12 §4, §5, §12).
 constexpr uint32_t kUsagePageGenericDesktop = 0x01;
@@ -290,7 +292,9 @@ struct HidParseState {
     int32_t logMin;
     int32_t logMax;
     uint8_t currentReportId;
-    uint32_t bitCursor;
+    // A field belongs to the report its Report ID names (HID 1.11 §6.2.2.7), so an id that comes
+    // back continues its report where that report's last field ended.
+    uint32_t bitCursorByReportId[kReportIdCount];
     bool locked;
     uint8_t lockedReportId;
     uint32_t usages[kMaxUsages];
@@ -315,7 +319,6 @@ void applyGlobalItem(const HidItem& item, HidParseState& st) {
         break;
     case kGlobalReportId:
         st.currentReportId = (uint8_t)item.data;
-        st.bitCursor = 0;
         break;
     case kGlobalReportCount:
         st.reportCount = item.data;
@@ -369,8 +372,9 @@ void takeAxisFields(const HidParseState& st, const uint32_t startBit, HidLayout&
 
 // The first non-constant Input item locks the report id this layout describes.
 void applyInputItem(const HidItem& item, HidParseState& st, HidLayout& out) {
-    const uint32_t startBit = st.bitCursor;
-    st.bitCursor += st.reportSize * st.reportCount;
+    uint32_t& bitCursor = st.bitCursorByReportId[st.currentReportId];
+    const uint32_t startBit = bitCursor;
+    bitCursor += st.reportSize * st.reportCount;
 
     const bool isConstantPadding = (item.data & kInputConstantBit) != 0;
     const bool carriesFields = st.reportSize > 0 && st.reportCount > 0;
