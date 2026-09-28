@@ -10,7 +10,11 @@ import io.mockk.every
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -25,6 +29,9 @@ private const val PAST_EVERY_BACKOFF_MS = 120_000L
 
 // Past the first 1 s backoff: a retry scheduled by the first failure has fired.
 private const val PAST_FIRST_BACKOFF_MS = 1100L
+
+// Past the first 2 s approval poll: the satellite has answered it once.
+private const val PAST_FIRST_APPROVAL_POLL_MS = 2100L
 
 // What openSocket answers: a handle, or the refusal.
 private const val OPEN_SOCKET = 5
@@ -176,6 +183,67 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
             coVerify(exactly = 1) { discoveryRepo.disconnect("10.0.0.5", 9877, "conn_1", "test-device-id", any()) }
             verify(exactly = 0) { controllerRepo.openSocket(any(), any()) }
             assertTrue("the user asked for this; no banner: $events", events.isEmpty())
+        }
+
+    // The session PUT reaches the satellite whatever becomes of its caller: the satellite grants
+    // on arrival, and a caller cancelled meanwhile only loses the answer, as withContext does
+    // to the blocking request under it.
+    private fun sessionPutGrantedRegardless(body: String): CompletableDeferred<Unit> {
+        val gate = CompletableDeferred<Unit>()
+        coEvery {
+            discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
+        } coAnswers {
+            withContext(NonCancellable) { gate.await() }
+            currentCoroutineContext().ensureActive()
+            ok(body)
+        }
+        return gate
+    }
+
+    @Test
+    fun `a user disconnect during an approved request's session PUT hands the granted session back`() =
+        runMgrTest { mgr, events ->
+            stubStoredKey()
+            every { controllerRepo.openSocket(any(), any()) } returns OPEN_SOCKET
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any(), any()) } returns ok("""{"status":"pending"}""")
+            coEvery { discoveryRepo.pairStatus(any(), any(), any()) } returns
+                ok("""{"status":"approved","sharedKey":"${"aa".repeat(32)}"}""")
+            val put = sessionPutGrantedRegardless(sessionGrantBody())
+            mgr.requestApproval(server, "4242")
+            scope.testScheduler.advanceTimeBy(PAST_FIRST_APPROVAL_POLL_MS)
+            scope.testScheduler.runCurrent()
+            coVerify(exactly = 1) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
+
+            mgr.disconnect(serverId)
+            put.complete(Unit)
+            scope.testScheduler.runCurrent()
+
+            assertEquals(SatelliteSessionState.Idle, mgr.get(serverId)?.state?.value)
+            coVerify(exactly = 1) { discoveryRepo.disconnect("10.0.0.5", 9877, "conn_1", "test-device-id", any()) }
+            verify(exactly = 0) { controllerRepo.openSocket(any(), any()) }
+            assertTrue("the user asked for this; no banner: $events", events.isEmpty())
+        }
+
+    @Test
+    fun `an approved request nobody disconnects goes live on the granted session`() =
+        runMgrTest { mgr, events ->
+            stubStoredKey()
+            every { controllerRepo.openSocket(any(), any()) } returns OPEN_SOCKET
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any(), any()) } returns ok("""{"status":"pending"}""")
+            coEvery { discoveryRepo.pairStatus(any(), any(), any()) } returns
+                ok("""{"status":"approved","sharedKey":"${"aa".repeat(32)}"}""")
+            val put = sessionPutGrantedRegardless(sessionGrantBody())
+            mgr.requestApproval(server, "4242")
+            scope.testScheduler.advanceTimeBy(PAST_FIRST_APPROVAL_POLL_MS)
+            scope.testScheduler.runCurrent()
+
+            put.complete(Unit)
+            scope.testScheduler.runCurrent()
+
+            assertEquals(SatelliteSessionState.Live, mgr.get(serverId)?.state?.value)
+            assertEquals("conn_1", mgr.get(serverId)?.connectionId)
+            coVerify(exactly = 0) { discoveryRepo.disconnect(any(), any(), any(), any(), any()) }
+            assertTrue(events.isEmpty())
         }
 
     @Test

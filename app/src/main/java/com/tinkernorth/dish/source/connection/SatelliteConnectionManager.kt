@@ -559,7 +559,11 @@ class SatelliteConnectionManager
                         if (st is Status.Approved) {
                             clearStale(id)
                             store.setSatelliteSharedKey(id, st.sharedKeyHex)
-                            openSession(conn, server, ConnectIntent.USER_INITIATED, generation)
+                            // Out of the poll job, as connect() runs it: a disconnect cancels the
+                            // poll, and a cancel landing on the session PUT would cut it off from
+                            // the session it was granted. The generation stops it instead, and
+                            // hands that session back.
+                            scope.launch { openSession(conn, server, ConnectIntent.USER_INITIATED, generation) }
                             return@launch
                         }
                         if (st is Status.Declined) {
