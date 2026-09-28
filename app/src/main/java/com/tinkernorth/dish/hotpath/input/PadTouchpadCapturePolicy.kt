@@ -50,7 +50,7 @@ fun shouldCapture(
 
 /**
  * [routes] as two parallel arrays, built once per route change, so the lookup every captured
- * event makes boxes no device id.
+ * event makes boxes no device id, and a resend tick's routed check builds no set.
  */
 class CapturedSurfaceTable internal constructor(
     private val surfaceIds: IntArray,
@@ -62,6 +62,9 @@ class CapturedSurfaceTable internal constructor(
         }
         return null
     }
+
+    /** Whether any routed surface feeds [slotId]. */
+    fun isRouted(slotId: String): Boolean = slotIds.any { it == slotId }
 }
 
 fun capturedSurfaceTableOf(routes: Map<Int, String>): CapturedSurfaceTable {

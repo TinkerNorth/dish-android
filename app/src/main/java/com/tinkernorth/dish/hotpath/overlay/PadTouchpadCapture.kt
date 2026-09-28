@@ -219,14 +219,14 @@ class PadTouchpadCapture(
     // by its equal event time. With every slot forgotten the loop stops itself; the next capture
     // starts it again.
     internal fun resendDue() {
-        val routedSlots = routes.values.toSet()
+        val routedSurfaces = surfaces
         for ((slotId, frame) in lastFrame) {
             val sink = reachability.state.value[slotId]
             val changed = frame != lastResent[slotId]
             if (changed) lastResent[slotId] = frame
             val pacer = pacers.getOrPut(slotId) { ResendPacer() }
             val due = pacer.resendDue(changed)
-            when (resendStepFor(due, hasSink = sink != null, routed = slotId in routedSlots)) {
+            when (resendStepFor(due, hasSink = sink != null, routed = routedSurfaces.isRouted(slotId))) {
                 ResendStep.SEND -> if (sink != null) send(sink, slotId, frame, resendReport)
                 ResendStep.FORGET -> forgetSlot(slotId)
                 ResendStep.KEEP -> Unit

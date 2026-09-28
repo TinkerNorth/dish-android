@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.hotpath.input
 
 import com.tinkernorth.dish.architecture.testing.allocatedBytesDuring
+import com.tinkernorth.dish.architecture.testing.fewestAllocatedBytesDuring
 import com.tinkernorth.dish.composer.TouchpadSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -111,9 +112,47 @@ class PadTouchpadCapturePolicyTest {
         assertTrue("$allocated bytes over $MEASURED_LOOKUPS lookups", allocated < MEASURED_LOOKUPS * BYTES_PER_LOOKUP_BOUND)
     }
 
+    @Test
+    fun `every routed slot is routed and no other is`() {
+        val surfaces = capturedSurfaceTableOf(mapOf(7 to "7", 31 to "8", WIDE_SURFACE to "9"))
+        assertTrue(surfaces.isRouted("7"))
+        assertTrue(surfaces.isRouted("8"))
+        assertTrue(surfaces.isRouted("9"))
+        assertFalse(surfaces.isRouted("31"))
+        assertFalse(surfaces.isRouted("10"))
+    }
+
+    @Test
+    fun `no routes route no slot`() {
+        assertFalse(capturedSurfaceTableOf(emptyMap()).isRouted("7"))
+    }
+
+    private var routedChecks = 0
+
+    // What one resend tick asks of each slot it holds a frame for: one routed, one not.
+    private fun checkRoutedSlots(surfaces: CapturedSurfaceTable) {
+        repeat(MEASURED_LOOKUPS) {
+            if (surfaces.isRouted("9")) routedChecks++
+            if (surfaces.isRouted("10")) routedChecks++
+        }
+    }
+
+    @Test
+    fun `asking whether a slot is routed allocates nothing`() {
+        val surfaces = capturedSurfaceTableOf(mapOf(7 to "7", 31 to "8", WIDE_SURFACE to "9"))
+        checkRoutedSlots(surfaces)
+        routedChecks = 0
+
+        val allocated = fewestAllocatedBytesDuring(MEASURED_RUNS) { checkRoutedSlots(surfaces) }
+
+        assertEquals(MEASURED_RUNS * MEASURED_LOOKUPS, routedChecks)
+        assertTrue("$allocated bytes over $MEASURED_LOOKUPS lookups", allocated < MEASURED_LOOKUPS * BYTES_PER_LOOKUP_BOUND)
+    }
+
     private companion object {
         const val WIDE_SURFACE = 1000
         const val MEASURED_LOOKUPS = 1000
+        const val MEASURED_RUNS = 3
 
         // Half the smallest object: a boxed id costs 16 bytes or more every lookup.
         const val BYTES_PER_LOOKUP_BOUND = 8
