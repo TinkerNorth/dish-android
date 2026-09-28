@@ -301,7 +301,14 @@ class MoonlightConnectionFrameTest {
     // MockK instrument it for the rest of the JVM, and that instrumentation allocates on every
     // call, so the connection's cost is what it adds on top of this.
     private fun runSessionCycle(session: MoonlightControlSession) {
-        for (number in 0 until ALL_PADS) session.sendControllerState(number, ALL_PADS_MASK, number, number, number, number, number, number, number)
+        for (number in 0 until ALL_PADS) sendSessionFrame(session, number)
+    }
+
+    private fun sendSessionFrame(
+        session: MoonlightControlSession,
+        number: Int,
+    ) {
+        session.sendControllerState(number, ALL_PADS_MASK, number, number, number, number, number, number, number)
     }
 
     private inline fun bytesAllocatedBy(cycle: () -> Unit): Long {
