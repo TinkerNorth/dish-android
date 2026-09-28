@@ -5,7 +5,6 @@ package com.tinkernorth.dish.repository
 import com.tinkernorth.dish.architecture.interfaces.KeyedRepository
 import com.tinkernorth.dish.architecture.testing.AbstractKeyedRepositoryContract
 import kotlinx.serialization.json.Json
-import kotlin.random.Random
 
 class RememberedSatelliteRepositoryContractTest : AbstractKeyedRepositoryContract<String, RememberedSatellite>() {
     override fun newKeyedRepository(): KeyedRepository<String, RememberedSatellite> =
@@ -14,7 +13,7 @@ class RememberedSatelliteRepositoryContractTest : AbstractKeyedRepositoryContrac
             json = Json { ignoreUnknownKeys = true },
         )
 
-    override fun newKey(): String = "satellite:1.1.1.${Random.nextInt(2, 250)}:${Random.nextInt(1, 65000)}"
+    override fun keyFor(index: Int): String = "satellite:mid:$index"
 
     // Must be deterministic for a given key: contract recomputes expected via newValue(k).
     override fun newValue(key: String): RememberedSatellite {

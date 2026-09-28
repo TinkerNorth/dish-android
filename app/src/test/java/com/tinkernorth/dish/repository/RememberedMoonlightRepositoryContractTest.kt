@@ -7,7 +7,6 @@ import com.tinkernorth.dish.architecture.interfaces.KeyedRepository
 import com.tinkernorth.dish.architecture.testing.AbstractKeyedRepositoryContract
 import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
 import kotlinx.serialization.json.Json
-import kotlin.random.Random
 
 class RememberedMoonlightRepositoryContractTest : AbstractKeyedRepositoryContract<String, RememberedMoonlight>() {
     override fun newKeyedRepository(): KeyedRepository<String, RememberedMoonlight> =
@@ -16,7 +15,7 @@ class RememberedMoonlightRepositoryContractTest : AbstractKeyedRepositoryContrac
             json = Json { ignoreUnknownKeys = true },
         )
 
-    override fun newKey(): String = "moonlight:uid:${Random.nextInt(0, 1_000_000)}"
+    override fun keyFor(index: Int): String = "moonlight:uid:$index"
 
     // Must be deterministic for a given key: the contract recomputes expected via newValue(k).
     override fun newValue(key: String): RememberedMoonlight {
