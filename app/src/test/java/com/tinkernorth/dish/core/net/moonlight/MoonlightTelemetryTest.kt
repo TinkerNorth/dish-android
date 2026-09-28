@@ -266,19 +266,18 @@ class MoonlightTouchDifferTest {
     private val up = TOUCH_EVENT_UP
     private val move = TOUCH_EVENT_MOVE
 
+    private val sent = RecordingTouchSink()
+
+    // One snapshot through [this] differ for [CONTROLLER], and the events it sent.
     private fun MoonlightTouchDiffer.frame(
         f0: Triple<Int, Float, Float>? = null,
         f1: Triple<Int, Float, Float>? = null,
-    ) = diff(
-        finger0Active = f0 != null,
-        finger0Id = f0?.first ?: 0,
-        finger0X = f0?.second ?: 0f,
-        finger0Y = f0?.third ?: 0f,
-        finger1Active = f1 != null,
-        finger1Id = f1?.first ?: 0,
-        finger1X = f1?.second ?: 0f,
-        finger1Y = f1?.third ?: 0f,
-    )
+    ): List<SentTouch> {
+        sent.events.clear()
+        diff(FIRST_FINGER, f0 != null, f0?.first ?: 0, f0?.second ?: 0f, f0?.third ?: 0f, CONTROLLER, sent)
+        diff(SECOND_FINGER, f1 != null, f1?.first ?: 0, f1?.second ?: 0f, f1?.third ?: 0f, CONTROLLER, sent)
+        return sent.events.toList()
+    }
 
     @Test
     fun `contact lifecycle produces down move up`() {
@@ -367,6 +366,100 @@ class MoonlightTouchDifferTest {
     }
 
     @Test
+    fun `every event names the controller the snapshot is for`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame(f0 = Triple(1, 0.1f, 0.1f), f1 = Triple(2, 0.9f, 0.9f))
+        differ.frame(f0 = Triple(1, 0.2f, 0.1f), f1 = Triple(3, 0.9f, 0.9f))
+        val events = differ.frame()
+        assertEquals(listOf(CONTROLLER, CONTROLLER), events.map { it.controllerNumber })
+    }
+
+    @Test
+    fun `a lift names the contact where it was last held`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame(f1 = Triple(4, 0.3f, 0.4f))
+        val lifted = differ.frame().single()
+        assertEquals(SentTouch(CONTROLLER, up, 4, 0.3f, 0.4f, 0.0f), lifted)
+    }
+
+    @Test
+    fun `a re-tracked finger lifts the old contact where it was and lands the new one where it is`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame(f0 = Triple(5, 0.5f, 0.55f))
+        val events = differ.frame(f0 = Triple(6, 0.6f, 0.65f))
+        val expected =
+            listOf(
+                SentTouch(CONTROLLER, up, 5, 0.5f, 0.55f, 0.0f),
+                SentTouch(CONTROLLER, down, 6, 0.6f, 0.65f, 1.0f),
+            )
+        assertEquals(expected, events)
+    }
+
+    @Test
+    fun `a re-tracked finger is held as its new contact`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame(f0 = Triple(5, 0.5f, 0.55f))
+        differ.frame(f0 = Triple(6, 0.6f, 0.65f))
+        assertTrue(differ.frame(f0 = Triple(6, 0.6f, 0.65f)).isEmpty())
+    }
+
+    @Test
+    fun `a move in y alone is a move`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame(f0 = Triple(1, 0.5f, 0.5f))
+        val events = differ.frame(f0 = Triple(1, 0.5f, 0.6f))
+        assertEquals(listOf(SentTouch(CONTROLLER, move, 1, 0.5f, 0.6f, 1.0f)), events)
+    }
+
+    @Test
+    fun `a finger that stays up says nothing`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame()
+        assertTrue(differ.frame().isEmpty())
+    }
+
+    @Test
+    fun `reset forgets both fingers`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame(f0 = Triple(1, 0.1f, 0.1f), f1 = Triple(2, 0.9f, 0.9f))
+        differ.reset()
+        assertTrue(differ.frame().isEmpty())
+    }
+
+    private val pacedDiffer = MoonlightTouchDiffer()
+    private val countingSink = CountingTouchSink()
+
+    private fun diffFrame(
+        finger0Active: Boolean,
+        finger0X: Float,
+        finger1Active: Boolean,
+        finger1Id: Int,
+    ) {
+        pacedDiffer.diff(FIRST_FINGER, finger0Active, FIRST_ID, finger0X, Y, CONTROLLER, countingSink)
+        pacedDiffer.diff(SECOND_FINGER, finger1Active, finger1Id, X, Y, CONTROLLER, countingSink)
+    }
+
+    // Every flow a finger can take in one cycle: both land, the first moves, the second is
+    // re-tracked (a lift and a fresh contact), both lift.
+    private fun runTouchCycle() {
+        repeat(MEASURED_FRAMES) {
+            diffFrame(true, X, true, SECOND_ID)
+            diffFrame(true, MOVED_X, true, SECOND_ID)
+            diffFrame(true, MOVED_X, true, RETRACKED_ID)
+            diffFrame(false, MOVED_X, false, RETRACKED_ID)
+        }
+    }
+
+    @Test
+    fun `a frame's diff allocates nothing`() {
+        runTouchCycle()
+        countingSink.events = 0
+        val allocated = fewestAllocatedBytesDuring(MEASURED_RUNS, ::runTouchCycle)
+        assertEquals(MEASURED_RUNS * MEASURED_FRAMES * EVENTS_PER_CYCLE, countingSink.events)
+        assertTrue("$allocated bytes over $MEASURED_FRAMES cycles", allocated < MEASURED_FRAMES * BYTES_PER_CYCLE_BOUND)
+    }
+
+    @Test
     fun `lifting the first finger leaves the second one held`() {
         val differ = MoonlightTouchDiffer()
         differ.frame(f0 = Triple(1, 0.1f, 0.1f), f1 = Triple(2, 0.9f, 0.9f))
@@ -374,5 +467,64 @@ class MoonlightTouchDifferTest {
         assertEquals(1, events.size)
         assertEquals(up, events[0].eventType)
         assertEquals(1, events[0].pointerId)
+    }
+
+    private companion object {
+        const val CONTROLLER = 2
+        const val FIRST_ID = 1
+        const val SECOND_ID = 2
+        const val RETRACKED_ID = 3
+        const val X = 0.25f
+        const val MOVED_X = 0.5f
+        const val Y = 0.75f
+        const val MEASURED_FRAMES = 1000
+        const val MEASURED_RUNS = 3
+
+        // Two downs, one move, an up and a down, two ups.
+        const val EVENTS_PER_CYCLE = 7
+
+        // Half the smallest object: one event, list or finger state costs 16 bytes or more.
+        const val BYTES_PER_CYCLE_BOUND = 8
+    }
+}
+
+// One event as the differ handed it to the sink.
+private data class SentTouch(
+    val controllerNumber: Int,
+    val eventType: Int,
+    val pointerId: Int,
+    val x: Float,
+    val y: Float,
+    val pressure: Float,
+)
+
+private class RecordingTouchSink : MoonlightTouchSink {
+    val events = mutableListOf<SentTouch>()
+
+    override fun sendControllerTouch(
+        controllerNumber: Int,
+        eventType: Int,
+        pointerId: Int,
+        x: Float,
+        y: Float,
+        pressure: Float,
+    ) {
+        events += SentTouch(controllerNumber, eventType, pointerId, x, y, pressure)
+    }
+}
+
+// Counts what it is handed and keeps nothing, so a measured diff allocates only its own.
+private class CountingTouchSink : MoonlightTouchSink {
+    var events = 0
+
+    override fun sendControllerTouch(
+        controllerNumber: Int,
+        eventType: Int,
+        pointerId: Int,
+        x: Float,
+        y: Float,
+        pressure: Float,
+    ) {
+        events++
     }
 }

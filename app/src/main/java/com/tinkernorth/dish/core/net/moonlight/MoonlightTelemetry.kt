@@ -138,76 +138,97 @@ private class MotionStream(
     }
 }
 
+// The two fingers a touch frame carries, as [MoonlightTouchDiffer.diff] names them.
+const val FIRST_FINGER = 0
+const val SECOND_FINGER = 1
+private const val FINGERS = 2
+
+/** Where a [MoonlightTouchDiffer] hands each event it finds, in the order the wire carries them. */
+fun interface MoonlightTouchSink {
+    fun sendControllerTouch(
+        controllerNumber: Int,
+        eventType: Int,
+        pointerId: Int,
+        x: Float,
+        y: Float,
+        pressure: Float,
+    )
+}
+
 /**
  * Turns the app's full-state two-finger touch snapshots into the per-pointer
- * DOWN / MOVE / UP events the Moonlight wire wants. Pure and per-pad: feed
- * every snapshot in order, get the events out. A changed tracking id on an
- * active finger is a lift plus a fresh contact, matching how the satellite
- * receiver treats it.
+ * DOWN / MOVE / UP events the Moonlight wire wants. Per-pad: feed each
+ * snapshot's fingers in order and the events go to the sink as they are found;
+ * the differ keeps each finger's last contact in place and builds nothing. A
+ * changed tracking id on an active finger is a lift plus a fresh contact,
+ * matching how the satellite receiver treats it.
  */
 class MoonlightTouchDiffer {
-    data class TouchEvent(
-        val eventType: Int,
-        val pointerId: Int,
-        val x: Float,
-        val y: Float,
-        val pressure: Float,
-    )
-
-    private data class FingerState(
-        val active: Boolean,
-        val id: Int,
-        val x: Float,
-        val y: Float,
-    )
-
-    private var last0 = FingerState(false, 0, 0f, 0f)
-    private var last1 = FingerState(false, 0, 0f, 0f)
+    private val contacts = Array(FINGERS) { HeldContact() }
 
     fun reset() {
-        last0 = FingerState(false, 0, 0f, 0f)
-        last1 = FingerState(false, 0, 0f, 0f)
+        for (contact in contacts) contact.forget()
     }
 
+    /** [finger]'s contact in this snapshot against its last, its events to [sink] for [controllerNumber]. */
     fun diff(
-        finger0Active: Boolean,
-        finger0Id: Int,
-        finger0X: Float,
-        finger0Y: Float,
-        finger1Active: Boolean,
-        finger1Id: Int,
-        finger1X: Float,
-        finger1Y: Float,
-    ): List<TouchEvent> {
-        val out = ArrayList<TouchEvent>(2)
-        last0 = diffFinger(last0, FingerState(finger0Active, finger0Id, finger0X, finger0Y), out)
-        last1 = diffFinger(last1, FingerState(finger1Active, finger1Id, finger1X, finger1Y), out)
-        return out
-    }
-
-    private fun diffFinger(
-        prev: FingerState,
-        cur: FingerState,
-        out: MutableList<TouchEvent>,
-    ): FingerState {
-        val landed = !prev.active && cur.active
-        val lifted = prev.active && !cur.active
-        val bothActive = prev.active && cur.active
-        val retracked = bothActive && prev.id != cur.id
-        val moved = bothActive && (prev.x != cur.x || prev.y != cur.y)
+        finger: Int,
+        active: Boolean,
+        id: Int,
+        x: Float,
+        y: Float,
+        controllerNumber: Int,
+        sink: MoonlightTouchSink,
+    ) {
+        val held = contacts[finger]
+        val landed = !held.active && active
+        val lifted = held.active && !active
+        val bothActive = held.active && active
+        val retracked = bothActive && held.id != id
+        val moved = bothActive && (held.x != x || held.y != y)
         when {
-            landed -> out += down(cur)
-            lifted -> out += up(prev)
+            landed -> sink.sendControllerTouch(controllerNumber, TOUCH_EVENT_DOWN, id, x, y, PRESSURE_TOUCHING)
+            lifted -> held.sendUp(controllerNumber, sink)
             retracked -> {
-                out += up(prev)
-                out += down(cur)
+                held.sendUp(controllerNumber, sink)
+                sink.sendControllerTouch(controllerNumber, TOUCH_EVENT_DOWN, id, x, y, PRESSURE_TOUCHING)
             }
-            moved -> out += TouchEvent(TOUCH_EVENT_MOVE, cur.id, cur.x, cur.y, PRESSURE_TOUCHING)
+            moved -> sink.sendControllerTouch(controllerNumber, TOUCH_EVENT_MOVE, id, x, y, PRESSURE_TOUCHING)
         }
-        return cur
+        held.hold(active, id, x, y)
+    }
+}
+
+// One finger's last contact, overwritten by each snapshot once its events are out.
+private class HeldContact {
+    var active = false
+        private set
+    var id = 0
+        private set
+    var x = 0f
+        private set
+    var y = 0f
+        private set
+
+    fun hold(
+        active: Boolean,
+        id: Int,
+        x: Float,
+        y: Float,
+    ) {
+        this.active = active
+        this.id = id
+        this.x = x
+        this.y = y
     }
 
-    private fun down(finger: FingerState) = TouchEvent(TOUCH_EVENT_DOWN, finger.id, finger.x, finger.y, PRESSURE_TOUCHING)
+    fun forget() = hold(active = false, id = 0, x = 0f, y = 0f)
 
-    private fun up(finger: FingerState) = TouchEvent(TOUCH_EVENT_UP, finger.id, finger.x, finger.y, PRESSURE_LIFTED)
+    // The lift names the contact as it was last held, not as the snapshot that ended it.
+    fun sendUp(
+        controllerNumber: Int,
+        sink: MoonlightTouchSink,
+    ) {
+        sink.sendControllerTouch(controllerNumber, TOUCH_EVENT_UP, id, x, y, PRESSURE_LIFTED)
+    }
 }

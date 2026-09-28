@@ -5,6 +5,7 @@ package com.tinkernorth.dish.source.connection.moonlight
 
 import android.util.Log
 import com.tinkernorth.dish.core.net.moonlight.BTN_TOUCHPAD
+import com.tinkernorth.dish.core.net.moonlight.FIRST_FINGER
 import com.tinkernorth.dish.core.net.moonlight.MOTION_TYPE_ACCEL
 import com.tinkernorth.dish.core.net.moonlight.MOTION_TYPE_GYRO
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
@@ -12,6 +13,7 @@ import com.tinkernorth.dish.core.net.moonlight.MoonlightEvent
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.core.net.moonlight.MoonlightMotionGate
 import com.tinkernorth.dish.core.net.moonlight.MoonlightTouchDiffer
+import com.tinkernorth.dish.core.net.moonlight.SECOND_FINGER
 import com.tinkernorth.dish.core.net.moonlight.XBOX
 import com.tinkernorth.dish.core.net.moonlight.accelMs2
 import com.tinkernorth.dish.core.net.moonlight.batteryPercentage
@@ -515,27 +517,24 @@ class MoonlightConnection(
         val isAClickEdge = touchClickByNumber.getAndSet(pad.number, click) != click
         if (isAClickEdge) replayLastFrame(pad.number)
         val differ = touchDiffers.getOrPut(slotId) { MoonlightTouchDiffer() }
-        val events =
-            differ.diff(
-                finger0Active = report.finger0Active,
-                finger0Id = report.finger0TrackingId,
-                finger0X = touchNorm(report.finger0X),
-                finger0Y = touchNorm(report.finger0Y),
-                finger1Active = report.finger1Active,
-                finger1Id = report.finger1TrackingId,
-                finger1X = touchNorm(report.finger1X),
-                finger1Y = touchNorm(report.finger1Y),
-            )
-        for (e in events) {
-            live.sendControllerTouch(
-                controllerNumber = pad.number,
-                eventType = e.eventType,
-                pointerId = e.pointerId,
-                x = e.x,
-                y = e.y,
-                pressure = e.pressure,
-            )
-        }
+        differ.diff(
+            finger = FIRST_FINGER,
+            active = report.finger0Active,
+            id = report.finger0TrackingId,
+            x = touchNorm(report.finger0X),
+            y = touchNorm(report.finger0Y),
+            controllerNumber = pad.number,
+            sink = live,
+        )
+        differ.diff(
+            finger = SECOND_FINGER,
+            active = report.finger1Active,
+            id = report.finger1TrackingId,
+            x = touchNorm(report.finger1X),
+            y = touchNorm(report.finger1Y),
+            controllerNumber = pad.number,
+            sink = live,
+        )
     }
 
     fun dispatchFeedback(event: MoonlightEvent) {

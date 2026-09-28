@@ -11,6 +11,7 @@ import com.tinkernorth.dish.core.net.moonlight.BTN_TOUCHPAD
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
+import com.tinkernorth.dish.core.net.moonlight.TOUCH_EVENT_MOVE
 import com.tinkernorth.dish.core.net.moonlight.XBOX
 import com.tinkernorth.dish.source.connection.TouchpadReport
 import io.mockk.every
@@ -121,11 +122,65 @@ internal class MoonlightSlotLookups :
     override fun getAsLong(): Long = named
 }
 
+// A touch contact's id and its two positions, as MoonlightTouchCycles sends them.
+private const val CYCLE_TOUCH_ID = 9
+private const val CYCLE_TOUCH_X: Short = -1000
+private const val CYCLE_MOVED_TOUCH_X: Short = 1000
+private const val CYCLE_TOUCH_EVENTS = 3
+
+// The idle session one touch cycle is measured over.
+private fun idleSession() = MoonlightControlSession(ByteArray(IDLE_SESSION_KEY_BYTES), 0, SilentTransport(), { IDLE_SESSION_NOW_MS })
+
+private fun cycleTouchReport(
+    active: Boolean,
+    x: Short,
+) = TouchpadReport(active, false, false, false, false, CYCLE_TOUCH_ID, x, 0, 0, 0, 0, 0L, 0)
+
+// One pad's contact landing, moving and lifting through the connection: three events, over a real
+// session that is not connected. Reached through Runnable because the allocation test makes it in
+// a class loader of its own.
+internal class MoonlightTouchCycles : Runnable {
+    private val dispatcher = StandardTestDispatcher()
+    private val connection =
+        MoonlightConnection(
+            id = "moonlight:uid:abc",
+            host = MoonlightHost(name = "PC", address = "10.0.0.5", uniqueId = "abc"),
+            scope = TestScope(dispatcher),
+            ioDispatcher = dispatcher,
+        )
+    private val landing = cycleTouchReport(active = true, x = CYCLE_TOUCH_X)
+    private val moving = cycleTouchReport(active = true, x = CYCLE_MOVED_TOUCH_X)
+    private val lifting = cycleTouchReport(active = false, x = CYCLE_MOVED_TOUCH_X)
+
+    init {
+        connection.acquirePad("slot-0", PLAYSTATION, CYCLE_CAPS, CYCLE_BUTTONS)
+        connection.markLive(idleSession(), appId = null, appName = null)
+    }
+
+    override fun run() {
+        connection.sendTouchpad("slot-0", landing)
+        connection.sendTouchpad("slot-0", moving)
+        connection.sendTouchpad("slot-0", lifting)
+    }
+}
+
+// The same three events sent on an idle session directly: the session's own cost.
+internal class MoonlightSessionTouchCycles : Runnable {
+    private val session = idleSession()
+
+    override fun run() {
+        repeat(CYCLE_TOUCH_EVENTS) { session.sendControllerTouch(0, TOUCH_EVENT_MOVE, CYCLE_TOUCH_ID, 0f, 0f, 1f) }
+    }
+}
+
 // The connection's per-frame path: what it remembers of each pad's last frame, and that
 // remembering it allocates nothing.
 class MoonlightConnectionFrameTest {
     private val dispatcher = StandardTestDispatcher()
     private val sent = mutableListOf<SentFrame>()
+
+    // Each touch event the recording session was handed: its controller number and pointer id.
+    private val touches = mutableListOf<Pair<Int, Int>>()
 
     private fun connection(): MoonlightConnection =
         MoonlightConnection(
@@ -166,6 +221,9 @@ class MoonlightConnectionFrameTest {
                 arg(7),
                 arg(8),
             )
+        }
+        every { session.sendControllerTouch(any(), any(), any(), any(), any(), any()) } answers {
+            touches += arg<Int>(0) to arg<Int>(2)
         }
         return session
     }
@@ -379,6 +437,45 @@ class MoonlightConnectionFrameTest {
         assertTrue("$allocatedBytes bytes over $MEASURED_CYCLES cycles", allocatedBytes < MEASURED_CYCLES * BYTES_PER_CYCLE_BOUND)
     }
 
+    // ---- a touch frame's contacts ----
+
+    private fun touchReport(
+        active: Boolean,
+        x: Short,
+    ) = clickReport(pressed = false).apply {
+        finger0Active = active
+        finger0TrackingId = TOUCH_ID
+        finger0X = x
+    }
+
+    @Test
+    fun `a two-finger frame lands both contacts on the pad's number, first finger first`() {
+        val conn = liveWithPads(ALL_PADS)
+        val twoFingers =
+            touchReport(active = true, x = FIRST_TOUCH_X).apply {
+                finger1Active = true
+                finger1TrackingId = SECOND_TOUCH_ID
+            }
+        conn.sendTouchpad("slot-$LAST_NUMBER", twoFingers)
+        assertEquals(listOf(LAST_NUMBER to TOUCH_ID, LAST_NUMBER to SECOND_TOUCH_ID), touches)
+    }
+
+    // The session's own touch send builds its packet, connected or not; that is the session's
+    // cost, measured on its own copy and taken off, and what is left is the connection's.
+    @Test
+    fun `a touch frame allocates nothing past the session's own send, even once MockK has rewritten both classes`() {
+        mockk<MoonlightConnection>(relaxed = true).activeMask()
+        mockk<MoonlightControlSession>(relaxed = true).sendControllerTouch(0, 0, 0, 0f, 0f, 0f)
+        val touches = freshAppInstanceOf(MoonlightTouchCycles::class.java) as Runnable
+        val sessionTouches = freshAppInstanceOf(MoonlightSessionTouchCycles::class.java) as Runnable
+        repeat(WARMUP_CYCLES) { touches.run() }
+        repeat(WARMUP_CYCLES) { sessionTouches.run() }
+        val sessionBytes = fewestAllocatedBytesDuring(MEASURED_RUNS) { repeat(MEASURED_CYCLES) { sessionTouches.run() } }
+        val connectionBytes = fewestAllocatedBytesDuring(MEASURED_RUNS) { repeat(MEASURED_CYCLES) { touches.run() } }
+        val addedBytes = connectionBytes - sessionBytes
+        assertTrue("$addedBytes bytes over $MEASURED_CYCLES cycles", addedBytes < MEASURED_CYCLES * BYTES_PER_CYCLE_BOUND)
+    }
+
     // ---- the slot a bridge upcall's controller number names ----
 
     @Test
@@ -448,5 +545,8 @@ class MoonlightConnectionFrameTest {
         // cycle, while the JIT's one-off warm-up allocations stay flat as the cycles grow.
         const val BYTES_PER_CYCLE_BOUND = 8
         const val MEASURED_RUNS = 3
+        const val TOUCH_ID = 9
+        const val SECOND_TOUCH_ID = 10
+        const val FIRST_TOUCH_X: Short = -1000
     }
 }

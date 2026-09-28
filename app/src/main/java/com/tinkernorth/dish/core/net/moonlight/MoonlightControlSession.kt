@@ -33,7 +33,7 @@ class MoonlightControlSession(
     private val transport: Transport,
     private val nowMs: () -> Long,
     private val onEvent: (MoonlightEvent) -> Unit = {},
-) {
+) : MoonlightTouchSink {
     /** The datagram plumbing under the session (a UDP socket in production). */
     interface Transport {
         fun send(datagram: ByteArray)
@@ -212,7 +212,7 @@ class MoonlightControlSession(
         }
     }
 
-    fun sendControllerTouch(
+    override fun sendControllerTouch(
         controllerNumber: Int,
         eventType: Int,
         pointerId: Int,
