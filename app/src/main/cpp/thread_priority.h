@@ -9,7 +9,8 @@
 
 namespace dish {
 
-// Android's THREAD_PRIORITY_URGENT_AUDIO, the highest nice value an app thread may ask for.
+// Android's THREAD_PRIORITY_URGENT_AUDIO: the lowest nice value, so the highest priority, that
+// android.os.Process names.
 constexpr int kUrgentAudioNice = -19;
 // setpriority's "who" that names the calling thread under PRIO_PROCESS.
 constexpr id_t kCallingThread = 0;
