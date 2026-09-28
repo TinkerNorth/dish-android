@@ -32,33 +32,61 @@ class PadTouchpadCaptureTest {
 
     // ---- which pointers are still on the surface after an event ----
 
+    private fun twoFingerEvent(
+        actionMasked: Int,
+        actionIndex: Int = 0,
+    ): MotionEvent =
+        mockk {
+            every { this@mockk.actionMasked } returns actionMasked
+            every { this@mockk.actionIndex } returns actionIndex
+            every { pointerCount } returns pointers.size
+            every { getPointerId(0) } returns first.id
+            every { getX(0) } returns first.x
+            every { getY(0) } returns first.y
+            every { getPointerId(1) } returns second.id
+            every { getX(1) } returns second.x
+            every { getY(1) } returns second.y
+        }
+
     @Test
     fun `on a pointer up only the lifting pointer is gone`() {
-        assertEquals(listOf(first), pointersStillDown(MotionEvent.ACTION_POINTER_UP, actionIndex = 1, pointers = pointers))
+        assertEquals(listOf(first), pointersStillDown(twoFingerEvent(MotionEvent.ACTION_POINTER_UP, actionIndex = 1)))
     }
 
     @Test
     fun `on an up the lifting pointer is gone`() {
-        assertEquals(listOf(second), pointersStillDown(MotionEvent.ACTION_UP, actionIndex = 0, pointers = pointers))
+        assertEquals(listOf(second), pointersStillDown(twoFingerEvent(MotionEvent.ACTION_UP, actionIndex = 0)))
     }
 
     @Test
     fun `on a cancel every pointer is gone`() {
-        assertEquals(emptyList<Pointer>(), pointersStillDown(MotionEvent.ACTION_CANCEL, actionIndex = 0, pointers = pointers))
+        assertEquals(emptyList<Pointer>(), pointersStillDown(twoFingerEvent(MotionEvent.ACTION_CANCEL)))
     }
 
     @Test
     fun `a hover carries no finger`() {
-        val hovers = listOf(MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE, MotionEvent.ACTION_HOVER_EXIT)
-        for (action in hovers) {
-            assertEquals("action $action", emptyList<Pointer>(), pointersStillDown(action, actionIndex = 0, pointers = pointers))
+        for (action in HOVERS) {
+            assertEquals("action $action", emptyList<Pointer>(), pointersStillDown(twoFingerEvent(action)))
+        }
+    }
+
+    // The hot path builds no pointer list it would throw away: a cancel or a hover never reads one.
+    @Test
+    fun `a cancel or a hover never reads the pointers`() {
+        for (action in listOf(MotionEvent.ACTION_CANCEL) + HOVERS) {
+            val event = twoFingerEvent(action)
+
+            pointersStillDown(event)
+
+            verify(exactly = 0) { event.pointerCount }
+            verify(exactly = 0) { event.getPointerId(any()) }
         }
     }
 
     @Test
     fun `a move or a down keeps every pointer`() {
-        assertEquals(pointers, pointersStillDown(MotionEvent.ACTION_MOVE, actionIndex = 0, pointers = pointers))
-        assertEquals(pointers, pointersStillDown(MotionEvent.ACTION_POINTER_DOWN, actionIndex = 1, pointers = pointers))
+        assertEquals(pointers, pointersStillDown(twoFingerEvent(MotionEvent.ACTION_MOVE)))
+        assertEquals(pointers, pointersStillDown(twoFingerEvent(MotionEvent.ACTION_POINTER_DOWN, actionIndex = 1)))
     }
 
     // ---- the lift frames a lost focus or a released capture sends ----
@@ -213,5 +241,7 @@ class PadTouchpadCaptureTest {
         const val EVENT_TIME_MS = 42L
         const val DS4_X_MAX = 1919f
         const val DS4_Y_MAX = 941f
+
+        val HOVERS = listOf(MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE, MotionEvent.ACTION_HOVER_EXIT)
     }
 }

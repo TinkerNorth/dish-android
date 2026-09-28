@@ -17,7 +17,6 @@ import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.PhysicalReachabilityComposer
 import com.tinkernorth.dish.hotpath.input.PadTouchFrame
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
-import com.tinkernorth.dish.hotpath.input.Pointer
 import com.tinkernorth.dish.hotpath.input.Range
 import com.tinkernorth.dish.hotpath.input.frame
 import com.tinkernorth.dish.hotpath.input.routes
@@ -46,12 +45,12 @@ import java.util.concurrent.ConcurrentHashMap
  * DualShock 4 or DualSense's surface as a system mouse and hands the app nothing of it. Pointer
  * capture is the platform's door to the surface itself: while a view holds it, the touchpad
  * arrives "unscaled" as SOURCE_TOUCHPAD events carrying each finger's raw position, and the
- * cursor stops moving. [PadTouchpadCapturePolicy] says when that trade is worth making (a routed
- * pad, a focused window); this class makes the platform calls, maps each event through
- * [CapturedTouchpadMapper], and heals a lost final frame the way the phone-screen overlays do,
- * with the same [ResendPacer] burst on a thread of its own. The frames go to the slot's
- * [TelemetrySink] exactly as the on-screen touchpad's would, so the satellite and a Moonlight
- * host see one shape whichever surface produced it.
+ * cursor stops moving. [shouldCapture] says when that trade is worth making (a routed pad, a
+ * focused window); this class makes the platform calls, maps each event through [frame], and
+ * heals a lost final frame the way the phone-screen overlays do, with the same [ResendPacer]
+ * burst on a thread of its own. The frames go to the slot's [TelemetrySink] exactly as the
+ * on-screen touchpad's would, so the satellite and a Moonlight host see one shape whichever
+ * surface produced it.
  *
  * The events are taken at the activity's `dispatchGenericMotionEvent`, not through a view's
  * captured-pointer listener: the platform hands a captured touchpad event down the FOCUS chain
@@ -151,7 +150,7 @@ class PadTouchpadCapture(
         }
         val frame =
             frame(
-                down = downPointers(event),
+                down = pointersStillDown(event),
                 xRange = xRange,
                 yRange = yRange,
                 buttonPressed = event.buttonState and MotionEvent.BUTTON_PRIMARY != 0,
@@ -173,12 +172,6 @@ class PadTouchpadCapture(
         warnedNoRange = true
         Log.w(TAG, "captured touchpad on device $deviceId reports no axis range; dropping its frames")
     }
-
-    private fun downPointers(event: MotionEvent): List<Pointer> =
-        pointersStillDown(event.actionMasked, event.actionIndex, allPointers(event))
-
-    private fun allPointers(event: MotionEvent): List<Pointer> =
-        List(event.pointerCount) { Pointer(event.getPointerId(it), event.getX(it), event.getY(it)) }
 
     private fun liftAll() {
         val now = SystemClock.uptimeMillis()

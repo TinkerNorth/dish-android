@@ -9,20 +9,32 @@ import com.tinkernorth.dish.hotpath.input.Pointer
 
 // Every pointer still on the surface after this event: the one lifting on an UP is gone, all of
 // them on a CANCEL, and a hover carries no finger at all.
-internal fun pointersStillDown(
-    actionMasked: Int,
-    actionIndex: Int,
-    pointers: List<Pointer>,
-): List<Pointer> =
-    when (actionMasked) {
-        MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> pointers.filterIndexed { index, _ -> index != actionIndex }
+internal fun pointersStillDown(event: MotionEvent): List<Pointer> =
+    when (event.actionMasked) {
+        MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> pointersExcept(event, event.actionIndex)
         MotionEvent.ACTION_CANCEL,
         MotionEvent.ACTION_HOVER_ENTER,
         MotionEvent.ACTION_HOVER_MOVE,
         MotionEvent.ACTION_HOVER_EXIT,
         -> emptyList()
-        else -> pointers
+        else -> pointersExcept(event, NO_LIFTING_INDEX)
     }
+
+// The event's pointers but the one at [liftingIndex], read straight into the one list the frame keeps.
+private fun pointersExcept(
+    event: MotionEvent,
+    liftingIndex: Int,
+): List<Pointer> {
+    val count = event.pointerCount
+    val pointers = ArrayList<Pointer>(count)
+    for (index in 0 until count) {
+        if (index == liftingIndex) continue
+        pointers.add(Pointer(event.getPointerId(index), event.getX(index), event.getY(index)))
+    }
+    return pointers
+}
+
+private const val NO_LIFTING_INDEX = -1
 
 // The slots whose last frame still holds a finger or the click, each with its lifted frame.
 internal fun liftedFrames(
