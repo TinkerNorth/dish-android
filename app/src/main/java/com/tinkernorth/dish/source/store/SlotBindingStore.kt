@@ -3,7 +3,6 @@
 package com.tinkernorth.dish.source.store
 
 import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
-import kotlinx.coroutines.flow.getAndUpdate
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -47,7 +46,7 @@ class SlotBindingStore
             slotId: String,
             connectionId: String,
         ): String? {
-            val prior = mutableState.getAndUpdate { current -> current + (slotId to connectionId) }
+            val prior = getAndSetState { current -> current + (slotId to connectionId) }
             return prior[slotId]
         }
     }
