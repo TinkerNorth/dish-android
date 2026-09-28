@@ -9,6 +9,10 @@
 
 namespace usbhid {
 
+// How many Push items (HID 1.11 §6.2.2.7) may be outstanding at once. The spec sets no bound; one
+// more than this ends the parse, as any other malformed stream does.
+inline constexpr size_t HID_GLOBAL_STACK_DEPTH = 8;
+
 struct HidAxis {
     bool present = false;
     uint16_t bitOffset = 0;

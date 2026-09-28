@@ -979,3 +979,137 @@ TEST(HidDescriptor, AReportIdThatReturnsResumesWhereItsReportLeftOff) {
     EXPECT_EQ(32767, s.sLX);
     EXPECT_EQ(32767, s.sLY); // Y is inverted: raw 0 is full up
 }
+
+// ---- Push and Pop (HID 1.11 §6.2.2.7): the global item state table saved and restored ---------
+
+namespace {
+
+// X, then a Push, a button block that rewrites every global, a Pop, and Y: {X, buttons, Y}.
+const uint8_t kPushPopDescriptor[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x05,       // Usage (Game Pad)
+    0xA1, 0x01,       // Collection (Application)
+    0x15, 0x00,       //   Logical Minimum (0)
+    0x26, 0xFF, 0x00, //   Logical Maximum (255)
+    0x75, 0x08,       //   Report Size (8)
+    0x95, 0x01,       //   Report Count (1)
+    0x09, 0x30,       //   Usage (X)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xA4,             //   Push
+    0x05, 0x09,       //   Usage Page (Button)
+    0x19, 0x01,       //   Usage Minimum (1)
+    0x29, 0x08,       //   Usage Maximum (8)
+    0x25, 0x01,       //   Logical Maximum (1)
+    0x75, 0x01,       //   Report Size (1)
+    0x95, 0x08,       //   Report Count (8)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xB4,             //   Pop
+    0x09, 0x31,       //   Usage (Y)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xC0,             // End Collection
+};
+
+// Report 1 carries X; a Push, report 2's buttons, and a Pop bring report 1 back for Y.
+const uint8_t kPopRestoresTheReportIdDescriptor[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x05,       // Usage (Game Pad)
+    0xA1, 0x01,       // Collection (Application)
+    0x85, 0x01,       //   Report ID (1)
+    0x15, 0x00,       //   Logical Minimum (0)
+    0x26, 0xFF, 0x00, //   Logical Maximum (255)
+    0x75, 0x08,       //   Report Size (8)
+    0x95, 0x01,       //   Report Count (1)
+    0x09, 0x30,       //   Usage (X)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xA4,             //   Push
+    0x85, 0x02,       //   Report ID (2)
+    0x05, 0x09,       //   Usage Page (Button)
+    0x19, 0x01,       //   Usage Minimum (1)
+    0x29, 0x08,       //   Usage Maximum (8)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xB4,             //   Pop
+    0x09, 0x31,       //   Usage (Y)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xC0,             // End Collection
+};
+
+// X, then a Pop with nothing pushed, then Y.
+const uint8_t kPopWithNothingPushedDescriptor[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x05,       // Usage (Game Pad)
+    0xA1, 0x01,       // Collection (Application)
+    0x15, 0x00,       //   Logical Minimum (0)
+    0x26, 0xFF, 0x00, //   Logical Maximum (255)
+    0x75, 0x08,       //   Report Size (8)
+    0x95, 0x01,       //   Report Count (1)
+    0x09, 0x30,       //   Usage (X)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xB4,             //   Pop
+    0x09, 0x31,       //   Usage (Y)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xC0,             // End Collection
+};
+
+// X, then `depth` Pushes, a switch to the Button page, `depth` Pops, and Y: {X, Y} when every
+// Push fit.
+std::vector<uint8_t> nestedPushesThenY(const size_t depth) {
+    constexpr uint8_t kPush = 0xA4;
+    constexpr uint8_t kPop = 0xB4;
+    const uint8_t xAxis[] = {0x05, 0x01, 0x09, 0x05, 0xA1, 0x01, 0x15, 0x00, 0x26, 0xFF,
+                             0x00, 0x75, 0x08, 0x95, 0x01, 0x09, 0x30, 0x81, 0x02};
+    const uint8_t buttonPage[] = {0x05, 0x09};
+    const uint8_t yAxis[] = {0x09, 0x31, 0x81, 0x02, 0xC0};
+    std::vector<uint8_t> d(xAxis, xAxis + sizeof(xAxis));
+    d.insert(d.end(), depth, kPush);
+    d.insert(d.end(), buttonPage, buttonPage + sizeof(buttonPage));
+    d.insert(d.end(), depth, kPop);
+    d.insert(d.end(), yAxis, yAxis + sizeof(yAxis));
+    return d;
+}
+
+} // namespace
+
+TEST(HidDescriptor, APopRestoresTheGlobalsThePushSaved) {
+    const HidLayout L = parsed(kPushPopDescriptor, sizeof(kPushPopDescriptor));
+    EXPECT_EQ(0, L.lx.bitOffset);
+    EXPECT_EQ(8, L.buttonBitOffset);
+    EXPECT_EQ(8, L.buttonCount);
+    ASSERT_TRUE(L.ly.present);
+    EXPECT_EQ(16, L.ly.bitOffset);
+    EXPECT_EQ(8, L.ly.bitSize);
+    EXPECT_EQ(0, L.ly.logicalMin);
+    EXPECT_EQ(255, L.ly.logicalMax);
+
+    const DeviceState s = decoded(L, {0xFF, 0x01, 0x00});
+    EXPECT_EQ(32767, s.sLX);
+    EXPECT_EQ(XUSB_A, s.wButtons);
+    EXPECT_EQ(32767, s.sLY);
+}
+
+TEST(HidDescriptor, APopRestoresTheReportIdThePushSaved) {
+    const HidLayout L =
+        parsed(kPopRestoresTheReportIdDescriptor, sizeof(kPopRestoresTheReportIdDescriptor));
+    EXPECT_EQ(1, L.reportId);
+    EXPECT_EQ(0, L.buttonCount);
+    ASSERT_TRUE(L.ly.present);
+    EXPECT_EQ(8, L.ly.bitOffset);
+}
+
+TEST(HidDescriptor, APopWithNothingPushedEndsTheParseAndKeepsWhatCameBefore) {
+    const HidLayout L =
+        parsed(kPopWithNothingPushedDescriptor, sizeof(kPopWithNothingPushedDescriptor));
+    EXPECT_TRUE(L.lx.present);
+    EXPECT_FALSE(L.ly.present);
+}
+
+TEST(HidDescriptor, PushesNestAsDeepAsTheStackAndOneMoreEndsTheParse) {
+    const std::vector<uint8_t> deepest = nestedPushesThenY(usbhid::HID_GLOBAL_STACK_DEPTH);
+    const HidLayout fits = parsed(deepest.data(), deepest.size());
+    ASSERT_TRUE(fits.ly.present);
+    EXPECT_EQ(8, fits.ly.bitOffset);
+
+    const std::vector<uint8_t> tooDeep = nestedPushesThenY(usbhid::HID_GLOBAL_STACK_DEPTH + 1);
+    const HidLayout overflowed = parsed(tooDeep.data(), tooDeep.size());
+    EXPECT_TRUE(overflowed.lx.present);
+    EXPECT_FALSE(overflowed.ly.present);
+}

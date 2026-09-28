@@ -59,6 +59,8 @@ constexpr uint8_t kGlobalLogicalMax = 0x2;
 constexpr uint8_t kGlobalReportSize = 0x7;
 constexpr uint8_t kGlobalReportId = 0x8;
 constexpr uint8_t kGlobalReportCount = 0x9;
+constexpr uint8_t kGlobalPush = 0xA;
+constexpr uint8_t kGlobalPop = 0xB;
 constexpr uint8_t kLocalUsage = 0x0;
 constexpr uint8_t kLocalUsageMin = 0x1;
 constexpr uint8_t kLocalUsageMax = 0x2;
@@ -284,14 +286,21 @@ HidItem readHidItem(const uint8_t* desc, const size_t len, size_t& i) {
     return readShortItem(desc, len, prefix, i);
 }
 
-// The global and local item state the stream accumulates until a Main item consumes it.
-struct HidParseState {
+// The global item state table: what Push saves and Pop restores (HID 1.11 §6.2.2.7).
+struct HidGlobals {
     uint32_t usagePage;
     uint32_t reportSize;
     uint32_t reportCount;
     int32_t logMin;
     int32_t logMax;
     uint8_t currentReportId;
+};
+
+// The global and local item state the stream accumulates until a Main item consumes it.
+struct HidParseState {
+    HidGlobals globals;
+    HidGlobals pushedGlobals[HID_GLOBAL_STACK_DEPTH];
+    size_t pushedCount;
     // A field belongs to the report its Report ID names (HID 1.11 §6.2.2.7), so an id that comes
     // back continues its report where that report's last field ended.
     uint32_t bitCursorByReportId[kReportIdCount];
@@ -303,28 +312,51 @@ struct HidParseState {
     bool haveRange;
 };
 
-void applyGlobalItem(const HidItem& item, HidParseState& st) {
+// A Push past the stack's depth has nowhere to go, so the stream is no longer one this parser can
+// follow.
+bool pushGlobals(HidParseState& st) {
+    const bool isFull = st.pushedCount == HID_GLOBAL_STACK_DEPTH;
+    if (isFull) return false;
+    st.pushedGlobals[st.pushedCount++] = st.globals;
+    return true;
+}
+
+// A Pop with nothing pushed is a malformed stream.
+bool popGlobals(HidParseState& st) {
+    const bool isEmpty = st.pushedCount == 0;
+    if (isEmpty) return false;
+    st.globals = st.pushedGlobals[--st.pushedCount];
+    return true;
+}
+
+// False when the item leaves the stream malformed and the parse has to end.
+bool applyGlobalItem(const HidItem& item, HidParseState& st) {
+    HidGlobals& g = st.globals;
     switch (item.tag) {
     case kGlobalUsagePage:
-        st.usagePage = item.data;
-        break;
+        g.usagePage = item.data;
+        return true;
     case kGlobalLogicalMin:
-        st.logMin = signExtend(item.data, item.dataLen);
-        break;
+        g.logMin = signExtend(item.data, item.dataLen);
+        return true;
     case kGlobalLogicalMax:
-        st.logMax = signExtend(item.data, item.dataLen);
-        break;
+        g.logMax = signExtend(item.data, item.dataLen);
+        return true;
     case kGlobalReportSize:
-        st.reportSize = item.data;
-        break;
+        g.reportSize = item.data;
+        return true;
     case kGlobalReportId:
-        st.currentReportId = (uint8_t)item.data;
-        break;
+        g.currentReportId = (uint8_t)item.data;
+        return true;
     case kGlobalReportCount:
-        st.reportCount = item.data;
-        break;
+        g.reportCount = item.data;
+        return true;
+    case kGlobalPush:
+        return pushGlobals(st);
+    case kGlobalPop:
+        return popGlobals(st);
     default:
-        break;
+        return true;
     }
 }
 
@@ -349,14 +381,15 @@ void takeButtonField(const HidParseState& st, const uint32_t startBit, HidLayout
     const bool alreadyTaken = out.buttonCount != 0;
     if (alreadyTaken) return;
     out.buttonBitOffset = (uint16_t)startBit;
-    const uint32_t count = std::min<uint32_t>(st.reportCount, kMaxButtons);
+    const uint32_t count = std::min<uint32_t>(st.globals.reportCount, kMaxButtons);
     out.buttonCount = (uint8_t)count;
 }
 
 // A usage range names every field; a usage list names the first fields and its last entry stands
 // for the rest.
 void takeAxisFields(const HidParseState& st, const uint32_t startBit, HidLayout& out) {
-    for (uint32_t f = 0; f < st.reportCount; f++) {
+    const HidGlobals& g = st.globals;
+    for (uint32_t f = 0; f < g.reportCount; f++) {
         uint32_t usage;
         if (st.haveRange) {
             usage = st.usageMin + f;
@@ -365,36 +398,37 @@ void takeAxisFields(const HidParseState& st, const uint32_t startBit, HidLayout&
         } else {
             usage = st.usages[f < st.usageCount ? f : st.usageCount - 1];
         }
-        assignUsage(out, st.usagePage, usage, startBit + f * st.reportSize, st.reportSize,
-                    st.logMin, st.logMax);
+        assignUsage(out, g.usagePage, usage, startBit + f * g.reportSize, g.reportSize, g.logMin,
+                    g.logMax);
     }
 }
 
 // The first non-constant Input item locks the report id this layout describes.
 void applyInputItem(const HidItem& item, HidParseState& st, HidLayout& out) {
-    uint32_t& bitCursor = st.bitCursorByReportId[st.currentReportId];
+    const HidGlobals& g = st.globals;
+    uint32_t& bitCursor = st.bitCursorByReportId[g.currentReportId];
     const uint32_t startBit = bitCursor;
-    bitCursor += st.reportSize * st.reportCount;
+    bitCursor += g.reportSize * g.reportCount;
 
     const bool isConstantPadding = (item.data & kInputConstantBit) != 0;
-    const bool carriesFields = st.reportSize > 0 && st.reportCount > 0;
+    const bool carriesFields = g.reportSize > 0 && g.reportCount > 0;
     if (isConstantPadding || !carriesFields) return;
 
     if (!st.locked) {
         st.locked = true;
-        st.lockedReportId = st.currentReportId;
-        out.reportId = st.currentReportId;
+        st.lockedReportId = g.currentReportId;
+        out.reportId = g.currentReportId;
     }
-    const bool isTheLockedReport = st.currentReportId == st.lockedReportId;
+    const bool isTheLockedReport = g.currentReportId == st.lockedReportId;
     if (!isTheLockedReport) return;
 
-    const bool isButtonPage = st.usagePage == kUsagePageButton;
+    const bool isButtonPage = g.usagePage == kUsagePageButton;
     if (isButtonPage) {
         takeButtonField(st, startBit, out);
         return;
     }
     const bool isAxisPage =
-        st.usagePage == kUsagePageGenericDesktop || st.usagePage == kUsagePageSimulation;
+        g.usagePage == kUsagePageGenericDesktop || g.usagePage == kUsagePageSimulation;
     if (isAxisPage) takeAxisFields(st, startBit, out);
 }
 
@@ -405,22 +439,21 @@ void clearLocalItems(HidParseState& st) {
 }
 
 // A Main item consumes whatever the Global and Local items have accumulated and then clears the
-// Local ones; only an Input main item carries fields this parser wants.
-void applyItem(const HidItem& item, HidParseState& st, HidLayout& out) {
+// Local ones; only an Input main item carries fields this parser wants. False when the item leaves
+// the stream malformed and the parse has to end.
+bool applyItem(const HidItem& item, HidParseState& st, HidLayout& out) {
     const bool isMainItem = item.type == kItemTypeMain;
     if (isMainItem) {
         const bool isInputItem = item.tag == kMainInput;
         if (isInputItem) applyInputItem(item, st, out);
         clearLocalItems(st);
-        return;
+        return true;
     }
     const bool isGlobalItem = item.type == kItemTypeGlobal;
-    if (isGlobalItem) {
-        applyGlobalItem(item, st);
-        return;
-    }
+    if (isGlobalItem) return applyGlobalItem(item, st);
     const bool isLocalItem = item.type == kItemTypeLocal;
     if (isLocalItem) applyLocalItem(item, st);
+    return true;
 }
 
 // The report-id prefix byte, when the layout says the device sends one.
@@ -503,7 +536,8 @@ bool parseReportDescriptor(const uint8_t* desc, const size_t len, HidLayout& out
         const HidItem item = readHidItem(desc, len, i);
         if (item.truncated) break;
         if (item.skip) continue;
-        applyItem(item, st, out);
+        const bool isStillWellFormed = applyItem(item, st, out);
+        if (!isStillWellFormed) break;
     }
 
     const bool hasAStick = out.lx.present || out.ly.present;
