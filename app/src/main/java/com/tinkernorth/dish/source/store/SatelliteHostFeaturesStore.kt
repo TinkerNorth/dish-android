@@ -52,14 +52,7 @@ class SatelliteHostFeaturesStore
             protocolVersion: Int,
         ) {
             if (protocolVersion <= 0) return
-            setState { current ->
-                val base = current[connectionId] ?: HostFeatureSet.SATELLITE_DEFAULT
-                if (base.protocolVersion == protocolVersion) {
-                    current
-                } else {
-                    current + (connectionId to base.copy(protocolVersion = protocolVersion))
-                }
-            }
+            setState { withProtocolVersion(it, connectionId, protocolVersion) }
         }
 
         // Merged like noteProtocolVersion, and both directions ride one write because one document
@@ -69,17 +62,36 @@ class SatelliteHostFeaturesStore
             mic: Boolean,
             speaker: Boolean,
         ) {
-            setState { current ->
-                val base = current[connectionId] ?: HostFeatureSet.SATELLITE_DEFAULT
-                if (base.controllerMic == mic && base.controllerSpeaker == speaker) {
-                    current
-                } else {
-                    current + (connectionId to base.copy(controllerMic = mic, controllerSpeaker = speaker))
-                }
-            }
+            setState { withControllerAudio(it, connectionId, mic, speaker) }
         }
 
         fun clearConnection(connectionId: String) {
             setState { if (connectionId in it) it - connectionId else it }
         }
     }
+
+// A host the store has not heard of starts from the default. A read that changes nothing hands
+// back the same map, so a re-probe that learned nothing builds no new one.
+internal fun withProtocolVersion(
+    features: Map<String, HostFeatureSet>,
+    connectionId: String,
+    protocolVersion: Int,
+): Map<String, HostFeatureSet> {
+    val base = features[connectionId] ?: HostFeatureSet.SATELLITE_DEFAULT
+    val isUnchanged = base.protocolVersion == protocolVersion
+    if (isUnchanged) return features
+    return features + (connectionId to base.copy(protocolVersion = protocolVersion))
+}
+
+// The same rule for the audio verdict, read as a pair: moving either direction is a change.
+internal fun withControllerAudio(
+    features: Map<String, HostFeatureSet>,
+    connectionId: String,
+    mic: Boolean,
+    speaker: Boolean,
+): Map<String, HostFeatureSet> {
+    val base = features[connectionId] ?: HostFeatureSet.SATELLITE_DEFAULT
+    val isUnchanged = base.controllerMic == mic && base.controllerSpeaker == speaker
+    if (isUnchanged) return features
+    return features + (connectionId to base.copy(controllerMic = mic, controllerSpeaker = speaker))
+}
