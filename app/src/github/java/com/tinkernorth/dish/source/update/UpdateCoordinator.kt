@@ -14,9 +14,9 @@ import com.tinkernorth.dish.core.update.UpdateEvent
 import com.tinkernorth.dish.core.update.UpdatePhase
 import com.tinkernorth.dish.core.update.UpdateStatus
 import com.tinkernorth.dish.core.update.UpdateTrigger
-import com.tinkernorth.dish.core.update.UpdateVersion
 import com.tinkernorth.dish.core.update.jitteredDelayMs
 import com.tinkernorth.dish.core.update.reduce
+import com.tinkernorth.dish.core.update.updateVersionOfBuild
 import com.tinkernorth.dish.source.system.NetworkState
 import com.tinkernorth.dish.source.system.NetworkStateObserver
 import kotlinx.coroutines.CoroutineScope
@@ -65,7 +65,7 @@ class UpdateCoordinator internal constructor(
         // A build past its tag reports the tag's version; a name that is not a
         // version at all can never be "older" than a release, so such a build
         // is never offered one.
-        currentVersion = UpdateVersion.ofBuild(BuildConfig.VERSION_NAME)?.toString() ?: BuildConfig.VERSION_NAME,
+        currentVersion = updateVersionOfBuild(BuildConfig.VERSION_NAME)?.toString() ?: BuildConfig.VERSION_NAME,
         nowMs = System::currentTimeMillis,
         jitterUnit = { Random.nextDouble() },
     )
@@ -198,33 +198,31 @@ class UpdateCoordinator internal constructor(
                 dispatch(event)
             }
     }
-
-    private companion object {
-        fun initialStatus(
-            currentVersion: String,
-            prefs: UpdatePreferences,
-        ) = UpdateStatus(
-            currentVersion = currentVersion,
-            phase = if (prefs.checksEnabled) UpdatePhase.Idle else UpdatePhase.Disabled,
-            checksEnabled = prefs.checksEnabled,
-            skippedVersion = prefs.skippedVersion,
-        )
-
-        fun noticeOf(s: UpdateStatus) =
-            UpdateNoticeStatus(
-                phase =
-                    when (s.phase) {
-                        UpdatePhase.Disabled -> UpdateNoticePhase.Disabled
-                        UpdatePhase.Idle -> UpdateNoticePhase.Idle
-                        UpdatePhase.Checking -> UpdateNoticePhase.Checking
-                        UpdatePhase.UpToDate -> UpdateNoticePhase.UpToDate
-                        UpdatePhase.Available -> UpdateNoticePhase.Available
-                        UpdatePhase.Failed -> UpdateNoticePhase.Failed
-                    },
-                checksEnabled = s.checksEnabled,
-                availableVersion = s.availableVersion,
-                downloadUrl = s.downloadUrl,
-                required = s.required,
-            )
-    }
 }
+
+private fun initialStatus(
+    currentVersion: String,
+    prefs: UpdatePreferences,
+) = UpdateStatus(
+    currentVersion = currentVersion,
+    phase = if (prefs.checksEnabled) UpdatePhase.Idle else UpdatePhase.Disabled,
+    checksEnabled = prefs.checksEnabled,
+    skippedVersion = prefs.skippedVersion,
+)
+
+internal fun noticeOf(s: UpdateStatus): UpdateNoticeStatus =
+    UpdateNoticeStatus(
+        phase =
+            when (s.phase) {
+                UpdatePhase.Disabled -> UpdateNoticePhase.Disabled
+                UpdatePhase.Idle -> UpdateNoticePhase.Idle
+                UpdatePhase.Checking -> UpdateNoticePhase.Checking
+                UpdatePhase.UpToDate -> UpdateNoticePhase.UpToDate
+                UpdatePhase.Available -> UpdateNoticePhase.Available
+                UpdatePhase.Failed -> UpdateNoticePhase.Failed
+            },
+        checksEnabled = s.checksEnabled,
+        availableVersion = s.availableVersion,
+        downloadUrl = s.downloadUrl,
+        required = s.required,
+    )
