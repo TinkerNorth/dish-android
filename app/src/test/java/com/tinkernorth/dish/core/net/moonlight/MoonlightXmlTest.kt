@@ -213,8 +213,15 @@ class MoonlightXmlTest {
     }
 
     @Test
-    fun `a non-numeric status code reads as success`() {
-        assertTrue(parseStatus("""<root status_code="ok"></root>""")!!.ok)
+    fun `a status code that is present but not a number fails closed`() {
+        val status = parseStatus("""<root status_code="ok" status_message="garbled"></root>""")!!
+        assertFalse(status.ok)
+        assertEquals("garbled", status.message)
+    }
+
+    @Test
+    fun `a status code that is present but empty fails closed`() {
+        assertFalse(parseStatus("""<root status_code=""></root>""")!!.ok)
     }
 
     @Test

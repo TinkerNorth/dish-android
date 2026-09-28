@@ -63,12 +63,17 @@ data class Status(
 /**
  * The root element's status, or null when the reply is not parsable XML. A
  * reply with no status_code attribute at all is read as success, which is
- * what a host that answers plainly (Wolf's /applist) sends.
+ * what a host that answers plainly (Wolf's /applist) sends. One that names a
+ * status_code that is not a number is read as a failure: a garbled answer is
+ * not a yes.
  */
 fun parseStatus(xml: String): Status? {
     val root = rootOf(xml) ?: return null
+    val namesAStatus = root.hasAttribute(STATUS_CODE)
+    val namedCode = root.getAttribute(STATUS_CODE).toIntOrNull() ?: UNREADABLE_STATUS
+    val code = if (namesAStatus) namedCode else DEFAULT_OK
     return Status(
-        code = root.getAttribute("status_code").toIntOrNull() ?: DEFAULT_OK,
+        code = code,
         message = root.getAttribute("status_message").orEmpty(),
         resume = (intText(root, "resume") ?: 0) == 1,
     )
@@ -164,6 +169,10 @@ private fun DocumentBuilderFactory.harden(
 
 // A reply that names no status_code is a plain success.
 private const val DEFAULT_OK = 200
+
+// Outside every HTTP class, so Status.ok is false for a status_code that is not a number.
+private const val UNREADABLE_STATUS = -1
+private const val STATUS_CODE = "status_code"
 private const val ALREADY_RUNNING = "already running"
 
 private const val DISALLOW_DOCTYPE = "http://apache.org/xml/features/disallow-doctype-decl"
