@@ -21,6 +21,33 @@ class SatelliteHttpBodiesTest {
     }
 
     @Test
+    fun `jsonEscape escapes both ends of the C0 range as a unicode escape`() {
+        assertEquals("""\u0000""", jsonEscape("\u0000"))
+        assertEquals("""\u001f""", jsonEscape("\u001f"))
+    }
+
+    @Test
+    fun `jsonEscape leaves the first printable character and DEL alone`() {
+        assertEquals(" ", jsonEscape(" "))
+        assertEquals("\u007f", jsonEscape("\u007f"))
+    }
+
+    @Test
+    fun `the headers go out spelled as the satellite reads them`() {
+        assertEquals("Accept-Language", HEADER_ACCEPT_LANGUAGE)
+        assertEquals("If-None-Match", HEADER_IF_NONE_MATCH)
+        assertEquals("Content-Type", HEADER_CONTENT_TYPE)
+        assertEquals("X-Device-Id", HEADER_DEVICE_ID)
+        assertEquals("X-Hmac-Proof", HEADER_HMAC_PROOF)
+        assertEquals("ETag", HEADER_ETAG)
+    }
+
+    @Test
+    fun `the bodies are sent as json`() {
+        assertEquals("application/json", MIME_JSON)
+    }
+
+    @Test
     fun `jsonEscape leaves plain and non-ascii text alone`() {
         assertEquals("Pixel 9 Pro", jsonEscape("Pixel 9 Pro"))
         assertEquals("Téléphone d'Élodie", jsonEscape("Téléphone d'Élodie"))

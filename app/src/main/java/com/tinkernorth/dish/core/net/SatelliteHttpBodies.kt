@@ -24,19 +24,20 @@ private const val UNICODE_ESCAPE = "\\u%04x"
 // user's own text): the two-character escapes JSON names, then \u00XX for the rest of C0.
 internal fun jsonEscape(s: String): String =
     buildString(s.length) {
-        for (c in s) append(jsonEscaped(c))
+        for (c in s) appendJsonEscaped(c)
     }
 
-private fun jsonEscaped(c: Char): String =
+private fun StringBuilder.appendJsonEscaped(c: Char) {
     when {
-        c == '"' -> "\\\""
-        c == '\\' -> "\\\\"
-        c == '\n' -> "\\n"
-        c == '\r' -> "\\r"
-        c == '\t' -> "\\t"
-        c < LOWEST_PRINTABLE -> UNICODE_ESCAPE.format(c.code)
-        else -> c.toString()
+        c == '"' -> append("\\\"")
+        c == '\\' -> append("\\\\")
+        c == '\n' -> append("\\n")
+        c == '\r' -> append("\\r")
+        c == '\t' -> append("\\t")
+        c < LOWEST_PRINTABLE -> append(UNICODE_ESCAPE.format(c.code))
+        else -> append(c)
     }
+}
 
 // PUT /api/connections: the declarative session upsert. `descriptorsJson` is the prebuilt
 // `[{...}, ...]` controllers array (ControllerDescriptor owns its shape).
