@@ -136,7 +136,7 @@ class PhysicalGamepadRegistry
             installed = true
             inputManager.registerInputDeviceListener(this, null)
             syncAll()
-            btConnections.start { refreshTransports() }
+            btConnections.start(::refreshTransports)
         }
 
         private fun syncAll() {
