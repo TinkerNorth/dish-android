@@ -5,19 +5,32 @@ package com.tinkernorth.dish.composer
 
 import com.tinkernorth.dish.architecture.testing.composerTest
 import com.tinkernorth.dish.architecture.testing.probe
+import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.net.moonlight.AUTO
+import com.tinkernorth.dish.core.net.moonlight.CAP_ACCELEROMETER
+import com.tinkernorth.dish.core.net.moonlight.CAP_ANALOG_TRIGGERS
+import com.tinkernorth.dish.core.net.moonlight.CAP_BATTERY
+import com.tinkernorth.dish.core.net.moonlight.CAP_GYRO
+import com.tinkernorth.dish.core.net.moonlight.CAP_RGB_LED
+import com.tinkernorth.dish.core.net.moonlight.CAP_RUMBLE
+import com.tinkernorth.dish.core.net.moonlight.CAP_TOUCHPAD
+import com.tinkernorth.dish.core.net.moonlight.CAP_TRIGGER_RUMBLE
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.core.net.moonlight.NINTENDO
 import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
 import com.tinkernorth.dish.core.net.moonlight.XBOX
+import com.tinkernorth.dish.core.net.moonlight.capabilityBits
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.TOUCHPAD_MODE_DS4
 import com.tinkernorth.dish.repository.TOUCHPAD_MODE_MOUSE
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
+import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 // A Moonlight host hears a pad's type in the CONTROLLER_ARRIVAL sent when the session acquires
@@ -30,12 +43,18 @@ class CapabilityComposerAnnouncedTypeTest {
     private fun TestScope.session(): MoonlightConnection =
         MoonlightConnection(HOST_ID, host, backgroundScope, StandardTestDispatcher(testScheduler))
 
+    // Announced with every bit the type allows unless a test says otherwise, so by default only
+    // the type narrows what the dashboard shows.
     private fun MoonlightConnection.acquire(
         slotId: String,
         type: Int,
-    ) = acquirePad(slotId = slotId, emulatedType = type, capabilities = 0, supportedButtons = 0)
+        capabilities: Int = capabilityBits(type, ALL_BITS),
+    ) = acquirePad(slotId = slotId, emulatedType = type, capabilities = capabilities, supportedButtons = 0)
 
     private fun pad(hasGyro: Boolean): PhysicalGamepadRegistry.Device = device(PAD_ID, hasGyro = hasGyro, touchpadDeviceId = PAD_SURFACE_ID)
+
+    private fun Rig.candidateHasInput(slotId: String): Boolean =
+        composer.capabilityForCandidate(slotId, AUTO, ConnectionKind.MOONLIGHT, HOST_ID).inputOk(Feature.GAMEPAD)
 
     private class Rig(
         val composer: CapabilityComposer,
@@ -124,7 +143,7 @@ class CapabilityComposerAnnouncedTypeTest {
             rig.session.acquire(PAD_SLOT, PLAYSTATION)
             testScheduler.runCurrent()
 
-            rig.session.reannouncePad(PAD_SLOT, NINTENDO, capabilities = 0, supportedButtons = 0)
+            rig.session.reannouncePad(PAD_SLOT, NINTENDO, capabilities = capabilityBits(NINTENDO, ALL_BITS), supportedButtons = 0)
             testScheduler.runCurrent()
 
             assertEquals(moonlightTypeCapabilities(NINTENDO), rig.composer.capabilityFor(PAD_SLOT).type)
@@ -168,6 +187,81 @@ class CapabilityComposerAnnouncedTypeTest {
             assertEquals(TOUCHPAD_MODE_DS4, rig.composer.touchpadWireMode(PAD_SLOT))
         }
 
+    // The host builds its pad from the bits in the arrival too: a PlayStation pad announced
+    // before its gyro enumerated has no motion on the host until the session replugs it with the
+    // bits, so the dashboard shows no motion until then either.
+    @Test
+    fun `a held pad announced without the motion bits shows no motion while the pad has a gyro`() =
+        composerTest {
+            val rig = rig(padHasGyro = false, storedType = PLAYSTATION)
+            rig.session.acquire(PAD_SLOT, PLAYSTATION, capabilities = PS_BITS_WITHOUT_MOTION)
+            testScheduler.runCurrent()
+
+            rig.devices.value = mapOf(PAD_ID to pad(hasGyro = true))
+            testScheduler.runCurrent()
+
+            val caps = rig.composer.capabilityFor(PAD_SLOT)
+            assertFalse(caps.typeOk(Feature.MOTION))
+            assertFalse(caps.isAvailable(Feature.MOTION))
+            assertTrue(caps.typeOk(Feature.TOUCHPAD))
+        }
+
+    @Test
+    fun `a replug that carries the motion bits re-publishes motion on the dashboard`() =
+        composerTest {
+            val rig = rig(padHasGyro = true, storedType = PLAYSTATION)
+            rig.session.acquire(PAD_SLOT, PLAYSTATION, capabilities = PS_BITS_WITHOUT_MOTION)
+            testScheduler.runCurrent()
+
+            rig.session.reannouncePad(PAD_SLOT, PLAYSTATION, capabilities = capabilityBits(PLAYSTATION, ALL_BITS), supportedButtons = 0)
+            testScheduler.runCurrent()
+
+            assertEquals(moonlightTypeCapabilities(PLAYSTATION), rig.composer.capabilityFor(PAD_SLOT).type)
+            assertTrue(rig.composer.capabilityFor(PAD_SLOT).isAvailable(Feature.MOTION))
+        }
+
+    // Each wire bit crosses out the one feature it declares, and nothing else.
+    @Test
+    fun `every bit a held pad was announced without is crossed out of the dashboard`() =
+        composerTest {
+            val rig = rig(padHasGyro = true, storedType = PLAYSTATION)
+            rig.session.acquire(PAD_SLOT, PLAYSTATION)
+            val everything = capabilityBits(PLAYSTATION, ALL_BITS)
+            for ((bit, feature) in BIT_FEATURES) {
+                rig.session.reannouncePad(PAD_SLOT, PLAYSTATION, capabilities = everything and bit.inv(), supportedButtons = 0)
+                testScheduler.runCurrent()
+
+                val type = rig.composer.capabilityFor(PAD_SLOT).type
+                assertEquals("bit $bit", moonlightTypeCapabilities(PLAYSTATION).features - feature, type.features)
+            }
+        }
+
+    // A pad announced with one motion bit still declares motion: either is what the host reads
+    // to ask for motion at all.
+    @Test
+    fun `a held pad announced with either motion bit shows motion`() =
+        composerTest {
+            val rig = rig(padHasGyro = true, storedType = PLAYSTATION)
+            rig.session.acquire(PAD_SLOT, PLAYSTATION)
+            for (motion in listOf(CAP_ACCELEROMETER, CAP_GYRO)) {
+                rig.session.reannouncePad(PAD_SLOT, PLAYSTATION, capabilities = PS_BITS_WITHOUT_MOTION or motion, supportedButtons = 0)
+                testScheduler.runCurrent()
+
+                assertTrue("bit $motion", rig.composer.capabilityFor(PAD_SLOT).typeOk(Feature.MOTION))
+            }
+        }
+
+    // The pad on the host has no touchpad, so the surface goes to the mouse rather than to it.
+    @Test
+    fun `a held PlayStation pad announced without the touchpad bit routes the surface to the mouse`() =
+        composerTest {
+            val rig = rig(padHasGyro = true, storedType = PLAYSTATION)
+            rig.session.acquire(PAD_SLOT, PLAYSTATION, capabilities = capabilityBits(PLAYSTATION, ALL_BITS) and CAP_TOUCHPAD.inv())
+            testScheduler.runCurrent()
+
+            assertEquals(TOUCHPAD_MODE_MOUSE, rig.composer.touchpadWireMode(PAD_SLOT))
+        }
+
     @Test
     fun `a candidate query still resolves live, because the session asks it what to announce`() =
         composerTest {
@@ -180,11 +274,51 @@ class CapabilityComposerAnnouncedTypeTest {
             assertEquals(moonlightTypeCapabilities(PLAYSTATION), candidate.type)
         }
 
+    // The session controller asks for no new pad for a slot whose candidate has no input: that
+    // is how it tells a device the registry no longer has from one it can derive a pad from.
+    @Test
+    fun `a candidate for a pad the registry no longer has has no input, and one for a present pad has`() =
+        composerTest {
+            val rig = rig(padHasGyro = true)
+            assertTrue(rig.candidateHasInput(PAD_SLOT))
+
+            rig.devices.value = emptyMap()
+
+            assertFalse(rig.candidateHasInput(PAD_SLOT))
+            assertTrue(rig.candidateHasInput(VIRTUAL_SLOT_ID))
+        }
+
+    // The session derives the next request from the candidate, so a candidate that followed the
+    // announced bits could never ask for the motion the held pad lacks.
+    @Test
+    fun `a candidate query ignores the bits the held pad was announced with`() =
+        composerTest {
+            val rig = rig(padHasGyro = true, storedType = PLAYSTATION)
+            rig.session.acquire(PAD_SLOT, PLAYSTATION, capabilities = PS_BITS_WITHOUT_MOTION)
+            testScheduler.runCurrent()
+
+            val candidate = rig.composer.capabilityForCandidate(PAD_SLOT, PLAYSTATION, ConnectionKind.MOONLIGHT, HOST_ID)
+
+            assertTrue(candidate.isAvailable(Feature.MOTION))
+        }
+
     private companion object {
         const val HOST_ID = "moonlight:abc"
         const val PAD_ID = 7
         const val PAD_SLOT = "7"
         const val OTHER_SLOT = "8"
         const val PAD_SURFACE_ID = 70
+        const val ALL_BITS = 0xFF
+        const val PS_BITS_WITHOUT_MOTION = ALL_BITS and (CAP_ACCELEROMETER or CAP_GYRO).inv()
+        val BIT_FEATURES =
+            listOf(
+                CAP_ANALOG_TRIGGERS to Feature.ANALOG_TRIGGERS,
+                CAP_RUMBLE to Feature.RUMBLE,
+                CAP_TRIGGER_RUMBLE to Feature.TRIGGER_RUMBLE,
+                CAP_TOUCHPAD to Feature.TOUCHPAD,
+                (CAP_ACCELEROMETER or CAP_GYRO) to Feature.MOTION,
+                CAP_BATTERY to Feature.BATTERY,
+                CAP_RGB_LED to Feature.LIGHTBAR,
+            )
     }
 }

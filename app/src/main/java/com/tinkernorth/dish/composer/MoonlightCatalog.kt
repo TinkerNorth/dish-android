@@ -46,22 +46,40 @@ internal fun moonlightTypeCapabilities(type: Int): CapabilitySet =
         else -> padType(Feature.RUMBLE)
     }
 
-// What the local input can actually feed or actuate, in the wire's own bits. One
-// motion switch means the accelerometer and the gyro; trigger rumble is its own
-// bit, claimed only when the pad has the motors (a claimed-but-dropped cap would
-// make a host waste RUMBLE_TRIGGERS events on a pad that eats them).
-internal fun sourceBits(caps: CapabilitySet): Int {
-    var bits = 0
-    if (Feature.ANALOG_TRIGGERS in caps) bits = bits or CAP_ANALOG_TRIGGERS
-    if (Feature.RUMBLE in caps) bits = bits or CAP_RUMBLE
-    if (Feature.TRIGGER_RUMBLE in caps) bits = bits or CAP_TRIGGER_RUMBLE
-    if (Feature.TOUCHPAD in caps) bits = bits or CAP_TOUCHPAD
-    if (Feature.MOTION in caps) {
-        bits = bits or CAP_ACCELEROMETER or CAP_GYRO
-    }
-    if (Feature.BATTERY in caps) bits = bits or CAP_BATTERY
-    if (Feature.LIGHTBAR in caps) bits = bits or CAP_RGB_LED
-    return bits
+// The wire bits each feature is declared by in CONTROLLER_ARRIVAL. One motion switch means the
+// accelerometer and the gyro; trigger rumble is its own bit, claimed only when the pad has the
+// motors (a claimed-but-dropped cap would make a host waste RUMBLE_TRIGGERS events on a pad that
+// eats them). A feature with no entry has no bit, and the arrival says nothing about it.
+private val WIRE_BITS: Map<Feature, Int> =
+    mapOf(
+        Feature.ANALOG_TRIGGERS to CAP_ANALOG_TRIGGERS,
+        Feature.RUMBLE to CAP_RUMBLE,
+        Feature.TRIGGER_RUMBLE to CAP_TRIGGER_RUMBLE,
+        Feature.TOUCHPAD to CAP_TOUCHPAD,
+        Feature.MOTION to (CAP_ACCELEROMETER or CAP_GYRO),
+        Feature.BATTERY to CAP_BATTERY,
+        Feature.LIGHTBAR to CAP_RGB_LED,
+    )
+
+// What the local input can actually feed or actuate, in the wire's own bits.
+internal fun sourceBits(caps: CapabilitySet): Int =
+    WIRE_BITS
+        .filterKeys { it in caps }
+        .values
+        .fold(0, Int::or)
+
+// The features a pad announced with [bits] was declared with: every feature with a bit set, and
+// every feature the arrival carries no bit for. Either motion bit declares motion, since the host
+// asks for motion events on either.
+internal fun announcedFeatures(bits: Int): CapabilitySet =
+    CapabilitySet(Feature.entries.filterTo(mutableSetOf()) { feature -> isDeclaredBy(bits, feature) })
+
+private fun isDeclaredBy(
+    bits: Int,
+    feature: Feature,
+): Boolean {
+    val featureBits = WIRE_BITS[feature] ?: return true
+    return bits and featureBits != 0
 }
 
 internal fun capabilityBits(

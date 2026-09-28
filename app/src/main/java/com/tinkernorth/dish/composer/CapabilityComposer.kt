@@ -64,29 +64,30 @@ private data class HostInputs(
     val motionBackend: Map<Pair<String, String>, SatelliteMotionBackendStatus>,
 )
 
-// Where each slot is bound, what those destinations are, and the type each held Moonlight pad
-// was announced with, keyed by (host id, slot id).
+// Where each slot is bound, what those destinations are, and every held Moonlight pad as it was
+// announced, keyed by (host id, slot id).
 private data class BindingInputs(
     val bindings: Map<String, String>,
     val summaries: List<ConnectionSummary>,
-    val announcedTypes: Map<Pair<String, String>, Int>,
+    val announcedPads: Map<Pair<String, String>, MoonlightPad>,
 )
 
-// The type every held Moonlight pad was announced with. Each session's pad table is folded in,
-// not just the session map, so a pad acquired or released on a session already up re-publishes.
+// Every held Moonlight pad as it was announced: its type and its capability bits. Each session's
+// pad table is folded in, not just the session map, so a pad acquired, replugged or released on a
+// session already up re-publishes.
 @OptIn(ExperimentalCoroutinesApi::class)
-internal fun announcedMoonlightTypes(connections: Flow<Map<String, MoonlightConnection>>): Flow<Map<Pair<String, String>, Int>> =
+internal fun announcedMoonlightPads(connections: Flow<Map<String, MoonlightConnection>>): Flow<Map<Pair<String, String>, MoonlightPad>> =
     connections.flatMapLatest { sessions ->
-        val perSession = sessions.map { (hostId, session) -> session.pads.map { pads -> heldPadTypes(hostId, pads) } }
-        if (perSession.isEmpty()) flowOf(emptyMap()) else combine(perSession, ::mergedPadTypes)
+        val perSession = sessions.map { (hostId, session) -> session.pads.map { pads -> heldPads(hostId, pads) } }
+        if (perSession.isEmpty()) flowOf(emptyMap()) else combine(perSession, ::mergedPads)
     }
 
-private fun heldPadTypes(
+private fun heldPads(
     hostId: String,
     pads: Map<String, MoonlightPad>,
-): Map<Pair<String, String>, Int> = pads.entries.associate { (slotId, pad) -> (hostId to slotId) to pad.emulatedType }
+): Map<Pair<String, String>, MoonlightPad> = pads.entries.associate { (slotId, pad) -> (hostId to slotId) to pad }
 
-private fun mergedPadTypes(perSession: Array<Map<Pair<String, String>, Int>>): Map<Pair<String, String>, Int> =
+private fun mergedPads(perSession: Array<Map<Pair<String, String>, MoonlightPad>>): Map<Pair<String, String>, MoonlightPad> =
     perSession.fold(emptyMap()) { all, one -> all + one }
 
 /**
@@ -102,6 +103,22 @@ internal fun boundMoonlightType(
     sourceHasMotion: Boolean,
     announcedType: Int?,
 ): Int = announcedType ?: resolveMoonlightEmulatedType(fromStored(storedType ?: AUTO), sourceHasMotion)
+
+/**
+ * The type layer of a bound Moonlight slot: the features of the type [boundMoonlightType] names,
+ * narrowed for a held pad to the capability bits it was announced with. The host builds its pad
+ * from those bits as well as the type (it asks for motion only for a pad that arrived with a
+ * motion bit), and a request whose bits the host does not read keeps the pad as announced, so
+ * what the host was told is what the slot shows.
+ */
+internal fun boundMoonlightTypeCapabilities(
+    storedType: Int?,
+    sourceHasMotion: Boolean,
+    announced: MoonlightPad?,
+): CapabilitySet {
+    val type = moonlightTypeCapabilities(boundMoonlightType(storedType, sourceHasMotion, announced?.emulatedType))
+    return announced?.let { type intersect announcedFeatures(it.capabilities) } ?: type
+}
 
 // The wire-facing projection of one slot's capabilities: the caps word the descriptor carries
 // and its touchpadMode. Only these two move the descriptor, so consumers converging the wire
@@ -142,7 +159,7 @@ class CapabilityComposer
             combine(hostFacts.features.state, hostFacts.motionBackend.state, ::HostInputs)
 
         private val bindingInputs: Flow<BindingInputs> =
-            combine(hub.bindings, hub.connections, announcedMoonlightTypes(hub.moonlightSessions), ::BindingInputs)
+            combine(hub.bindings, hub.connections, announcedMoonlightPads(hub.moonlightSessions), ::BindingInputs)
 
         override fun upstream(): Flow<Map<String, SlotCapabilities>> =
             combine(
@@ -251,11 +268,8 @@ class CapabilityComposer
             if (kind != ConnectionKind.MOONLIGHT) {
                 return typeCapabilitiesFor(storedType ?: CONTROLLER_TYPE_XBOX, connId, kind, sourceHasMotion)
             }
-            val announcedType =
-                hub.moonlightSessions.value[connId]
-                    ?.padFor(slotId)
-                    ?.emulatedType
-            return moonlightTypeCapabilities(boundMoonlightType(storedType, sourceHasMotion, announcedType))
+            val announced = hub.moonlightSessions.value[connId]?.padFor(slotId)
+            return boundMoonlightTypeCapabilities(storedType, sourceHasMotion, announced)
         }
 
         /**
@@ -304,7 +318,7 @@ class CapabilityComposer
             return resolve(
                 controller = controller,
                 transport = transportLayer(summary),
-                type = typeLayer(slotId, summary, controller, bound.announcedTypes),
+                type = typeLayer(slotId, summary, controller, bound.announcedPads),
                 host = hostLayer(connId, summary, hosts.features),
                 userEnabled = userEnabledCapabilities(motionOn, rumbleOn, micOn, speakerOn),
                 runtimeDown = runtimeDownLayer(connId, slotId, hosts.motionBackend),
@@ -475,17 +489,15 @@ class CapabilityComposer
             slotId: String,
             summary: ConnectionSummary?,
             controller: CapabilitySet,
-            announcedTypes: Map<Pair<String, String>, Int>,
+            announcedPads: Map<Pair<String, String>, MoonlightPad>,
         ): CapabilitySet {
             if (summary == null) return ALL
             val storedType = summary.satelliteControllerTypes[slotId]
             val sourceHasMotion = Feature.MOTION in controller
             return when (summary.kind) {
                 ConnectionKind.BLUETOOTH -> ALL
-                ConnectionKind.MOONLIGHT -> {
-                    val announcedType = announcedTypes[summary.id to slotId]
-                    moonlightTypeCapabilities(boundMoonlightType(storedType, sourceHasMotion, announcedType))
-                }
+                ConnectionKind.MOONLIGHT ->
+                    boundMoonlightTypeCapabilities(storedType, sourceHasMotion, announcedPads[summary.id to slotId])
                 ConnectionKind.SATELLITE ->
                     storedType?.let { typeCapabilitiesFor(it, summary.id, summary.kind, sourceHasMotion) } ?: ALL
             }

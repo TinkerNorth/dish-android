@@ -3,6 +3,14 @@
 
 package com.tinkernorth.dish.source.connection.moonlight
 
+import com.tinkernorth.dish.core.net.moonlight.CAP_ACCELEROMETER
+import com.tinkernorth.dish.core.net.moonlight.CAP_ANALOG_TRIGGERS
+import com.tinkernorth.dish.core.net.moonlight.CAP_BATTERY
+import com.tinkernorth.dish.core.net.moonlight.CAP_GYRO
+import com.tinkernorth.dish.core.net.moonlight.CAP_RGB_LED
+import com.tinkernorth.dish.core.net.moonlight.CAP_RUMBLE
+import com.tinkernorth.dish.core.net.moonlight.CAP_TOUCHPAD
+import com.tinkernorth.dish.core.net.moonlight.CAP_TRIGGER_RUMBLE
 import com.tinkernorth.dish.core.net.moonlight.NINTENDO
 import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
 import com.tinkernorth.dish.core.net.moonlight.XBOX
@@ -67,12 +75,39 @@ class MoonlightConvergeTest {
         assertEquals(PadPlacement.KEEP, padPlacement(held(XBOX), request(XBOX)))
     }
 
-    // The bits alone do not earn a replug: it unplugs the pad in the game, and the host builds
-    // the same pad for the same type.
+    // A replug unplugs the pad in the game, so only what the host reads at arrival earns one. Wolf
+    // (control/input_handler.cpp create_new_joypad) reads the accelerometer and gyro bits there
+    // and nothing else: every other bit, and the supported buttons, build the same pad.
     @Test
-    fun `a held pad asked for with other bits but the same type is kept`() {
-        val otherBits = request(XBOX).copy(capabilities = OTHER_CAPS, supportedButtons = OTHER_BUTTONS)
+    fun `a held pad asked for with other bits the host never reads is kept`() {
+        val otherBits = request(XBOX).copy(capabilities = NON_MOTION_CAPS, supportedButtons = OTHER_BUTTONS)
         assertEquals(PadPlacement.KEEP, padPlacement(held(XBOX), otherBits))
+    }
+
+    // The host asks for motion events, and applies its motion override, only for a pad that
+    // arrived with a motion bit, so a pad announced before its gyro enumerated never gets motion.
+    @Test
+    fun `a held pad asked for with a motion bit it was announced without is re-announced`() {
+        listOf(CAP_ACCELEROMETER, CAP_GYRO, CAP_ACCELEROMETER or CAP_GYRO).forEach { motion ->
+            val withMotion = request(PLAYSTATION).copy(capabilities = CAPS or motion)
+            assertEquals("bits $motion", PadPlacement.REANNOUNCE, padPlacement(held(PLAYSTATION), withMotion))
+        }
+    }
+
+    @Test
+    fun `a held pad asked for without a motion bit it was announced with is re-announced`() {
+        listOf(CAP_ACCELEROMETER, CAP_GYRO).forEach { motion ->
+            val announced = held(PLAYSTATION).copy(capabilities = CAPS or CAP_ACCELEROMETER or CAP_GYRO)
+            val lost = request(PLAYSTATION).copy(capabilities = (CAPS or CAP_ACCELEROMETER or CAP_GYRO) and motion.inv())
+            assertEquals("bits $motion", PadPlacement.REANNOUNCE, padPlacement(announced, lost))
+        }
+    }
+
+    @Test
+    fun `a held pad asked for with the motion bits it was announced with and others changed is kept`() {
+        val announced = held(PLAYSTATION).copy(capabilities = CAPS or CAP_ACCELEROMETER or CAP_GYRO)
+        val otherBits = request(PLAYSTATION).copy(capabilities = NON_MOTION_CAPS or CAP_ACCELEROMETER or CAP_GYRO)
+        assertEquals(PadPlacement.KEEP, padPlacement(announced, otherBits))
     }
 
     @Test
@@ -91,7 +126,7 @@ class MoonlightConvergeTest {
     private companion object {
         const val CAPS = 0x03
         const val BUTTONS = 0xFFFF
-        const val OTHER_CAPS = 0x3F
+        const val NON_MOTION_CAPS = CAP_ANALOG_TRIGGERS or CAP_RUMBLE or CAP_TRIGGER_RUMBLE or CAP_TOUCHPAD or CAP_BATTERY or CAP_RGB_LED
         const val OTHER_BUTTONS = 0x10FFFF
     }
 }

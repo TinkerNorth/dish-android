@@ -7,6 +7,8 @@ import android.util.Log
 import androidx.core.content.edit
 import com.tinkernorth.dish.core.net.bytesToHex
 import com.tinkernorth.dish.core.net.moonlight.AUTO
+import com.tinkernorth.dish.core.net.moonlight.CAP_ACCELEROMETER
+import com.tinkernorth.dish.core.net.moonlight.CAP_GYRO
 import com.tinkernorth.dish.core.net.moonlight.MoonlightApp
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEvent
@@ -149,17 +151,24 @@ internal fun moonlightConverge(
 /** What converging one requested pad does with the pad its slot already holds on the session. */
 enum class PadPlacement { ACQUIRE, KEEP, REANNOUNCE }
 
-// A held pad is re-announced only for another type, which is the pad the host builds: a replug
-// unplugs the pad in the game, and the host would build the same pad for the same type, so a
-// change in the bits alone keeps the pad as it is.
+// The capability bits the host reads when a pad arrives, and only then. Wolf's create_new_joypad
+// (control/input_handler.cpp) reads the accelerometer and gyro bits to apply its per-client
+// motion override, to promote an unknown type to PlayStation, and to ask the client for motion
+// events at all; it reads no other bit, nor the supported buttons.
+private const val BITS_READ_AT_ARRIVAL = CAP_ACCELEROMETER or CAP_GYRO
+
+// A held pad is re-announced only when the host would build another pad for the request: another
+// type, or a change in a bit it reads at arrival. A replug unplugs the pad in the game, so a
+// change in bits the host never reads keeps the pad as it is (and as the dashboard shows it).
 internal fun padPlacement(
     held: MoonlightPad?,
     wanted: MoonlightPadRequest,
 ): PadPlacement =
     when {
         held == null -> PadPlacement.ACQUIRE
-        held.emulatedType == wanted.emulatedType -> PadPlacement.KEEP
-        else -> PadPlacement.REANNOUNCE
+        held.emulatedType != wanted.emulatedType -> PadPlacement.REANNOUNCE
+        (held.capabilities xor wanted.capabilities) and BITS_READ_AT_ARRIVAL != 0 -> PadPlacement.REANNOUNCE
+        else -> PadPlacement.KEEP
     }
 
 /** One binding's claim on a host session: which slot, and what pad to announce for it. */
@@ -456,9 +465,9 @@ class MoonlightConnectionManager
         }
 
         // Places every requested pad on the session and answers the ones that found no room. A
-        // held pad the binding now asks for as another type is re-announced (on a live stream the
-        // host replugs it; before, only the table changes), so a re-pick takes effect without an
-        // unbind.
+        // held pad the binding now asks for as another pad (another type, or motion bits it was
+        // not announced with) is re-announced (on a live stream the host replugs it; before, only
+        // the table changes), so a re-pick or a late gyro takes effect without an unbind.
         private fun placePads(
             conn: MoonlightConnection,
             pads: Collection<MoonlightPadRequest>,
