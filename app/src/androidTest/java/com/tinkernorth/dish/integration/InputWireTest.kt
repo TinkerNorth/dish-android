@@ -48,7 +48,7 @@ class InputWireTest {
         manager.pairWithPin(server, "1234")
         assertTrue(
             "session should reach Live",
-            AppSingletons.await { manager.get(id)?.state?.value == SatelliteSessionState.Live },
+            await { manager.get(id)?.state?.value == SatelliteSessionState.Live },
         )
         // Declare the virtual slot straight on the live connection. Production
         // routes this through the lifecycle-scoped SlotTopologyController, which
@@ -58,7 +58,7 @@ class InputWireTest {
         manager.get(id)!!.applyDesired(mapOf(VIRTUAL_SLOT_ID to CONTROLLER_TYPE_XBOX))
         assertTrue(
             "the virtual slot must register on the satellite before streams flow",
-            AppSingletons.await {
+            await {
                 manager
                     .get(id)
                     ?.slots

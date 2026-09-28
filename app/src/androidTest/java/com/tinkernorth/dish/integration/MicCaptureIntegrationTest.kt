@@ -134,12 +134,12 @@ class MicCaptureIntegrationTest {
         manager.pairWithPin(server, "1234")
         assertTrue(
             "session should reach Live",
-            AppSingletons.await { manager.get(id)?.state?.value == SatelliteSessionState.Live },
+            await { manager.get(id)?.state?.value == SatelliteSessionState.Live },
         )
         manager.get(id)!!.applyDesired(mapOf(VIRTUAL_SLOT_ID to CONTROLLER_TYPE_DUALSENSE))
         assertTrue(
             "the virtual slot must register before streams flow",
-            AppSingletons.await {
+            await {
                 manager
                     .get(id)
                     ?.slots
@@ -227,7 +227,7 @@ class MicCaptureIntegrationTest {
         // The recorder is released when the capture body returns, which is a moment after the plan
         // said stop; wait for the engine to say it has stopped rather than assuming the settle
         // above covered it.
-        assertTrue("the engine must reach quiescence", AppSingletons.await { engine.quiescent })
+        assertTrue("the engine must reach quiescence", await { engine.quiescent })
         assertEquals("the recorder must be released, not left open", 1, mic.closes.get())
 
         // And it comes back: mute is a control, not a teardown.
@@ -256,7 +256,7 @@ class MicCaptureIntegrationTest {
         // fixed-length join is a guess about how long that takes.
         assertTrue(
             "the engine must reach quiescence after an idle plan",
-            AppSingletons.await { engine.quiescent },
+            await { engine.quiescent },
         )
         assertEquals("the recorder must be released, not left open", 1, mic.closes.get())
 

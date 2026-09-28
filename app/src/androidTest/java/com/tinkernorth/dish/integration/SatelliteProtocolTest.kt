@@ -5,7 +5,6 @@ package com.tinkernorth.dish.integration
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.net.DISH_PROTOCOL_CURRENT
-import com.tinkernorth.dish.integration.AppSingletons.await
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import org.junit.After

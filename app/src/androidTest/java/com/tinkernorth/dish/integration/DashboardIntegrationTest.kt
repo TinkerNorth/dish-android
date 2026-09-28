@@ -7,7 +7,6 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.integration.AppSingletons.await
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.ui.main.MainActivity

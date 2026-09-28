@@ -72,14 +72,14 @@ class ControllerAudioWireTest {
         manager.pairWithPin(server, "1234")
         assertTrue(
             "session should reach Live",
-            AppSingletons.await { manager.get(id)?.state?.value == SatelliteSessionState.Live },
+            await { manager.get(id)?.state?.value == SatelliteSessionState.Live },
         )
         // A DualSense: the only identity a host can materialize with audio
         // endpoints, so it is the one a mic/speaker slot would really bind to.
         manager.get(id)!!.applyDesired(mapOf(VIRTUAL_SLOT_ID to CONTROLLER_TYPE_DUALSENSE))
         assertTrue(
             "the virtual slot must register before streams flow",
-            AppSingletons.await {
+            await {
                 manager
                     .get(id)
                     ?.slots
@@ -159,7 +159,7 @@ class ControllerAudioWireTest {
             satellite.sendSpeakerAudio(ctrlIdx, seq, packet)
             Thread.sleep(20)
         }
-        assertTrue("decoded speaker PCM must reach Kotlin", AppSingletons.await { speakerFrames.size >= 4 })
+        assertTrue("decoded speaker PCM must reach Kotlin", await { speakerFrames.size >= 4 })
 
         val frame = speakerFrames.first()
         assertEquals("the bound session", conn.handle, frame.handle)
@@ -188,7 +188,7 @@ class ControllerAudioWireTest {
             satellite.sendSpeakerAudio(ctrlIdx, seq, packet)
             Thread.sleep(20)
         }
-        assertTrue("the stream must keep flowing across the gap", AppSingletons.await { speakerFrames.size >= 6 })
+        assertTrue("the stream must keep flowing across the gap", await { speakerFrames.size >= 6 })
         val concealed = speakerFrames.firstOrNull { it.concealed }
         assertNotNull("the missing frame must be concealed, not skipped", concealed)
         assertEquals(FRAME_SAMPLES * 2, concealed!!.pcm.size)
