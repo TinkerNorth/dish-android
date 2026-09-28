@@ -253,6 +253,19 @@ class InputInspectorViewModelTest {
         }
 
     @Test
+    fun `a range note for a controller with facts is keyed by its model`() =
+        runTest(dispatcher) {
+            val vm = viewModel()
+            val job = launch { vm.ui.collect {} }
+            dispatcher.scheduler.runCurrent()
+
+            vm.noteRange(0.9f, 0.8f, 0.7f, null)
+
+            verify { stickHistory.noteRange(StickTestHistoryStore.keyFor(0x054C, 0x0CE6, "DualSense"), 0.9f, 0.8f, 0.7f, null, any()) }
+            job.cancel()
+        }
+
+    @Test
     fun `a drift note for a controller with no facts is dropped`() =
         runTest(dispatcher) {
             val vm = viewModel(slotId = VIRTUAL_SLOT_ID)
@@ -262,8 +275,8 @@ class InputInspectorViewModelTest {
             vm.noteDrift(0.1f, 0.2f, 0.15f)
             vm.noteRange(0.9f, 0.9f, null, null)
 
-            verify(exactly = 0) { stickHistory.noteDrift(any(), any(), any(), any()) }
-            verify(exactly = 0) { stickHistory.noteRange(any(), any(), any(), any(), any()) }
+            verify(exactly = 0) { stickHistory.noteDrift(any(), any(), any(), any(), any()) }
+            verify(exactly = 0) { stickHistory.noteRange(any(), any(), any(), any(), any(), any()) }
             job.cancel()
         }
 
