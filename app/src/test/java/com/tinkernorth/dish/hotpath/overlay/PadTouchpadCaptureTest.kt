@@ -14,6 +14,7 @@ import com.tinkernorth.dish.hotpath.input.PadTouchFrame
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.TelemetrySink
 import com.tinkernorth.dish.source.connection.TouchpadReport
+import com.tinkernorth.dish.ui.common.ResendPacer
 import io.mockk.Called
 import io.mockk.every
 import io.mockk.mockk
@@ -23,6 +24,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -259,8 +262,101 @@ class PadTouchpadCaptureTest {
         return oneFinger && theOther && !report.buttonPressed
     }
 
+    // ---- the reports each sending thread refills, and what a resend tick keeps ----
+
+    private val recording = RecordingSink()
+
+    private fun capturingWithRecordingSink(): PadTouchpadCapture {
+        val capture = capture()
+        capture.installRoutes(mapOf(SURFACE to SLOT))
+        reachable.value = mapOf(SLOT to recording)
+        return capture
+    }
+
+    @Test
+    fun `every captured event on the main thread refills one report`() {
+        val capture = capturingWithRecordingSink()
+
+        capture.onGenericMotionEvent(capturedMove(SURFACE, surface(withRanges = true)))
+        capture.onGenericMotionEvent(capturedPointerUp(surface(withRanges = true)))
+
+        assertEquals(2, recording.reports.size)
+        assertSame(recording.reports[0], recording.reports[1])
+    }
+
+    @Test
+    fun `a lift on focus loss refills the main thread's report`() {
+        val capture = capturingWithRecordingSink()
+
+        capture.onGenericMotionEvent(capturedMove(SURFACE, surface(withRanges = true)))
+        capture.onWindowFocusChanged(false)
+
+        assertEquals(2, recording.reports.size)
+        assertSame(recording.reports[0], recording.reports[1])
+        assertFalse(recording.frames[1].finger0Active)
+    }
+
+    @Test
+    fun `a resend tick sends the captured frame in the resend thread's own report`() {
+        val capture = capturingWithRecordingSink()
+
+        capture.onGenericMotionEvent(capturedMove(SURFACE, surface(withRanges = true)))
+        capture.resendDue()
+
+        assertEquals(2, recording.reports.size)
+        assertNotSame(recording.reports[0], recording.reports[1])
+        assertEquals(recording.frames[0], recording.frames[1])
+    }
+
+    @Test
+    fun `every resend tick refills the resend thread's one report`() {
+        val capture = capturingWithRecordingSink()
+
+        capture.onGenericMotionEvent(capturedMove(SURFACE, surface(withRanges = true)))
+        capture.resendDue()
+        capture.resendDue()
+
+        assertEquals(3, recording.reports.size)
+        assertSame(recording.reports[1], recording.reports[2])
+    }
+
+    // The edge burst goes out on the first ticks after a change; the tick after it is where a
+    // slot is kept or forgotten.
+    private fun tickPastTheBurst(capture: PadTouchpadCapture) {
+        repeat(ResendPacer.EDGE_BURST_RESENDS + 1) { capture.resendDue() }
+    }
+
+    @Test
+    fun `a resend tick forgets a slot the app stopped routing once its burst is out`() {
+        val capture = capturingWithRecordingSink()
+        capture.onGenericMotionEvent(capturedMove(SURFACE, surface(withRanges = true)))
+        capture.installRoutes(mapOf(OTHER_SURFACE to OTHER_SLOT))
+
+        tickPastTheBurst(capture)
+        val sentBeforeFocusLoss = recording.reports.size
+        capture.onWindowFocusChanged(false)
+
+        assertEquals(1 + ResendPacer.EDGE_BURST_RESENDS, sentBeforeFocusLoss)
+        assertEquals("a forgotten slot has no finger left to lift", sentBeforeFocusLoss, recording.reports.size)
+    }
+
+    @Test
+    fun `a resend tick keeps a routed slot between bursts`() {
+        val capture = capturingWithRecordingSink()
+        capture.onGenericMotionEvent(capturedMove(SURFACE, surface(withRanges = true)))
+        capture.installRoutes(mapOf(OTHER_SURFACE to OTHER_SLOT, SURFACE to SLOT))
+
+        tickPastTheBurst(capture)
+        val sentBeforeFocusLoss = recording.reports.size
+        capture.onWindowFocusChanged(false)
+
+        assertEquals(1 + ResendPacer.EDGE_BURST_RESENDS, sentBeforeFocusLoss)
+        assertEquals("a kept slot's held finger is lifted", sentBeforeFocusLoss + 1, recording.reports.size)
+    }
+
     private companion object {
         const val SLOT = "7"
+        const val OTHER_SLOT = "8"
         const val SURFACE = 31
         const val OTHER_SURFACE = 32
         const val POINTER_ID = 3
@@ -271,5 +367,37 @@ class PadTouchpadCaptureTest {
         const val DS4_Y_MAX = 941f
 
         val HOVERS = listOf(MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE, MotionEvent.ACTION_HOVER_EXIT)
+    }
+}
+
+// Each report a sink was handed, and what it held when it was handed over: a sender refills its
+// report for the next frame, so only the copy keeps the frame.
+private class RecordingSink : TelemetrySink {
+    val reports = mutableListOf<TouchpadReport>()
+    val frames = mutableListOf<TouchpadReport>()
+
+    override fun sendMotion(
+        slotId: String,
+        gyroX: Short,
+        gyroY: Short,
+        gyroZ: Short,
+        accelX: Short,
+        accelY: Short,
+        accelZ: Short,
+        timestampDeltaUs: Int,
+    ) = Unit
+
+    override fun sendBattery(
+        slotId: String,
+        level: Int,
+        status: Int,
+    ) = Unit
+
+    override fun sendTouchpad(
+        slotId: String,
+        report: TouchpadReport,
+    ) {
+        reports += report
+        frames += report.copy()
     }
 }

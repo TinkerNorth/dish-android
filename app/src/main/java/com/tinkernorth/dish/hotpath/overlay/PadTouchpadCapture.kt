@@ -23,8 +23,8 @@ import com.tinkernorth.dish.hotpath.input.routes
 import com.tinkernorth.dish.hotpath.input.shouldCapture
 import com.tinkernorth.dish.hotpath.input.slotForEvent
 import com.tinkernorth.dish.source.connection.TelemetrySink
-import com.tinkernorth.dish.source.connection.TouchpadReport
 import com.tinkernorth.dish.ui.common.ResendPacer
+import com.tinkernorth.dish.ui.common.TouchpadReportBuffer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.android.asCoroutineDispatcher
@@ -92,6 +92,11 @@ class PadTouchpadCapture(
     // Resend-thread-only.
     private val pacers = HashMap<String, ResendPacer>()
     private val lastResent = HashMap<String, PadTouchFrame>()
+
+    // The wire frame, one per sending thread: the main thread's captured events and lifts, and
+    // the resend thread's ticks.
+    private val mainReport = TouchpadReportBuffer()
+    private val resendReport = TouchpadReportBuffer()
 
     private var warnedNoRange = false
 
@@ -164,7 +169,7 @@ class PadTouchpadCapture(
                 eventTimeMs = event.eventTime,
             )
         lastFrame[slotId] = frame
-        reachability.state.value[slotId]?.let { send(it, slotId, frame) }
+        reachability.state.value[slotId]?.let { send(it, slotId, frame, mainReport) }
         return true
     }
 
@@ -179,7 +184,7 @@ class PadTouchpadCapture(
         val now = SystemClock.uptimeMillis()
         for ((slotId, lifted) in liftedFrames(lastFrame, now)) {
             lastFrame[slotId] = lifted
-            reachability.state.value[slotId]?.let { send(it, slotId, lifted) }
+            reachability.state.value[slotId]?.let { send(it, slotId, lifted, mainReport) }
         }
     }
 
@@ -213,7 +218,7 @@ class PadTouchpadCapture(
     // slow keepalive, so a lost finger-up heals at the next tick; the receiver drops a duplicate
     // by its equal event time. With every slot forgotten the loop stops itself; the next capture
     // starts it again.
-    private fun resendDue() {
+    internal fun resendDue() {
         val routedSlots = routes.values.toSet()
         for ((slotId, frame) in lastFrame) {
             val sink = reachability.state.value[slotId]
@@ -222,7 +227,7 @@ class PadTouchpadCapture(
             val pacer = pacers.getOrPut(slotId) { ResendPacer() }
             val due = pacer.resendDue(changed)
             when (resendStepFor(due, hasSink = sink != null, routed = slotId in routedSlots)) {
-                ResendStep.SEND -> if (sink != null) send(sink, slotId, frame)
+                ResendStep.SEND -> if (sink != null) send(sink, slotId, frame, resendReport)
                 ResendStep.FORGET -> forgetSlot(slotId)
                 ResendStep.KEEP -> Unit
             }
@@ -240,25 +245,9 @@ class PadTouchpadCapture(
         sink: TelemetrySink,
         slotId: String,
         frame: PadTouchFrame,
+        buffer: TouchpadReportBuffer,
     ) {
-        sink.sendTouchpad(
-            slotId,
-            TouchpadReport(
-                finger0Active = frame.finger0Active,
-                finger1Active = frame.finger1Active,
-                buttonPressed = frame.buttonPressed,
-                rightPressed = false,
-                middlePressed = false,
-                finger0TrackingId = frame.finger0Id,
-                finger0X = frame.finger0X,
-                finger0Y = frame.finger0Y,
-                finger1TrackingId = frame.finger1Id,
-                finger1X = frame.finger1X,
-                finger1Y = frame.finger1Y,
-                eventTimeMs = frame.eventTimeMs,
-                scrollDelta = 0,
-            ),
-        )
+        sink.sendTouchpad(slotId, buffer.reportOf(frame))
     }
 
     private companion object {
