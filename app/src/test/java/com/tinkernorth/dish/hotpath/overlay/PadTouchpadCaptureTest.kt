@@ -10,7 +10,8 @@ import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.PhysicalReachabilityComposer
 import com.tinkernorth.dish.hotpath.input.PadTouchFrame
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
-import com.tinkernorth.dish.hotpath.input.Pointer
+import com.tinkernorth.dish.hotpath.input.EVERY_POINTER_LIFTING
+import com.tinkernorth.dish.hotpath.input.NO_POINTER_LIFTING
 import com.tinkernorth.dish.source.connection.TelemetrySink
 import com.tinkernorth.dish.source.connection.TouchpadReport
 import io.mockk.Called
@@ -26,67 +27,56 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PadTouchpadCaptureTest {
-    private val first = Pointer(3, 1f, 2f)
-    private val second = Pointer(5, 3f, 4f)
-    private val pointers = listOf(first, second)
-
-    // ---- which pointers are still on the surface after an event ----
-
-    private fun twoFingerEvent(
-        actionMasked: Int,
-        actionIndex: Int = 0,
-    ): MotionEvent =
-        mockk {
-            every { this@mockk.actionMasked } returns actionMasked
-            every { this@mockk.actionIndex } returns actionIndex
-            every { pointerCount } returns pointers.size
-            every { getPointerId(0) } returns first.id
-            every { getX(0) } returns first.x
-            every { getY(0) } returns first.y
-            every { getPointerId(1) } returns second.id
-            every { getX(1) } returns second.x
-            every { getY(1) } returns second.y
-        }
+    // ---- which pointer an event takes off the surface ----
 
     @Test
-    fun `on a pointer up only the lifting pointer is gone`() {
-        assertEquals(listOf(first), pointersStillDown(twoFingerEvent(MotionEvent.ACTION_POINTER_UP, actionIndex = 1)))
+    fun `an up or a pointer up lifts the pointer at its action index`() {
+        assertEquals(1, liftingIndexOf(MotionEvent.ACTION_POINTER_UP, actionIndex = 1))
+        assertEquals(0, liftingIndexOf(MotionEvent.ACTION_UP, actionIndex = 0))
     }
 
     @Test
-    fun `on an up the lifting pointer is gone`() {
-        assertEquals(listOf(second), pointersStillDown(twoFingerEvent(MotionEvent.ACTION_UP, actionIndex = 0)))
-    }
-
-    @Test
-    fun `on a cancel every pointer is gone`() {
-        assertEquals(emptyList<Pointer>(), pointersStillDown(twoFingerEvent(MotionEvent.ACTION_CANCEL)))
+    fun `a cancel lifts every pointer`() {
+        assertEquals(EVERY_POINTER_LIFTING, liftingIndexOf(MotionEvent.ACTION_CANCEL, actionIndex = 0))
     }
 
     @Test
     fun `a hover carries no finger`() {
         for (action in HOVERS) {
-            assertEquals("action $action", emptyList<Pointer>(), pointersStillDown(twoFingerEvent(action)))
-        }
-    }
-
-    // The hot path builds no pointer list it would throw away: a cancel or a hover never reads one.
-    @Test
-    fun `a cancel or a hover never reads the pointers`() {
-        for (action in listOf(MotionEvent.ACTION_CANCEL) + HOVERS) {
-            val event = twoFingerEvent(action)
-
-            pointersStillDown(event)
-
-            verify(exactly = 0) { event.pointerCount }
-            verify(exactly = 0) { event.getPointerId(any()) }
+            assertEquals("action $action", EVERY_POINTER_LIFTING, liftingIndexOf(action, actionIndex = 0))
         }
     }
 
     @Test
-    fun `a move or a down keeps every pointer`() {
-        assertEquals(pointers, pointersStillDown(twoFingerEvent(MotionEvent.ACTION_MOVE)))
-        assertEquals(pointers, pointersStillDown(twoFingerEvent(MotionEvent.ACTION_POINTER_DOWN, actionIndex = 1)))
+    fun `a move or a down lifts nothing`() {
+        assertEquals(NO_POINTER_LIFTING, liftingIndexOf(MotionEvent.ACTION_MOVE, actionIndex = 0))
+        assertEquals(NO_POINTER_LIFTING, liftingIndexOf(MotionEvent.ACTION_DOWN, actionIndex = 0))
+        assertEquals(NO_POINTER_LIFTING, liftingIndexOf(MotionEvent.ACTION_POINTER_DOWN, actionIndex = 1))
+    }
+
+    // ---- the MotionEvent as the mapper reads it ----
+
+    @Test
+    fun `the event's pointers and the surface's ranges are read in place`() {
+        val event =
+            mockk<MotionEvent> {
+                every { pointerCount } returns 2
+                every { getPointerId(1) } returns POINTER_ID
+                every { getX(1) } returns DS4_X_MAX
+                every { getY(1) } returns DS4_Y_MAX
+            }
+        val touchpad = MotionEventTouchpad()
+
+        touchpad.bind(event, range(RANGE_MIN, DS4_X_MAX), range(-RANGE_MIN, DS4_Y_MAX))
+
+        assertEquals(2, touchpad.pointerCount)
+        assertEquals(POINTER_ID, touchpad.pointerId(1))
+        assertEquals(DS4_X_MAX, touchpad.x(1))
+        assertEquals(DS4_Y_MAX, touchpad.y(1))
+        assertEquals(RANGE_MIN, touchpad.xMin)
+        assertEquals(DS4_X_MAX, touchpad.xMax)
+        assertEquals(-RANGE_MIN, touchpad.yMin)
+        assertEquals(DS4_Y_MAX, touchpad.yMax)
     }
 
     // ---- the lift frames a lost focus or a released capture sends ----
@@ -233,11 +223,49 @@ class PadTouchpadCaptureTest {
         verify { sink wasNot Called }
     }
 
+    // One of two fingers lifting: the event's action index names it, and the other stays down.
+    private fun capturedPointerUp(surface: InputDevice): MotionEvent =
+        mockk {
+            every { source } returns InputDevice.SOURCE_TOUCHPAD
+            every { deviceId } returns SURFACE
+            every { device } returns surface
+            every { actionMasked } returns MotionEvent.ACTION_POINTER_UP
+            every { actionIndex } returns 0
+            every { pointerCount } returns 2
+            every { getPointerId(0) } returns POINTER_ID
+            every { getX(0) } returns 0f
+            every { getY(0) } returns 0f
+            every { getPointerId(1) } returns OTHER_POINTER_ID
+            every { getX(1) } returns DS4_X_MAX
+            every { getY(1) } returns 0f
+            every { buttonState } returns 0
+            every { eventTime } returns EVENT_TIME_MS
+        }
+
+    @Test
+    fun `a captured pointer up sends only the finger still down`() {
+        val capture = capture()
+        capture.installRoutes(mapOf(SURFACE to SLOT))
+        reachable.value = mapOf(SLOT to sink)
+
+        assertTrue(capture.onGenericMotionEvent(capturedPointerUp(surface(withRanges = true))))
+
+        verify(exactly = 1) { sink.sendTouchpad(SLOT, match(::isTheOtherFingerAlone)) }
+    }
+
+    private fun isTheOtherFingerAlone(report: TouchpadReport): Boolean {
+        val oneFinger = report.finger0Active && !report.finger1Active
+        val theOther = report.finger0TrackingId == OTHER_POINTER_ID && report.finger0X == Short.MAX_VALUE
+        return oneFinger && theOther && !report.buttonPressed
+    }
+
     private companion object {
         const val SLOT = "7"
         const val SURFACE = 31
         const val OTHER_SURFACE = 32
         const val POINTER_ID = 3
+        const val OTHER_POINTER_ID = 5
+        const val RANGE_MIN = 10f
         const val EVENT_TIME_MS = 42L
         const val DS4_X_MAX = 1919f
         const val DS4_Y_MAX = 941f

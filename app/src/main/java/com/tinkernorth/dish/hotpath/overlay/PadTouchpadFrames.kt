@@ -3,38 +3,60 @@
 
 package com.tinkernorth.dish.hotpath.overlay
 
+import android.view.InputDevice
 import android.view.MotionEvent
+import com.tinkernorth.dish.hotpath.input.CapturedTouchpadEvent
+import com.tinkernorth.dish.hotpath.input.EVERY_POINTER_LIFTING
+import com.tinkernorth.dish.hotpath.input.NO_POINTER_LIFTING
 import com.tinkernorth.dish.hotpath.input.PadTouchFrame
-import com.tinkernorth.dish.hotpath.input.Pointer
 
-// Every pointer still on the surface after this event: the one lifting on an UP is gone, all of
-// them on a CANCEL, and a hover carries no finger at all.
-internal fun pointersStillDown(event: MotionEvent): List<Pointer> =
-    when (event.actionMasked) {
-        MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> pointersExcept(event, event.actionIndex)
+// The pointer this event takes off the surface: the one lifting on an UP, all of them on a
+// CANCEL, and all of them on a hover, which carries no finger at all.
+internal fun liftingIndexOf(
+    actionMasked: Int,
+    actionIndex: Int,
+): Int =
+    when (actionMasked) {
+        MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> actionIndex
         MotionEvent.ACTION_CANCEL,
         MotionEvent.ACTION_HOVER_ENTER,
         MotionEvent.ACTION_HOVER_MOVE,
         MotionEvent.ACTION_HOVER_EXIT,
-        -> emptyList()
-        else -> pointersExcept(event, NO_LIFTING_INDEX)
+        -> EVERY_POINTER_LIFTING
+        else -> NO_POINTER_LIFTING
     }
 
-// The event's pointers but the one at [liftingIndex], read straight into the one list the frame keeps.
-private fun pointersExcept(
-    event: MotionEvent,
-    liftingIndex: Int,
-): List<Pointer> {
-    val count = event.pointerCount
-    val pointers = ArrayList<Pointer>(count)
-    for (index in 0 until count) {
-        if (index == liftingIndex) continue
-        pointers.add(Pointer(event.getPointerId(index), event.getX(index), event.getY(index)))
+// A captured MotionEvent as the mapper reads it, in place: the two fingers the frame keeps are
+// read straight into its fields and nothing else is built. One per capture, rebound to each event
+// on the main thread.
+internal class MotionEventTouchpad : CapturedTouchpadEvent {
+    private lateinit var event: MotionEvent
+    private lateinit var xRange: InputDevice.MotionRange
+    private lateinit var yRange: InputDevice.MotionRange
+
+    fun bind(
+        event: MotionEvent,
+        xRange: InputDevice.MotionRange,
+        yRange: InputDevice.MotionRange,
+    ) {
+        this.event = event
+        this.xRange = xRange
+        this.yRange = yRange
     }
-    return pointers
+
+    override val pointerCount: Int get() = event.pointerCount
+
+    override fun pointerId(index: Int): Int = event.getPointerId(index)
+
+    override fun x(index: Int): Float = event.getX(index)
+
+    override fun y(index: Int): Float = event.getY(index)
+
+    override val xMin: Float get() = xRange.min
+    override val xMax: Float get() = xRange.max
+    override val yMin: Float get() = yRange.min
+    override val yMax: Float get() = yRange.max
 }
-
-private const val NO_LIFTING_INDEX = -1
 
 // The slots whose last frame still holds a finger or the click, each with its lifted frame.
 internal fun liftedFrames(

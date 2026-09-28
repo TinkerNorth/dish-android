@@ -49,18 +49,41 @@ fun shouldCapture(
 ): Boolean = focused && routes.isNotEmpty()
 
 /**
+ * [routes] as two parallel arrays, built once per route change, so the lookup every captured
+ * event makes boxes no device id.
+ */
+class CapturedSurfaceTable internal constructor(
+    private val surfaceIds: IntArray,
+    private val slotIds: Array<String>,
+) {
+    fun slotFor(surfaceId: Int): String? {
+        for (index in surfaceIds.indices) {
+            if (surfaceIds[index] == surfaceId) return slotIds[index]
+        }
+        return null
+    }
+}
+
+fun capturedSurfaceTableOf(routes: Map<Int, String>): CapturedSurfaceTable {
+    val entries = routes.entries.toList()
+    val surfaceIds = IntArray(entries.size) { entries[it].key }
+    val slotIds = Array(entries.size) { entries[it].value }
+    return CapturedSurfaceTable(surfaceIds, slotIds)
+}
+
+/**
  * The slot a motion event feeds, or null when it is not a captured touchpad event for a
  * routed pad. Only the touchpad source counts: a captured surface reports SOURCE_TOUCHPAD,
  * while the same device's joystick axes and its uncaptured mouse-mode cursor moves carry
  * other sources and must keep going where they went.
  */
 fun slotForEvent(
-    routes: Map<Int, String>,
+    surfaces: CapturedSurfaceTable,
     source: Int,
     deviceId: Int,
 ): String? {
     if ((source and SOURCE_TOUCHPAD) != SOURCE_TOUCHPAD) return null
-    return routes[deviceId]
+    return surfaces.slotFor(deviceId)
 }
 
 // android.view.InputDevice.SOURCE_TOUCHPAD, restated so the policy stays JVM-testable.

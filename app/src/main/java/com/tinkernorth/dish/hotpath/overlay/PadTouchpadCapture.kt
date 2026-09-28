@@ -17,7 +17,7 @@ import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.PhysicalReachabilityComposer
 import com.tinkernorth.dish.hotpath.input.PadTouchFrame
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
-import com.tinkernorth.dish.hotpath.input.Range
+import com.tinkernorth.dish.hotpath.input.capturedSurfaceTableOf
 import com.tinkernorth.dish.hotpath.input.frame
 import com.tinkernorth.dish.hotpath.input.routes
 import com.tinkernorth.dish.hotpath.input.shouldCapture
@@ -71,6 +71,11 @@ class PadTouchpadCapture(
 ) : DefaultLifecycleObserver {
     @Volatile private var routes: Map<Int, String> = emptyMap()
 
+    @Volatile private var surfaces = capturedSurfaceTableOf(emptyMap())
+
+    // Main-thread only: each captured event is read through it in place.
+    private val touchpad = MotionEventTouchpad()
+
     @Volatile private var focused = false
 
     // Last frame per slot: written on the main thread (the captured event), read on the resend
@@ -102,6 +107,7 @@ class PadTouchpadCapture(
     // The captured surfaces the composer routes now; capture follows them and the window focus.
     internal fun installRoutes(next: Map<Int, String>) {
         routes = next
+        surfaces = capturedSurfaceTableOf(next)
         apply()
     }
 
@@ -141,18 +147,19 @@ class PadTouchpadCapture(
      * axis, a mouse the app never captured, a surface it does not route) is left alone.
      */
     fun onGenericMotionEvent(event: MotionEvent): Boolean {
-        val slotId = slotForEvent(routes, event.source, event.deviceId) ?: return false
-        val xRange = axisRange(event.device, MotionEvent.AXIS_X)
-        val yRange = axisRange(event.device, MotionEvent.AXIS_Y)
+        val slotId = slotForEvent(surfaces, event.source, event.deviceId) ?: return false
+        val device = event.device
+        val xRange = device?.getMotionRange(MotionEvent.AXIS_X, InputDevice.SOURCE_TOUCHPAD)
+        val yRange = device?.getMotionRange(MotionEvent.AXIS_Y, InputDevice.SOURCE_TOUCHPAD)
         if (xRange == null || yRange == null) {
             warnOnceAboutMissingRange(event.deviceId)
             return true
         }
+        touchpad.bind(event, xRange, yRange)
         val frame =
             frame(
-                down = pointersStillDown(event),
-                xRange = xRange,
-                yRange = yRange,
+                event = touchpad,
+                liftingIndex = liftingIndexOf(event.actionMasked, event.actionIndex),
                 buttonPressed = event.buttonState and MotionEvent.BUTTON_PRIMARY != 0,
                 eventTimeMs = event.eventTime,
             )
@@ -160,11 +167,6 @@ class PadTouchpadCapture(
         reachability.state.value[slotId]?.let { send(it, slotId, frame) }
         return true
     }
-
-    private fun axisRange(
-        device: InputDevice?,
-        axis: Int,
-    ): Range? = device?.getMotionRange(axis, InputDevice.SOURCE_TOUCHPAD)?.let { Range(it.min, it.max) }
 
     // Once per process: a pad that reports no range will report none for every frame it sends.
     private fun warnOnceAboutMissingRange(deviceId: Int) {
