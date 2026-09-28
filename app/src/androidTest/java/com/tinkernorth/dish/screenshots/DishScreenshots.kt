@@ -15,6 +15,7 @@ import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
+import com.tinkernorth.dish.integration.fieldValue
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
 import com.tinkernorth.dish.source.connection.SatelliteConnection
@@ -340,19 +341,6 @@ class DishScreenshots {
 
     private fun batteryClear(slotId: String) {
         batteryStore.clear(slotId)
-    }
-
-    private fun Any.fieldValue(name: String): Any {
-        var cls: Class<*>? = javaClass
-        while (cls != null) {
-            val f = cls.declaredFields.firstOrNull { it.name == name }
-            if (f != null) {
-                f.isAccessible = true
-                return f.get(this) ?: error("field $name is null on ${javaClass.name}")
-            }
-            cls = cls.superclass
-        }
-        error("field $name not found on ${javaClass.name}")
     }
 
     // The flow is reached by field name, so its value is set the same way: through the
