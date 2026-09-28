@@ -47,8 +47,7 @@ class LicensesAdapter(
             holder.binding.tvLicense.visibility = View.GONE
         }
 
-        val clickUrl = entry.licenses.firstOrNull()?.url ?: entry.url
-        if (clickUrl.isNullOrBlank()) bindInert(holder) else bindClickable(holder, entry)
+        if (licenseLinkOf(entry) == null) bindInertRow(holder.itemView) else bindClickable(holder, entry)
     }
 
     private fun bindClickable(
@@ -63,11 +62,20 @@ class LicensesAdapter(
         holder.itemView.setOnClickListener { onClick(entry) }
     }
 
-    private fun bindInert(holder: VH) {
-        holder.itemView.isClickable = false
-        holder.itemView.isFocusable = false
-        holder.itemView.setOnClickListener(null)
-    }
-
     override fun getItemCount(): Int = items.size
+}
+
+// The link a row opens: its first licence's, else the library's own, and none when that is blank.
+internal fun licenseLinkOf(entry: LicenseEntry): String? {
+    val link = entry.licenses.firstOrNull()?.url ?: entry.url
+    return link?.takeIf { it.isNotBlank() }
+}
+
+// Platform quirk: setOnClickListener, even with null, makes the view clickable again, so the
+// listener goes before the flags. A recycled link row also drops the description it announced.
+internal fun bindInertRow(row: View) {
+    row.setOnClickListener(null)
+    row.isClickable = false
+    row.isFocusable = false
+    row.contentDescription = null
 }
