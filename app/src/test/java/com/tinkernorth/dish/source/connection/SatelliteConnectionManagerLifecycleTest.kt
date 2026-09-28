@@ -144,6 +144,148 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
             coVerify(exactly = 2) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
         }
 
+    // Each session PUT waits on its own gate, in call order, so a test decides when each answers.
+    private fun gatedSessionPuts(vararg bodies: String): List<CompletableDeferred<Unit>> {
+        val gates = bodies.map { CompletableDeferred<Unit>() }
+        var call = 0
+        coEvery {
+            discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
+        } coAnswers {
+            val mine = call++
+            gates[mine].await()
+            ok(bodies[mine])
+        }
+        return gates
+    }
+
+    @Test
+    fun `a user disconnect during the session PUT wins and hands the granted session back`() =
+        runMgrTest { mgr, events ->
+            stubStoredKey()
+            every { controllerRepo.openSocket(any(), any()) } returns OPEN_SOCKET
+            val (put) = gatedSessionPuts(sessionGrantBody())
+            mgr.connect(server, ConnectIntent.USER_INITIATED)
+            scope.testScheduler.runCurrent()
+            assertEquals(SatelliteSessionState.Linking, mgr.get(serverId)?.state?.value)
+
+            mgr.disconnect(serverId)
+            put.complete(Unit)
+            scope.testScheduler.runCurrent()
+
+            assertEquals(SatelliteSessionState.Idle, mgr.get(serverId)?.state?.value)
+            coVerify(exactly = 1) { discoveryRepo.disconnect("10.0.0.5", 9877, "conn_1", "test-device-id", any()) }
+            verify(exactly = 0) { controllerRepo.openSocket(any(), any()) }
+            assertTrue("the user asked for this; no banner: $events", events.isEmpty())
+        }
+
+    @Test
+    fun `a user disconnect during the pair round trip stops before any session PUT`() =
+        runMgrTest { mgr, events ->
+            val pairAnswered = gatedPair("""{"ok":true,"sharedKey":"${"aa".repeat(32)}"}""")
+            mgr.connect(server, ConnectIntent.USER_INITIATED)
+            scope.testScheduler.runCurrent()
+
+            mgr.disconnect(serverId)
+            stubStoredKey()
+            pairAnswered.complete(Unit)
+            scope.testScheduler.runCurrent()
+
+            assertEquals(SatelliteSessionState.Idle, mgr.get(serverId)?.state?.value)
+            coVerify(exactly = 0) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
+            assertTrue(events.isEmpty())
+        }
+
+    // The pair round trip answers only when the test opens its gate, with [body].
+    private fun gatedPair(body: String): CompletableDeferred<Unit> {
+        val gate = CompletableDeferred<Unit>()
+        coEvery { discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), any()) } coAnswers {
+            gate.await()
+            ok(body)
+        }
+        return gate
+    }
+
+    @Test
+    fun `a pair that fails after a user disconnect raises no banner`() =
+        runMgrTest { mgr, events ->
+            val pairAnswered = gatedPair("")
+            mgr.connect(server, ConnectIntent.USER_INITIATED)
+            scope.testScheduler.runCurrent()
+
+            mgr.disconnect(serverId)
+            pairAnswered.complete(Unit)
+            scope.testScheduler.runCurrent()
+
+            assertEquals(SatelliteSessionState.Idle, mgr.get(serverId)?.state?.value)
+            assertTrue("the user asked for this; no banner: $events", events.isEmpty())
+        }
+
+    @Test
+    fun `a PIN pair that answers after a user disconnect neither reports nor opens a session`() =
+        runMgrTest { mgr, events ->
+            val pairAnswered = gatedPair("""{"ok":true,"sharedKey":"${"aa".repeat(32)}"}""")
+            mgr.pairWithPin(server, "1234")
+            scope.testScheduler.runCurrent()
+
+            mgr.disconnect(serverId)
+            stubStoredKey()
+            pairAnswered.complete(Unit)
+            scope.testScheduler.runCurrent()
+
+            assertEquals(SatelliteSessionState.Idle, mgr.get(serverId)?.state?.value)
+            coVerify(exactly = 0) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
+            assertTrue(events.isEmpty())
+        }
+
+    // The user disconnects and taps again while the first PUT is still out: the first answer is
+    // stale and must neither end the second handshake nor go Live in its place.
+    @Test
+    fun `a stale session PUT leaves the handshake that replaced it alone`() =
+        runMgrTest { mgr, _ ->
+            stubStoredKey()
+            every { controllerRepo.openSocket(any(), any()) } returns OPEN_SOCKET
+            val (stalePut, freshPut) =
+                gatedSessionPuts(sessionGrantBody(), sessionGrantBody().replace("conn_1", "conn_2"))
+            mgr.connect(server, ConnectIntent.USER_INITIATED)
+            scope.testScheduler.runCurrent()
+            mgr.disconnect(serverId)
+            mgr.connect(server, ConnectIntent.USER_INITIATED)
+            scope.testScheduler.runCurrent()
+
+            stalePut.complete(Unit)
+            scope.testScheduler.runCurrent()
+            assertEquals(SatelliteSessionState.Linking, mgr.get(serverId)?.state?.value)
+            coVerify(exactly = 1) { discoveryRepo.disconnect(any(), any(), "conn_1", any(), any()) }
+
+            freshPut.complete(Unit)
+            scope.testScheduler.runCurrent()
+            assertEquals(SatelliteSessionState.Live, mgr.get(serverId)?.state?.value)
+            assertEquals("conn_2", mgr.get(serverId)?.connectionId)
+        }
+
+    @Test
+    fun `a user disconnect while a reconcile is reading the session keeps it down`() =
+        runMgrTest { mgr, _ ->
+            stubLiveSession()
+            val viewAnswered = CompletableDeferred<Unit>()
+            coEvery { discoveryRepo.getSession(any(), any(), any(), any(), any()) } coAnswers {
+                viewAnswered.await()
+                ok(matchingViewBody(epoch = 9).replace("conn_1", "conn_other"))
+            }
+            connectLive(mgr)
+            every { controllerRepo.getServerEpoch(any()) } returns 9
+            scope.testScheduler.advanceTimeBy(CLOSE_NOTIFY_SEEN_MS)
+            scope.testScheduler.runCurrent()
+            coVerify(exactly = 1) { discoveryRepo.getSession(any(), any(), any(), any(), any()) }
+
+            mgr.disconnect(serverId)
+            viewAnswered.complete(Unit)
+            scope.testScheduler.runCurrent()
+
+            assertEquals(SatelliteSessionState.Idle, mgr.get(serverId)?.state?.value)
+            coVerify(exactly = 1) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
+        }
+
     @Test
     fun `a replaced close-notify stays down without a retry`() =
         runMgrTest { mgr, _ ->

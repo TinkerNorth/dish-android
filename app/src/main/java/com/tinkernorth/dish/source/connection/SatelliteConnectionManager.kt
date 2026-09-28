@@ -140,6 +140,12 @@ class SatelliteConnectionManager
         // them all, since one that fired afterwards would undo the disconnect.
         private val pendingRetries = ConcurrentHashMap<String, MutableSet<Job>>()
 
+        // Bumped by every disconnect. A handshake notes the generation it started under; when a
+        // disconnect has moved it on by the time a round trip answers, the handshake stops without
+        // touching the connection (a newer handshake may own it by then) and hands back any session
+        // it was granted.
+        private val disconnectGenerations = ConcurrentHashMap<String, Int>()
+
         // Single-flight reconcile guard per id: heartbeat ticks fire every
         // second, the reconcile round-trip can take longer.
         private val reconcileInFlight = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
@@ -306,6 +312,13 @@ class SatelliteConnectionManager
             }.getOrNull()
         }
 
+        private fun generationOf(id: String): Int = disconnectGenerations[id] ?: 0
+
+        private fun isSuperseded(
+            id: String,
+            generation: Int,
+        ): Boolean = generationOf(id) != generation
+
         fun remembered(): List<RememberedSatellite> = store.remembered()
 
         fun startDiscovery() {
@@ -385,11 +398,12 @@ class SatelliteConnectionManager
             }
             conn.updateServer(server)
             conn.markConnecting()
+            val generation = generationOf(id)
             scope.launch {
                 if (store.satelliteSharedKey(id) != null) {
-                    openSession(conn, server, intent)
+                    openSession(conn, server, intent, generation)
                 } else {
-                    pairAndConnect(conn, server, intent)
+                    pairAndConnect(conn, server, intent, generation)
                 }
             }
         }
@@ -398,9 +412,11 @@ class SatelliteConnectionManager
             conn: SatelliteConnection,
             server: DiscoveredServer,
             intent: ConnectIntent,
+            generation: Int,
         ) {
             val id = SatelliteConnection.idFor(server)
             val reply = pairNegotiated(id, server, pin = "")
+            if (isSuperseded(id, generation)) return
             if (reply == null || reply.unreachable) {
                 conn.markDisconnected()
                 emitErrorIfUserInitiated(intent, unreachableMessage(reply))
@@ -436,7 +452,7 @@ class SatelliteConnectionManager
             }
             clearStale(id)
             store.setSatelliteSharedKey(id, pair.sharedKey)
-            openSession(conn, server, intent)
+            openSession(conn, server, intent, generation)
         }
 
         fun pairWithPin(
@@ -451,8 +467,10 @@ class SatelliteConnectionManager
             if (conn.state.value == SatelliteSessionState.Live) return
             conn.updateServer(server)
             conn.markConnecting()
+            val generation = generationOf(id)
             scope.launch {
                 val reply = pairNegotiated(id, server, pin)
+                if (isSuperseded(id, generation)) return@launch
                 if (reply == null || reply.unreachable) {
                     conn.markDisconnected()
                     _events.emit(ConnectionEvent.Error(unreachableMessage(reply)))
@@ -478,7 +496,7 @@ class SatelliteConnectionManager
                 }
                 clearStale(id)
                 store.setSatelliteSharedKey(id, pair.sharedKey)
-                openSession(conn, server, ConnectIntent.USER_INITIATED)
+                openSession(conn, server, ConnectIntent.USER_INITIATED, generation)
             }
         }
 
@@ -501,6 +519,7 @@ class SatelliteConnectionManager
             // A re-issued request supersedes any prior poll for this id; cancel it
             // so two polls can't race to openSession on the same satellite.
             cancelApprovalPoll(id)
+            val generation = generationOf(id)
             val job =
                 scope.launch {
                     val reply = pairNegotiated(id, server, pin = "", clientPin = clientPin)
@@ -539,7 +558,7 @@ class SatelliteConnectionManager
                         if (st is Status.Approved) {
                             clearStale(id)
                             store.setSatelliteSharedKey(id, st.sharedKeyHex)
-                            openSession(conn, server, ConnectIntent.USER_INITIATED)
+                            openSession(conn, server, ConnectIntent.USER_INITIATED, generation)
                             return@launch
                         }
                         if (st is Status.Declined) {
@@ -587,6 +606,7 @@ class SatelliteConnectionManager
             conn: SatelliteConnection,
             server: DiscoveredServer,
             intent: ConnectIntent,
+            generation: Int,
         ) = withContext(ioDispatcher) {
             val id = SatelliteConnection.idFor(server)
             // Vet the discovered address before any socket: an unauthenticated
@@ -608,6 +628,9 @@ class SatelliteConnectionManager
             }
             val descriptors = conn.desiredDescriptors()
             val put = putSessionNegotiated(id, conn, server, creds.proof, descriptors)
+            if (isSuperseded(id, generation)) {
+                return@withContext releaseStaleGrant(server, put?.reply, creds.proof)
+            }
             if (put == null) {
                 return@withContext failSession(conn, server, intent, SATELLITE_UPDATE_REQUIRED_MSG, retry = false)
             }
@@ -788,10 +811,12 @@ class SatelliteConnectionManager
         ) {
             val id = conn.id
             if (reconcileInFlight.putIfAbsent(id, true) != null) return
+            val generation = generationOf(id)
             try {
                 val live = liveSessionOf(conn) ?: return
                 val view = fetchSessionView(live) ?: return
                 when {
+                    isSuperseded(id, generation) -> Unit
                     rejectsOurCredentials(view.code) -> dropRejectedSession(conn)
                     view.connectionId == live.connectionId && conn.matchesAppliedView(view) -> conn.adoptEpoch(view.epoch)
                     else -> {
@@ -800,7 +825,7 @@ class SatelliteConnectionManager
                         // rotates token/key.
                         conn.markDisconnected()
                         conn.markConnecting()
-                        openSession(conn, server, ConnectIntent.RETRY_AFTER_DEATH)
+                        openSession(conn, server, ConnectIntent.RETRY_AFTER_DEATH, generation)
                     }
                 }
             } finally {
@@ -871,9 +896,10 @@ class SatelliteConnectionManager
             server: DiscoveredServer,
         ) {
             if (conn.state.value != SatelliteSessionState.Live) return
+            val generation = generationOf(conn.id)
             conn.markDisconnected()
             conn.markConnecting()
-            openSession(conn, server, ConnectIntent.RETRY_AFTER_DEATH)
+            openSession(conn, server, ConnectIntent.RETRY_AFTER_DEATH, generation)
         }
 
         // Single-slot converge while the session is live (PUT .../controllers/{idx}).
@@ -975,6 +1001,7 @@ class SatelliteConnectionManager
             // call openSession seconds after the user tore the connection down.
             cancelApprovalPoll(id)
             cancelPendingRetries(id)
+            disconnectGenerations.merge(id, 1, Int::plus)
             val conn = _connections.value[id] ?: return
             val srv = conn.server.value
             val cid = conn.connectionId
@@ -985,6 +1012,18 @@ class SatelliteConnectionManager
                     scope.launch(ioDispatcher) { releaseSession(srv, cid, proof) }
                 }
             }
+        }
+
+        // A session PUT that answered after a disconnect: whatever it was granted goes straight back.
+        private suspend fun releaseStaleGrant(
+            server: DiscoveredServer,
+            reply: HttpReply?,
+            proof: String,
+        ) {
+            val body = reply?.takeIf { !it.unreachable }?.body ?: return
+            val granted = runCatching { json.decodeFromString(SessionResponse.serializer(), body) }.getOrNull()
+            val connectionId = granted?.connectionId ?: return
+            releaseSession(server, connectionId, proof)
         }
 
         private suspend fun releaseSession(
