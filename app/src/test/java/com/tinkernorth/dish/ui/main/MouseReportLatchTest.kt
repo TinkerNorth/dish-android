@@ -3,18 +3,17 @@
 
 package com.tinkernorth.dish.ui.main
 
+import com.tinkernorth.dish.architecture.testing.allocatedBytesDuring
 import com.tinkernorth.dish.ui.common.TouchpadSurfaceView
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.lang.management.ManagementFactory
 
 // What the mouse surface last reported, and the resend thread's snapshot of it.
 class MouseReportLatchTest {
     private val latch = MouseReportLatch()
-    private val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
 
     private fun finger(
         x: Int,
@@ -150,13 +149,7 @@ class MouseReportLatchTest {
     fun `a report and a resend tick allocate nothing`() {
         val fingers = finger(FIRST_X)
         repeat(WARMUP_CYCLES) { runReportCycle(fingers, it) }
-        val measureOnlyStart = threads.currentThreadAllocatedBytes
-        val measureOnlyEnd = threads.currentThreadAllocatedBytes
-        val measurementCost = measureOnlyEnd - measureOnlyStart
-        val start = threads.currentThreadAllocatedBytes
-        for (cycle in 0 until MEASURED_CYCLES) runReportCycle(fingers, cycle)
-        val end = threads.currentThreadAllocatedBytes
-        val allocatedBytes = end - start - measurementCost
+        val allocatedBytes = allocatedBytesDuring { repeat(MEASURED_CYCLES) { runReportCycle(fingers, it) } }
         assertTrue("$allocatedBytes bytes over $MEASURED_CYCLES cycles", allocatedBytes < MEASURED_CYCLES * BYTES_PER_CYCLE_BOUND)
     }
 
@@ -168,9 +161,6 @@ class MouseReportLatchTest {
         const val BUTTON_TIME_MS = 90L
         const val CYCLE_X_MASK = 0x3FFF
         const val WARMUP_CYCLES = 10
-
-        // Few enough calls that C2 never compiles the latch: its escape analysis would hide an
-        // allocation that ART, which has none, still makes.
         const val MEASURED_CYCLES = 1000
 
         // Half the smallest object: one allocation in any cycle costs 16 bytes or more every

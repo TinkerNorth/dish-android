@@ -3,10 +3,10 @@
 
 package com.tinkernorth.dish.source.audio
 
+import com.tinkernorth.dish.architecture.testing.allocatedBytesDuring
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import java.lang.management.ManagementFactory
 
 // One 20 ms window at 48 kHz mono: large enough that a boxed count is never a cached Integer.
 private const val WINDOW_SAMPLES = 960
@@ -88,13 +88,9 @@ class MicCaptureReadTest {
     fun `reading windows allocates nothing`() {
         val recorder = WholeRecorder()
         val out = ShortArray(WINDOW_SAMPLES)
-        val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
         readWholeWindow(recorder::read, out)
-        threads.currentThreadAllocatedBytes
 
-        val before = threads.currentThreadAllocatedBytes
-        repeat(WINDOWS) { readWholeWindow(recorder::read, out) }
-        val allocated = threads.currentThreadAllocatedBytes - before
+        val allocated = allocatedBytesDuring { repeat(WINDOWS) { readWholeWindow(recorder::read, out) } }
 
         assertEquals(0L, allocated)
     }

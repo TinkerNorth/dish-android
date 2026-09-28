@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.core.net.moonlight
 
+import com.tinkernorth.dish.architecture.testing.allocatedBytesDuring
 import com.tinkernorth.dish.core.net.bytesToHex
 import com.tinkernorth.dish.core.net.hexToBytes
 import com.tinkernorth.dish.core.net.moonlight.enet.EnetClient
@@ -14,7 +15,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.lang.management.ManagementFactory
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -456,8 +456,6 @@ class MoonlightControlSessionTest {
         override fun close() = Unit
     }
 
-    private val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
-
     // What one send allocates on average, on a fresh connected session so every kind of send
     // starts from the same ENet state and grows the same unacked-send table.
     private fun bytesPerSend(send: (MoonlightControlSession) -> Unit): Long {
@@ -467,14 +465,9 @@ class MoonlightControlSessionTest {
         assertTrue(session.connect())
         repeat(WARMUP_SENDS) { send(session) }
         val sentBefore = transport.sent
-        val measureOnlyStart = threads.currentThreadAllocatedBytes
-        val measureOnlyEnd = threads.currentThreadAllocatedBytes
-        val measurementCost = measureOnlyEnd - measureOnlyStart
-        val start = threads.currentThreadAllocatedBytes
-        repeat(MEASURED_SENDS) { send(session) }
-        val end = threads.currentThreadAllocatedBytes
+        val allocated = allocatedBytesDuring { repeat(MEASURED_SENDS) { send(session) } }
         assertEquals(MEASURED_SENDS, transport.sent - sentBefore)
-        return (end - start - measurementCost) / MEASURED_SENDS
+        return allocated / MEASURED_SENDS
     }
 
     // A reliable send cannot be allocation-free: ENet keeps each command until the host acks it
@@ -511,9 +504,6 @@ class MoonlightControlSessionTest {
         const val REPLUG_CAPS = 0x3F
         const val REPLUG_BUTTONS = 0x10FFFF
         const val WARMUP_SENDS = 50
-
-        // Few enough sends that C2 never compiles the send path: its escape analysis would hide
-        // an allocation that ART, which has none, still makes.
         const val MEASURED_SENDS = 500
     }
 }

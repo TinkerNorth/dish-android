@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.ui.main
 
+import com.tinkernorth.dish.architecture.testing.allocatedBytesDuring
 import com.tinkernorth.dish.core.net.moonlight.MOUSE_BUTTON_LEFT
 import com.tinkernorth.dish.core.net.moonlight.MOUSE_BUTTON_MIDDLE
 import com.tinkernorth.dish.core.net.moonlight.MOUSE_BUTTON_RIGHT
@@ -15,7 +16,6 @@ import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.lang.management.ManagementFactory
 
 // One packet as the host would receive it.
 private sealed interface MouseCommand {
@@ -90,7 +90,6 @@ private class CountingSink : MoonlightMouseSink {
 class MoonlightMouseMoverTest {
     private val mover = MoonlightMouseMover()
     private val sink = RecordingSink()
-    private val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
 
     private fun lifted() = TouchpadSurfaceView.TouchpadState()
 
@@ -240,13 +239,7 @@ class MoonlightMouseMoverTest {
         val lifted = lifted()
         repeat(WARMUP_CYCLES) { runFrameCycle(counter, anchor, drag, lifted) }
         val sentBefore = counter.sent
-        val measureOnlyStart = threads.currentThreadAllocatedBytes
-        val measureOnlyEnd = threads.currentThreadAllocatedBytes
-        val measurementCost = measureOnlyEnd - measureOnlyStart
-        val start = threads.currentThreadAllocatedBytes
-        repeat(MEASURED_CYCLES) { runFrameCycle(counter, anchor, drag, lifted) }
-        val end = threads.currentThreadAllocatedBytes
-        val allocatedBytes = end - start - measurementCost
+        val allocatedBytes = allocatedBytesDuring { repeat(MEASURED_CYCLES) { runFrameCycle(counter, anchor, drag, lifted) } }
         assertEquals(MEASURED_CYCLES * PACKETS_PER_CYCLE, counter.sent - sentBefore)
         assertTrue("$allocatedBytes bytes over $MEASURED_CYCLES cycles", allocatedBytes < MEASURED_CYCLES * BYTES_PER_CYCLE_BOUND)
     }
@@ -292,9 +285,6 @@ class MoonlightMouseMoverTest {
         const val WHEEL_UNITS_PER_NOTCH = 120
         const val DRAG_UNITS = 1000
         const val WARMUP_CYCLES = 10
-
-        // Few enough calls that C2 never compiles the mover: its escape analysis would hide an
-        // allocation that ART, which has none, still makes.
         const val MEASURED_CYCLES = 1000
 
         // Half the smallest object: one allocation in any frame costs 16 bytes or more every
