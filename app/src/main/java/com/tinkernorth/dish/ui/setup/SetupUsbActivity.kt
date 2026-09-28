@@ -116,7 +116,7 @@ class SetupUsbActivity : BaseGamepadHostActivity() {
     // start over / exit are handled by the dialog.
     private fun showRecovery(reason: DirectClaimFailure?) {
         val message = reason?.let { getString(directFailureReasonRes(it)) }
-        show(this, message) { retryAfterRecovery() }
+        showSetupError(this, message) { retryAfterRecovery() }
     }
 
     private fun retryAfterRecovery() {

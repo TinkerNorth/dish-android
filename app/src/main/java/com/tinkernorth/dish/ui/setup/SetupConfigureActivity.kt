@@ -388,7 +388,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
             is ApplyState.Finished -> {
                 setBindBusy(false)
                 if (state.errorMessage != null) {
-                    show(this, state.errorMessage) { viewModel.apply() }
+                    showSetupError(this, state.errorMessage) { viewModel.apply() }
                 } else {
                     finishToDashboard(state)
                 }

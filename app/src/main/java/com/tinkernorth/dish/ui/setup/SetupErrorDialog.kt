@@ -13,7 +13,7 @@ import com.tinkernorth.dish.ui.main.MainActivity
 // The single blocking sheet for any "your input or destination is gone" failure
 // across the flow: Retry re-runs the caller's recovery, Start over rewinds to
 // the first screen, Exit drops to the dashboard.
-fun show(
+internal fun showSetupError(
     activity: AppCompatActivity,
     message: String? = null,
     onRetry: () -> Unit,
@@ -37,14 +37,14 @@ private fun dismissAndRetry(
 
 // SetupInputActivity sits at the root of the flow's task, so CLEAR_TOP rewinds
 // to it and drops every screen stacked above.
-fun startOver(activity: Activity) {
+private fun startOver(activity: Activity) {
     activity.startActivity(
         Intent(activity, SetupInputActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
     )
 }
 
-fun exitToDashboard(activity: Activity) {
+private fun exitToDashboard(activity: Activity) {
     activity.startActivity(
         Intent(activity, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),

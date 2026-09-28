@@ -69,7 +69,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
             resume?.invoke()
             return
         }
-        show(this, getString(R.string.setup_conn_local_network_denied)) {
+        showSetupError(this, getString(R.string.setup_conn_local_network_denied)) {
             withLocalNetwork(resume ?: { viewModel.startDiscovery() })
         }
     }
@@ -292,7 +292,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
     // message through the dialog; otherwise surface the generic error sheet.
     private fun onConnectionError(message: String) {
         if (pairing.showError(message)) return
-        show(this, message) { withLocalNetwork { viewModel.startDiscovery() } }
+        showSetupError(this, message) { withLocalNetwork { viewModel.startDiscovery() } }
     }
 
     private fun openGitHub() {
