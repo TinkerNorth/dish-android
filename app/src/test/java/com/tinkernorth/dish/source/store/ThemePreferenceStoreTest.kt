@@ -5,10 +5,32 @@ package com.tinkernorth.dish.source.store
 
 import androidx.appcompat.app.AppCompatDelegate
 import com.tinkernorth.dish.repository.mapBackedPrefs
+import io.mockk.every
+import io.mockk.just
+import io.mockk.mockkStatic
+import io.mockk.runs
+import io.mockk.unmockkStatic
+import io.mockk.verify
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Before
 import org.junit.Test
 
 class ThemePreferenceStoreTest {
+    // The night mode is process-wide and cannot be put back: setDefaultNightMode refuses the
+    // unspecified default. So no test here sets it for real, and each one checks that none has.
+    @Before
+    fun standInForTheNightMode() {
+        assertEquals(AppCompatDelegate.MODE_NIGHT_UNSPECIFIED, AppCompatDelegate.getDefaultNightMode())
+        mockkStatic(AppCompatDelegate::class)
+        every { AppCompatDelegate.setDefaultNightMode(any()) } just runs
+    }
+
+    @After
+    fun releaseTheNightMode() {
+        unmockkStatic(AppCompatDelegate::class)
+    }
+
     @Test
     fun `every theme mode round trips through storage`() {
         for (mode in ThemeMode.entries) {
@@ -35,9 +57,18 @@ class ThemePreferenceStoreTest {
 
     @Test
     fun `the store hydrates from prefs on construction`() {
-        val (ctx, _) = mapBackedPrefs(mutableMapOf(ThemePreferenceStore.KEY_THEME_MODE to "dark"))
+        val (ctx, _) = mapBackedPrefs(mutableMapOf(PERSISTED_KEY to "dark"))
 
         assertEquals(ThemeMode.DARK, ThemePreferenceStore(ctx).state.value)
+    }
+
+    @Test
+    fun `the mode lives in the cloud-backed user preferences file`() {
+        val (ctx, _) = mapBackedPrefs()
+
+        ThemePreferenceStore(ctx).setMode(ThemeMode.DARK)
+
+        verifyOnlyPrefsFile(ctx, USER_PREFERENCES_FILE)
     }
 
     @Test
@@ -54,19 +85,23 @@ class ThemePreferenceStoreTest {
 
         store.setMode(ThemeMode.LIGHT)
 
-        assertEquals("light", backing[ThemePreferenceStore.KEY_THEME_MODE])
+        assertEquals("light", backing[PERSISTED_KEY])
         assertEquals(ThemeMode.LIGHT, store.state.value)
-        assertEquals(AppCompatDelegate.MODE_NIGHT_NO, AppCompatDelegate.getDefaultNightMode())
+        verify(exactly = 1) { AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO) }
     }
 
     @Test
     fun `applyPersistedMode applies what was read without writing`() {
-        val (ctx, backing) = mapBackedPrefs(mutableMapOf(ThemePreferenceStore.KEY_THEME_MODE to "dark"))
+        val (ctx, backing) = mapBackedPrefs(mutableMapOf(PERSISTED_KEY to "dark"))
         val store = ThemePreferenceStore(ctx)
 
         store.applyPersistedMode()
 
-        assertEquals(AppCompatDelegate.MODE_NIGHT_YES, AppCompatDelegate.getDefaultNightMode())
+        verify(exactly = 1) { AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES) }
         assertEquals(1, backing.size)
+    }
+
+    private companion object {
+        const val PERSISTED_KEY = "theme_mode"
     }
 }

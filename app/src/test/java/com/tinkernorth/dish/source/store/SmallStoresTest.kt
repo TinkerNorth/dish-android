@@ -16,7 +16,7 @@ class SmallStoresTest {
     @Test
     fun `crash reporting defaults on and hydrates from prefs`() {
         assertTrue(CrashReportingStore(mapBackedPrefs().first).state.value)
-        val (ctx, _) = mapBackedPrefs(mutableMapOf(CrashReportingStore.KEY_COLLECTION_ENABLED to false))
+        val (ctx, _) = mapBackedPrefs(mutableMapOf(CRASH_REPORTING_KEY to false))
         assertFalse(CrashReportingStore(ctx).state.value)
     }
 
@@ -27,14 +27,15 @@ class SmallStoresTest {
 
         store.setEnabled(false)
 
-        assertEquals(false, backing[CrashReportingStore.KEY_COLLECTION_ENABLED])
+        assertEquals(false, backing[CRASH_REPORTING_KEY])
         assertFalse(store.state.value)
+        verifyOnlyPrefsFile(ctx, USER_PREFERENCES_FILE)
     }
 
     @Test
     fun `onboarding starts incomplete and hydrates from prefs`() {
         assertFalse(OnboardingPreferenceStore(mapBackedPrefs().first).state.value.welcomeCompleted)
-        val (ctx, _) = mapBackedPrefs(mutableMapOf(OnboardingPreferenceStore.KEY_WELCOME_COMPLETED to true))
+        val (ctx, _) = mapBackedPrefs(mutableMapOf(WELCOME_COMPLETED_KEY to true))
         assertTrue(OnboardingPreferenceStore(ctx).state.value.welcomeCompleted)
     }
 
@@ -45,18 +46,19 @@ class SmallStoresTest {
 
         store.markWelcomeCompleted()
 
-        assertEquals(true, backing[OnboardingPreferenceStore.KEY_WELCOME_COMPLETED])
+        assertEquals(true, backing[WELCOME_COMPLETED_KEY])
         assertTrue(store.state.value.welcomeCompleted)
+        verifyOnlyPrefsFile(ctx, USER_PREFERENCES_FILE)
     }
 
     @Test
     fun `resetWelcome persists and republishes false`() {
-        val (ctx, backing) = mapBackedPrefs(mutableMapOf(OnboardingPreferenceStore.KEY_WELCOME_COMPLETED to true))
+        val (ctx, backing) = mapBackedPrefs(mutableMapOf(WELCOME_COMPLETED_KEY to true))
         val store = OnboardingPreferenceStore(ctx)
 
         store.resetWelcome()
 
-        assertEquals(false, backing[OnboardingPreferenceStore.KEY_WELCOME_COMPLETED])
+        assertEquals(false, backing[WELCOME_COMPLETED_KEY])
         assertFalse(store.state.value.welcomeCompleted)
     }
 
@@ -68,9 +70,10 @@ class SmallStoresTest {
 
         store.markDismissed()
 
-        assertEquals(true, backing[BluetoothPermissionBannerStore.KEY_BANNER_DISMISSED])
+        assertEquals(true, backing[BANNER_DISMISSED_KEY])
         assertTrue(store.state.value)
         assertTrue(BluetoothPermissionBannerStore(ctx).state.value)
+        verifyOnlyPrefsFile(ctx, USER_PREFERENCES_FILE)
     }
 
     private fun serverInfo(
@@ -147,5 +150,11 @@ class SmallStoresTest {
         store.note("slot-1", FeedbackKind.RUMBLE, nowMs = 2L)
 
         assertEquals(1L, snapshot["slot-1"]?.count)
+    }
+
+    private companion object {
+        const val CRASH_REPORTING_KEY = "crashlytics_collection_enabled"
+        const val WELCOME_COMPLETED_KEY = "onboarding_welcome_completed"
+        const val BANNER_DISMISSED_KEY = "bt_permission_banner_dismissed"
     }
 }

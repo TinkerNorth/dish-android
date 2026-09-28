@@ -34,13 +34,13 @@ class BluetoothPermissionBannerStoreTest {
             }
         val context =
             mockk<Context> {
-                every { getSharedPreferences(any(), any()) } returns prefs
+                every { getSharedPreferences(USER_PREFERENCES_FILE, Context.MODE_PRIVATE) } returns prefs
             }
         val store = BluetoothPermissionBannerStore(context)
 
         store.markDismissed()
 
-        verify { editor.putBoolean(BluetoothPermissionBannerStore.KEY_BANNER_DISMISSED, true) }
+        verify { editor.putBoolean("bt_permission_banner_dismissed", true) }
         assertTrue(store.state.value)
     }
 

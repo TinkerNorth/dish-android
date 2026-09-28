@@ -42,6 +42,7 @@ class SpeakerEnabledStoreTest {
 
         store.setEnabled("9", enabled = false)
 
+        verifyOnlyPrefsFile(ctx, USER_PREFERENCES_FILE)
         assertEquals(false, backing["speaker_enabled:9"])
         assertEquals(false, store.state.value["9"])
         assertFalse(store.isEnabled("9"))

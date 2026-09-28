@@ -16,10 +16,10 @@ class LatencyProfilingStoreTest {
         val editor: SharedPreferences.Editor = mockk(relaxed = true)
         val prefs: SharedPreferences =
             mockk {
-                every { getBoolean(LatencyProfilingStore.KEY, LatencyProfilingStore.DEFAULT_ENABLED) } returns persisted
+                every { getBoolean(PERSISTED_KEY, LatencyProfilingStore.DEFAULT_ENABLED) } returns persisted
                 every { edit() } returns editor
             }
-        val context: Context = mockk { every { getSharedPreferences(any(), any()) } returns prefs }
+        val context: Context = mockk { every { getSharedPreferences(USER_PREFERENCES_FILE, Context.MODE_PRIVATE) } returns prefs }
         return LatencyProfilingStore(context) to editor
     }
 
@@ -40,10 +40,14 @@ class LatencyProfilingStoreTest {
         val (store, editor) = storeBackedBy(persisted = false)
         store.setEnabled(true)
         assertTrue(store.state.value)
-        verify { editor.putBoolean(LatencyProfilingStore.KEY, true) }
+        verify { editor.putBoolean(PERSISTED_KEY, true) }
 
         store.setEnabled(false)
         assertFalse(store.state.value)
-        verify { editor.putBoolean(LatencyProfilingStore.KEY, false) }
+        verify { editor.putBoolean(PERSISTED_KEY, false) }
+    }
+
+    private companion object {
+        const val PERSISTED_KEY = "latency_profiling_enabled"
     }
 }

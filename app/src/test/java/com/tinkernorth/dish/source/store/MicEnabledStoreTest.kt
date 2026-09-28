@@ -42,6 +42,7 @@ class MicEnabledStoreTest {
 
         store.setEnabled("9", enabled = true)
 
+        verifyOnlyPrefsFile(ctx, USER_PREFERENCES_FILE)
         assertEquals(true, backing["mic_enabled:9"])
         assertEquals(true, store.state.value["9"])
         assertTrue(store.isEnabled("9"))

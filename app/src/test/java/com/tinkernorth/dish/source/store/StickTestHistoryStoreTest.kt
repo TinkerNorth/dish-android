@@ -33,7 +33,7 @@ class StickTestHistoryStoreTest {
 
     @Test
     fun `a corrupt history blob reads as empty`() {
-        val (ctx, _) = mapBackedPrefs(mutableMapOf(StickTestHistoryStore.KEY to "{not json"))
+        val (ctx, _) = mapBackedPrefs(mutableMapOf(PERSISTED_KEY to "{not json"))
 
         assertTrue(StickTestHistoryStore(ctx, json).state.value.isEmpty())
     }
@@ -88,7 +88,8 @@ class StickTestHistoryStoreTest {
         val store = StickTestHistoryStore(ctx, json)
         store.noteDrift("a", left = 0.1f, right = 0.2f, suggestedDeadzone = 0.15f, nowMs = 5L)
         store.noteRange("b", reachLeft = 0.9f, reachRight = 0.95f, circularityLeft = null, circularityRight = null, nowMs = 9L)
-        assertTrue(backing.containsKey(StickTestHistoryStore.KEY))
+        assertTrue(backing.containsKey(PERSISTED_KEY))
+        verifyOnlyPrefsFile(ctx, PERSISTED_FILE)
 
         val reread = StickTestHistoryStore(ctx, json)
 
@@ -104,5 +105,11 @@ class StickTestHistoryStoreTest {
         store.noteDrift("a", left = 0.1f, right = 0.2f, suggestedDeadzone = 0.15f, nowMs = 5L)
 
         assertNull(store.recordFor("b"))
+    }
+
+    // Backup schema: the history is its own file, apart from the user preferences.
+    private companion object {
+        const val PERSISTED_FILE = "stick_test_history"
+        const val PERSISTED_KEY = "records"
     }
 }
