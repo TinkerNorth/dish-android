@@ -2,6 +2,9 @@
 
 package com.tinkernorth.dish.ui.diagnostics
 
+import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.composer.ConnectionSummary
+import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.store.LatencyProfilingStore
 import com.tinkernorth.dish.source.system.WifiLinkSource
@@ -12,6 +15,7 @@ import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -36,10 +40,12 @@ class DiagnosticsViewModelTest {
             every { hotPathBenchJson(false) } returns """{"rtt_us":{"n":4,"p50":6000.0}}"""
         }
     private val wifi = mockk<WifiLinkSource>(relaxed = true)
+    private val sources = mockk<DiagnosticsSources>(relaxed = true)
 
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
+        every { sources.world } returns flowOf(worldWithOneSatellite())
     }
 
     @After
@@ -53,9 +59,45 @@ class DiagnosticsViewModelTest {
             native,
             wifi,
             Json { ignoreUnknownKeys = true },
-            mockk(relaxed = true),
+            sources,
             mockk(relaxed = true),
         )
+
+    private fun worldWithOneSatellite(): DiagnosticsWorld {
+        val satellite =
+            ConnectionSummary(
+                id = SATELLITE_ID,
+                kind = ConnectionKind.SATELLITE,
+                label = SATELLITE_LABEL,
+                detail = "",
+                live = LinkState.Connected,
+                boundSlotIds = emptyList(),
+            )
+        return DiagnosticsWorld(
+            devices = emptyMap(),
+            virtualName = "Virtual Controller",
+            bindings = emptyMap(),
+            summaries = listOf(satellite),
+            satellites = emptyMap(),
+            rates = emptyMap(),
+            batteries = emptyMap(),
+            caps = emptyMap(),
+            hostFeatures = emptyMap(),
+            serverVersions = emptyMap(),
+        )
+    }
+
+    private fun satelliteRows(): LatencyRows {
+        val unmeasured =
+            HostLatencyRow(
+                label = SATELLITE_LABEL,
+                kind = ConnectionKind.SATELLITE,
+                oneWayMs = null,
+                samples = 0,
+                controlRttMs = null,
+            )
+        return LatencyRows(hosts = listOf(unmeasured), pads = emptyList())
+    }
 
     @Test
     fun `latency is off while profiling is disabled and no probe runs`() =
@@ -108,12 +150,14 @@ class DiagnosticsViewModelTest {
 
             val off = vm.latencyPanel.value
             assertEquals(DiagnosticsViewModel.LatencyUi.Off, off.ui)
-            assertEquals(DiagnosticsViewModel.Overview.EMPTY.latencyRows, off.rows)
+            assertEquals(satelliteRows(), off.rows)
 
             profilingEnabled.value = true
             dispatcher.scheduler.runCurrent()
 
-            assertTrue(vm.latencyPanel.value.ui is DiagnosticsViewModel.LatencyUi.Stats)
+            val measuring = vm.latencyPanel.value
+            assertTrue(measuring.ui is DiagnosticsViewModel.LatencyUi.Stats)
+            assertEquals(satelliteRows(), measuring.rows)
             job.cancel()
         }
 
@@ -132,4 +176,9 @@ class DiagnosticsViewModelTest {
             assertEquals(DiagnosticsViewModel.LatencyUi.Off, vm.latency.value)
             job.cancel()
         }
+
+    private companion object {
+        const val SATELLITE_ID = "sat"
+        const val SATELLITE_LABEL = "Living Room"
+    }
 }
