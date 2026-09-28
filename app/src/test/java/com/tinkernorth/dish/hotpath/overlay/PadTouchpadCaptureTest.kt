@@ -8,10 +8,10 @@ import android.view.MotionEvent
 import android.view.View
 import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.PhysicalReachabilityComposer
-import com.tinkernorth.dish.hotpath.input.PadTouchFrame
-import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.EVERY_POINTER_LIFTING
 import com.tinkernorth.dish.hotpath.input.NO_POINTER_LIFTING
+import com.tinkernorth.dish.hotpath.input.PadTouchFrame
+import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.TelemetrySink
 import com.tinkernorth.dish.source.connection.TouchpadReport
 import io.mockk.Called

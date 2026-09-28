@@ -2,8 +2,8 @@
 
 package com.tinkernorth.dish.hotpath.input
 
-import com.tinkernorth.dish.composer.TouchpadSource
 import com.tinkernorth.dish.architecture.testing.allocatedBytesDuring
+import com.tinkernorth.dish.composer.TouchpadSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

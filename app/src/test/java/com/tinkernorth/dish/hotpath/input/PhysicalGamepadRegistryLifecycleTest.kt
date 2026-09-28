@@ -382,8 +382,7 @@ class PhysicalGamepadRegistryLifecycleTest {
             .getValue(PAD)
             .hasLightbar
 
-    private fun sensors(gyroscope: Sensor?): SensorManager =
-        mockk { every { getDefaultSensor(Sensor.TYPE_GYROSCOPE) } returns gyroscope }
+    private fun sensors(gyroscope: Sensor?): SensorManager = mockk { every { getDefaultSensor(Sensor.TYPE_GYROSCOPE) } returns gyroscope }
 
     // A DualShock 4's light bar as hid-sony composes it, the way API 31 to 33 names it.
     private fun composedLightbar(): Light =
