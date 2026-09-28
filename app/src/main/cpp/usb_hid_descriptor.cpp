@@ -92,9 +92,8 @@ uint32_t extractBits(const uint8_t* d, const size_t dlen, const uint32_t bitOff,
 }
 
 // HID 1.11 §6.2.2.7 reads a field as unsigned when both logical bounds are non-negative. Like
-// Linux hid-core, this decides on the minimum alone, because a common descriptor bug writes Logical
-// Maximum 255 as the one-byte 0x25 0xFF, which reads as -1. An unsigned field keeps all 32 bits as
-// magnitude, so a value above its range stays above it.
+// Linux hid-core, this decides on the minimum alone (fieldLogicalMax says why). An unsigned field
+// keeps all 32 bits as magnitude, so a value above its range stays above it.
 int64_t toSigned(const uint32_t raw, const uint8_t bits, const int32_t logicalMin) {
     const bool isAnUnsignedField = logicalMin >= 0;
     if (isAnUnsignedField) return raw;
@@ -165,7 +164,7 @@ uint16_t switchOrderButtonBit(const uint8_t idx) {
 }
 
 void setAxis(HidAxis& a, const uint32_t bit, const uint32_t size, const int32_t lo,
-             const int32_t hi) {
+             const int64_t hi) {
     if (a.present) return;
     a.present = true;
     a.bitOffset = (uint16_t)bit;
@@ -175,7 +174,7 @@ void setAxis(HidAxis& a, const uint32_t bit, const uint32_t size, const int32_t 
 }
 
 void setHat(HidLayout& out, const uint32_t bit, const uint32_t size, const int32_t lo,
-            const int32_t hi) {
+            const int64_t hi) {
     if (out.hasHat) return;
     out.hasHat = true;
     out.hatBitOffset = (uint16_t)bit;
@@ -187,7 +186,7 @@ void setHat(HidLayout& out, const uint32_t bit, const uint32_t size, const int32
 // Generic Desktop: X/Y the left stick, Z/Rz the right stick and Rx/Ry the triggers, matching the
 // convention the fixed-offset fallback assumes.
 void assignGenericDesktopUsage(HidLayout& out, const uint32_t usage, const uint32_t bit,
-                               const uint32_t size, const int32_t lo, const int32_t hi) {
+                               const uint32_t size, const int32_t lo, const int64_t hi) {
     switch (usage) {
     case kUsageX:
         setAxis(out.lx, bit, size, lo, hi);
@@ -216,7 +215,7 @@ void assignGenericDesktopUsage(HidLayout& out, const uint32_t usage, const uint3
 }
 
 void assignSimulationUsage(HidLayout& out, const uint32_t usage, const uint32_t bit,
-                           const uint32_t size, const int32_t lo, const int32_t hi) {
+                           const uint32_t size, const int32_t lo, const int64_t hi) {
     switch (usage) {
     case kUsageBrake:
         setAxis(out.lt, bit, size, lo, hi);
@@ -230,7 +229,7 @@ void assignSimulationUsage(HidLayout& out, const uint32_t usage, const uint32_t 
 }
 
 void assignUsage(HidLayout& out, const uint32_t page, const uint32_t usage, const uint32_t bit,
-                 const uint32_t size, const int32_t lo, const int32_t hi) {
+                 const uint32_t size, const int32_t lo, const int64_t hi) {
     switch (page) {
     case kUsagePageGenericDesktop:
         assignGenericDesktopUsage(out, usage, bit, size, lo, hi);
@@ -322,7 +321,9 @@ struct HidGlobals {
     uint32_t reportSize;
     uint32_t reportCount;
     int32_t logMin;
-    int32_t logMax;
+    // The Logical Maximum as its item's bytes, zero-extended: fieldLogicalMax reads its sign.
+    uint32_t logMaxData;
+    uint8_t logMaxBytes;
     uint8_t currentReportId;
 };
 
@@ -370,7 +371,8 @@ bool applyGlobalItem(const HidItem& item, HidParseState& st) {
         g.logMin = signExtend(item.data, item.dataLen);
         return true;
     case kGlobalLogicalMax:
-        g.logMax = signExtend(item.data, item.dataLen);
+        g.logMaxData = item.data;
+        g.logMaxBytes = item.dataLen;
         return true;
     case kGlobalReportSize:
         g.reportSize = item.data;
@@ -436,13 +438,24 @@ uint32_t firstFieldPage(const HidParseState& st) {
     return fieldUsage(st, 0).page;
 }
 
+// A field whose minimum is non-negative is unsigned, and so is its maximum: a common descriptor bug
+// writes Logical Maximum 255 as the one-byte 0x25 0xFF, which sign-extends to -1. Linux reads the
+// maximum the same way (hid-core.c hid_parser_global: item_udata unless logical_minimum < 0), but
+// at the Logical Maximum item; this reads it against the minimum in force at the Input.
+int64_t fieldLogicalMax(const HidGlobals& g) {
+    const bool isAnUnsignedField = g.logMin >= 0;
+    if (isAnUnsignedField) return g.logMaxData;
+    return signExtend(g.logMaxData, g.logMaxBytes);
+}
+
 void takeAxisFields(const HidParseState& st, const uint32_t startBit, HidLayout& out) {
     if (!namesAUsage(st)) return;
     const HidGlobals& g = st.globals;
+    const int64_t logMax = fieldLogicalMax(g);
     for (uint32_t f = 0; f < g.reportCount; f++) {
         const Usage usage = fieldUsage(st, f);
         assignUsage(out, usage.page, usage.id, startBit + f * g.reportSize, g.reportSize, g.logMin,
-                    g.logMax);
+                    logMax);
     }
 }
 
@@ -527,8 +540,8 @@ void decodeLayoutAxes(const uint8_t* d, const size_t dlen, const HidLayout& L, D
 uint16_t decodeLayoutHat(const uint8_t* d, const size_t dlen, const HidLayout& L) {
     if (!L.hasHat) return 0;
     const uint32_t raw = extractBits(d, dlen, L.hatBitOffset, L.hatBitSize);
-    const int dir = (int)raw - (int)L.hatLogicalMin;
-    const int range = (int)L.hatLogicalMax - (int)L.hatLogicalMin;
+    const int64_t dir = (int64_t)raw - L.hatLogicalMin;
+    const int64_t range = L.hatLogicalMax - L.hatLogicalMin;
     const bool isInsideTheDeclaredRange = dir >= 0 && dir <= range;
     if (!isInsideTheDeclaredRange) return 0;
     return gamepad::hatDirectionBits(dir);

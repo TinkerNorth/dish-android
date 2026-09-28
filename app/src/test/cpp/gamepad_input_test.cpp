@@ -929,6 +929,12 @@ TEST(HatDirectionBits, OutsideTheEightIsCentred) {
     EXPECT_EQ(0, hatDirectionBits(255));
 }
 
+TEST(HatDirectionBits, ADirectionPastIntsRangeIsCentredNotWrappedOntoTheEight) {
+    // A 32-bit hat field less a negative Logical Minimum counts past int's range.
+    EXPECT_EQ(0, hatDirectionBits(INT64_C(0x100000002)));
+    EXPECT_EQ(0, hatDirectionBits(INT64_C(-0x100000000) + 2));
+}
+
 // ── applyAxes: the hat threshold, the right-stick deadzone and the held right trigger ──
 
 TEST(ApplyAxes, HatJustInsideHalfIsCentred) {

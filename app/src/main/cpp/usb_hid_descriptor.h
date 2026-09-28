@@ -18,7 +18,7 @@ struct HidAxis {
     uint16_t bitOffset = 0;
     uint8_t bitSize = 0;
     int32_t logicalMin = 0;
-    int32_t logicalMax = 0;
+    int64_t logicalMax = 0;
 };
 
 // A gamepad field map distilled from a HID report descriptor: where each stick/trigger/hat/button
@@ -32,7 +32,7 @@ struct HidLayout {
     uint16_t hatBitOffset = 0;
     uint8_t hatBitSize = 0;
     int32_t hatLogicalMin = 0;
-    int32_t hatLogicalMax = 0;
+    int64_t hatLogicalMax = 0;
     uint16_t buttonBitOffset = 0;
     uint8_t buttonCount = 0;
     // Set by the attach path from the model catalog, after parseReportDescriptor resets the

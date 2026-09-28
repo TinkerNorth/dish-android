@@ -33,7 +33,7 @@ constexpr uint16_t HAT_DIRECTION_BITS[] = {
 };
 
 // Zero for any direction outside the eight, which is how every HID hat spells centred.
-constexpr uint16_t hatDirectionBits(const int direction) {
+constexpr uint16_t hatDirectionBits(const int64_t direction) {
     const bool isADirection = direction >= 0 && direction < 8;
     if (!isADirection) return 0;
     return HAT_DIRECTION_BITS[direction];

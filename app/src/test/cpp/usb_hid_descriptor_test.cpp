@@ -936,6 +936,171 @@ TEST(HidDescriptor, ASignedThirtyTwoBitFieldReadsItsTopBitAsTheSign) {
 
 namespace {
 
+constexpr uint8_t kReportSizeByte = 8;
+constexpr uint8_t kReportSizeWord = 16;
+constexpr uint8_t kReportSizeDword = 32;
+
+// One X axis of reportSize bits whose logical bounds are the given Global items, in the given
+// order: {X}.
+std::vector<uint8_t> xAxisWithBounds(const std::vector<uint8_t>& boundItems,
+                                     const uint8_t reportSize) {
+    std::vector<uint8_t> d = {
+        0x05, 0x01, // Usage Page (Generic Desktop)
+        0x09, 0x05, // Usage (Game Pad)
+        0xA1, 0x01, // Collection (Application)
+        0x09, 0x30, //   Usage (X)
+    };
+    d.insert(d.end(), boundItems.begin(), boundItems.end());
+    const uint8_t field[] = {
+        0x75, reportSize, //   Report Size
+        0x95, 0x01,       //   Report Count (1)
+        0x81, 0x02,       //   Input (Data,Var,Abs)
+        0xC0,             // End Collection
+    };
+    d.insert(d.end(), field, field + sizeof(field));
+    return d;
+}
+
+HidLayout parsedXAxisWithBounds(const std::vector<uint8_t>& boundItems, const uint8_t reportSize) {
+    const std::vector<uint8_t> d = xAxisWithBounds(boundItems, reportSize);
+    return parsed(d.data(), d.size());
+}
+
+// An unsigned field's one-byte maximum 0xFF, pushed, overwritten by a four-byte 0xFFFFFFFF, popped.
+const std::vector<uint8_t> kUnsignedMaximumPushedAroundAWiderOne = {
+    0x15, 0x00,                   // Logical Minimum (0)
+    0x25, 0xFF,                   // Logical Maximum (one-byte 0xFF)
+    0xA4,                         // Push
+    0x27, 0xFF, 0xFF, 0xFF, 0xFF, // Logical Maximum (four-byte 0xFFFFFFFF)
+    0xB4,                         // Pop
+};
+
+// A signed field's one-byte maximum -1, pushed, overwritten by the two-byte 0x00FF, popped: the
+// same data byte reads as -1 only at the size it was written in.
+const std::vector<uint8_t> kSignedMaximumPushedAroundAWiderOne = {
+    0x15, 0x81,       // Logical Minimum (-127)
+    0x25, 0xFF,       // Logical Maximum (one-byte -1)
+    0xA4,             // Push
+    0x26, 0xFF, 0x00, // Logical Maximum (two-byte 255)
+    0xB4,             // Pop
+};
+
+// X, then an Rx trigger whose Logical Maximum 255 is written as the one-byte 0x25 0xFF: {X, Rx}.
+const uint8_t kTriggerWithAOneByteMaximumOf255Descriptor[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x05,       // Usage (Game Pad)
+    0xA1, 0x01,       // Collection (Application)
+    0x09, 0x30,       //   Usage (X)
+    0x15, 0x00,       //   Logical Minimum (0)
+    0x26, 0xFF, 0x00, //   Logical Maximum (255)
+    0x75, 0x08,       //   Report Size (8)
+    0x95, 0x01,       //   Report Count (1)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0x09, 0x33,       //   Usage (Rx)
+    0x25, 0xFF,       //   Logical Maximum (255, written as the one-byte -1)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xC0,             // End Collection
+};
+
+} // namespace
+
+TEST(HidDescriptor, AOneByteMaximumOf0xFFOnAnUnsignedFieldIs255) {
+    const HidLayout L = parsedXAxisWithBounds({0x15, 0x00, 0x25, 0xFF}, kReportSizeByte);
+    EXPECT_EQ(0, L.lx.logicalMin);
+    EXPECT_EQ(255, L.lx.logicalMax);
+    EXPECT_EQ(32767, decoded(L, {0xFF}).sLX);
+    EXPECT_EQ(-32767, decoded(L, {0x00}).sLX);
+}
+
+TEST(HidDescriptor, ATwoByteMaximumOf0xFFFFOnAnUnsignedFieldIs65535) {
+    const HidLayout L = parsedXAxisWithBounds({0x15, 0x00, 0x26, 0xFF, 0xFF}, kReportSizeWord);
+    EXPECT_EQ(65535, L.lx.logicalMax);
+    EXPECT_EQ(32767, decoded(L, {0xFF, 0xFF}).sLX);
+    EXPECT_EQ(-32767, decoded(L, {0x00, 0x00}).sLX);
+}
+
+TEST(HidDescriptor, AFourByteMaximumOf0xFFFFFFFFOnAnUnsignedFieldIsFourBillion) {
+    const HidLayout L =
+        parsedXAxisWithBounds({0x15, 0x00, 0x27, 0xFF, 0xFF, 0xFF, 0xFF}, kReportSizeDword);
+    EXPECT_EQ(INT64_C(0xFFFFFFFF), L.lx.logicalMax);
+    EXPECT_EQ(32767, decoded(L, {0xFF, 0xFF, 0xFF, 0xFF}).sLX);
+    EXPECT_EQ(-32767, decoded(L, {0x00, 0x00, 0x00, 0x00}).sLX);
+}
+
+TEST(HidDescriptor, TheMostNegativeOneByteMaximumOnAnUnsignedFieldIs128) {
+    const HidLayout L = parsedXAxisWithBounds({0x15, 0x00, 0x25, 0x80}, kReportSizeByte);
+    EXPECT_EQ(128, L.lx.logicalMax);
+}
+
+TEST(HidDescriptor, TheLargestPositiveOneByteMaximumIsReadAsItIs) {
+    const HidLayout L = parsedXAxisWithBounds({0x15, 0x00, 0x25, 0x7F}, kReportSizeByte);
+    EXPECT_EQ(127, L.lx.logicalMax);
+}
+
+TEST(HidDescriptor, AMinimumOfMinusOneKeepsANegativeMaximumSigned) {
+    const HidLayout L = parsedXAxisWithBounds({0x15, 0xFF, 0x25, 0xFF}, kReportSizeByte);
+    EXPECT_EQ(-1, L.lx.logicalMin);
+    EXPECT_EQ(-1, L.lx.logicalMax);
+}
+
+TEST(HidDescriptor, ASignedFieldWithANegativeMaximumDecodesAcrossItsRange) {
+    const HidLayout L = parsedXAxisWithBounds({0x15, 0x81, 0x25, 0xFF}, kReportSizeByte);
+    EXPECT_EQ(-127, L.lx.logicalMin);
+    EXPECT_EQ(-1, L.lx.logicalMax);
+    EXPECT_EQ(-32767, decoded(L, {0x81}).sLX);
+    EXPECT_EQ(32767, decoded(L, {0xFF}).sLX);
+}
+
+TEST(HidDescriptor, AMaximumIsReadAgainstTheMinimumInForceAtTheInputNotAtItsOwnItem) {
+    // Linux decides at the Logical Maximum item, on whatever minimum came before it; the field
+    // takes the pair its Input sees, so declaring the bounds in either order reads the same.
+    const HidLayout L =
+        parsedXAxisWithBounds({0x15, 0x81, 0x25, 0xFF, 0x15, 0x00}, kReportSizeByte);
+    EXPECT_EQ(0, L.lx.logicalMin);
+    EXPECT_EQ(255, L.lx.logicalMax);
+}
+
+TEST(HidDescriptor, APopRestoresTheMaximumThePushSaved) {
+    const HidLayout L =
+        parsedXAxisWithBounds(kUnsignedMaximumPushedAroundAWiderOne, kReportSizeByte);
+    EXPECT_EQ(255, L.lx.logicalMax);
+}
+
+TEST(HidDescriptor, APopRestoresTheItemSizeTheMaximumWasWrittenIn) {
+    const HidLayout L = parsedXAxisWithBounds(kSignedMaximumPushedAroundAWiderOne, kReportSizeByte);
+    EXPECT_EQ(-1, L.lx.logicalMax);
+}
+
+TEST(HidDescriptor, ATriggerWithAOneByteMaximumOf0xFFIsFullyPressedAt255) {
+    const HidLayout L = parsed(kTriggerWithAOneByteMaximumOf255Descriptor,
+                               sizeof(kTriggerWithAOneByteMaximumOf255Descriptor));
+    ASSERT_TRUE(L.lt.present);
+    EXPECT_EQ(255, L.lt.logicalMax);
+    EXPECT_EQ(255, decoded(L, {0x80, 0xFF}).bLT);
+    EXPECT_EQ(0, decoded(L, {0x80, 0x00}).bLT);
+}
+
+TEST(HidDescriptor, AHatWithAFourByteMaximumOf0xFFFFFFFFKeepsItsDirections) {
+    const std::vector<uint8_t> d = {
+        0x05, 0x01,                   // Usage Page (Generic Desktop)
+        0x09, 0x05,                   // Usage (Game Pad)
+        0xA1, 0x01,                   // Collection (Application)
+        0x09, 0x39,                   //   Usage (Hat switch)
+        0x15, 0x00,                   //   Logical Minimum (0)
+        0x27, 0xFF, 0xFF, 0xFF, 0xFF, //   Logical Maximum (four-byte 0xFFFFFFFF)
+        0x75, 0x20,                   //   Report Size (32)
+        0x95, 0x01,                   //   Report Count (1)
+        0x81, 0x42,                   //   Input (Data,Var,Abs,Null)
+        0xC0,                         // End Collection
+    };
+    const HidLayout L = parsed(d.data(), d.size());
+    EXPECT_EQ(INT64_C(0xFFFFFFFF), L.hatLogicalMax);
+    EXPECT_EQ(XUSB_DPAD_RIGHT, decoded(L, {0x02, 0x00, 0x00, 0x00}).wButtons & XUSB_DPAD_MASK);
+    EXPECT_EQ(0, decoded(L, {0xFF, 0xFF, 0xFF, 0xFF}).wButtons & XUSB_DPAD_MASK);
+}
+
+namespace {
+
 // Report 1 carries X, report 2 two bytes of buttons, then report 1 resumes with Y: report 1 is
 // {0x01, X, Y} whatever report 2 declared in between.
 const uint8_t kReportResumedDescriptor[] = {
