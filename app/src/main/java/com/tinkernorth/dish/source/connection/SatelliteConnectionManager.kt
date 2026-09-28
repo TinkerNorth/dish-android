@@ -48,6 +48,7 @@ import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
@@ -137,7 +138,7 @@ class SatelliteConnectionManager
 
         // Silent retries still waiting out their backoff, per satellite id: disconnect cancels
         // them all, since one that fired afterwards would undo the disconnect.
-        private val pendingRetries = java.util.concurrent.ConcurrentHashMap<String, MutableSet<Job>>()
+        private val pendingRetries = ConcurrentHashMap<String, MutableSet<Job>>()
 
         // Single-flight reconcile guard per id: heartbeat ticks fire every
         // second, the reconcile round-trip can take longer.
@@ -765,7 +766,7 @@ class SatelliteConnectionManager
             id: String,
             retry: Job,
         ) {
-            val pending = pendingRetries.computeIfAbsent(id) { java.util.concurrent.ConcurrentHashMap.newKeySet() }
+            val pending = pendingRetries.computeIfAbsent(id) { ConcurrentHashMap.newKeySet() }
             pending += retry
             retry.invokeOnCompletion { pending -= retry }
         }

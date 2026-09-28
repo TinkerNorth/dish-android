@@ -340,31 +340,37 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
     private fun staleRetryAgainst(
         tapState: SatelliteSessionState,
         tapPutSession: suspend () -> com.tinkernorth.dish.core.net.HttpReply,
-    ) =
-        runMgrTest { mgr, _ ->
-            val stable = server.copy(machineId = "m1")
-            val stableId = SatelliteConnection.idFor(stable)
-            every { store.satelliteSharedKey(stableId) } returns "aa".repeat(32)
-            every { controllerRepo.openSocket(any(), any()) } returns 5
-            coEvery {
-                discoveryRepo.putSession(server.ip, any(), any(), any(), any(), any(), any(), any())
-            } returns unreachable()
-            coEvery {
-                discoveryRepo.putSession(MOVED_IP, any(), any(), any(), any(), any(), any(), any())
-            } coAnswers { tapPutSession() }
-            mgr.connect(stable, ConnectIntent.AUTO_RECONNECT)
-            scope.testScheduler.runCurrent()
-            mgr.connect(stable.copy(ip = MOVED_IP), ConnectIntent.USER_INITIATED)
-            scope.testScheduler.runCurrent()
-            assertEquals(tapState, mgr.get(stableId)?.state?.value)
+    ) = runMgrTest { mgr, _ ->
+        val stable = server.copy(machineId = "m1")
+        val stableId = SatelliteConnection.idFor(stable)
+        every { store.satelliteSharedKey(stableId) } returns "aa".repeat(32)
+        every { controllerRepo.openSocket(any(), any()) } returns 5
+        coEvery {
+            discoveryRepo.putSession(server.ip, any(), any(), any(), any(), any(), any(), any())
+        } returns unreachable()
+        coEvery {
+            discoveryRepo.putSession(MOVED_IP, any(), any(), any(), any(), any(), any(), any())
+        } coAnswers { tapPutSession() }
+        mgr.connect(stable, ConnectIntent.AUTO_RECONNECT)
+        scope.testScheduler.runCurrent()
+        mgr.connect(stable.copy(ip = MOVED_IP), ConnectIntent.USER_INITIATED)
+        scope.testScheduler.runCurrent()
+        assertEquals(tapState, mgr.get(stableId)?.state?.value)
 
-            scope.testScheduler.advanceTimeBy(PAST_FIRST_BACKOFF_MS)
-            scope.testScheduler.runCurrent()
+        scope.testScheduler.advanceTimeBy(PAST_FIRST_BACKOFF_MS)
+        scope.testScheduler.runCurrent()
 
-            assertEquals(MOVED_IP, mgr.get(stableId)?.server?.value?.ip)
-            assertEquals(tapState, mgr.get(stableId)?.state?.value)
-            coVerify(exactly = 2) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
-        }
+        assertEquals(
+            MOVED_IP,
+            mgr
+                .get(stableId)
+                ?.server
+                ?.value
+                ?.ip,
+        )
+        assertEquals(tapState, mgr.get(stableId)?.state?.value)
+        coVerify(exactly = 2) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
+    }
 
     @Test
     fun `a silent retry leaves a connection mid-handshake at the address the tap dialled`() =
