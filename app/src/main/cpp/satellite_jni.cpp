@@ -194,12 +194,17 @@ enum SlotKind : uint8_t {
     SLOT_MOONLIGHT = 3
 };
 
+// The Kotlin-side connection id of a bridge slot (Bluetooth / Moonlight). Built once when the slot
+// binds and shared, never copied: every report the slot queues points at the same string, so the
+// per-event path bumps a reference count where a std::string copy would allocate (an id is longer
+// than the small-string buffer). Null for a satellite slot or a bind that named no connection.
+using BridgeConnectionId = std::shared_ptr<const std::string>;
+
 struct SlotBinding {
     SlotKind kind = SLOT_NONE;
     int sessionHandle = -1;
     int controllerIndex = -1;
-    // Kotlin-side connection id for the bridge kinds (Bluetooth / Moonlight).
-    std::string bridgeConnectionId;
+    BridgeConnectionId bridgeConnectionId;
 };
 
 static std::mutex g_devicesMtx;
@@ -241,7 +246,7 @@ struct BridgeReport {
     // touch samples off the USB reader thread (Bluetooth stays gamepad-only).
     enum Payload : uint8_t { GAMEPAD = 0, MOTION = 1, TOUCH = 2 };
     Payload payload = GAMEPAD;
-    std::string connectionId;
+    BridgeConnectionId connectionId;
     int32_t controllerNumber;
     uint16_t wButtons;
     uint8_t bLT, bRT;
@@ -338,7 +343,7 @@ static void dispatchBridgeReport(JNIEnv* env, const BridgeReport& r) {
     jmethodID method = nullptr;
     if (!bridgeTargetFor(r, cls, method)) return;
 
-    jstring connId = env->NewStringUTF(r.connectionId.c_str());
+    jstring connId = env->NewStringUTF(r.connectionId->c_str());
     callBridgeUpcall(env, cls, method, connId, r);
     env->DeleteLocalRef(connId);
     if (env->ExceptionCheck()) env->ExceptionClear();
@@ -606,7 +611,7 @@ static void publishGamepadToSatellite(const SlotBinding& binding, const DeviceSt
 // Bluetooth and Moonlight both leave through Kotlin, so the state is queued for the bridge thread
 // rather than written here: this call holds g_slotsMtx and must not make a JVM upcall under it.
 static void publishGamepadToBridge(const SlotBinding& binding, const DeviceState& s) {
-    if (binding.bridgeConnectionId.empty()) return;
+    if (!binding.bridgeConnectionId) return;
     BridgeReport r{};
     r.kind = binding.kind;
     r.payload = BridgeReport::GAMEPAD;
@@ -784,7 +789,7 @@ struct MotionSample {
 // Kotlin translates to CONTROLLER_MOTION and drops samples the host never asked for (MOTION_EVENT
 // gate), so this stays fire-and-forget.
 static void publishMotionToBridge(const SlotBinding& binding, const MotionSample& m) {
-    if (binding.bridgeConnectionId.empty()) return;
+    if (!binding.bridgeConnectionId) return;
     BridgeReport r{};
     r.kind = SLOT_MOONLIGHT;
     r.payload = BridgeReport::MOTION;
@@ -834,7 +839,7 @@ void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyro
 // satellite receiver's job, declared per slot in the descriptor.
 // eventTimeMs is not carried: Moonlight re-times these events on the reliable control stream.
 static void publishTouchToBridge(const SlotBinding& binding, const gamepad::TouchpadState& t) {
-    if (binding.bridgeConnectionId.empty()) return;
+    if (!binding.bridgeConnectionId) return;
     BridgeReport r{};
     r.kind = SLOT_MOONLIGHT;
     r.payload = BridgeReport::TOUCH;
@@ -1636,15 +1641,21 @@ Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_bindPhysicalSlotSatellite(
         b.kind = SLOT_SATELLITE;
         b.sessionHandle = sessionHandle;
         b.controllerIndex = controllerIndex;
-        b.bridgeConnectionId.clear();
+        b.bridgeConnectionId.reset();
     }
     syncSlotBaseline(deviceId);
+}
+
+// An empty id names no connection, as a missing one does: the slot then publishes nothing.
+static BridgeConnectionId bridgeConnectionIdOf(const char* utf) {
+    if (utf == nullptr || utf[0] == '\0') return nullptr;
+    return std::make_shared<const std::string>(utf);
 }
 
 static void bindPhysicalSlotBridge(JNIEnv* env, jint deviceId, jstring connectionId, SlotKind kind,
                                    jint controllerIndex) {
     const char* cstr = env->GetStringUTFChars(connectionId, nullptr);
-    std::string copy = cstr ? std::string(cstr) : std::string();
+    BridgeConnectionId id = bridgeConnectionIdOf(cstr);
     if (cstr) env->ReleaseStringUTFChars(connectionId, cstr);
     {
         std::lock_guard<std::mutex> lock(g_slotsMtx);
@@ -1652,7 +1663,7 @@ static void bindPhysicalSlotBridge(JNIEnv* env, jint deviceId, jstring connectio
         b.kind = kind;
         b.sessionHandle = -1;
         b.controllerIndex = controllerIndex;
-        b.bridgeConnectionId = std::move(copy);
+        b.bridgeConnectionId = std::move(id);
     }
     syncSlotBaseline(deviceId);
 }
