@@ -236,9 +236,9 @@ class PhysicalGamepadRegistry
         ): Device {
             val vid = dev.vendorIdOrZero()
             val pid = dev.productIdOrZero()
-            val hasGyro = hasGyro(deviceId)
+            val hasGyro = hasGyro(deviceId, sdkInt)
             val hasRumble = probeRumble(dev)
-            val hasLightbar = hasLightbar(dev)
+            val hasLightbar = hasLightbar(dev, sdkInt)
             val touchpadDeviceId = touchpadSurfaceFor(deviceId, dev, vid, pid)
             if (vid != 0 && pid != 0) {
                 lastFrameworkCaps[vidPidKey(vid, pid)] =
@@ -519,9 +519,9 @@ class PhysicalGamepadRegistry
             dev: InputDevice,
             current: Device?,
         ) = ProbedCapabilities(
-            hasGyro = hasGyro(deviceId),
+            hasGyro = hasGyro(deviceId, sdkInt),
             hasRumble = probeRumble(dev),
-            hasLightbar = hasLightbar(dev),
+            hasLightbar = hasLightbar(dev, sdkInt),
             touchpadDeviceId =
                 touchpadSurfaceFor(deviceId, dev, current?.vendorId ?: 0, current?.productId ?: 0),
         )

@@ -48,14 +48,6 @@ class PhysicalMotionProbeTest {
     }
 
     @Test
-    fun `returns false on API below 31 - per-device sensor API does not exist`() {
-        // The JVM stub reports SDK_INT 0, so the gate in hasGyro is what answers here: it must
-        // never reach the per-device sensor read.
-        assertTrue(Build.VERSION.SDK_INT < Build.VERSION_CODES.S)
-        assertFalse(hasGyro(deviceId = 7))
-    }
-
-    @Test
     fun `below API 31 the pad is never looked up`() {
         assertFalse(hasGyro(deviceId = 7, sdkInt = Build.VERSION_CODES.R))
         verify(exactly = 0) { InputDevice.getDevice(any()) }

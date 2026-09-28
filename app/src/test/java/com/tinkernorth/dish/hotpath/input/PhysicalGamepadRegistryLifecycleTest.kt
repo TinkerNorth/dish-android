@@ -4,7 +4,11 @@
 package com.tinkernorth.dish.hotpath.input
 
 import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorManager
 import android.hardware.input.InputManager
+import android.hardware.lights.Light
+import android.hardware.lights.LightsManager
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Build
@@ -13,6 +17,7 @@ import android.os.VibratorManager
 import android.view.InputDevice
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.bluetooth.BluetoothConnections
+import com.tinkernorth.dish.source.lights.COMPOSED_RGB_LIGHT_NAME
 import com.tinkernorth.dish.source.usb.DirectClaimFailure
 import io.mockk.every
 import io.mockk.just
@@ -38,8 +43,8 @@ import org.junit.Test
 // The InputDevice lifecycle callbacks and the model mutators the USB path drives: what the
 // registry publishes when Android adds, changes or removes a pad, and what a path switch holds.
 // The registry is built for API 24 unless a case says otherwise, so the touch-surface probe reads
-// absent and the rumble probe takes the legacy vibrator, the capability these flows exercise. The
-// gyro and light-bar probes read Build.VERSION.SDK_INT, which is 0 here, and always read absent.
+// absent, the rumble probe takes the legacy vibrator, the capability these flows exercise, and the
+// gyro and light-bar probes, whose per-device APIs start at 31, read absent.
 @OptIn(ExperimentalCoroutinesApi::class)
 class PhysicalGamepadRegistryLifecycleTest {
     private val dispatcher = StandardTestDispatcher()
@@ -365,6 +370,106 @@ class PhysicalGamepadRegistryLifecycleTest {
         assertFalse(rumbleOfPad(registry))
     }
 
+    // ---- the gyro and light-bar probes: both per-device APIs start at 31 ----
+
+    private fun gyroOfPad(registry: PhysicalGamepadRegistry): Boolean =
+        registry.devices.value
+            .getValue(PAD)
+            .hasGyro
+
+    private fun lightbarOfPad(registry: PhysicalGamepadRegistry): Boolean =
+        registry.devices.value
+            .getValue(PAD)
+            .hasLightbar
+
+    private fun sensors(gyroscope: Sensor?): SensorManager =
+        mockk { every { getDefaultSensor(Sensor.TYPE_GYROSCOPE) } returns gyroscope }
+
+    // A DualShock 4's light bar as hid-sony composes it, the way API 31 to 33 names it.
+    private fun composedLightbar(): Light =
+        mockk {
+            every { id } returns LIGHT_BAR
+            every { name } returns COMPOSED_RGB_LIGHT_NAME
+            every { type } returns Light.LIGHT_TYPE_INPUT
+            every { hasRgbControl() } returns true
+        }
+
+    private fun lights(vararg listed: Light): LightsManager = mockk { every { lights } returns listed.toList() }
+
+    @Test
+    fun `through API 30 a pad reports no gyro and its sensors are never asked`() {
+        val registry = buildRegistry(sdkInt = Build.VERSION_CODES.R)
+        val pad = frameworkPad(PAD)
+        every { pad.sensorManager } returns sensors(gyroscope = mockk())
+
+        addPad(registry, pad)
+
+        assertFalse(gyroOfPad(registry))
+        verify(exactly = 0) { pad.sensorManager }
+    }
+
+    @Test
+    fun `from API 31 a pad with a gyroscope reports gyro`() {
+        val registry = buildRegistry(sdkInt = Build.VERSION_CODES.S)
+        val pad = frameworkPad(PAD)
+        every { pad.sensorManager } returns sensors(gyroscope = mockk())
+
+        addPad(registry, pad)
+
+        assertTrue(gyroOfPad(registry))
+    }
+
+    @Test
+    fun `from API 31 a gyroscope that enumerates late lands on the re-probe`() {
+        val registry = buildRegistry(sdkInt = Build.VERSION_CODES.S)
+        val pad = frameworkPad(PAD)
+        every { pad.sensorManager } returns sensors(gyroscope = null)
+        addPad(registry, pad)
+        assertFalse(gyroOfPad(registry))
+
+        every { pad.sensorManager } returns sensors(gyroscope = mockk())
+        registry.onInputDeviceChanged(PAD)
+
+        assertTrue(gyroOfPad(registry))
+    }
+
+    @Test
+    fun `through API 30 a pad reports no light bar and its lights are never listed`() {
+        val registry = buildRegistry(sdkInt = Build.VERSION_CODES.R)
+        val pad = frameworkPad(PAD)
+        every { pad.lightsManager } returns lights(composedLightbar())
+
+        addPad(registry, pad)
+
+        assertFalse(lightbarOfPad(registry))
+        verify(exactly = 0) { pad.lightsManager }
+    }
+
+    @Test
+    fun `from API 31 a pad with a light bar reports it`() {
+        val registry = buildRegistry(sdkInt = Build.VERSION_CODES.S)
+        val pad = frameworkPad(PAD)
+        every { pad.lightsManager } returns lights(composedLightbar())
+
+        addPad(registry, pad)
+
+        assertTrue(lightbarOfPad(registry))
+    }
+
+    @Test
+    fun `from API 31 a light bar that enumerates late lands on the re-probe`() {
+        val registry = buildRegistry(sdkInt = Build.VERSION_CODES.S)
+        val pad = frameworkPad(PAD)
+        every { pad.lightsManager } returns lights()
+        addPad(registry, pad)
+        assertFalse(lightbarOfPad(registry))
+
+        every { pad.lightsManager } returns lights(composedLightbar())
+        registry.onInputDeviceChanged(PAD)
+
+        assertTrue(lightbarOfPad(registry))
+    }
+
     // ---- transport ----
 
     @Test
@@ -684,6 +789,7 @@ class PhysicalGamepadRegistryLifecycleTest {
         const val MOUSE = 21
         const val SYNTHETIC = -1000
         const val ACTUATOR = 1
+        const val LIGHT_BAR = 4
         const val VID = 0x054C
         const val PID = 0x0CE6
         const val OTHER_PID = 0x09CC

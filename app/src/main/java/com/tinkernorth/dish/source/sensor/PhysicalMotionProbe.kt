@@ -11,7 +11,7 @@ import androidx.annotation.RequiresApi
 // The per-device sensor API exists from 31.
 internal fun hasGyro(
     deviceId: Int,
-    sdkInt: Int = Build.VERSION.SDK_INT,
+    sdkInt: Int,
 ): Boolean {
     if (!atLeast(Build.VERSION_CODES.S, sdkInt)) return false
     return probeGyro(InputDevice.getDevice(deviceId))

@@ -6,6 +6,7 @@ package com.tinkernorth.dish.source.lights
 import android.hardware.lights.Light
 import android.os.Build
 import android.view.InputDevice
+import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.annotation.RequiresApi
 
 // The names the framework gives the light bar it composes from a driver's LEDs. hid-sony builds one
@@ -50,15 +51,26 @@ fun lightbarLight(
  * Only `InputDevice.getLightsManager()` is used (API 31, no permission); the system LightsManager
  * service is a different, permission-gated flavor and is never touched.
  */
-fun hasLightbar(device: InputDevice): Boolean {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
-    return lightbarOf(device) != null
+fun hasLightbar(
+    device: InputDevice,
+    sdkInt: Int,
+): Boolean = lightbarOf(device, sdkInt) != null
+
+fun lightbarOf(
+    device: InputDevice,
+    sdkInt: Int,
+): Light? {
+    if (!atLeast(Build.VERSION_CODES.S, sdkInt)) return null
+    return resolve(device, sdkInt)
 }
 
-fun lightbarOf(device: InputDevice): Light? {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
-    return resolve(device, Build.VERSION.SDK_INT)
-}
+// The annotation is what lets lint read a caller-supplied API level as the gate resolve needs;
+// a bare `sdkInt >= api` comparison it cannot see through.
+@ChecksSdkIntAtLeast(parameter = 0)
+private fun atLeast(
+    api: Int,
+    sdkInt: Int,
+): Boolean = sdkInt >= api
 
 @RequiresApi(Build.VERSION_CODES.S)
 private fun resolve(
