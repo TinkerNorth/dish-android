@@ -262,8 +262,9 @@ class MainViewModel
 
         // The skin the on-screen pad opens with, matching the pad the host really builds:
         // a Bluetooth host carries it in the profile name, a Moonlight host in its own type
-        // table (Auto resolved the same way the session resolves it), a satellite in the
-        // per-slot catalog type.
+        // table (the type the session announced for a pad it holds, else the pick with Auto
+        // resolved the way the session will resolve it), a satellite in the per-slot
+        // catalog type.
         fun gamepadSkinFor(slotId: String): GamepadSkin {
             val summary =
                 uiState.value.slots
@@ -271,10 +272,20 @@ class MainViewModel
                     ?.boundStatus
             return when (summary?.kind) {
                 ConnectionKind.BLUETOOTH -> gamepadSkinForBtProfile(summary.btProfile)
-                ConnectionKind.MOONLIGHT -> gamepadSkinForMoonlightType(resolvedMoonlightType(slotId, summary))
+                ConnectionKind.MOONLIGHT -> gamepadSkinForMoonlightType(moonlightTypeFor(slotId, summary))
                 else -> gamepadSkinForControllerType(summary?.satelliteControllerTypes?.get(slotId) ?: CONTROLLER_TYPE_XBOX)
             }
         }
+
+        // The composer's rule (boundMoonlightType): a held pad is the type its host was told.
+        private fun moonlightTypeFor(
+            slotId: String,
+            summary: ConnectionSummary,
+        ): Int =
+            hub.moonlightSessions.value[summary.id]
+                ?.padFor(slotId)
+                ?.emulatedType
+                ?: resolvedMoonlightType(slotId, summary)
 
         private fun resolvedMoonlightType(
             slotId: String,

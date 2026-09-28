@@ -16,12 +16,15 @@ import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.core.net.DISH_PROTOCOL_CURRENT
 import com.tinkernorth.dish.core.net.DishProtocolCompat
+import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.core.net.moonlight.NINTENDO
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
 import com.tinkernorth.dish.core.net.moonlight.XBOX
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.lowpower.LowPowerSignal
@@ -50,6 +53,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -82,6 +86,7 @@ class MainViewModelTest {
     private val usbControllersFlow = MutableStateFlow<Map<Int, UsbController>>(emptyMap())
     private val capabilityStateFlow = MutableStateFlow<Map<String, SlotCapabilities>>(emptyMap())
     private val satelliteEvents = MutableSharedFlow<ConnectionEvent>(extraBufferCapacity = 8)
+    private val moonlightSessions = MutableStateFlow<Map<String, MoonlightConnection>>(emptyMap())
 
     @Before
     fun setUp() {
@@ -105,6 +110,7 @@ class MainViewModelTest {
         every { usbGamepadManager.controllers } returns usbControllersFlow
         every { hub.connections } returns connectionsFlow
         every { hub.bindings } returns bindingsFlow
+        every { hub.moonlightSessions } returns moonlightSessions
         every { gamepadRegistry.devices } returns devicesFlow
         every { gamepadRegistry.frameworkCapsFor(any(), any()) } returns null
         every { satellite.events } returns satelliteEvents
@@ -477,6 +483,44 @@ class MainViewModelTest {
                 )
             } returns SlotCapabilities.NONE
             assertEquals(GamepadSkin.Xbox, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+        }
+
+    // The Moonlight session on host c:1, holding [slotId]'s pad as [heldType].
+    private fun holdPadAs(
+        slotId: String,
+        heldType: Int,
+    ) {
+        val host = MoonlightHost(name = "PC", address = "10.0.0.5", uniqueId = "abc")
+        val session = MoonlightConnection("c:1", host, TestScope(dispatcher), dispatcher)
+        session.acquirePad(slotId, heldType, capabilities = HELD_PAD_CAPS, supportedButtons = HELD_PAD_BUTTONS)
+        moonlightSessions.value = mapOf("c:1" to session)
+    }
+
+    @Test
+    fun `gamepadSkinFor shows a held moonlight pad as the type its host was told, not a newer pick`() =
+        runTest(dispatcher) {
+            bindToKind(ConnectionKind.MOONLIGHT, mapOf(VIRTUAL_SLOT_ID to NINTENDO))
+            holdPadAs(VIRTUAL_SLOT_ID, PLAYSTATION)
+            assertEquals(GamepadSkin.PlayStation, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+        }
+
+    @Test
+    fun `gamepadSkinFor keeps a held moonlight Auto pad as announced after its source gains motion`() =
+        runTest(dispatcher) {
+            every {
+                capabilityComposer.capabilityForCandidate(VIRTUAL_SLOT_ID, XBOX, ConnectionKind.MOONLIGHT, "c:1")
+            } returns SlotCapabilities.NONE.copy(controller = CapabilitySet.of(Feature.MOTION))
+            bindToKind(ConnectionKind.MOONLIGHT, emptyMap())
+            holdPadAs(VIRTUAL_SLOT_ID, XBOX)
+            assertEquals(GamepadSkin.Xbox, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+        }
+
+    @Test
+    fun `gamepadSkinFor resolves a moonlight slot the session holds no pad for from its pick`() =
+        runTest(dispatcher) {
+            bindToKind(ConnectionKind.MOONLIGHT, mapOf(VIRTUAL_SLOT_ID to NINTENDO))
+            holdPadAs("9", PLAYSTATION)
+            assertEquals(GamepadSkin.Switch, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
         }
 
     @Test
@@ -896,4 +940,9 @@ class MainViewModelTest {
                     ?.directPollHz,
             )
         }
+
+    private companion object {
+        const val HELD_PAD_CAPS = 0x03
+        const val HELD_PAD_BUTTONS = 0xFFFF
+    }
 }
