@@ -26,3 +26,17 @@ fun allocatedBytesDuring(block: () -> Unit): Long {
     val end = threads.currentThreadAllocatedBytes
     return end - start - readCost
 }
+
+/**
+ * The fewest bytes [block] allocated in any of [runs] runs. An allocation the code makes every time
+ * shows in every run; a one-off (a class the first run loads, a method the JIT recompiles
+ * mid-run) shows in one, and must not fail a test that asks whether the code allocates.
+ */
+fun fewestAllocatedBytesDuring(
+    runs: Int,
+    block: () -> Unit,
+): Long {
+    var fewest = Long.MAX_VALUE
+    repeat(runs) { fewest = minOf(fewest, allocatedBytesDuring(block)) }
+    return fewest
+}

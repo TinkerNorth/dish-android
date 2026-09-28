@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.architecture.testing
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -48,6 +49,47 @@ class ThreadAllocationTest {
         assertTrue("fewest bytes in one burst: $fewest (sum $total)", fewest >= CALLS_PER_BURST * SMALLEST_OBJECT_BYTES)
     }
 
+    private var runsSoFar = 0
+    private var kept: LongArray? = null
+
+    private var oneOffRun = 0
+
+    private fun allocateOnTheOneOffRunOnly() {
+        if (runsSoFar == oneOffRun) kept = LongArray(ARRAY_LONGS)
+        runsSoFar++
+    }
+
+    private fun allocateEveryRun() {
+        kept = LongArray(ARRAY_LONGS)
+    }
+
+    private fun fewestWithAOneOffOn(run: Int): Long {
+        oneOffRun = run
+        val fewest = fewestAllocatedBytesDuring(RUNS, ::allocateOnTheOneOffRunOnly)
+        assertEquals(RUNS, runsSoFar)
+        assertEquals(ARRAY_LONGS, kept?.size)
+        return fewest
+    }
+
+    @Test
+    fun `a one-off allocation in the first run is not the fewest`() {
+        val fewest = fewestWithAOneOffOn(0)
+        assertTrue("fewest bytes: $fewest", fewest < ARRAY_BYTES)
+    }
+
+    @Test
+    fun `a one-off allocation in the last run is not the fewest`() {
+        val fewest = fewestWithAOneOffOn(RUNS - 1)
+        assertTrue("fewest bytes: $fewest", fewest < ARRAY_BYTES)
+    }
+
+    @Test
+    fun `an allocation in every run is the fewest`() {
+        val fewest = fewestAllocatedBytesDuring(RUNS, ::allocateEveryRun)
+        assertEquals(ARRAY_LONGS, kept?.size)
+        assertTrue("fewest bytes: $fewest", fewest >= ARRAY_BYTES)
+    }
+
     private companion object {
         // Enough calls, twenty million in all, that C2 compiles the burst well before the last one.
         const val BURSTS = 2000
@@ -55,5 +97,11 @@ class ThreadAllocationTest {
 
         // A header and two ints come to more than this on any 64-bit HotSpot layout.
         const val SMALLEST_OBJECT_BYTES = 16L
+
+        const val RUNS = 3
+        const val ARRAY_LONGS = 128
+
+        // The array's payload alone, before its header.
+        const val ARRAY_BYTES = ARRAY_LONGS * Long.SIZE_BYTES
     }
 }
