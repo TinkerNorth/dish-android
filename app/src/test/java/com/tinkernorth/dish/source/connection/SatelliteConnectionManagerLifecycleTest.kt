@@ -701,7 +701,7 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
             mgr.pairWithPin(server, "1234")
             scope.testScheduler.runCurrent()
 
-            coVerify(exactly = 0) { discoveryRepo.pair(any(), any(), any(), any(), any()) }
+            coVerify(exactly = 0) { discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), any()) }
             assertEquals(SatelliteSessionState.Live, mgr.get(serverId)?.state?.value)
         }
 
