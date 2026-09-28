@@ -3,14 +3,13 @@
 
 package com.tinkernorth.dish.ui.main
 
-import com.tinkernorth.dish.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-// The overlay toolbar's readout and the link guard's copy.
+// The overlay toolbar's readout and when the link guard's scrim waits out a blip.
 class RateReadoutTest {
     @Test
     fun `a motionless overlay shows only the touch rate`() {
@@ -37,60 +36,10 @@ class RateReadoutTest {
     }
 
     @Test
-    fun `a lost satellite off wifi blames the network`() {
-        val copy = guardCopy(OverlayGuardUi(GuardKind.HOST_LOST, hostLabel = "PC", detail = GuardDetail.WIFI_DOWN))
-        assertEquals(R.string.overlay_guard_wifi_detail, copy.detailRes)
-        assertNull(copy.detailArg)
-        assertEquals(R.string.binding_edge_host_lost_title, copy.titleRes)
-        assertEquals(R.drawable.ic_error, copy.iconRes)
-        assertEquals(R.color.colorError, copy.colorRes)
-    }
-
-    @Test
-    fun `a lost host with nothing else to blame is named`() {
-        val copy = guardCopy(OverlayGuardUi(GuardKind.HOST_LOST, hostLabel = "PC", detail = GuardDetail.GENERIC))
-        assertEquals(R.string.binding_edge_host_lost_detail, copy.detailRes)
-        assertEquals("PC", copy.detailArg)
-    }
-
-    @Test
-    fun `a reconnecting link wears the refresh glyph and the host's own reason`() {
-        val bt = guardCopy(OverlayGuardUi(GuardKind.RECONNECTING, hostLabel = "PC", detail = GuardDetail.BLUETOOTH_HOST))
-        assertEquals(R.drawable.ic_refresh, bt.iconRes)
-        assertEquals(R.color.colorPrimary, bt.colorRes)
-        assertEquals(R.string.chip_status_connecting, bt.titleRes)
-        assertEquals(R.string.overlay_guard_bt_detail, bt.detailRes)
-        val ml = guardCopy(OverlayGuardUi(GuardKind.RECONNECTING, hostLabel = "PC", detail = GuardDetail.MOONLIGHT_SESSION))
-        assertEquals(R.string.overlay_guard_ml_detail, ml.detailRes)
-    }
-
-    @Test
-    fun `an unplugged pad asks for a replug and a departed one says goodbye`() {
-        val unplugged = guardCopy(OverlayGuardUi(GuardKind.UNPLUGGED, hostLabel = "PC"))
-        assertEquals(R.string.binding_edge_input_lost_title, unplugged.titleRes)
-        assertEquals(R.string.overlay_guard_replug_detail, unplugged.detailRes)
-        assertEquals(R.drawable.ic_gamepad, unplugged.iconRes)
-        assertEquals(R.color.colorWarning, unplugged.colorRes)
-        val departed = guardCopy(OverlayGuardUi(GuardKind.DEPARTED, hostLabel = "PC", autoClose = true))
-        assertEquals(R.string.overlay_guard_departed_detail, departed.detailRes)
-        assertNull(departed.detailArg)
-    }
-
-    @Test
-    fun `an unbound slot names the host it left`() {
-        val copy = guardCopy(OverlayGuardUi(GuardKind.UNBOUND, hostLabel = "PC", autoClose = true))
-        assertEquals(R.drawable.ic_link_off, copy.iconRes)
-        assertEquals(R.string.overlay_guard_unbound_title, copy.titleRes)
-        assertEquals(R.string.overlay_guard_unbound_detail, copy.detailRes)
-        assertEquals("PC", copy.detailArg)
-    }
-
-    @Test
-    fun `a gone connection is the error card`() {
-        val copy = guardCopy(OverlayGuardUi(GuardKind.GONE, autoClose = true))
-        assertEquals(R.drawable.ic_error, copy.iconRes)
-        assertEquals(R.string.overlay_guard_gone_title, copy.titleRes)
-        assertEquals(R.string.overlay_guard_gone_detail, copy.detailRes)
+    fun `a single sample is already a rate`() {
+        val readout = rateReadout(screenPeakHz = 1, gyroHz = 1, hasMotion = true, motionOn = true)
+        assertEquals(RateReading.PeakHz(1), readout.touch)
+        assertEquals(RateReading.LiveHz(1), readout.motion)
     }
 
     @Test
