@@ -13,35 +13,59 @@ to `security@tinkernorth.com`.
 ## Getting set up
 
 ```bash
-# 1) Install Android Studio Otter (2025.2)+ for AGP 9.2, NDK, CMake 3.22.1, JDK 17+
+# 1) Install an Android Studio that supports the AGP version pinned in
+#    gradle/libs.versions.toml, plus the NDK, CMake 3.22.1 and JDK 17+
 # 2) Open the project in Android Studio (Gradle sync downloads deps)
 # 3) Point git at the in-tree pre-commit hook
 scripts/setup-hooks.sh
 ```
 
 The pre-commit hook runs `clang-format -i` (autofix, re-stages) on staged
-JNI C/C++ files and skips Kotlin to keep itself fast. CI runs `clang-format
---dry-run --Werror` on the JNI plus `ktlintCheck`, `detekt`, and `lint` on
+JNI C/C++ files and `scripts/check-translations.py` when a `strings.xml` is
+staged; it skips Kotlin to keep itself fast. CI runs `clang-format
+--dry-run --Werror` on the JNI plus `ktlintCheck`, `detekt`, and lint on
 the Kotlin tree, so anything that slips locally fails the PR.
 
 ## License headers
 
-Every source file (`*.kt`, `*.cpp`, `*.h`) starts with:
+Every source file (`*.kt`, `*.cpp`, `*.h`) starts with the SPDX line, and a
+new file carries the copyright line under it:
 
 ```
 // SPDX-License-Identifier: LGPL-3.0-or-later
 // Copyright (C) 2026 Dish contributors.
 ```
 
-New files must include both lines. Don't introduce code under a different
-license: the project is LGPL-3.0-or-later end-to-end (`LICENSE`,
-`COPYING.GPL3`, source headers).
+Don't introduce code under a different license: the project is
+LGPL-3.0-or-later end-to-end (`LICENSE`, `COPYING.GPL3`, source headers).
 
 ## Style
 
 `ktlint` and `detekt` (Kotlin) and `clang-format` (JNI) are authoritative
 for layout; run `./gradlew ktlintFormat` and `clang-format -i` to fix.
 This section is about what a formatter cannot check.
+
+### Zero warnings
+
+Every Kotlin compiler warning and every lint warning fails the build
+(`allWarningsAsErrors`, lint `warningsAsErrors` in `app/build.gradle.kts`),
+and a ktlint or detekt finding fails CI. A warning is fixed at its cause,
+never suppressed: no new `@Suppress`, `@SuppressLint`, `NOLINT`, lint
+baseline or detekt baseline.
+
+The one exception is a warning whose right fix is out of this code's reach:
+a deprecated framework call that is the only one on the older Android
+versions the app still supports (the fix is a minSdk bump), a protocol the
+app does not own (AES-ECB in Moonlight pairing), a trust manager that no
+platform-managed form can replace (`TofuTrustManager`), a parameter list
+that a native upcall's JNI signature fixes, or a lint layout check whose
+suggested form cannot do what the layout does (`UseCompoundDrawables` where
+a compound drawable could neither top-align nor rotate its glyph). There the
+suppression sits on the one function, class or view that needs it, under a
+comment that says why: a `Marker:` comment naming the right fix in Kotlin, a
+`tools:ignore reason:` line in a layout. The suppressed call is made nowhere
+else. Tests follow the same rule: a test that has to name a deprecated
+overload names it once, in one suppressed helper.
 
 ### Shape of the code
 
@@ -55,30 +79,33 @@ app, JNI and test code alike.
   In the JNI, `const` on every local and parameter that is not reassigned,
   and `constexpr` for a value known at compile time. A value that never
   changes is a named constant, never a literal in the middle of a function.
-  A type that holds no state is a set of functions, not a class.
+  A type that holds no state is a set of functions, not a class. Where a
+  caller needs it as a value of an interface (a `DiffUtil.ItemCallback`, the
+  no-op `UpdateNotices` of the play flavour), it is a class, constructed
+  where it is needed, not an `object`.
 
 - **Split values into simple, named steps.** One operation per line, with
   the result in a named `val` that says what it is, even when that reads
-  longer:
+  longer (`PhysicalGamepadRegistry.isStalePlaceholderFor`):
 
   ```kotlin
-  val isAnotherSlot = entry.key != deviceId
-  val isAPlaceholder = other.transitioning || other.needsReplug
-  val isTheSameModel = other.vendorId == device.vendorId &&
-      other.productId == device.productId
-  return isAnotherSlot && isAPlaceholder && isTheSameModel
+  val isAnotherSlot = id != deviceId
+  val isAPlaceholder = held.transitioning || held.needsReplug
+  val isTheSameModel =
+      held.vendorId == device.vendorId && held.productId == device.productId
+  return isAnotherSlot && isAPlaceholder && !held.isUsbSynthetic && isTheSameModel
   ```
 
-  not one five-term boolean. The names are the documentation, the debugger
+  not one six-term boolean. The names are the documentation, the debugger
   can show each value, and a test can pin each step.
 
 - **One function, one flow.** When a function would hold two algorithms
   chosen by a condition, the condition dispatches to two named things that
   each do one thing, and the dispatcher does nothing else. In Kotlin that is
-  usually a sealed type and an exhaustive `when` -- `RumbleTarget` in
-  `FeedbackRouter` is the pattern -- so the compiler checks that every flow
-  is handled. A guard clause is not an algorithm: do not invent indirection
-  where there is only one flow.
+  usually a sealed type and an exhaustive `when` -- `RumbleTarget` and the
+  `when` in `RumbleRouter.cancel` are the pattern -- so the compiler checks
+  that every flow is handled. A guard clause is not an algorithm: do not
+  invent indirection where there is only one flow.
 
 - **A callback with a body gets a name.** A lambda is fine as a
   one-expression forward, and fine as an argument to an `inline` stdlib or
@@ -98,23 +125,40 @@ app, JNI and test code alike.
   supertype, so for those there is no named form to prefer.
 
 - **No singletons.** A stateless helper is a top-level `internal fun` in the
-  file that owns it. Kotlin emits a top-level function as a real
-  `public static final` method on the file class, with no `INSTANCE` field,
-  no private constructor and no virtual dispatch; an `object` emits all
-  three. An `object` is justified only where something genuinely requires a
-  single static entry point:
+  file that owns it. Kotlin compiles a top-level function to a
+  `public static final` method on the file class, called with
+  `invokestatic`. An `object` adds a class with a private constructor and an
+  `INSTANCE` field built in its static initializer, and each of its
+  functions is an instance method: final, so there is no virtual dispatch
+  either way, but every call loads `INSTANCE` first. A `companion object` is
+  an `object` too: it holds the class's named constants, and a function that
+  belongs with the class is a top-level function beside it
+  (`parseUpdateVersion`, not `UpdateVersion.parse`). An `object` is
+  justified only where something genuinely requires a single static entry
+  point:
 
   - a `@JvmStatic` bridge that native code calls (`BluetoothGamepadBridge`,
-    `MoonlightGamepadBridge`),
-  - a framework that demands it (a Hilt `@Module`, a `Parcelable.CREATOR`),
-  - a sealed-hierarchy case with no payload (`RumbleTarget.Phone`),
-  - a namespace of `const val`s that the call site reads better for
-    (`EnetProtocol`): Kotlin compiles a constant in an object to a
-    `getstatic`, so those cost no instance at all; it is the *functions* on an
-    object that pay for one,
-  - a process-wide switch that owns state by definition
-    (`HotPathBenchController`, whose one job is to be the single thing a
-    broadcast toggles),
+    `MoonlightGamepadBridge`, `RumbleBridge`, `FeedbackBridge`,
+    `MicMuteBridge`, `SpeakerAudioBridge`), holding the one target its
+    upcalls deliver to,
+  - a framework that demands it: a Hilt `@Module` of `@Provides` functions
+    (`AppModule`), which Dagger reaches through `INSTANCE` rather than
+    constructing a module of its own,
+  - a sealed-hierarchy case with no payload (`RumbleTarget.Phone`, the
+    `data object`s),
+  - a namespace of named constants that the call site reads better for
+    (`EnetProtocol`, `BatteryValidator`, a class's `companion object` of
+    `const val`s and immutable values such as `CapabilitySet.EMPTY`): a
+    `const val` is inlined at every use, so reading one never touches the
+    object; it is the *functions* on an object, and its non-`const` values,
+    that are reached through its instance,
+  - a process-wide holder that owns state by definition:
+    `HotPathBenchController`, whose one job is to be the single thing a
+    broadcast toggles; `DishApplication.nativeLoadFailed`, the one answer to
+    whether this process loaded its native library; and the instrumented
+    tests' `AppSingletons`, which holds the app process's one Hilt graph,
+    grabbed once per instrumentation run because grabbing it again would
+    relaunch the app and wipe its preferences mid-suite,
   - a holder of `external fun` declarations (`SessionNative`,
     `SlotReportNative` and the other `core/jni` objects): the C symbol each
     binds to spells out the class name (`Java_..._SessionNative_openSocket`),
@@ -123,9 +167,12 @@ app, JNI and test code alike.
   Hilt `@Singleton` bindings are a different thing and are fine: they are
   graph-scoped, injected, and replaceable in a test.
 
-- **Member naming.** Kotlin properties carry no prefix. The JNI uses a
-  trailing underscore (`registry_`), which is the same "state, not scratch"
-  signal at the point of use. Keep it; do not mix in `m_`.
+- **Member naming.** Kotlin properties carry no prefix, apart from the
+  leading underscore of Kotlin's backing-property convention (`_uiState`
+  behind the public `uiState`). A C++ class member in the JNI carries a
+  trailing underscore (`mtx_`, `last_`, `primed_`), which is the same
+  "state, not scratch" signal at the point of use. Keep it; do not mix in
+  `m_`.
 
 - **Prefer a test to a comment.** Behaviour that needs explaining gets a test
   named for the behaviour. A comment is the last resort for a constraint that
@@ -161,9 +208,13 @@ app, JNI and test code alike.
 ### JNI / C++
 
 - C++17, four-space indent, 100-column soft limit. The same `.clang-format`
-  ships with `satellite`, `dish-linux`, and this repo.
+  rules ship with `satellite`, `dish-windows`, `dish-linux`, and this repo.
 - The JNI is the **hot path**. No allocations per packet, no JNI calls from
-  the input thread other than `sendReport`, no logging on the per-event path.
+  the input thread other than the one that carries the event to native code
+  (`PhysicalSlotNative.processGamepadMotionEvent` or
+  `processGamepadKeyEvent` for a physical pad, a `SlotReportNative` send for
+  the on-screen pad and a captured touchpad), no logging on the per-event
+  path.
 - The shape rules above apply, and the hot path is where they pay: a named
   `const bool` costs nothing at runtime and a small function inlines, but a
   per-event allocation does not. Where a shape rule and the hot path
@@ -175,20 +226,27 @@ app, JNI and test code alike.
 - No magic dimensions. A size is a `@dimen`, a colour a `@color`, a string a
   `@string`. A literal `16dp` in a layout is the same defect as a literal in
   the middle of a function.
-- Resource invariants that matter are tests, not comments: that every
-  declared string is translated in every shipped locale, that an array's
-  order matches the enum it indexes.
-- `res/drawable/` vectors are generated from SVG by `tools/svg2vd.ps1`.
-  Don't hand-edit them and don't apply style rules to them: change the SVG
-  and regenerate.
+- Resource invariants that matter are checked, not commented:
+  `LayoutResourceRulesTest` fails on a layout that carries a raw size or
+  references an undeclared dimen, and lint fails the build on a string
+  missing from any shipped locale (`MissingTranslation` is an error; the
+  pre-commit hook runs the same check through
+  `scripts/check-translations.py`).
+- The controller-glyph vectors in `res/drawable/` that `tools/svg2vd.ps1`
+  lists are generated from Kenney's input-prompt SVGs. Don't hand-edit them
+  and don't apply style rules to them: change the SVG and regenerate.
 
 ## Tests
 
 - `app/src/test`: JVM unit tests. No Robolectric and no Hilt in this source
   set. If a test seems to need either, the logic under test is in the wrong
   place: lift it into a reducer, a mapper or a top-level function first.
-- `app/src/test/cpp`: googletest over the host-buildable JNI split
-  (`gamepad_input`, `wire_encoders`, `audio_jitter`, `audio_codec`).
+  `app/src/testGithub` and `app/src/testPlay` hold the tests of each
+  flavour's own code, under the same rules.
+- `app/src/test/cpp`: googletest over the host-buildable JNI split, one
+  target per layer (`gamepad_input`, `wire_encoders`, `usb_parsers`,
+  `usb_hid_descriptor`, `send_counter`, `audio_jitter`, `heartbeat_thread`,
+  `hotpath_latency`, `audio_codec`), run by `./gradlew :app:nativeTest`.
 - `app/src/androidTest`: instrumented tests for what genuinely needs a
   device.
 
@@ -203,8 +261,8 @@ app, JNI and test code alike.
   Each branch of each new condition, each early return, each end of a clamp
   or a loop, and each state a machine can be in when the new code runs gets
   its own case, named for the behaviour
-  (`deviceAdded_whenAPlaceholderForTheSameModelIsShowing_replacesIt`). If a
-  branch has no test, either it is dead and goes, or it needs one.
+  (`` `a re-enumerated pad replaces the held placeholder for the same model` ``).
+  If a branch has no test, either it is dead and goes, or it needs one.
 
 - **Assume nothing; validate with a test.** A claim about how the framework
   behaves -- what `InputDevice.getLightsManager` reports on API 33, what a
@@ -235,21 +293,28 @@ app, JNI and test code alike.
 
 Build + style:
 
-- `android-ci.yml`: `clang-format` over `app/src/main/cpp/`,
-  `./gradlew ktlintCheck`, `./gradlew detekt`, `./gradlew lint`,
-  `./gradlew testDebugUnitTest`, `./gradlew assembleDebug` (uploads the
-  APK as a CI artifact).
+- `android-ci.yml`, build job: `clang-format` over `app/src/main/cpp/`,
+  `scripts/check_play_metadata.py`, `./gradlew ktlintCheck`,
+  `./gradlew detekt`, `./gradlew lintGithubDebug lintPlayDebug`,
+  `./gradlew testGithubDebugUnitTest testPlayDebugUnitTest`,
+  `./gradlew :app:nativeTest`, `./gradlew assembleGithubDebug
+  assemblePlayDebug` (uploads the APKs as a CI artifact).
+- `android-ci.yml`, integration job: `connectedGithubDebugAndroidTest` over
+  the `integration` package on an API 35 emulator.
 
-Security gates (also blocking):
+Security gates:
 
-- `security.yml`: action-pin lint, vulnerability allowlist expiry,
-  OSV-Scanner, gitleaks secret scan, and GitHub `dependency-review-action`
-  (consumes the Gradle dependency graph). Release artifacts additionally
-  get a Grype scan in `release.yml`.
+- `security.yml` (blocking): action-pin lint, vulnerability allowlist
+  expiry, OSV-Scanner and gitleaks secret scan. On a pull request it also
+  runs GitHub's `dependency-review-action`, best-effort
+  (`continue-on-error`) until GitHub Advanced Security is enabled. Release
+  artifacts additionally get a Grype scan in `release.yml`.
 - `codeql.yml`: CodeQL `java-kotlin` and `cpp` analysis
-  (security-extended + security-and-quality query packs).
+  (security-extended + security-and-quality query packs). Its analysis step
+  is `continue-on-error` for the same reason, so findings surface in the
+  run's log rather than blocking.
 
-If any step fails, the PR is blocked.
+If any blocking step fails, the PR is blocked.
 
 ## Security
 
@@ -337,23 +402,29 @@ The full cross-repo verification recipe lives in
 ## Touching the hot path
 
 The Kotlin → JNI → `sendto()` chain runs at gamepad polling rate and
-must never block. If you're modifying `MainActivity.dispatchGenericMotionEvent`,
-the `core.jni` objects (`SlotReportNative`, `PhysicalSlotNative`), or the native
-input path (`gamepad_input.cpp`,
-`satellite_jni.cpp::sendReport`):
+must never block. If you're modifying `GamepadActivityHost`'s
+`dispatchGenericMotionEvent` or `dispatchKeyEvent` (which `MainActivity` and
+every `BaseGamepadHostActivity` forward to), the `core.jni` objects
+(`PhysicalSlotNative`, `SlotReportNative`), or the native input path
+(`gamepad_input.cpp`, and `publishIfChanged` down to `sendEncrypted` in
+`satellite_jni.cpp`):
 
 - No `withContext`, no `runBlocking`, no `Dispatchers.IO` on the send path.
-- No allocations per event: use the preallocated `XUSB_REPORT`.
-- The session map's lookup is the only lock allowed; hold it briefly.
-- Preserve `IP_TOS = 0xB8` (DSCP EF) and `MSG_NOSIGNAL` on every send.
+- No heap allocation per event: the `XUSB_REPORT`, the payload and the
+  packet are stack buffers.
+- Take no lock the path does not already take, keep the order written at
+  `publishIfChanged` (devices, then slots, then sessions or the bridge
+  queue), hold each briefly, and never make a JVM upcall under one.
+- Preserve `IP_TOS = 0xB8` (DSCP EF) on the socket and `MSG_DONTWAIT` on
+  every send.
 
 ## Touching the wire protocol
 
-The Android, macOS, and Linux clients all talk to the same `satellite`
-server and must produce byte-identical traffic:
+The Android, Windows, macOS, and Linux clients all talk to the same
+`satellite` server and must produce byte-identical traffic:
 
-- AEAD: ChaCha20-Poly1305 IETF, 12-byte big-endian nonce derived from a
-  monotonic counter.
+- AEAD: ChaCha20-Poly1305 IETF with a 12-byte nonce: one direction byte,
+  seven zero bytes, then the monotonic send counter as 4 big-endian bytes.
 - Packet layout: `token(4) | counter(4) | ciphertext+tag`, with the
   4-byte token as AAD.
 - XUSB report: 12 bytes, little-endian.
@@ -364,8 +435,8 @@ The full opcode catalog and message layouts live in the protocol
 contract, `satellite/docs/contract.md`, in the TinkerNorth/satellite
 repo. The Android-side mapping is [`docs/contract.md`](docs/contract.md).
 
-Any change here must be coordinated with `dish-linux`, `dish-mac`, and
-`satellite` in the same PR / release cycle.
+Any change here must be coordinated with `dish-windows`, `dish-linux`,
+`dish-mac`, and `satellite` in the same PR / release cycle.
 
 ## Reporting bugs
 
