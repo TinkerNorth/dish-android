@@ -6,6 +6,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.core.content.ContextCompat
 
 /**
@@ -17,8 +18,16 @@ import androidx.core.content.ContextCompat
  * a test passes one to reach both sides of the API 31 gate.
  */
 internal fun Context.checkBluetoothConnectPermission(sdkInt: Int = Build.VERSION.SDK_INT): Int =
-    if (sdkInt >= Build.VERSION_CODES.S) {
+    if (atLeast(Build.VERSION_CODES.S, sdkInt)) {
         ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
     } else {
         PackageManager.PERMISSION_GRANTED
     }
+
+// The gate lint reads: with the level passed in, lint cannot see through a bare
+// `sdkInt >= S` to the BLUETOOTH_CONNECT constant it guards.
+@ChecksSdkIntAtLeast(parameter = 0)
+private fun atLeast(
+    api: Int,
+    sdkInt: Int,
+): Boolean = sdkInt >= api
