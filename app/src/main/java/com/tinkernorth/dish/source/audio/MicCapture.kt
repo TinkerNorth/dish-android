@@ -195,8 +195,9 @@ class AudioRecordMicSource
 
 // Blocking reads normally return the whole request, but the contract only guarantees "up to": a
 // short read is retried so the window is whole, and a recorder that stops answering yields the
-// partial count rather than a packet the far end has to guess at.
-internal fun readWholeWindow(
+// partial count rather than a packet the far end has to guess at. Inline, because it runs once per
+// 20 ms window on the capture thread: a lambda object and boxed counts per call would be garbage.
+internal inline fun readWholeWindow(
     read: (buffer: ShortArray, offset: Int, count: Int) -> Int,
     out: ShortArray,
 ): Int {

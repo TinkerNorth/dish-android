@@ -6,6 +6,25 @@ package com.tinkernorth.dish.source.audio
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.lang.management.ManagementFactory
+
+// One 20 ms window at 48 kHz mono: large enough that a boxed count is never a cached Integer.
+private const val WINDOW_SAMPLES = 960
+
+// One second of windows.
+private const val WINDOWS = 50
+
+// A recorder that always fills what it is asked for, and allocates nothing doing it.
+private class WholeRecorder {
+    fun read(
+        buffer: ShortArray,
+        offset: Int,
+        count: Int,
+    ): Int {
+        buffer[offset] = 1
+        return count
+    }
+}
 
 class MicCaptureReadTest {
     // A recorder that answers each read with the next count from [chunks], filling what it gives.
@@ -62,6 +81,22 @@ class MicCaptureReadTest {
         val out = ShortArray(4)
 
         assertEquals(3, readWholeWindow(recorder::read, out))
+    }
+
+    // The capture thread reads one window every 20 ms for as long as the microphone is open.
+    @Test
+    fun `reading windows allocates nothing`() {
+        val recorder = WholeRecorder()
+        val out = ShortArray(WINDOW_SAMPLES)
+        val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
+        readWholeWindow(recorder::read, out)
+        threads.currentThreadAllocatedBytes
+
+        val before = threads.currentThreadAllocatedBytes
+        for (window in 0 until WINDOWS) readWholeWindow(recorder::read, out)
+        val allocated = threads.currentThreadAllocatedBytes - before
+
+        assertEquals(0L, allocated)
     }
 
     @Test
