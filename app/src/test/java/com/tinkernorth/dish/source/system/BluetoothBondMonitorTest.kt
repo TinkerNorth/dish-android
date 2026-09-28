@@ -6,7 +6,9 @@ import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
+import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
@@ -37,7 +39,7 @@ class BluetoothBondMonitorTest {
     @Before
     fun setUp() {
         // android.util.Log is unmocked by default in JVM unit tests. Stub to no-ops so logging plumbing isn't under test.
-        mockkStatic(Log::class, IntentCompat::class)
+        mockkStatic(Log::class, IntentCompat::class, ContextCompat::class)
         every { Log.w(any(), any<String>()) } returns 0
         every { Log.d(any(), any<String>()) } returns 0
         every { Log.i(any(), any<String>()) } returns 0
@@ -163,5 +165,18 @@ class BluetoothBondMonitorTest {
         )
 
         verify(exactly = 0) { registry.markStale(any(), any()) }
+    }
+
+    // Bond changes and KEY_MISSING mark a remembered host stale: an exported receiver would let
+    // any app forge them for a MAC it does not own.
+    @Test
+    fun `onStart registers the receiver not exported`() {
+        every { ContextCompat.registerReceiver(context, any(), any(), any()) } returns null
+
+        monitor.onStart(mockk<LifecycleOwner>())
+
+        verify(exactly = 1) {
+            ContextCompat.registerReceiver(context, any(), any(), ContextCompat.RECEIVER_NOT_EXPORTED)
+        }
     }
 }

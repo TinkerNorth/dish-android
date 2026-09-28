@@ -16,6 +16,7 @@ import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.slot
 import io.mockk.unmockkAll
+import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -56,6 +57,16 @@ class PhoneBatterySourceTest {
     @Test
     fun `a level past the scale clamps to 100`() {
         assertEquals(100, phoneBatteryLevel(rawLevel = 120, scale = 100))
+    }
+
+    @Test
+    fun `an empty battery is a reading, not an absent one`() {
+        assertEquals(0, phoneBatteryLevel(rawLevel = 0, scale = 100))
+    }
+
+    @Test
+    fun `a scale of one is a readable scale`() {
+        assertEquals(100, phoneBatteryLevel(rawLevel = 1, scale = 1))
     }
 
     @Test
@@ -103,10 +114,21 @@ class PhoneBatterySourceTest {
     // only the receiver path produces samples.
     private fun startWithSticky(sticky: Intent?): BroadcastReceiver {
         val receiver = slot<BroadcastReceiver>()
-        every { ContextCompat.registerReceiver(context, capture(receiver), any(), any()) } returns sticky
+        every {
+            ContextCompat.registerReceiver(context, capture(receiver), any(), ContextCompat.RECEIVER_NOT_EXPORTED)
+        } returns sticky
         every { context.registerReceiver(null, any<IntentFilter>()) } returns null
         PhoneBatterySource(context).start(scope, emit)
         return receiver.captured
+    }
+
+    @Test
+    fun `start registers the charging receiver not exported`() {
+        startWithSticky(sticky = null)
+
+        verify(exactly = 1) {
+            ContextCompat.registerReceiver(context, any(), any(), ContextCompat.RECEIVER_NOT_EXPORTED)
+        }
     }
 
     @Test

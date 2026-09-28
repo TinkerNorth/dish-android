@@ -8,11 +8,27 @@ import android.os.Build
 import android.view.InputDevice
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
+import io.mockk.verify
+import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 
 class PhysicalMotionProbeTest {
+    // hasGyro looks the pad up through the static, so that is what the API-gate tests stand in for.
+    @Before
+    fun setUp() {
+        mockkStatic(InputDevice::class)
+    }
+
+    @After
+    fun tearDown() {
+        unmockkStatic(InputDevice::class)
+    }
+
     private val gyro: Sensor = mockk(relaxed = true)
 
     private fun deviceWithGyro(): InputDevice {
@@ -37,6 +53,35 @@ class PhysicalMotionProbeTest {
         // never reach the per-device sensor read.
         assertTrue(Build.VERSION.SDK_INT < Build.VERSION_CODES.S)
         assertFalse(hasGyro(deviceId = 7))
+    }
+
+    @Test
+    fun `below API 31 the pad is never looked up`() {
+        assertFalse(hasGyro(deviceId = 7, sdkInt = Build.VERSION_CODES.R))
+        verify(exactly = 0) { InputDevice.getDevice(any()) }
+    }
+
+    @Test
+    fun `from API 31 a pad reporting a gyroscope has one`() {
+        val pad = deviceWithGyro()
+        every { InputDevice.getDevice(7) } returns pad
+
+        assertTrue(hasGyro(deviceId = 7, sdkInt = Build.VERSION_CODES.S))
+    }
+
+    @Test
+    fun `from API 31 a pad without a gyroscope has none`() {
+        val pad = deviceWithoutGyro()
+        every { InputDevice.getDevice(7) } returns pad
+
+        assertFalse(hasGyro(deviceId = 7, sdkInt = Build.VERSION_CODES.S))
+    }
+
+    @Test
+    fun `from API 31 a pad that is already gone has none`() {
+        every { InputDevice.getDevice(7) } returns null
+
+        assertFalse(hasGyro(deviceId = 7, sdkInt = Build.VERSION_CODES.S))
     }
 
     @Test

@@ -67,7 +67,9 @@ class BluetoothAdapterStateObserverTest {
 
     private fun startAndCaptureReceiver(observer: BluetoothAdapterStateObserver): BroadcastReceiver {
         val receiver = slot<BroadcastReceiver>()
-        every { ContextCompat.registerReceiver(context, capture(receiver), any(), any()) } returns null
+        every {
+            ContextCompat.registerReceiver(context, capture(receiver), any(), ContextCompat.RECEIVER_NOT_EXPORTED)
+        } returns null
         observer.onStart(owner)
         return receiver.captured
     }
@@ -114,6 +116,17 @@ class BluetoothAdapterStateObserverTest {
     }
 
     @Test
+    fun `onStart registers the receiver not exported`() {
+        adapterEnabled(true)
+
+        BluetoothAdapterStateObserver(context).onStart(owner)
+
+        verify(exactly = 1) {
+            ContextCompat.registerReceiver(context, any(), any(), ContextCompat.RECEIVER_NOT_EXPORTED)
+        }
+    }
+
+    @Test
     fun `onStart twice registers once`() {
         adapterEnabled(true)
         val observer = BluetoothAdapterStateObserver(context)
@@ -121,7 +134,9 @@ class BluetoothAdapterStateObserverTest {
         startAndCaptureReceiver(observer)
         observer.onStart(owner)
 
-        verify(exactly = 1) { ContextCompat.registerReceiver(context, any(), any(), any()) }
+        verify(exactly = 1) {
+            ContextCompat.registerReceiver(context, any(), any(), ContextCompat.RECEIVER_NOT_EXPORTED)
+        }
     }
 
     @Test

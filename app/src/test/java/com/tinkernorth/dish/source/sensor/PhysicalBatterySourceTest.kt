@@ -56,7 +56,9 @@ class PhysicalBatterySourceTest {
 
     init {
         mockkStatic(ContextCompat::class)
-        every { ContextCompat.registerReceiver(context, capture(receiver), any(), any()) } returns null
+        every {
+            ContextCompat.registerReceiver(context, capture(receiver), any(), ContextCompat.RECEIVER_NOT_EXPORTED)
+        } returns null
     }
 
     private val owner = mockk<LifecycleOwner>()
@@ -132,6 +134,15 @@ class PhysicalBatterySourceTest {
         mockk {
             every { getIntExtra(BatteryManager.EXTRA_STATUS, -1) } returns status
         }
+
+    @Test
+    fun `onStart registers the charging receiver not exported`() {
+        started()
+
+        verify(exactly = 1) {
+            ContextCompat.registerReceiver(context, any(), any(), ContextCompat.RECEIVER_NOT_EXPORTED)
+        }
+    }
 
     @Test
     fun `a framework pad is looked up once and its battery read on every poll`() {

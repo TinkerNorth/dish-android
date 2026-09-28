@@ -70,9 +70,40 @@ class BatteryValidatorTest {
 
     @Test
     fun `status outside the documented set is rejected`() {
-        assertFalse(publishBatterySample(BatterySample(50, BatteryValidator.STATUS_MAX + 1), emit))
+        assertFalse(publishBatterySample(BatterySample(50, STATUS_PAST_WIRED), emit))
         assertFalse(publishBatterySample(BatterySample(50, -1), emit))
         assertEquals(0, emitted.size)
+    }
+
+    @Test
+    fun `an empty battery is the inclusive low end of the level range`() {
+        assertTrue(publishBatterySample(BatterySample(0, BatteryValidator.STATUS_DISCHARGING), emit))
+        assertEquals(listOf(BatterySample(0, BatteryValidator.STATUS_DISCHARGING)), emitted)
+    }
+
+    @Test
+    fun `a full battery is the inclusive high end of the level range`() {
+        assertTrue(publishBatterySample(BatterySample(100, BatteryValidator.STATUS_DISCHARGING), emit))
+        assertEquals(listOf(BatterySample(100, BatteryValidator.STATUS_DISCHARGING)), emitted)
+    }
+
+    @Test
+    fun `a level just past the unknown sentinel is rejected`() {
+        assertFalse(publishBatterySample(BatterySample(LEVEL_PAST_SENTINEL, BatteryValidator.STATUS_DISCHARGING), emit))
+        assertEquals(0, emitted.size)
+    }
+
+    @Test
+    fun `an unknown status is the inclusive low end of the status range`() {
+        // What a phone whose battery cannot be read, and a pre-31 pad, report: it must still reach the wire.
+        assertTrue(publishBatterySample(BatterySample(50, 0), emit))
+        assertEquals(listOf(BatterySample(50, BatteryValidator.STATUS_UNKNOWN)), emitted)
+    }
+
+    @Test
+    fun `a wired status is the inclusive high end of the status range`() {
+        assertTrue(publishBatterySample(BatterySample(50, 4), emit))
+        assertEquals(listOf(BatterySample(50, BatteryValidator.STATUS_WIRED)), emitted)
     }
 
     @Test
@@ -86,5 +117,10 @@ class BatteryValidatorTest {
         assertEquals(4, BatteryValidator.STATUS_WIRED)
         assertEquals(30, BatteryValidator.REPORT_INTERVAL_SECONDS)
         assertEquals(30_000L, BatteryValidator.REPORT_INTERVAL_MS)
+    }
+
+    private companion object {
+        const val STATUS_PAST_WIRED = 5
+        const val LEVEL_PAST_SENTINEL = 0x100
     }
 }
