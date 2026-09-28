@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.core.net.moonlight
 
+import com.tinkernorth.dish.architecture.testing.fewestAllocatedBytesDuring
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -139,6 +140,124 @@ class MoonlightMotionGateTest {
         gate.onMotionRequest(0, 200, gyro)
         assertFalse(gate.shouldSend(0, gyro, 1L))
         assertTrue(gate.shouldSend(0, gyro, 5_000_000L))
+    }
+
+    @Test
+    fun `a sample one nanosecond short of the interval waits`() {
+        val gate = MoonlightMotionGate()
+        gate.onMotionRequest(0, 100, gyro)
+        assertTrue(gate.shouldSend(0, gyro, 0L))
+        assertFalse(gate.shouldSend(0, gyro, 9_999_999L))
+        assertTrue(gate.shouldSend(0, gyro, 10_000_000L))
+    }
+
+    @Test
+    fun `stopping one type leaves the controller's other type streaming`() {
+        val gate = MoonlightMotionGate()
+        gate.onMotionRequest(0, 100, gyro)
+        gate.onMotionRequest(0, 100, accel)
+        gate.onMotionRequest(0, 0, gyro)
+        assertTrue(gate.wanted(0))
+        assertFalse(gate.wanted(0, gyro))
+        assertTrue(gate.wanted(0, accel))
+        assertTrue(gate.shouldSend(0, accel, 0L))
+    }
+
+    @Test
+    fun `a stop for a stream never started changes nothing`() {
+        val gate = MoonlightMotionGate()
+        gate.onMotionRequest(0, 100, accel)
+        gate.onMotionRequest(0, 0, gyro)
+        gate.onMotionRequest(1, -1, gyro)
+        assertTrue(gate.wanted(0, accel))
+        assertFalse(gate.wanted(0, gyro))
+        assertFalse(gate.wanted(1))
+    }
+
+    @Test
+    fun `a controller asking only for accel is wanted`() {
+        val gate = MoonlightMotionGate()
+        gate.onMotionRequest(3, 100, accel)
+        assertTrue(gate.wanted(3))
+        assertFalse(gate.wanted(2))
+    }
+
+    @Test
+    fun `clear drops every type of that controller`() {
+        val gate = MoonlightMotionGate()
+        gate.onMotionRequest(0, 100, gyro)
+        gate.onMotionRequest(0, 100, accel)
+        gate.onMotionRequest(1, 100, accel)
+        gate.clear(0)
+        assertFalse(gate.wanted(0, gyro))
+        assertFalse(gate.wanted(0, accel))
+        assertTrue(gate.wanted(1, accel))
+    }
+
+    @Test
+    fun `a cleared stream asked for again sends its first sample at once`() {
+        val gate = MoonlightMotionGate()
+        gate.onMotionRequest(0, 100, gyro)
+        assertTrue(gate.shouldSend(0, gyro, 0L))
+        gate.clear(0)
+        gate.onMotionRequest(0, 100, gyro)
+        assertTrue(gate.shouldSend(0, gyro, 1L))
+    }
+
+    // Whatever u16 number and byte type a host sends is kept as sent, as the map it replaced did.
+    @Test
+    fun `any number and type a host sends is paced on its own`() {
+        val gate = MoonlightMotionGate()
+        gate.onMotionRequest(LAST_CONTROLLER, 100, UNKNOWN_MOTION_TYPE)
+        assertTrue(gate.wanted(LAST_CONTROLLER))
+        assertTrue(gate.wanted(LAST_CONTROLLER, UNKNOWN_MOTION_TYPE))
+        assertFalse(gate.wanted(LAST_CONTROLLER, gyro))
+        assertTrue(gate.shouldSend(LAST_CONTROLLER, UNKNOWN_MOTION_TYPE, 0L))
+        assertFalse(gate.shouldSend(LAST_CONTROLLER, UNKNOWN_MOTION_TYPE, 1L))
+    }
+
+    private val pacedGate = MoonlightMotionGate()
+    private var sentSamples = 0
+    private var sampleNs = 0L
+
+    // What a pad's sensor thread asks per sample: whether anything is wanted, then each type in
+    // turn, for the last controller a session carries, whose key is past the boxed-integer cache.
+    private fun runSampleCycle() {
+        repeat(MEASURED_SAMPLES) {
+            sampleNs += SAMPLE_INTERVAL_NS
+            if (pacedGate.wanted(LAST_CONTROLLER)) sentSamples++
+            if (pacedGate.wanted(LAST_CONTROLLER, gyro)) sentSamples++
+            if (pacedGate.shouldSend(LAST_CONTROLLER, gyro, sampleNs)) sentSamples++
+            if (pacedGate.shouldSend(LAST_CONTROLLER, accel, sampleNs)) sentSamples++
+        }
+    }
+
+    @Test
+    fun `a sample's checks allocate nothing`() {
+        pacedGate.onMotionRequest(FIRST_CONTROLLER, SAMPLE_RATE_HZ, gyro)
+        pacedGate.onMotionRequest(LAST_CONTROLLER, SAMPLE_RATE_HZ, gyro)
+        pacedGate.onMotionRequest(LAST_CONTROLLER, SAMPLE_RATE_HZ, accel)
+        runSampleCycle()
+        sentSamples = 0
+        val allocated = fewestAllocatedBytesDuring(MEASURED_RUNS, ::runSampleCycle)
+        assertEquals(MEASURED_RUNS * MEASURED_SAMPLES * CHECKS_PASSED_PER_SAMPLE, sentSamples)
+        assertTrue("$allocated bytes over $MEASURED_SAMPLES samples", allocated < MEASURED_SAMPLES * BYTES_PER_SAMPLE_BOUND)
+    }
+
+    private companion object {
+        const val FIRST_CONTROLLER = 0
+
+        // A u16 on the wire: far past the Integer cache, as any number a host sends may be.
+        const val LAST_CONTROLLER = 0xFFFF
+        const val UNKNOWN_MOTION_TYPE = 0xFF
+        const val SAMPLE_RATE_HZ = 100
+        const val SAMPLE_INTERVAL_NS = 10_000_000L
+        const val MEASURED_SAMPLES = 1000
+        const val MEASURED_RUNS = 3
+        const val CHECKS_PASSED_PER_SAMPLE = 4
+
+        // Half the smallest object: a key or an iterator costs 16 bytes or more every sample.
+        const val BYTES_PER_SAMPLE_BOUND = 8
     }
 }
 

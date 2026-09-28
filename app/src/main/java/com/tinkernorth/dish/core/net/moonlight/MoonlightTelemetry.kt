@@ -2,8 +2,6 @@
 
 package com.tinkernorth.dish.core.net.moonlight
 
-import java.util.concurrent.ConcurrentHashMap
-
 // Pure translation from the satellite wire conventions the app's sources
 // already speak (docs/contract.md scales) onto the Moonlight control-stream
 // ones (Wolf control.hpp), so the two transports share every source.
@@ -55,47 +53,53 @@ fun batteryPercentage(level: Int): Int = if (level in 0..PERCENT_MAX) level else
  * (MOTION_EVENT 0x5501): per (controller number, motion type) the requested
  * report rate, 0 = stop. Senders keep their own cadence; [shouldSend] applies
  * the host's ceiling so a 100 Hz request never receives the phone's 200 Hz.
- * Thread-safe: the pump thread writes, the sensor threads read.
+ * Thread-safe: the pump thread and the pad table write, the sensor threads read.
  */
 class MoonlightMotionGate {
-    private data class Key(
-        val controllerNumber: Int,
-        val motionType: Int,
-    )
-
-    private val rates = ConcurrentHashMap<Key, Int>()
-    private val lastSentNs = ConcurrentHashMap<Key, Long>()
+    // Copy on write: a host request or a released pad swaps the array under [writeLock]; a
+    // sample's checks scan the array they read, with no lock and nothing built.
+    @Volatile private var streams = arrayOf<MotionStream>()
+    private val writeLock = Any()
 
     fun onMotionRequest(
         controllerNumber: Int,
         reportRateHz: Int,
         motionType: Int,
     ) {
-        val key = Key(controllerNumber, motionType)
-        if (reportRateHz <= 0) {
-            rates.remove(key)
-            lastSentNs.remove(key)
-        } else {
-            rates[key] = reportRateHz
+        synchronized(writeLock) {
+            val held = streamFor(controllerNumber, motionType)
+            when {
+                reportRateHz <= 0 -> stop(held)
+                held != null -> held.rateHz = reportRateHz
+                else -> streams += MotionStream(controllerNumber, motionType, reportRateHz)
+            }
         }
     }
 
+    // Under [writeLock]. A stream started again later paces from scratch.
+    private fun stop(held: MotionStream?) {
+        if (held == null) return
+        streams = streams.filter { it !== held }.toTypedArray()
+    }
+
     fun clear(controllerNumber: Int) {
-        rates.keys.removeAll { it.controllerNumber == controllerNumber }
-        lastSentNs.keys.removeAll { it.controllerNumber == controllerNumber }
+        synchronized(writeLock) {
+            streams = streams.filter { it.controllerNumber != controllerNumber }.toTypedArray()
+        }
     }
 
     fun clearAll() {
-        rates.clear()
-        lastSentNs.clear()
+        synchronized(writeLock) {
+            streams = arrayOf()
+        }
     }
 
-    fun wanted(controllerNumber: Int): Boolean = rates.keys.any { it.controllerNumber == controllerNumber }
+    fun wanted(controllerNumber: Int): Boolean = streams.any { it.controllerNumber == controllerNumber }
 
     fun wanted(
         controllerNumber: Int,
         motionType: Int,
-    ): Boolean = rates.containsKey(Key(controllerNumber, motionType))
+    ): Boolean = streamFor(controllerNumber, motionType) != null
 
     /** True (and marks the send) when a sample of this type is due under the requested rate. */
     fun shouldSend(
@@ -103,12 +107,33 @@ class MoonlightMotionGate {
         motionType: Int,
         nowNs: Long,
     ): Boolean {
-        val key = Key(controllerNumber, motionType)
-        val rate = rates[key] ?: return false
-        val intervalNs = NS_PER_SECOND / rate
-        val last = lastSentNs[key]
-        if (last != null && nowNs - last < intervalNs) return false
-        lastSentNs[key] = nowNs
+        val stream = streamFor(controllerNumber, motionType) ?: return false
+        return stream.admit(nowNs)
+    }
+
+    private fun streamFor(
+        controllerNumber: Int,
+        motionType: Int,
+    ): MotionStream? =
+        streams.firstOrNull { it.controllerNumber == controllerNumber && it.motionType == motionType }
+}
+
+// One (controller number, motion type) the host asked for, and when a sample of it last went out.
+private class MotionStream(
+    val controllerNumber: Int,
+    val motionType: Int,
+    @Volatile var rateHz: Int,
+) {
+    @Volatile private var hasSent = false
+
+    @Volatile private var lastSentNs = 0L
+
+    fun admit(nowNs: Long): Boolean {
+        val intervalNs = NS_PER_SECOND / rateHz
+        val isTooSoon = hasSent && nowNs - lastSentNs < intervalNs
+        if (isTooSoon) return false
+        lastSentNs = nowNs
+        hasSent = true
         return true
     }
 }
