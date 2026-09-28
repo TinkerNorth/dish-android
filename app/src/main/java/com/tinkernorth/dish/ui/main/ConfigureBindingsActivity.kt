@@ -49,7 +49,6 @@ import com.tinkernorth.dish.ui.setup.capabilityRows
 import com.tinkernorth.dish.ui.setup.destinationGetFlows
 import com.tinkernorth.dish.ui.setup.destinationSendFlows
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class ConfigureBindingsActivity : BaseGamepadHostActivity() {
