@@ -94,12 +94,15 @@ class PhysicalReachabilityTest {
 
     @Test
     fun `satelliteSinkFor is null for a moonlight-bound pad`() {
+        // A satellite connection under the same id with the slot registered: only the summary's
+        // kind keeps it from being taken for the Moonlight pad's sink.
+        val sameIdSatellite = connection(MutableStateFlow(mapOf("9" to slot(registered = true))))
         assertNull(
             satelliteSinkFor(
                 slotId = "9",
                 bindings = mapOf("9" to "m"),
                 summariesById = mapOf("m" to summary("m", kind = ConnectionKind.MOONLIGHT)),
-                connections = emptyMap(),
+                connections = mapOf("m" to sameIdSatellite),
             ),
         )
     }
