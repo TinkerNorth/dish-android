@@ -9,6 +9,7 @@ import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.connection.ConnectIntent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.store.ControllerTypeStore
 import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SlotBindingStore
@@ -54,6 +55,9 @@ class ConnectionCoordinator
     ) {
         val bindings: StateFlow<Map<String, String>> = bindingStore.state
         val satTypes: StateFlow<Map<Pair<String, String>, Int>> = typeStore.state
+
+        // The live Moonlight sessions by host id; each one's pads are what its host was told about.
+        val moonlightSessions: StateFlow<Map<String, MoonlightConnection>> get() = moonlight.connections
 
         val connections: StateFlow<List<ConnectionSummary>> = composer.state
 

@@ -250,6 +250,49 @@ class CapabilityComposerLayersTest {
             assertEquals(CapabilitySet(Feature.entries.toSet()), composer.capabilityFor(VIRTUAL_SLOT_ID).type)
         }
 
+    // No type row at all for the binding: the session reads the gap as Auto and resolves it.
+    private fun TestScope.moonlightPadWithNoTypeRow(padHasGyro: Boolean): CapabilityComposer =
+        composerFor(
+            phoneAvailable = !padHasGyro,
+            devices = MutableStateFlow(mapOf(PAD_ID to device(PAD_ID, hasGyro = padHasGyro))),
+            bindings = MutableStateFlow(mapOf(PAD_SLOT to "ml-A")),
+            connections = MutableStateFlow(listOf(summary("ml-A", kind = ConnectionKind.MOONLIGHT))),
+            scope = backgroundScope,
+        )
+
+    @Test
+    fun `a bound moonlight pad with no stored type reads as Auto and resolves to PlayStation with a gyro`() =
+        composerTest {
+            val composer = moonlightPadWithNoTypeRow(padHasGyro = true)
+            composer.probe(this)
+            testScheduler.runCurrent()
+            assertEquals(moonlightTypeCapabilities(PLAYSTATION), composer.capabilityFor(PAD_SLOT).type)
+        }
+
+    @Test
+    fun `a bound moonlight pad with no stored type reads as Auto and resolves to Xbox without a gyro`() =
+        composerTest {
+            val composer = moonlightPadWithNoTypeRow(padHasGyro = false)
+            composer.probe(this)
+            testScheduler.runCurrent()
+            assertEquals(moonlightTypeCapabilities(XBOX), composer.capabilityFor(PAD_SLOT).type)
+        }
+
+    @Test
+    fun `touchpadWireMode reads a missing moonlight type row as Auto too`() =
+        composerTest {
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = MutableStateFlow(mapOf(PAD_ID to device(PAD_ID, hasGyro = true, touchpadDeviceId = PAD_SURFACE_ID))),
+                    bindings = MutableStateFlow(mapOf(PAD_SLOT to "ml-A")),
+                    connections = MutableStateFlow(listOf(summary("ml-A", kind = ConnectionKind.MOONLIGHT))),
+                    scope = backgroundScope,
+                    model = ModelFacts(modelHasTouchpad = true),
+                )
+            assertEquals(TOUCHPAD_MODE_DS4, composer.touchpadWireMode(PAD_SLOT))
+        }
+
     @Test
     fun `a type id missing from the cached catalog falls back to the bundled set`() =
         composerTest {

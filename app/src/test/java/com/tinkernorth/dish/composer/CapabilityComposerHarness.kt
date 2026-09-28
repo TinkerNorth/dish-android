@@ -10,6 +10,7 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.audio.PadAudioRoute
 import com.tinkernorth.dish.source.audio.PadAudioRoutes
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
 import com.tinkernorth.dish.source.store.MouseSurfaceStore
 import com.tinkernorth.dish.source.store.SatelliteHostFacts
@@ -75,6 +76,8 @@ internal data class StoreStates(
         MutableStateFlow(emptyMap()),
     val hostRuntime: MutableStateFlow<Map<String, SatelliteHostRuntime>> = MutableStateFlow(emptyMap()),
     val satTypes: MutableStateFlow<Map<Pair<String, String>, Int>> = MutableStateFlow(emptyMap()),
+    // The Moonlight sessions, keyed by host id: the pads each has acquired are what it announced.
+    val moonlightConnections: MutableStateFlow<Map<String, MoonlightConnection>> = MutableStateFlow(emptyMap()),
     // Default no cached catalog: the type layer falls back to BundledCatalog. Tests that
     // exercise the catalog-driven path pass a cachedCatalog explicitly.
     val cachedCatalog: CatalogDto? = null,
@@ -113,6 +116,7 @@ internal fun composerFor(
             every { this@mockk.bindings } returns bindings
             every { this@mockk.connections } returns connections
             every { satTypes } returns stores.satTypes
+            every { moonlightSessions } returns stores.moonlightConnections
         }
     val native: PhysicalInputNative =
         mockk {

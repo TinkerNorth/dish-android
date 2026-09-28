@@ -74,6 +74,7 @@ class CapabilityComposerLightbarTest {
                 every { this@mockk.bindings } returns MutableStateFlow(bindings)
                 every { this@mockk.connections } returns MutableStateFlow(connections)
                 every { satTypes } returns MutableStateFlow(emptyMap())
+                every { moonlightSessions } returns MutableStateFlow(emptyMap())
             }
         val native: PhysicalInputNative =
             mockk {
