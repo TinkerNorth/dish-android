@@ -51,7 +51,10 @@ class CapabilityComposerAnnouncedTypeTest {
         capabilities: Int = capabilityBits(type, ALL_BITS),
     ) = acquirePad(slotId = slotId, emulatedType = type, capabilities = capabilities, supportedButtons = 0)
 
-    private fun pad(hasGyro: Boolean): PhysicalGamepadRegistry.Device = device(PAD_ID, hasGyro = hasGyro, touchpadDeviceId = PAD_SURFACE_ID)
+    private fun pad(
+        hasGyro: Boolean,
+        surface: Int? = PAD_SURFACE_ID,
+    ): PhysicalGamepadRegistry.Device = device(PAD_ID, hasGyro = hasGyro, touchpadDeviceId = surface)
 
     private fun Rig.candidateHasInput(slotId: String): Boolean =
         composer.capabilityForCandidate(slotId, AUTO, ConnectionKind.MOONLIGHT, HOST_ID).inputOk(Feature.GAMEPAD)
@@ -65,8 +68,9 @@ class CapabilityComposerAnnouncedTypeTest {
     private fun TestScope.rig(
         padHasGyro: Boolean,
         storedType: Int = AUTO,
+        padSurface: Int? = PAD_SURFACE_ID,
     ): Rig {
-        val devices = MutableStateFlow(mapOf(PAD_ID to pad(padHasGyro)))
+        val devices = MutableStateFlow(mapOf(PAD_ID to pad(padHasGyro, padSurface)))
         val session = session()
         val types = mapOf(PAD_SLOT to storedType)
         val composer =
@@ -187,7 +191,7 @@ class CapabilityComposerAnnouncedTypeTest {
             assertEquals(TOUCHPAD_MODE_DS4, rig.composer.touchpadWireMode(PAD_SLOT))
         }
 
-    // The host builds its pad from the bits in the arrival too: a PlayStation pad announced
+    // The host reads the motion bits in the arrival, and only then: a PlayStation pad announced
     // before its gyro enumerated has no motion on the host until the session replugs it with the
     // bits, so the dashboard shows no motion until then either.
     @Test
@@ -220,19 +224,19 @@ class CapabilityComposerAnnouncedTypeTest {
             assertTrue(rig.composer.capabilityFor(PAD_SLOT).isAvailable(Feature.MOTION))
         }
 
-    // Each wire bit crosses out the one feature it declares, and nothing else.
+    // Wolf reads no other bit at arrival (control/input_handler.cpp create_new_joypad): the pad
+    // it builds, its rumble, its LED, its battery and its touch surface follow the type alone.
     @Test
-    fun `every bit a held pad was announced without is crossed out of the dashboard`() =
+    fun `a bit the host never reads at arrival crosses nothing out of the dashboard`() =
         composerTest {
             val rig = rig(padHasGyro = true, storedType = PLAYSTATION)
             rig.session.acquire(PAD_SLOT, PLAYSTATION)
             val everything = capabilityBits(PLAYSTATION, ALL_BITS)
-            for ((bit, feature) in BIT_FEATURES) {
+            for (bit in NON_MOTION_BITS) {
                 rig.session.reannouncePad(PAD_SLOT, PLAYSTATION, capabilities = everything and bit.inv(), supportedButtons = 0)
                 testScheduler.runCurrent()
 
-                val type = rig.composer.capabilityFor(PAD_SLOT).type
-                assertEquals("bit $bit", moonlightTypeCapabilities(PLAYSTATION).features - feature, type.features)
+                assertEquals("bit $bit", moonlightTypeCapabilities(PLAYSTATION), rig.composer.capabilityFor(PAD_SLOT).type)
             }
         }
 
@@ -251,14 +255,34 @@ class CapabilityComposerAnnouncedTypeTest {
             }
         }
 
-    // The pad on the host has no touchpad, so the surface goes to the mouse rather than to it.
+    // Wolf's PlayStation pad is one DualSense whatever the arrival said, and it places every
+    // CONTROLLER_TOUCH on it (control/input_handler.cpp controller_touch), so a surface that
+    // enumerates after the pad was announced reaches the host's touchpad without a replug.
     @Test
-    fun `a held PlayStation pad announced without the touchpad bit routes the surface to the mouse`() =
+    fun `a surface that enumerates after a PlayStation pad was announced shows the touchpad and routes it to the pad`() =
         composerTest {
-            val rig = rig(padHasGyro = true, storedType = PLAYSTATION)
+            val rig = rig(padHasGyro = true, storedType = PLAYSTATION, padSurface = null)
             rig.session.acquire(PAD_SLOT, PLAYSTATION, capabilities = capabilityBits(PLAYSTATION, ALL_BITS) and CAP_TOUCHPAD.inv())
             testScheduler.runCurrent()
 
+            rig.devices.value = mapOf(PAD_ID to pad(hasGyro = true, surface = PAD_SURFACE_ID))
+            testScheduler.runCurrent()
+
+            val caps = rig.composer.capabilityFor(PAD_SLOT)
+            assertTrue(caps.typeOk(Feature.TOUCHPAD))
+            assertTrue(caps.isAvailable(Feature.TOUCHPAD))
+            assertEquals(TOUCHPAD_MODE_DS4, rig.composer.touchpadWireMode(PAD_SLOT))
+        }
+
+    // The type still rules: an Xbox pad on the host has no touch surface, whatever bits it came with.
+    @Test
+    fun `a held Xbox pad routes the surface to the mouse, whatever bits it was announced with`() =
+        composerTest {
+            val rig = rig(padHasGyro = false, storedType = XBOX)
+            rig.session.acquire(PAD_SLOT, XBOX, capabilities = ALL_BITS)
+            testScheduler.runCurrent()
+
+            assertFalse(rig.composer.capabilityFor(PAD_SLOT).typeOk(Feature.TOUCHPAD))
             assertEquals(TOUCHPAD_MODE_MOUSE, rig.composer.touchpadWireMode(PAD_SLOT))
         }
 
@@ -310,15 +334,6 @@ class CapabilityComposerAnnouncedTypeTest {
         const val PAD_SURFACE_ID = 70
         const val ALL_BITS = 0xFF
         const val PS_BITS_WITHOUT_MOTION = ALL_BITS and (CAP_ACCELEROMETER or CAP_GYRO).inv()
-        val BIT_FEATURES =
-            listOf(
-                CAP_ANALOG_TRIGGERS to Feature.ANALOG_TRIGGERS,
-                CAP_RUMBLE to Feature.RUMBLE,
-                CAP_TRIGGER_RUMBLE to Feature.TRIGGER_RUMBLE,
-                CAP_TOUCHPAD to Feature.TOUCHPAD,
-                (CAP_ACCELEROMETER or CAP_GYRO) to Feature.MOTION,
-                CAP_BATTERY to Feature.BATTERY,
-                CAP_RGB_LED to Feature.LIGHTBAR,
-            )
+        val NON_MOTION_BITS = listOf(CAP_ANALOG_TRIGGERS, CAP_RUMBLE, CAP_TRIGGER_RUMBLE, CAP_TOUCHPAD, CAP_BATTERY, CAP_RGB_LED)
     }
 }

@@ -106,10 +106,11 @@ internal fun boundMoonlightType(
 
 /**
  * The type layer of a bound Moonlight slot: the features of the type [boundMoonlightType] names,
- * narrowed for a held pad to the capability bits it was announced with. The host builds its pad
- * from those bits as well as the type (it asks for motion only for a pad that arrived with a
- * motion bit), and a request whose bits the host does not read keeps the pad as announced, so
- * what the host was told is what the slot shows.
+ * narrowed for a held pad by the bits the host read when it arrived. The host asks for motion
+ * only for a pad that arrived with a motion bit, and a request whose other bits change keeps the
+ * pad as announced; every other feature the host builds from the type alone, so a touch surface
+ * that enumerates after the pad was announced still reaches the host pad's touchpad. What the
+ * host pad has is what the slot shows.
  */
 internal fun boundMoonlightTypeCapabilities(
     storedType: Int?,
@@ -117,7 +118,7 @@ internal fun boundMoonlightTypeCapabilities(
     announced: MoonlightPad?,
 ): CapabilitySet {
     val type = moonlightTypeCapabilities(boundMoonlightType(storedType, sourceHasMotion, announced?.emulatedType))
-    return announced?.let { type intersect announcedFeatures(it.capabilities) } ?: type
+    return announced?.let { type intersect hostBuiltFeatures(it.capabilities) } ?: type
 }
 
 // The wire-facing projection of one slot's capabilities: the caps word the descriptor carries

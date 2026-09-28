@@ -105,6 +105,14 @@ fun capabilityBits(
     sourceBits: Int,
 ): Int = typeMaximum(type) and sourceBits
 
+// The capability bits the host reads when a pad arrives, and only then. Wolf's create_new_joypad
+// (control/input_handler.cpp) reads the accelerometer and gyro bits to apply its per-client
+// motion override, to promote an unknown type to PlayStation, and to ask the client for motion
+// events at all; it reads no other bit, nor the supported buttons. The pad it builds follows the
+// type alone: every PlayStation pad is one DualSense with a touchpad and a lightbar, and
+// controller_touch places a touch on any of them.
+const val BITS_READ_AT_ARRIVAL = CAP_ACCELEROMETER or CAP_GYRO
+
 fun supportedButtons(capabilities: Int): Int =
     if (capabilities and CAP_TOUCHPAD != 0) {
         BASE_BUTTONS or BTN_TOUCHPAD

@@ -5,6 +5,7 @@ package com.tinkernorth.dish.composer
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.capabilitySetOf
+import com.tinkernorth.dish.core.net.moonlight.BITS_READ_AT_ARRIVAL
 import com.tinkernorth.dish.core.net.moonlight.CAP_ACCELEROMETER
 import com.tinkernorth.dish.core.net.moonlight.CAP_ANALOG_TRIGGERS
 import com.tinkernorth.dish.core.net.moonlight.CAP_BATTERY
@@ -68,18 +69,19 @@ internal fun sourceBits(caps: CapabilitySet): Int =
         .values
         .fold(0, Int::or)
 
-// The features a pad announced with [bits] was declared with: every feature with a bit set, and
-// every feature the arrival carries no bit for. Either motion bit declares motion, since the host
-// asks for motion events on either.
-internal fun announcedFeatures(bits: Int): CapabilitySet =
-    CapabilitySet(Feature.entries.filterTo(mutableSetOf()) { feature -> isDeclaredBy(bits, feature) })
+// The features the host built a pad announced with [bits] with, as far as the bits decide: a
+// feature the host reads a bit of at arrival (motion) only when the arrival carried one, since
+// the host asks for motion events on either; every other feature, since the host builds it from
+// the type alone whatever bit the arrival carried (BITS_READ_AT_ARRIVAL).
+internal fun hostBuiltFeatures(bits: Int): CapabilitySet =
+    CapabilitySet(Feature.entries.filterTo(mutableSetOf()) { feature -> isBuiltFrom(bits, feature) })
 
-private fun isDeclaredBy(
+private fun isBuiltFrom(
     bits: Int,
     feature: Feature,
 ): Boolean {
-    val featureBits = WIRE_BITS[feature] ?: return true
-    return bits and featureBits != 0
+    val bitsReadAtArrival = (WIRE_BITS[feature] ?: 0) and BITS_READ_AT_ARRIVAL
+    return bitsReadAtArrival == 0 || bits and bitsReadAtArrival != 0
 }
 
 internal fun capabilityBits(

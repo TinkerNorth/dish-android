@@ -7,8 +7,7 @@ import android.util.Log
 import androidx.core.content.edit
 import com.tinkernorth.dish.core.net.bytesToHex
 import com.tinkernorth.dish.core.net.moonlight.AUTO
-import com.tinkernorth.dish.core.net.moonlight.CAP_ACCELEROMETER
-import com.tinkernorth.dish.core.net.moonlight.CAP_GYRO
+import com.tinkernorth.dish.core.net.moonlight.BITS_READ_AT_ARRIVAL
 import com.tinkernorth.dish.core.net.moonlight.MoonlightApp
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEvent
@@ -161,12 +160,6 @@ internal fun moonlightConverge(
 
 /** What converging one requested pad does with the pad its slot already holds on the session. */
 enum class PadPlacement { ACQUIRE, KEEP, REANNOUNCE }
-
-// The capability bits the host reads when a pad arrives, and only then. Wolf's create_new_joypad
-// (control/input_handler.cpp) reads the accelerometer and gyro bits to apply its per-client
-// motion override, to promote an unknown type to PlayStation, and to ask the client for motion
-// events at all; it reads no other bit, nor the supported buttons.
-private const val BITS_READ_AT_ARRIVAL = CAP_ACCELEROMETER or CAP_GYRO
 
 // A held pad is re-announced only when the host would build another pad for the request: another
 // type, or a change in a bit it reads at arrival. A replug unplugs the pad in the game, so a
