@@ -861,6 +861,38 @@ const uint8_t kWideFieldNarrowRangeDescriptor[] = {
     0xC0,             // End Collection
 };
 
+// X, then a 32-bit Rx trigger whose declared range is only 0..100: {X, Rx (4 bytes)}.
+const uint8_t kWideTriggerNarrowRangeDescriptor[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x05,       // Usage (Game Pad)
+    0xA1, 0x01,       // Collection (Application)
+    0x09, 0x30,       //   Usage (X)
+    0x15, 0x00,       //   Logical Minimum (0)
+    0x26, 0xFF, 0x00, //   Logical Maximum (255)
+    0x75, 0x08,       //   Report Size (8)
+    0x95, 0x01,       //   Report Count (1)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0x09, 0x33,       //   Usage (Rx)
+    0x26, 0x64, 0x00, //   Logical Maximum (100)
+    0x75, 0x20,       //   Report Size (32)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xC0,             // End Collection
+};
+
+// A signed 32-bit X axis over the whole int32 range, both bounds as four-byte items.
+const uint8_t kSignedFullWidthAxisDescriptor[] = {
+    0x05, 0x01,                   // Usage Page (Generic Desktop)
+    0x09, 0x05,                   // Usage (Game Pad)
+    0xA1, 0x01,                   // Collection (Application)
+    0x09, 0x30,                   //   Usage (X)
+    0x17, 0x00, 0x00, 0x00, 0x80, //   Logical Minimum (-2147483648)
+    0x27, 0xFF, 0xFF, 0xFF, 0x7F, //   Logical Maximum (2147483647)
+    0x75, 0x20,                   //   Report Size (32)
+    0x95, 0x01,                   //   Report Count (1)
+    0x81, 0x02,                   //   Input (Data,Var,Abs)
+    0xC0,                         // End Collection
+};
+
 } // namespace
 
 TEST(HidDescriptor, AWideFieldBeyondItsDeclaredRangeClampsToTheRail) {
@@ -870,5 +902,34 @@ TEST(HidDescriptor, AWideFieldBeyondItsDeclaredRangeClampsToTheRail) {
     EXPECT_EQ(100, L.lx.logicalMax);
     EXPECT_EQ(32767, decoded(L, {0x64, 0x00, 0x00, 0x00}).sLX);
     EXPECT_EQ(32767, decoded(L, {0xFF, 0xFF, 0xFF, 0x7F}).sLX);
-    EXPECT_EQ(-32768, decoded(L, {0x00, 0x00, 0x00, 0x80}).sLX);
+    EXPECT_EQ(-32767, decoded(L, {0x00, 0x00, 0x00, 0x00}).sLX);
+}
+
+TEST(HidDescriptor, AnUnsignedFieldWithItsTopBitSetIsAboveTheRangeNotBelowIt) {
+    // Both logical bounds are non-negative, so the field is unsigned (HID 1.11 §6.2.2.7): raw
+    // 0x80000000 is two billion, far above 100, and has to land on the positive rail.
+    const HidLayout L =
+        parsed(kWideFieldNarrowRangeDescriptor, sizeof(kWideFieldNarrowRangeDescriptor));
+    EXPECT_EQ(32767, decoded(L, {0x00, 0x00, 0x00, 0x80}).sLX);
+    EXPECT_EQ(32767, decoded(L, {0xFF, 0xFF, 0xFF, 0xFF}).sLX);
+}
+
+TEST(HidDescriptor, AnUnsignedWideTriggerWithItsTopBitSetIsFullyPressed) {
+    const HidLayout L =
+        parsed(kWideTriggerNarrowRangeDescriptor, sizeof(kWideTriggerNarrowRangeDescriptor));
+    ASSERT_TRUE(L.lt.present);
+    EXPECT_EQ(8, L.lt.bitOffset);
+    EXPECT_EQ(0, decoded(L, {0x80, 0x00, 0x00, 0x00, 0x00}).bLT);
+    EXPECT_EQ(255, decoded(L, {0x80, 0x64, 0x00, 0x00, 0x00}).bLT);
+    EXPECT_EQ(255, decoded(L, {0x80, 0x00, 0x00, 0x00, 0x80}).bLT);
+}
+
+TEST(HidDescriptor, ASignedThirtyTwoBitFieldReadsItsTopBitAsTheSign) {
+    const HidLayout L =
+        parsed(kSignedFullWidthAxisDescriptor, sizeof(kSignedFullWidthAxisDescriptor));
+    EXPECT_EQ(INT32_MIN, L.lx.logicalMin);
+    EXPECT_EQ(INT32_MAX, L.lx.logicalMax);
+    EXPECT_EQ(-32767, decoded(L, {0x00, 0x00, 0x00, 0x80}).sLX);
+    EXPECT_EQ(32767, decoded(L, {0xFF, 0xFF, 0xFF, 0x7F}).sLX);
+    EXPECT_EQ(0, decoded(L, {0x00, 0x00, 0x00, 0x00}).sLX);
 }

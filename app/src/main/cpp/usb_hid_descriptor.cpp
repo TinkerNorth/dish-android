@@ -84,9 +84,13 @@ uint32_t extractBits(const uint8_t* d, const size_t dlen, const uint32_t bitOff,
     return v;
 }
 
-int32_t toSigned(const uint32_t raw, const uint8_t bits, const int32_t logicalMin) {
-    const bool isASignedField = logicalMin < 0 && bits > 0 && bits < kBitsPerU32;
-    if (!isASignedField) return (int32_t)raw;
+// A field is two's complement only when its logical minimum is negative (HID 1.11 §6.2.2.7); an
+// unsigned field keeps all 32 bits as magnitude, so a value above its range stays above it.
+int64_t toSigned(const uint32_t raw, const uint8_t bits, const int32_t logicalMin) {
+    const bool isAnUnsignedField = logicalMin >= 0;
+    if (isAnUnsignedField) return raw;
+    const bool isFullWidth = bits == 0 || bits >= kBitsPerU32;
+    if (isFullWidth) return (int32_t)raw;
     const uint32_t signBit = 1u << (bits - 1);
     const bool isNegative = (raw & signBit) != 0;
     if (isNegative) return (int32_t)(raw | ~((1u << bits) - 1u));
