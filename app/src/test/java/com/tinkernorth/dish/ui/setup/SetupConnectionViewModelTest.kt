@@ -15,6 +15,7 @@ import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import io.mockk.every
 import io.mockk.mockk
@@ -55,7 +56,7 @@ class SetupConnectionViewModelTest {
     private val events = MutableSharedFlow<ConnectionEvent>(extraBufferCapacity = 8)
 
     private val server = DiscoveredServer(name = "Living Room", ip = "10.0.0.5", machineId = "abc123")
-    private val id = SatelliteConnection.idFor(server)
+    private val id = satelliteConnectionIdFor(server)
 
     @Before
     fun setUp() {

@@ -19,21 +19,21 @@ data class BatteryUi(
 
     companion object {
         const val LOW_THRESHOLD = 15
-
-        // Returns null only when both level and status are UNKNOWN: nothing to render.
-        fun fromWire(
-            level: Int,
-            status: Int,
-        ): BatteryUi? {
-            val charging =
-                status == BatteryValidator.STATUS_CHARGING ||
-                    status == BatteryValidator.STATUS_FULL ||
-                    status == BatteryValidator.STATUS_WIRED
-            val pct = if (level == BatteryValidator.LEVEL_UNKNOWN) null else level
-            if (pct == null && status == BatteryValidator.STATUS_UNKNOWN) return null
-            return BatteryUi(level = pct, charging = charging)
-        }
     }
+}
+
+// Returns null only when both level and status are UNKNOWN: nothing to render.
+fun batteryUiFromWire(
+    level: Int,
+    status: Int,
+): BatteryUi? {
+    val charging =
+        status == BatteryValidator.STATUS_CHARGING ||
+            status == BatteryValidator.STATUS_FULL ||
+            status == BatteryValidator.STATUS_WIRED
+    val pct = if (level == BatteryValidator.LEVEL_UNKNOWN) null else level
+    if (pct == null && status == BatteryValidator.STATUS_UNKNOWN) return null
+    return BatteryUi(level = pct, charging = charging)
 }
 
 data class ControllerSlot(

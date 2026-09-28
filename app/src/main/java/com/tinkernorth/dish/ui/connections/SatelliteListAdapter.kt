@@ -14,7 +14,7 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.net.DishProtocolCompat
 import com.tinkernorth.dish.databinding.RowConnectionBinding
-import com.tinkernorth.dish.source.connection.SatelliteConnection
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.ui.common.setLoading
 import com.tinkernorth.dish.ui.common.statusChipText
 import com.tinkernorth.dish.ui.main.compatPillParts
@@ -162,7 +162,7 @@ private class SatelliteRowDiff : DiffUtil.ItemCallback<SatelliteRow>() {
         when {
             o is SatelliteRow.Known && n is SatelliteRow.Known -> o.summary.id == n.summary.id
             o is SatelliteRow.Discovered && n is SatelliteRow.Discovered ->
-                SatelliteConnection.idFor(o.server) == SatelliteConnection.idFor(n.server)
+                satelliteConnectionIdFor(o.server) == satelliteConnectionIdFor(n.server)
             o is SatelliteRow.Empty && n is SatelliteRow.Empty -> true
             else -> false
         }

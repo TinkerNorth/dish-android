@@ -21,8 +21,8 @@ import com.tinkernorth.dish.core.net.moonlight.XBOX
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.connection.ConnectionEvent
-import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.sensor.BatteryValidator
@@ -787,7 +787,7 @@ class MainViewModelTest {
             satelliteEvents.emit(ConnectionEvent.PairingRequired(server))
             dispatcher.scheduler.runCurrent()
 
-            assertEquals(listOf(MainEvent.ShowPairingDialog(SatelliteConnection.idFor(server))), events)
+            assertEquals(listOf(MainEvent.ShowPairingDialog(satelliteConnectionIdFor(server))), events)
             job.cancel()
         }
 

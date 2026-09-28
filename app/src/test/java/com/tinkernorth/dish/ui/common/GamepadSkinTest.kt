@@ -20,35 +20,35 @@ import org.junit.Test
 class GamepadSkinTest {
     @Test
     fun `every catalog type wears its own skin`() {
-        assertEquals(GamepadSkin.Xbox360, GamepadSkin.forControllerType(CONTROLLER_TYPE_XBOX))
-        assertEquals(GamepadSkin.PlayStation, GamepadSkin.forControllerType(CONTROLLER_TYPE_PLAYSTATION))
-        assertEquals(GamepadSkin.DualSense, GamepadSkin.forControllerType(CONTROLLER_TYPE_DUALSENSE))
-        assertEquals(GamepadSkin.Switch, GamepadSkin.forControllerType(CONTROLLER_TYPE_SWITCHPRO))
+        assertEquals(GamepadSkin.Xbox360, gamepadSkinForControllerType(CONTROLLER_TYPE_XBOX))
+        assertEquals(GamepadSkin.PlayStation, gamepadSkinForControllerType(CONTROLLER_TYPE_PLAYSTATION))
+        assertEquals(GamepadSkin.DualSense, gamepadSkinForControllerType(CONTROLLER_TYPE_DUALSENSE))
+        assertEquals(GamepadSkin.Switch, gamepadSkinForControllerType(CONTROLLER_TYPE_SWITCHPRO))
     }
 
     @Test
     fun `an unknown catalog id falls back to the emulated Xbox 360 pad`() {
-        assertEquals(GamepadSkin.Xbox360, GamepadSkin.forControllerType(99))
+        assertEquals(GamepadSkin.Xbox360, gamepadSkinForControllerType(99))
     }
 
     @Test
     fun `a Moonlight Xbox pad wears the Xbox skin, not the catalog skin its id collides with`() {
-        assertEquals(GamepadSkin.Xbox, GamepadSkin.forMoonlightType(XBOX))
-        assertEquals(GamepadSkin.PlayStation, GamepadSkin.forMoonlightType(PLAYSTATION))
-        assertEquals(GamepadSkin.Switch, GamepadSkin.forMoonlightType(NINTENDO))
+        assertEquals(GamepadSkin.Xbox, gamepadSkinForMoonlightType(XBOX))
+        assertEquals(GamepadSkin.PlayStation, gamepadSkinForMoonlightType(PLAYSTATION))
+        assertEquals(GamepadSkin.Switch, gamepadSkinForMoonlightType(NINTENDO))
     }
 
     @Test
     fun `an unresolved Moonlight value lands on the generic Xbox skin`() {
-        assertEquals(GamepadSkin.Xbox, GamepadSkin.forMoonlightType(AUTO))
-        assertEquals(GamepadSkin.Xbox, GamepadSkin.forMoonlightType(0))
+        assertEquals(GamepadSkin.Xbox, gamepadSkinForMoonlightType(AUTO))
+        assertEquals(GamepadSkin.Xbox, gamepadSkinForMoonlightType(0))
     }
 
     @Test
     fun `Bluetooth profiles keep their two skins`() {
-        assertEquals(GamepadSkin.PlayStation, GamepadSkin.forBtProfile("PlayStation"))
-        assertEquals(GamepadSkin.Xbox, GamepadSkin.forBtProfile("Xbox"))
-        assertEquals(GamepadSkin.Xbox, GamepadSkin.forBtProfile(null))
+        assertEquals(GamepadSkin.PlayStation, gamepadSkinForBtProfile("PlayStation"))
+        assertEquals(GamepadSkin.Xbox, gamepadSkinForBtProfile("Xbox"))
+        assertEquals(GamepadSkin.Xbox, gamepadSkinForBtProfile(null))
     }
 
     @Test
@@ -74,17 +74,17 @@ class GamepadSkinTest {
     fun `no Moonlight or Bluetooth destination can reach the mute button`() {
         // Neither transport carries controller audio, and neither mapper can produce DualSense.
         val reachable =
-            (ORDER + listOf(0, 99)).map(GamepadSkin::forMoonlightType) +
-                listOf(GamepadSkin.forBtProfile("PLAYSTATION"), GamepadSkin.forBtProfile(null))
+            (ORDER + listOf(0, 99)).map(::gamepadSkinForMoonlightType) +
+                listOf(gamepadSkinForBtProfile("PLAYSTATION"), gamepadSkinForBtProfile(null))
         assertEquals(emptyList<GamepadSkin>(), reachable.filter { it.hasMicMute })
     }
 
     @Test
     fun `every skin name round-trips through the intent extra`() {
         GamepadSkin.entries.forEach { skin ->
-            assertEquals(skin, GamepadSkin.fromName(skin.name))
+            assertEquals(skin, gamepadSkinFromName(skin.name))
         }
-        assertEquals(GamepadSkin.Xbox, GamepadSkin.fromName(null))
-        assertEquals(GamepadSkin.Xbox, GamepadSkin.fromName("NotASkin"))
+        assertEquals(GamepadSkin.Xbox, gamepadSkinFromName(null))
+        assertEquals(GamepadSkin.Xbox, gamepadSkinFromName("NotASkin"))
     }
 }

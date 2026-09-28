@@ -9,8 +9,8 @@ import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.core.net.DishProtocolCompat
 import com.tinkernorth.dish.core.net.dishProtocolCompatFor
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
-import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 
 sealed interface SatelliteRow {
     data class Known(
@@ -99,7 +99,7 @@ fun satelliteRows(
             add(SatelliteRow.Known(it, dishProtocolCompatFor(version)))
         }
         discovered.forEach { server ->
-            if (SatelliteConnection.idFor(server) !in knownIds) add(SatelliteRow.Discovered(server))
+            if (satelliteConnectionIdFor(server) !in knownIds) add(SatelliteRow.Discovered(server))
         }
     }
 }

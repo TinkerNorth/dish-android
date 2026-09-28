@@ -603,12 +603,12 @@ class SatelliteConnection(
         const val CLOSE_REASON_UNPAIRED = 3
 
         const val ID_PREFIX = "satellite:"
-
-        // Keyed on the stable machineId so a receiver that changes IP keeps the
-        // same identity; ip:udpPort only for a beacon that carries no id at all.
-        fun idFor(server: DiscoveredServer): String = "$ID_PREFIX${server.stableKey}"
     }
 }
+
+// Keyed on the stable machineId so a receiver that changes IP keeps the
+// same identity; ip:udpPort only for a beacon that carries no id at all.
+fun satelliteConnectionIdFor(server: DiscoveredServer): String = "${SatelliteConnection.ID_PREFIX}${server.stableKey}"
 
 internal fun lowestFreeIndex(taken: List<Int>): Int {
     val set = taken.toHashSet()

@@ -328,7 +328,7 @@ class SatelliteConnectionManager
                 val servers = discoveryRepo.discoverServers(DISC_PORT, DISC_TIMEOUT_MS)
                 store.refreshFromDiscovery(servers)
                 servers.forEach { server ->
-                    val conn = _connections.value[SatelliteConnection.idFor(server)]
+                    val conn = _connections.value[satelliteConnectionIdFor(server)]
                     if (conn != null && conn.state.value == SatelliteSessionState.Idle) {
                         conn.updateServer(server)
                     }
@@ -380,7 +380,7 @@ class SatelliteConnectionManager
         ) {
             // Only user-initiated connects (which prompt) may open LAN sockets before the Android 17 grant.
             if (intent != ConnectIntent.USER_INITIATED && !isGranted(context)) return
-            val id = SatelliteConnection.idFor(server)
+            val id = satelliteConnectionIdFor(server)
             if (intent == ConnectIntent.USER_INITIATED) retryAttempts.remove(id)
             // Atomic find-or-create: prevents two concurrent first-time connects allocating duplicates.
             val (conn, created) = findOrCreate(id, server)
@@ -415,7 +415,7 @@ class SatelliteConnectionManager
             intent: ConnectIntent,
             generation: Int,
         ) {
-            val id = SatelliteConnection.idFor(server)
+            val id = satelliteConnectionIdFor(server)
             val reply = pairNegotiated(id, server, pin = "")
             if (isSuperseded(id, generation)) return
             if (reply == null || reply.unreachable) {
@@ -460,7 +460,7 @@ class SatelliteConnectionManager
             server: DiscoveredServer,
             pin: String,
         ) {
-            val id = SatelliteConnection.idFor(server)
+            val id = satelliteConnectionIdFor(server)
             retryAttempts.remove(id)
             // Atomic find-or-create (as in connect): concurrent PIN submits must not
             // allocate duplicates, and a submit must not stack on a live session.
@@ -512,7 +512,7 @@ class SatelliteConnectionManager
             server: DiscoveredServer,
             clientPin: String,
         ) {
-            val id = SatelliteConnection.idFor(server)
+            val id = satelliteConnectionIdFor(server)
             retryAttempts.remove(id)
             val (conn, _) = findOrCreate(id, server)
             conn.updateServer(server)
@@ -613,7 +613,7 @@ class SatelliteConnectionManager
             intent: ConnectIntent,
             generation: Int,
         ) = withContext(ioDispatcher) {
-            val id = SatelliteConnection.idFor(server)
+            val id = satelliteConnectionIdFor(server)
             // Vet the discovered address before any socket: an unauthenticated
             // mDNS/broadcast beacon must not steer us at a public or non-literal
             // host. Every connect path funnels through here, so both discovery

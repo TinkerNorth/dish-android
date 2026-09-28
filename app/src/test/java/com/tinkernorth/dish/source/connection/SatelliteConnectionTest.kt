@@ -77,7 +77,7 @@ class SatelliteConnectionTest {
         ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO,
     ): SatelliteConnection =
         SatelliteConnection(
-            id = SatelliteConnection.idFor(server),
+            id = satelliteConnectionIdFor(server),
             server = server,
             scope = scope,
             controllerRepo = repo,
@@ -166,8 +166,8 @@ class SatelliteConnectionTest {
         }
 
     @Test
-    fun `idFor derives stable id from the machineId`() {
-        assertEquals("satellite:mid:abc123", SatelliteConnection.idFor(server))
+    fun `satelliteConnectionIdFor derives stable id from the machineId`() {
+        assertEquals("satellite:mid:abc123", satelliteConnectionIdFor(server))
     }
 
     @Test
@@ -1125,7 +1125,7 @@ class SatelliteConnectionTest {
     fun `renameSlot carries the motion backend status to the new id`() {
         val store = SatelliteMotionBackendStatusStore()
         val tracked = newConnection(store = store)
-        val id = SatelliteConnection.idFor(server)
+        val id = satelliteConnectionIdFor(server)
         val status =
             com.tinkernorth.dish.source.store
                 .SatelliteMotionBackendStatus(sinkSupportedForType = true, backendOk = true)
@@ -1152,7 +1152,7 @@ class SatelliteConnectionTest {
     fun `detachSlot clears the slot's motion backend status`() {
         val store = SatelliteMotionBackendStatusStore()
         val tracked = newConnection(store = store)
-        val id = SatelliteConnection.idFor(server)
+        val id = satelliteConnectionIdFor(server)
         tracked.attachSlot("a", controllerType = 1)
         store.setStatus(
             id,
@@ -1170,7 +1170,7 @@ class SatelliteConnectionTest {
     fun `markDisconnected clears every motion backend status of the connection`() {
         val store = SatelliteMotionBackendStatusStore()
         val tracked = newConnection(store = store)
-        val id = SatelliteConnection.idFor(server)
+        val id = satelliteConnectionIdFor(server)
         tracked.attachSlot("a", controllerType = 1)
         tracked.attachSlot("b", controllerType = 1)
         connectLive(target = tracked, applied = listOf(okApply(0, appliedType = 1), okApply(1, appliedType = 1)))

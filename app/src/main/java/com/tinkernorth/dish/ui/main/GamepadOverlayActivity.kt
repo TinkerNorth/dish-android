@@ -30,7 +30,7 @@ import com.tinkernorth.dish.source.sensor.PhoneBatterySource
 import com.tinkernorth.dish.source.sensor.PhoneMotionSource
 import com.tinkernorth.dish.source.store.MicMuteStore
 import com.tinkernorth.dish.source.store.VirtualPadFeedback
-import com.tinkernorth.dish.ui.common.GamepadSkin
+import com.tinkernorth.dish.ui.common.gamepadSkinFromName
 import com.tinkernorth.dish.ui.common.GamepadTouchView
 import com.tinkernorth.dish.ui.common.ResendPacer
 import com.tinkernorth.dish.ui.common.TouchpadSurfaceView
@@ -95,7 +95,7 @@ class GamepadOverlayActivity :
         installBaseScaffolding()
 
         binding.gamepadTouchView.listener = this
-        binding.gamepadTouchView.skin = GamepadSkin.fromName(intent.getStringExtra(EXTRA_GAMEPAD_SKIN))
+        binding.gamepadTouchView.skin = gamepadSkinFromName(intent.getStringExtra(EXTRA_GAMEPAD_SKIN))
         setupDishToolbar(binding.overlayToolbar)
         binding.overlayToolbar.setTitle(R.string.overlay_title_gamepad)
         installRateReadout(

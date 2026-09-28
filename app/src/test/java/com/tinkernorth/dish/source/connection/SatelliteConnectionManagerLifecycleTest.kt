@@ -552,7 +552,7 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
         tapPutSession: suspend () -> com.tinkernorth.dish.core.net.HttpReply,
     ) = runMgrTest { mgr, _ ->
         val stable = server.copy(machineId = "m1")
-        val stableId = SatelliteConnection.idFor(stable)
+        val stableId = satelliteConnectionIdFor(stable)
         every { store.satelliteSharedKey(stableId) } returns "aa".repeat(32)
         every { controllerRepo.openSocket(any(), any()) } returns 5
         coEvery {
@@ -970,7 +970,7 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
     fun `connect while faltering only updates the address`() =
         runMgrTest { mgr, _ ->
             val stable = server.copy(machineId = "m1")
-            val stableId = SatelliteConnection.idFor(stable)
+            val stableId = satelliteConnectionIdFor(stable)
             stubLiveSession()
             every { store.satelliteSharedKey(stableId) } returns "aa".repeat(32)
             mgr.connect(stable)

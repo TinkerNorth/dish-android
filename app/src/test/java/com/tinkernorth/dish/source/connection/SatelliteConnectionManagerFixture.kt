@@ -54,7 +54,7 @@ open class SatelliteConnectionManagerFixture {
             pairPort = 9878,
             httpPort = 9877,
         )
-    protected val serverId = SatelliteConnection.idFor(server)
+    protected val serverId = satelliteConnectionIdFor(server)
 
     protected fun reply(
         status: Int,

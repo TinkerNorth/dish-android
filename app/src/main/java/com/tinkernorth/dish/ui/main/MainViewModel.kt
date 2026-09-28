@@ -21,8 +21,8 @@ import com.tinkernorth.dish.core.net.moonlight.fromStored
 import com.tinkernorth.dish.core.net.moonlight.resolveMoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.ConnectionEvent
-import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.inputrate.InputRates
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
@@ -35,6 +35,9 @@ import com.tinkernorth.dish.source.usb.PhysicalPadSources
 import com.tinkernorth.dish.source.usb.UsbController
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.ui.common.GamepadSkin
+import com.tinkernorth.dish.ui.common.gamepadSkinForBtProfile
+import com.tinkernorth.dish.ui.common.gamepadSkinForControllerType
+import com.tinkernorth.dish.ui.common.gamepadSkinForMoonlightType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -155,7 +158,7 @@ class MainViewModel
             return copy(
                 boundConnectionId = cid,
                 boundStatus = cid?.let { bound -> conns.firstOrNull { it.id == bound } },
-                battery = batteries[id]?.let { BatteryUi.fromWire(it.level, it.status) },
+                battery = batteries[id]?.let { batteryUiFromWire(it.level, it.status) },
             )
         }
 
@@ -193,7 +196,7 @@ class MainViewModel
         private suspend fun onConnectionEvent(event: ConnectionEvent) {
             when (event) {
                 is ConnectionEvent.PairingRequired ->
-                    _events.emit(MainEvent.ShowPairingDialog(SatelliteConnection.idFor(event.server)))
+                    _events.emit(MainEvent.ShowPairingDialog(satelliteConnectionIdFor(event.server)))
                 is ConnectionEvent.Error -> _events.emit(MainEvent.ShowToast(event.message))
             }
         }
@@ -267,9 +270,9 @@ class MainViewModel
                     .firstOrNull { it.id == slotId }
                     ?.boundStatus
             return when (summary?.kind) {
-                ConnectionKind.BLUETOOTH -> GamepadSkin.forBtProfile(summary.btProfile)
-                ConnectionKind.MOONLIGHT -> GamepadSkin.forMoonlightType(resolvedMoonlightType(slotId, summary))
-                else -> GamepadSkin.forControllerType(summary?.satelliteControllerTypes?.get(slotId) ?: CONTROLLER_TYPE_XBOX)
+                ConnectionKind.BLUETOOTH -> gamepadSkinForBtProfile(summary.btProfile)
+                ConnectionKind.MOONLIGHT -> gamepadSkinForMoonlightType(resolvedMoonlightType(slotId, summary))
+                else -> gamepadSkinForControllerType(summary?.satelliteControllerTypes?.get(slotId) ?: CONTROLLER_TYPE_XBOX)
             }
         }
 

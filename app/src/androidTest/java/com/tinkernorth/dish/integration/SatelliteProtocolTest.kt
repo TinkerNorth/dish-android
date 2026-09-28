@@ -5,8 +5,8 @@ package com.tinkernorth.dish.integration
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.net.DISH_PROTOCOL_CURRENT
-import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -44,7 +44,7 @@ class SatelliteProtocolTest {
 
     private fun startFake(): FakeSatellite = FakeSatellite().also { fake = it }
 
-    private fun stateOf(server: DiscoveredServer): SatelliteSessionState? = manager.get(SatelliteConnection.idFor(server))?.state?.value
+    private fun stateOf(server: DiscoveredServer): SatelliteSessionState? = manager.get(satelliteConnectionIdFor(server))?.state?.value
 
     private fun pairAndGoLive(satellite: FakeSatellite): DiscoveredServer {
         val server = satellite.server()
@@ -60,7 +60,7 @@ class SatelliteProtocolTest {
     fun pairWithPin_reachesLive_withValidatedProofAndFullDescriptorPut() {
         val satellite = startFake()
         val server = pairAndGoLive(satellite)
-        val id = SatelliteConnection.idFor(server)
+        val id = satelliteConnectionIdFor(server)
 
         assertNotNull("pairing key must be stored", AppSingletons.store.satelliteSharedKey(id))
         assertEquals("satellite mints one pairing key", satellite.pairingKeyHex != null, true)
@@ -80,7 +80,7 @@ class SatelliteProtocolTest {
             "connection should settle back to Idle",
             await { stateOf(server) == SatelliteSessionState.Idle },
         )
-        assertNull(AppSingletons.store.satelliteSharedKey(SatelliteConnection.idFor(server)))
+        assertNull(AppSingletons.store.satelliteSharedKey(satelliteConnectionIdFor(server)))
         assertNull("no key minted for a bad PIN", satellite.pairingKeyHex)
     }
 
@@ -110,7 +110,7 @@ class SatelliteProtocolTest {
         val server = satellite.server(machineId = sharedMachineId)
         manager.pairWithPin(server, "1234")
         assertTrue(await { stateOf(server) == SatelliteSessionState.Live })
-        val id = SatelliteConnection.idFor(server)
+        val id = satelliteConnectionIdFor(server)
         manager.disconnect(id)
         satellite.close()
 
@@ -133,7 +133,7 @@ class SatelliteProtocolTest {
     fun terminal401_dropsTheStoredKeyAndStopsRetrying() {
         val satellite = startFake()
         val server = pairAndGoLive(satellite)
-        val id = SatelliteConnection.idFor(server)
+        val id = satelliteConnectionIdFor(server)
         manager.disconnect(id)
         assertTrue(await { stateOf(server) == SatelliteSessionState.Idle })
 
@@ -170,7 +170,7 @@ class SatelliteProtocolTest {
     fun forget_selfUnpairsOnTheSatelliteAndForgetsLocally() {
         val satellite = startFake()
         val server = pairAndGoLive(satellite)
-        val id = SatelliteConnection.idFor(server)
+        val id = satelliteConnectionIdFor(server)
 
         manager.forget(id)
         assertTrue(
@@ -201,7 +201,7 @@ class SatelliteProtocolTest {
     fun sessionCloseNotify_unpaired_isTerminalAndDropsTheKey() {
         val satellite = startFake()
         val server = pairAndGoLive(satellite)
-        val id = SatelliteConnection.idFor(server)
+        val id = satelliteConnectionIdFor(server)
         assertTrue(satellite.awaitUdpOpcode(0x0002))
 
         // Unpaired is terminal: drop the key, mark needs-pairing, no reconnect.
@@ -228,7 +228,7 @@ class SatelliteProtocolTest {
             "approval must open the session",
             await { stateOf(server) == SatelliteSessionState.Live },
         )
-        assertNotNull(AppSingletons.store.satelliteSharedKey(SatelliteConnection.idFor(server)))
+        assertNotNull(AppSingletons.store.satelliteSharedKey(satelliteConnectionIdFor(server)))
     }
 
     @Test

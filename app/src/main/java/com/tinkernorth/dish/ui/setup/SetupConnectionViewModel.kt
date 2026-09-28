@@ -18,6 +18,7 @@ import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.ui.connections.moonlightTrustFor
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -186,7 +187,7 @@ class SetupConnectionViewModel
             server: DiscoveredServer,
             pin: String,
         ) {
-            pendingHostId = SatelliteConnection.idFor(server)
+            pendingHostId = satelliteConnectionIdFor(server)
             satellite.pairWithPin(server, pin)
         }
 
@@ -194,7 +195,7 @@ class SetupConnectionViewModel
             server: DiscoveredServer,
             clientPin: String,
         ) {
-            pendingHostId = SatelliteConnection.idFor(server)
+            pendingHostId = satelliteConnectionIdFor(server)
             satellite.requestApproval(server, clientPin)
         }
 
@@ -242,7 +243,7 @@ class SetupConnectionViewModel
             stale: Set<String>,
             features: Map<String, HostFeatureSet> = emptyMap(),
         ): List<Host> {
-            val discoveredById = discovered.associateBy { SatelliteConnection.idFor(it) }
+            val discoveredById = discovered.associateBy { satelliteConnectionIdFor(it) }
             // The coordinator's summary carries the reactive LinkState; prefer it,
             // and fall back to a computed state for a freshly discovered host the
             // coordinator hasn't surfaced yet.

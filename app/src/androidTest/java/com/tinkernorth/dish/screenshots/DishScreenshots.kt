@@ -21,6 +21,7 @@ import com.tinkernorth.dish.repository.RememberedBt
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.ControllerTypeStore
@@ -111,12 +112,12 @@ class DishScreenshots {
         DiscoveredServer(name = "Office PC", ip = "192.168.1.52", machineId = "office-pc")
     private val livingRoomServer =
         DiscoveredServer(name = "Living Room PC", ip = "192.168.1.51", machineId = "living-room-pc")
-    private val gamingId get() = SatelliteConnection.idFor(gamingServer)
+    private val gamingId get() = satelliteConnectionIdFor(gamingServer)
 
     private fun liveSession(server: DiscoveredServer): SatelliteConnection {
         val session =
             SatelliteConnection(
-                id = SatelliteConnection.idFor(server),
+                id = satelliteConnectionIdFor(server),
                 server = server,
                 scope = MainScope(),
                 controllerRepo = satellite.controllerRepo,

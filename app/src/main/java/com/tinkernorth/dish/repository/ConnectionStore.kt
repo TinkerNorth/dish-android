@@ -3,7 +3,7 @@
 package com.tinkernorth.dish.repository
 
 import com.tinkernorth.dish.core.model.DiscoveredServer
-import com.tinkernorth.dish.source.connection.SatelliteConnection
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
 import javax.inject.Inject
@@ -26,13 +26,13 @@ class ConnectionStore
         fun remembered(): List<RememberedSatellite> = satellites.all()
 
         // Identity is machineId-only (satellite docs/contract.md §Identity):
-        // one physical receiver is exactly one remembered row. idFor still has
+        // one physical receiver is exactly one remembered row. satelliteConnectionIdFor still has
         // to mint an ip:port id while the machineId is unknown (manual add), so
         // the upsert itself keeps the invariant across an identity upgrade:
         // there is no separate reconciliation pass to run, or forget to run.
         fun rememberSatellite(server: DiscoveredServer) {
             if (server.machineId.isBlank() && refreshKnownBox(server)) return
-            val id = SatelliteConnection.idFor(server)
+            val id = satelliteConnectionIdFor(server)
             if (server.machineId.isNotBlank()) collapseLegacyGhosts(server, id)
             migratePinOnAddressChange(satellites.get(id)?.ip, server.ip)
             val row =
@@ -62,7 +62,7 @@ class ConnectionStore
             rows: List<RememberedSatellite>,
             knownIds: Set<String>,
         ): Boolean {
-            val isKnownById = SatelliteConnection.idFor(server) in knownIds
+            val isKnownById = satelliteConnectionIdFor(server) in knownIds
             val matchesALegacyRow = rows.any { it.isLegacyRowFor(server) }
             return isKnownById || matchesALegacyRow
         }

@@ -515,7 +515,7 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
     fun `connect to a public ip is refused before any socket is opened`() =
         runMgrTest { mgr, _ ->
             val publicServer = server.copy(ip = "8.8.8.8")
-            val publicId = SatelliteConnection.idFor(publicServer)
+            val publicId = satelliteConnectionIdFor(publicServer)
             // Stored key routes both straight to openSession (the IP choke point).
             every { store.satelliteSharedKey(publicId) } returns "aa".repeat(32)
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
@@ -965,7 +965,7 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
     fun `a scan re-points an idle connection at the discovered address`() =
         runMgrTest { mgr, _ ->
             val midServer = server.copy(machineId = "m1")
-            val midId = SatelliteConnection.idFor(midServer)
+            val midId = satelliteConnectionIdFor(midServer)
             coEvery { discoveryRepo.pair(any(), any(), any(), any(), any()) } returns unreachable()
             mgr.connect(midServer, ConnectIntent.AUTO_RECONNECT)
             scope.testScheduler.advanceUntilIdle()
@@ -997,7 +997,7 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
     fun `a scan leaves a live session's address alone`() =
         runMgrTest { mgr, _ ->
             val midServer = server.copy(machineId = "m1")
-            val midId = SatelliteConnection.idFor(midServer)
+            val midId = satelliteConnectionIdFor(midServer)
             every { store.satelliteSharedKey(midId) } returns "aa".repeat(32)
             coEvery {
                 discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
@@ -1031,7 +1031,7 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
     fun `a silent retry dials the address remembered at fire time`() =
         runMgrTest { mgr, _ ->
             val midServer = server.copy(machineId = "m1")
-            val midId = SatelliteConnection.idFor(midServer)
+            val midId = satelliteConnectionIdFor(midServer)
             every { store.satelliteSharedKey(midId) } returns "aa".repeat(32)
             coEvery {
                 discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())

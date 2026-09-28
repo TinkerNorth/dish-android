@@ -47,10 +47,10 @@ import com.tinkernorth.dish.source.bluetooth.BluetoothDeviceScanner
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.bluetooth.BtStaleReason
 import com.tinkernorth.dish.source.connection.ConnectionEvent
-import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.generatePin
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.source.notification.dishSnackbar
 import com.tinkernorth.dish.source.store.BluetoothPermissionBannerStore
 import com.tinkernorth.dish.source.system.BluetoothAdapterState
@@ -995,7 +995,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
         fun dismissIfPaired(state: ConnectionsUiState) {
             val pairing = server ?: return
-            val pid = SatelliteConnection.idFor(pairing)
+            val pid = satelliteConnectionIdFor(pairing)
             val connected =
                 state.satelliteRows.any {
                     it is SatelliteRow.Known && it.summary.id == pid && it.summary.live == LinkState.Connected

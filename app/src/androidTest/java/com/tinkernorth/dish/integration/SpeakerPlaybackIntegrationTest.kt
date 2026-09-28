@@ -21,8 +21,8 @@ import com.tinkernorth.dish.source.audio.SlotAudioRoutes
 import com.tinkernorth.dish.source.audio.SpeakerEngine
 import com.tinkernorth.dish.source.audio.SpeakerPlayoutSession
 import com.tinkernorth.dish.source.audio.SpeakerPlayoutSink
-import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.source.store.MIC_LED_OFF
 import com.tinkernorth.dish.source.store.MIC_LED_ON
 import com.tinkernorth.dish.source.store.MIC_LED_PULSE
@@ -137,7 +137,7 @@ class SpeakerPlaybackIntegrationTest {
     private fun bindVirtualAndGoLive(): DiscoveredServer {
         val satellite = FakeSatellite().also { fake = it }
         val server = satellite.server()
-        val id = SatelliteConnection.idFor(server)
+        val id = satelliteConnectionIdFor(server)
         manager.pairWithPin(server, "1234")
         assertTrue(
             "session should reach Live",
@@ -195,7 +195,7 @@ class SpeakerPlaybackIntegrationTest {
         // would pin the library version. Mono where a host's would be stereo, which a stereo
         // decoder upmixes, so the shape the sink receives is identical.
         val satellite = fake!!
-        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val conn = manager.get(satelliteConnectionIdFor(server))!!
         val ctrlIdx = conn.slots.value[VIRTUAL_SLOT_ID]!!.controllerIndex
         for (f in 0 until count + 2) {
             SlotReportNative.sendMicFrame(conn.handle, ctrlIdx, tone(f))
@@ -212,7 +212,7 @@ class SpeakerPlaybackIntegrationTest {
     fun speakerFrames_playThroughAnEligibleSlotAndStopWhenItIsSwitchedOff() {
         val server = bindVirtualAndGoLive()
         val satellite = fake!!
-        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val conn = manager.get(satelliteConnectionIdFor(server))!!
         val ctrlIdx = conn.slots.value[VIRTUAL_SLOT_ID]!!.controllerIndex
         val packets = speakerPackets(server, count = 8)
 
@@ -262,7 +262,7 @@ class SpeakerPlaybackIntegrationTest {
     fun micLed_reachesTheVirtualPadsSkinInEveryStateTheWireCarries() {
         val server = bindVirtualAndGoLive()
         val satellite = fake!!
-        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val conn = manager.get(satelliteConnectionIdFor(server))!!
         val ctrlIdx = conn.slots.value[VIRTUAL_SLOT_ID]!!.controllerIndex
         val store = virtualFeedback
 

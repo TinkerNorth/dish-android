@@ -12,6 +12,7 @@ import com.tinkernorth.dish.source.bluetooth.BluetoothLinkType
 import com.tinkernorth.dish.source.store.stickHistoryKeyFor
 import com.tinkernorth.dish.ui.main.BatteryUi
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
+import com.tinkernorth.dish.ui.main.batteryUiFromWire
 import com.tinkernorth.dish.ui.main.routedTwinIdsHiddenBySynthetics
 
 private val FUNCTION_FEATURES =
@@ -151,7 +152,7 @@ private fun stateOf(device: PhysicalGamepadRegistry.Device): ControllerDiagState
 private fun batteryUi(
     world: DiagnosticsWorld,
     slotId: String,
-): BatteryUi? = world.batteries[slotId]?.let { BatteryUi.fromWire(it.level, it.status) }
+): BatteryUi? = world.batteries[slotId]?.let { batteryUiFromWire(it.level, it.status) }
 
 internal fun functionsOf(caps: SlotCapabilities?): List<Feature> {
     caps ?: return emptyList()
