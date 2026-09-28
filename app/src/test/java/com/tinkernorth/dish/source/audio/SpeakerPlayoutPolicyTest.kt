@@ -89,7 +89,7 @@ class SpeakerPlayoutPolicyTest {
     fun `the route key packs a handle, an index and a lane without collision`() {
         val seen = HashSet<Long>()
         for (handle in 0..8) {
-            for (index in 0..4) {
+            for (index in 0..LAST_CTRL_IDX) {
                 for (lane in PlayoutLane.entries) {
                     assertTrue(
                         "handle=$handle index=$index lane=$lane collided",
@@ -131,6 +131,9 @@ class SpeakerPlayoutPolicyTest {
     private companion object {
         const val HANDLE = 7
         const val CTRL_IDX = 0
+
+        // The wire's highest controller index: a session carries up to 16 pads.
+        const val LAST_CTRL_IDX = 15
     }
 
     // ---- protocol 3: the haptic lane ----
