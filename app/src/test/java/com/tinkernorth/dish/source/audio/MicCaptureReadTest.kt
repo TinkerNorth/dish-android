@@ -93,7 +93,7 @@ class MicCaptureReadTest {
         threads.currentThreadAllocatedBytes
 
         val before = threads.currentThreadAllocatedBytes
-        for (window in 0 until WINDOWS) readWholeWindow(recorder::read, out)
+        repeat(WINDOWS) { readWholeWindow(recorder::read, out) }
         val allocated = threads.currentThreadAllocatedBytes - before
 
         assertEquals(0L, allocated)
