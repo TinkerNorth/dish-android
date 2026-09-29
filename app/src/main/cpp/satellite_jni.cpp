@@ -1194,6 +1194,9 @@ static void sleepUntilNextHeartbeat(Session& s, const int intervalMs) {
 }
 
 static void heartbeatLoop(std::shared_ptr<Session> s) {
+    // Each ping holds its session's send turn, which the input threads wait on, so the thread runs
+    // at their priority: a ping descheduled mid-send would hold every sender of the session.
+    dish::elevateCurrentThreadToInputPriority();
     LOGI("Heartbeat thread started (sock=%d)", s->udpSock);
     while (s->heartbeat.running()) {
         sendEncrypted(s, MSG_HEARTBEAT_PING, nullptr, 0);
