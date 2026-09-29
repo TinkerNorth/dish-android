@@ -12,9 +12,11 @@ import javax.inject.Singleton
 /**
  * Host-driven feedback for the on-screen virtual pad: the phone has no
  * lightbar or player-LED hardware, so the skin renders them instead. State is
- * last-known and deliberately survives the overlay closing — the host coalesces
- * these messages and will not resend an unchanged value, so forgetting it here
- * would blank the skin until the game next changes something.
+ * last-known and deliberately survives the overlay closing: a host sends a value
+ * when the game changes it, and a satellite repeats the light bar, trigger
+ * effects and player LEDs only when a new session first reaches this phone,
+ * never the mic lamp. Closing the overlay is neither, so forgetting the state
+ * here would blank the skin until the game next changes something.
  */
 data class VirtualPadFeedback(
     // ARGB color, null until a host has set one.
