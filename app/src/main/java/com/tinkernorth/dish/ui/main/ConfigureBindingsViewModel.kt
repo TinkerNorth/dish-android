@@ -641,10 +641,12 @@ class ConfigureBindingsViewModel
                 pairingJob = null
             }
 
+            // The quit's own reply proves nothing, so the card waits for the close request to go out
+            // and asks the host then (onEvent): asked sooner, it can still report the app being closed.
             private fun quitApp(host: MoonlightHost) {
                 moonlight.quitHostApp(host)
                 _ui.update { it.copy(moonlightFailure = null) }
-                refreshMoonlight()
+                showMoonlightPlaceholder(MoonlightSessionInput())
             }
 
             private fun restartSession(hostId: String) {
@@ -659,7 +661,11 @@ class ConfigureBindingsViewModel
                     Log.w(TAG, "pairing with ${event.host.address} failed: ${event.reason}")
                 }
                 _ui.update { it.recordMoonlightEvent(event) }
+                if (closeRequestedForTheShownHost(event)) refreshMoonlight()
             }
+
+            private fun closeRequestedForTheShownHost(event: MoonlightConnectionEvent): Boolean =
+                event is MoonlightConnectionEvent.AppCloseRequested && event.host.id == _ui.value.draft?.hostId
         }
 
         fun setDirect(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(directOn = on)).withCapabilities() }

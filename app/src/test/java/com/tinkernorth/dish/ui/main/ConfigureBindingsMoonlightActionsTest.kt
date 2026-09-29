@@ -211,19 +211,35 @@ class ConfigureBindingsMoonlightActionsTest {
             assertEquals(MoonlightSessionUi.Live(controllerNumber = 1, appName = "Desktop"), vm.ui.value.moonlightSession)
         }
 
-    // B16. A cancel answers 200 whether or not anything was running, so its reply proves
-    // nothing and the screen has to ask the host again rather than believe it.
+    // B16, H2. A cancel answers 200 whether or not anything was running, so its reply proves
+    // nothing and the screen asks the host again, once the close request has gone out. Asked at
+    // the same moment, the host could still report the app the quit was about to close.
     @Test
-    fun `quitting the app asks the host to close it and then re-checks the host`() =
+    fun `quitting the app asks the host to close it and re-checks the host once the request has gone out`() =
         runTest(dispatcher) {
             openOn(MoonlightTrustState.PAIRED)
 
             vm.onMoonlightAction(MoonlightAction.QUIT_APP)
             dispatcher.scheduler.advanceUntilIdle()
-
             verify { moonlight.quitHostApp(host) }
-            // Once on entering the screen, once because the cancel proved nothing.
-            coVerify(atLeast = 2) { moonlight.probe(host) }
+            assertEquals(MoonlightSessionUi.Checking, vm.ui.value.moonlightSession)
+            coVerify(exactly = 1) { moonlight.probe(host) }
+
+            events.emit(MoonlightConnectionEvent.AppCloseRequested(host))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            coVerify(exactly = 2) { moonlight.probe(host) }
+        }
+
+    @Test
+    fun `a close request for another host does not re-check this one`() =
+        runTest(dispatcher) {
+            openOn(MoonlightTrustState.PAIRED)
+
+            events.emit(MoonlightConnectionEvent.AppCloseRequested(host.copy(address = "10.0.0.6")))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            coVerify(exactly = 1) { moonlight.probe(host) }
         }
 
     // B5. New code is only ever offered while a pairing is in flight, so a guard that did
