@@ -38,4 +38,8 @@ class MoonlightHostFactsStore
         }
 
         fun factsFor(hostId: String): MoonlightHostFacts? = state.value[hostId]
+
+        fun forget(hostId: String) {
+            setState { it - hostId }
+        }
     }

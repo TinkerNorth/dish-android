@@ -949,6 +949,7 @@ class MoonlightConnectionManager
                 releaseSessionFor(id, host)
                 store.remove(id)
                 gateway.forgetPin(id)
+                hostFacts.forget(id)
                 _connections.updateAndGet { it - id }
                 _discovered.value = _discovered.value.filterNot { it.id == id }
                 _verifiedHostIds.value = _verifiedHostIds.value - id

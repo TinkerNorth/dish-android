@@ -110,6 +110,18 @@ class SmallStoresTest {
     }
 
     @Test
+    fun `forgetting a host drops its facts and keeps every other host's`() {
+        val store = MoonlightHostFactsStore()
+        store.note("h", serverInfo("PC", currentGame = 0), nowMs = 5L)
+        store.note("other", serverInfo("Den", currentGame = 0), nowMs = 6L)
+
+        store.forget("h")
+
+        assertNull(store.factsFor("h"))
+        assertEquals("Den", store.factsFor("other")?.hostname)
+    }
+
+    @Test
     fun `feedback activity counts per slot and keeps the latest kind`() {
         val store = FeedbackActivityStore()
 

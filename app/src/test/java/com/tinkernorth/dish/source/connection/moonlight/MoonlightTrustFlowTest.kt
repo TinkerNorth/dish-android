@@ -10,6 +10,7 @@ import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
 import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
 import com.tinkernorth.dish.repository.RememberedMoonlightRepository
+import com.tinkernorth.dish.source.store.MoonlightHostFactsStore
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -51,6 +52,9 @@ class MoonlightTrustFlowTest {
 
     /** What the fake store holds, so a test can assert on the record and not on a call. */
     private val rows = linkedMapOf<String, RememberedMoonlight>()
+
+    // What the host last said about itself, as the diagnostics read it.
+    private val facts = MoonlightHostFactsStore()
     private val entries = MutableStateFlow<List<RememberedMoonlight>>(emptyList())
 
     // The address-keyed form, because the live hosts publish no uniqueid TXT record and
@@ -127,6 +131,7 @@ class MoonlightTrustFlowTest {
             gateway = gateway,
             identity = mockk<MoonlightIdentity>(relaxed = true),
             store = store,
+            hostFacts = facts,
         )
 
     // ── Pairing ────────────────────────────────────────────────────────────────
@@ -229,6 +234,23 @@ class MoonlightTrustFlowTest {
             // The pin used to survive a forget, so a host that rotated its certificate
             // afterwards was refused with no way past it from inside the app.
             verify { gateway.forgetPin(host.id) }
+        }
+
+    // B6. Nothing about a forgotten host may outlive it, including what it last said about itself:
+    // a connection made to the same address later showed it in the diagnostics until the host
+    // answered again, and for good when it did not.
+    @Test
+    fun `forget leaves nothing of what the host last said about itself`() =
+        runTest(dispatcher) {
+            manager.pairHost(host)
+            manager.probe(host)
+            dispatcher.scheduler.advanceUntilIdle()
+            assertNotNull(facts.factsFor(host.id))
+
+            manager.forget(host.id)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertNull(facts.factsFor(host.id))
         }
 
     @Test
