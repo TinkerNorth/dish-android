@@ -106,6 +106,7 @@ class MoonlightHttpGatewayTest {
         // One accept per call, and the host read EOF on each: nothing of ours is
         // still open, which is exactly what the pooled URL-stack version leaked.
         assertEquals(CALLS, host.awaitHeads(CALLS).size)
+        assertTrue("the host has seen every call to its close", host.awaitServed())
         assertEquals(CALLS, host.closedByPeer.size)
         assertTrue("every connection must have ended at end-of-stream", host.closedByPeer.all { it })
     }
@@ -247,6 +248,9 @@ class MoonlightHttpGatewayTest {
             waitFor(count)
             return heads.toList()
         }
+
+        // The host reads each call's close on its own thread, which can come after the call returned.
+        fun awaitServed(): Boolean = served.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
 
         fun awaitClientPrincipals(): List<String> {
             waitFor(1)
