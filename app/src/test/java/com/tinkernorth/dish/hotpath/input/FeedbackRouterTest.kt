@@ -12,6 +12,7 @@ import com.tinkernorth.dish.source.store.FeedbackKind
 import com.tinkernorth.dish.source.store.MIC_LED_OFF
 import com.tinkernorth.dish.source.store.MIC_LED_ON
 import com.tinkernorth.dish.source.store.MIC_LED_PULSE
+import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.source.store.VirtualPadFeedbackStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import io.mockk.every
@@ -37,6 +38,11 @@ class FeedbackRouterTest {
     private val frameworkLights: FrameworkLightGateway = mockk(relaxed = true)
     private val activity = FeedbackActivityStore()
 
+    // Each slot's rumble switch, on unless a test turns it off.
+    private val rumbleOff = mutableSetOf<String>()
+    private val rumbleEnabled: RumbleEnabledStore =
+        mockk { every { isEnabled(any()) } answers { firstArg<String>() !in rumbleOff } }
+
     private fun managerWith(
         handle: Int,
         slotId: String,
@@ -55,7 +61,7 @@ class FeedbackRouterTest {
     }
 
     private fun router(manager: SatelliteConnectionManager = mockk(relaxed = true)) =
-        FeedbackRouter(manager, native, store, rumble, activity, frameworkLights)
+        FeedbackRouter(manager, native, store, rumble, activity, frameworkLights, rumbleEnabled)
 
     private fun lastKindNoted(slotId: String): FeedbackKind? = activity.snapshot()[slotId]?.lastKind
 
@@ -209,6 +215,46 @@ class FeedbackRouterTest {
         r.dispatchTriggerRumbleToSlot("9", 1, 2)
         verify(exactly = 0) { native.sendUsbTriggerRumble(9, any(), any()) }
         verify(exactly = 0) { rumble.dispatchToSlot("9", any(), any(), any()) }
+    }
+
+    // ---- trigger rumble is rumble, so the slot's rumble switch covers it ----
+
+    @Test
+    fun `a host's trigger rumble to a Direct pad whose rumble is off lands as a stop`() {
+        rumbleOff += "-1000"
+
+        router().dispatchTriggerRumbleToSlot("-1000", 100, 200)
+
+        verify(exactly = 0) { native.sendUsbTriggerRumble(-1000, 100, 200) }
+        verify(exactly = 1) { native.sendUsbTriggerRumble(-1000, 0, 0) }
+    }
+
+    @Test
+    fun `a host's trigger rumble to the virtual pad whose rumble is off asks the rumble path for a stop`() {
+        rumbleOff += VIRTUAL_SLOT_ID
+
+        router().dispatchTriggerRumbleToSlot(VIRTUAL_SLOT_ID, 300, 400)
+
+        verify(exactly = 0) { rumble.dispatchToSlot(VIRTUAL_SLOT_ID, 300, 400, any()) }
+        verify(exactly = 1) { rumble.dispatchToSlot(VIRTUAL_SLOT_ID, 0, 0, any()) }
+    }
+
+    @Test
+    fun `a host's trigger rumble to a slot whose rumble is off is still noted as host activity`() {
+        rumbleOff += "-1000"
+
+        router().dispatchTriggerRumbleToSlot("-1000", 100, 200)
+
+        assertEquals(FeedbackKind.TRIGGER_RUMBLE, lastKindNoted("-1000"))
+    }
+
+    @Test
+    fun `the bench's trigger rumble ignores the rumble switch, as the motors' test buzz does`() {
+        rumbleOff += "-1000"
+
+        router().testTriggerRumble("-1000", 100, 200)
+
+        verify(exactly = 1) { native.sendUsbTriggerRumble(-1000, 100, 200) }
     }
 
     @Test

@@ -8,6 +8,7 @@ import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.lights.FrameworkLightGateway
 import com.tinkernorth.dish.source.store.FeedbackActivityStore
 import com.tinkernorth.dish.source.store.FeedbackKind
+import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.source.store.VirtualPadFeedbackStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import javax.inject.Inject
@@ -43,6 +44,7 @@ class FeedbackRouter
         private val rumble: RumbleRouter,
         private val feedbackActivity: FeedbackActivityStore,
         private val frameworkLights: FrameworkLightGateway,
+        private val rumbleEnabled: RumbleEnabledStore,
     ) {
         fun dispatchLightbar(
             sessionHandle: Int,
@@ -128,13 +130,19 @@ class FeedbackRouter
             actuateMicLed(classifyTarget(slotId), state)
         }
 
+        // Trigger rumble is rumble, so the slot's rumble switch covers it. Off, the host's event
+        // lands as a stop rather than being dropped: a Direct pad's trigger motors hold their last
+        // level until the next write, so a dropped stop could leave them running.
         fun dispatchTriggerRumbleToSlot(
             slotId: String,
             leftMagnitude: Int,
             rightMagnitude: Int,
         ) {
             feedbackActivity.note(slotId, FeedbackKind.TRIGGER_RUMBLE)
-            testTriggerRumble(slotId, leftMagnitude, rightMagnitude)
+            val rumbleOn = rumbleEnabled.isEnabled(slotId)
+            val left = if (rumbleOn) leftMagnitude else TRIGGER_RUMBLE_STOP
+            val right = if (rumbleOn) rightMagnitude else TRIGGER_RUMBLE_STOP
+            testTriggerRumble(slotId, left, right)
         }
 
         /** The bench's entry: the same actuation without counting it as host feedback. */
@@ -243,6 +251,8 @@ class FeedbackRouter
 
             // Matches the Moonlight rumble hold: refreshed by the host well before expiry.
             private const val TRIGGER_RUMBLE_HOLD_MS = 1500
+
+            private const val TRIGGER_RUMBLE_STOP = 0
         }
     }
 
