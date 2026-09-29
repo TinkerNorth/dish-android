@@ -8,7 +8,6 @@ import android.view.MotionEvent
 import com.tinkernorth.dish.hotpath.input.CapturedTouchpadEvent
 import com.tinkernorth.dish.hotpath.input.EVERY_POINTER_LIFTING
 import com.tinkernorth.dish.hotpath.input.NO_POINTER_LIFTING
-import com.tinkernorth.dish.hotpath.input.PadTouchFrame
 
 // The pointer this event takes off the surface: the one lifting on an UP, all of them on a
 // CANCEL, and all of them on a hover, which carries no finger at all.
@@ -57,15 +56,6 @@ internal class MotionEventTouchpad : CapturedTouchpadEvent {
     override val yMin: Float get() = yRange.min
     override val yMax: Float get() = yRange.max
 }
-
-// The slots whose last frame still holds a finger or the click, each with its lifted frame.
-internal fun liftedFrames(
-    last: Map<String, PadTouchFrame>,
-    nowMs: Long,
-): Map<String, PadTouchFrame> =
-    last
-        .filterValues { it.anyFingerDown() || it.buttonPressed }
-        .mapValues { (_, frame) -> frame.lifted(nowMs) }
 
 // What one tick of the resend loop does with a slot's frame.
 internal enum class ResendStep {

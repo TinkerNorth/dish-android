@@ -10,7 +10,6 @@ import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.PhysicalReachabilityComposer
 import com.tinkernorth.dish.hotpath.input.EVERY_POINTER_LIFTING
 import com.tinkernorth.dish.hotpath.input.NO_POINTER_LIFTING
-import com.tinkernorth.dish.hotpath.input.PadTouchFrame
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.TelemetrySink
 import com.tinkernorth.dish.source.connection.TouchpadReport
@@ -80,30 +79,6 @@ class PadTouchpadCaptureTest {
         assertEquals(DS4_X_MAX, touchpad.xMax)
         assertEquals(-RANGE_MIN, touchpad.yMin)
         assertEquals(DS4_Y_MAX, touchpad.yMax)
-    }
-
-    // ---- the lift frames a lost focus or a released capture sends ----
-
-    @Test
-    fun `an idle frame is not lifted`() {
-        val last = mapOf(SLOT to PadTouchFrame(eventTimeMs = 5L))
-        assertTrue(liftedFrames(last, nowMs = 9L).isEmpty())
-    }
-
-    @Test
-    fun `a frame holding a finger is lifted at the given time`() {
-        val last = mapOf(SLOT to PadTouchFrame(finger0Active = true, finger0X = 100, eventTimeMs = 5L))
-        val lifted = liftedFrames(last, nowMs = 9L).getValue(SLOT)
-        assertFalse(lifted.anyFingerDown())
-        assertEquals(9L, lifted.eventTimeMs)
-        assertEquals(100.toShort(), lifted.finger0X)
-    }
-
-    @Test
-    fun `a frame holding only the click is lifted too`() {
-        val last = mapOf(SLOT to PadTouchFrame(buttonPressed = true, eventTimeMs = 5L))
-        val lifted = liftedFrames(last, nowMs = 9L).getValue(SLOT)
-        assertFalse(lifted.buttonPressed)
     }
 
     // ---- one resend tick's verdict for a slot ----

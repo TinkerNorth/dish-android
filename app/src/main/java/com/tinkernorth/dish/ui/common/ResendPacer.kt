@@ -2,22 +2,25 @@
 
 package com.tinkernorth.dish.ui.common
 
+import java.util.function.LongSupplier
+
 /**
  * Pacing gate for the overlay resend loops. Real input is event-driven and
  * never passes through here; resends exist solely to heal a LOST edge: the
  * final frame of a gesture (button-up, finger-up, stick-to-neutral) that no
  * later frame would correct. A changed state is re-sent [EDGE_BURST_RESENDS]
  * ticks in a row, then falls back to a slow keepalive against pathological
- * multi-loss. Not thread-safe: call from the single resend thread only.
+ * multi-loss. Not thread-safe: call from the single resend thread only. The clock is a
+ * [LongSupplier] so reading it boxes nothing on a tick.
  */
 class ResendPacer(
-    private val nanoTime: () -> Long = System::nanoTime,
+    private val nanoTime: LongSupplier = SYSTEM_NANO_TIME,
 ) {
     private var burstLeft = 0
     private var lastSendNs = 0L
 
     fun resendDue(changed: Boolean): Boolean {
-        val now = nanoTime()
+        val now = nanoTime.asLong
         if (changed) {
             burstLeft = EDGE_BURST_RESENDS - 1
         } else if (burstLeft > 0) {
@@ -30,6 +33,8 @@ class ResendPacer(
     }
 
     companion object {
+        private val SYSTEM_NANO_TIME = LongSupplier { System.nanoTime() }
+
         // A changed state is re-sent this many ticks in a row: one lost edge
         // frame heals at the next tick, a double loss at the one after.
         const val EDGE_BURST_RESENDS = 3

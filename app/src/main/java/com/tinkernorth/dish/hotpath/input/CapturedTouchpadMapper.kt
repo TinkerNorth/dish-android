@@ -10,24 +10,49 @@ package com.tinkernorth.dish.hotpath.input
  * the same normalisation the USB-direct decoder applies to the raw report, so the satellite
  * sees one shape whichever path read the pad. Tracking ids are the pointer ids Android assigned,
  * masked the way the raw decoder masks the pad's own (7 bits), for the same reason.
+ *
+ * Mutable because each thread that handles frames refills one it owns rather than building one
+ * an event: the main thread maps every captured event into its own, and the resend thread copies
+ * a slot's latest into its own (com.tinkernorth.dish.hotpath.overlay.CapturedTouchFrames).
  */
 data class PadTouchFrame(
-    val finger0Active: Boolean = false,
-    val finger1Active: Boolean = false,
-    val buttonPressed: Boolean = false,
-    val finger0Id: Int = 0,
-    val finger0X: Short = 0,
-    val finger0Y: Short = 0,
-    val finger1Id: Int = 0,
-    val finger1X: Short = 0,
-    val finger1Y: Short = 0,
-    val eventTimeMs: Long = 0L,
+    var finger0Active: Boolean = false,
+    var finger1Active: Boolean = false,
+    var buttonPressed: Boolean = false,
+    var finger0Id: Int = 0,
+    var finger0X: Short = 0,
+    var finger0Y: Short = 0,
+    var finger1Id: Int = 0,
+    var finger1X: Short = 0,
+    var finger1Y: Short = 0,
+    var eventTimeMs: Long = 0L,
 ) {
     fun anyFingerDown(): Boolean = finger0Active || finger1Active
 
-    /** The same frame with every finger lifted, for a capture that ends mid-gesture. */
-    fun lifted(eventTimeMs: Long): PadTouchFrame =
-        copy(finger0Active = false, finger1Active = false, buttonPressed = false, eventTimeMs = eventTimeMs)
+    /** Whether the frame still holds a finger or the click, which a capture ending now must lift. */
+    fun holdsATouch(): Boolean = anyFingerDown() || buttonPressed
+
+    /** Lifts every finger and the click at [eventTimeMs], keeping the positions. */
+    fun lift(eventTimeMs: Long) {
+        finger0Active = false
+        finger1Active = false
+        buttonPressed = false
+        this.eventTimeMs = eventTimeMs
+    }
+
+    /** Takes every field of [other]. */
+    fun copyFrom(other: PadTouchFrame) {
+        finger0Active = other.finger0Active
+        finger1Active = other.finger1Active
+        buttonPressed = other.buttonPressed
+        finger0Id = other.finger0Id
+        finger0X = other.finger0X
+        finger0Y = other.finger0Y
+        finger1Id = other.finger1Id
+        finger1X = other.finger1X
+        finger1Y = other.finger1Y
+        eventTimeMs = other.eventTimeMs
+    }
 }
 
 /**
@@ -74,31 +99,31 @@ fun normalize(
 }
 
 /**
- * The frame for [event], less the pointer [liftingIndex] takes off. The two finger slots take
- * the two lowest pointer ids still down, lowest first, so a finger keeps its slot while another
- * comes and goes, the way the pad's own report keeps its two touch slots; a third finger is
- * ignored. Both are read straight into the frame's fields: nothing else is built.
+ * Fills [into] with the frame for [event], less the pointer [liftingIndex] takes off. The two
+ * finger slots take the two lowest pointer ids still down, lowest first, so a finger keeps its
+ * slot while another comes and goes, the way the pad's own report keeps its two touch slots; a
+ * third finger is ignored. Every field is written, so nothing of the frame [into] held before
+ * survives, and both fingers are read straight into it: nothing is built.
  */
 fun frame(
     event: CapturedTouchpadEvent,
     liftingIndex: Int,
     buttonPressed: Boolean,
     eventTimeMs: Long,
-): PadTouchFrame {
+    into: PadTouchFrame,
+) {
     val first = lowestPointerIndex(event, liftingIndex, passedOver = NO_POINTER)
     val second = lowestPointerIndex(event, liftingIndex, passedOver = first)
-    return PadTouchFrame(
-        finger0Active = first != NO_POINTER,
-        finger1Active = second != NO_POINTER,
-        buttonPressed = buttonPressed,
-        finger0Id = trackingIdAt(event, first),
-        finger0X = xAt(event, first),
-        finger0Y = yAt(event, first),
-        finger1Id = trackingIdAt(event, second),
-        finger1X = xAt(event, second),
-        finger1Y = yAt(event, second),
-        eventTimeMs = eventTimeMs,
-    )
+    into.finger0Active = first != NO_POINTER
+    into.finger1Active = second != NO_POINTER
+    into.buttonPressed = buttonPressed
+    into.finger0Id = trackingIdAt(event, first)
+    into.finger0X = xAt(event, first)
+    into.finger0Y = yAt(event, first)
+    into.finger1Id = trackingIdAt(event, second)
+    into.finger1X = xAt(event, second)
+    into.finger1Y = yAt(event, second)
+    into.eventTimeMs = eventTimeMs
 }
 
 // The index of the lowest pointer id still down, other than [passedOver]; NO_POINTER when none is.

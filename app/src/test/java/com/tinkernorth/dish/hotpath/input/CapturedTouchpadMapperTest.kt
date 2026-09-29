@@ -2,7 +2,7 @@
 
 package com.tinkernorth.dish.hotpath.input
 
-import com.tinkernorth.dish.architecture.testing.allocatedBytesDuring
+import com.tinkernorth.dish.architecture.testing.fewestAllocatedBytesDuring
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -60,7 +60,7 @@ class CapturedTouchpadMapperTest {
         liftingIndex: Int = NO_POINTER_LIFTING,
         buttonPressed: Boolean = false,
         eventTimeMs: Long = EVENT_TIME_MS,
-    ) = frame(event, liftingIndex, buttonPressed, eventTimeMs)
+    ) = PadTouchFrame().also { frame(event, liftingIndex, buttonPressed, eventTimeMs, into = it) }
 
     // ---- the int16 span ----
 
@@ -180,41 +180,66 @@ class CapturedTouchpadMapperTest {
         assertTrue(frame.buttonPressed)
     }
 
+    // ---- a frame refilled for the next event ----
+
+    // The main thread maps every event into the one frame it owns, so what the last event left
+    // there must not leak into the next.
     @Test
-    fun `lifted keeps the positions and drops every finger and the click`() {
-        val down = frameOf(eventOf(TestPointer(1, DS4_X_MAX, 0f)), buttonPressed = true)
-        val lifted = down.lifted(OTHER_TIME_MS)
-        assertFalse(lifted.anyFingerDown())
-        assertFalse(lifted.buttonPressed)
-        assertEquals(down.finger0X, lifted.finger0X)
-        assertEquals(OTHER_TIME_MS, lifted.eventTimeMs)
+    fun `mapping into a frame that held another overwrites every field`() {
+        val reused = frameOf(eventOf(TestPointer(2, DS4_X_MAX, DS4_Y_MAX), TestPointer(9, DS4_X_MAX, DS4_Y_MAX)), buttonPressed = true)
+
+        frame(eventOf(TestPointer(3, 0f, 0f)), NO_POINTER_LIFTING, buttonPressed = false, eventTimeMs = OTHER_TIME_MS, into = reused)
+
+        assertEquals(frameOf(eventOf(TestPointer(3, 0f, 0f)), eventTimeMs = OTHER_TIME_MS), reused)
     }
 
-    // ---- per event, the frame is the only thing built ----
+    @Test
+    fun `a copy takes every field`() {
+        val source = frameOf(eventOf(TestPointer(2, DS4_X_MAX, 0f), TestPointer(9, 0f, DS4_Y_MAX)), buttonPressed = true)
+        val copy = PadTouchFrame()
 
-    private var kept = PadTouchFrame()
+        copy.copyFrom(source)
+
+        assertEquals(source, copy)
+    }
+
+    // ---- the lift a capture ending mid-gesture sends ----
+
+    @Test
+    fun `a lift keeps the positions and drops every finger and the click`() {
+        val down = frameOf(eventOf(TestPointer(1, DS4_X_MAX, 0f), TestPointer(4, 0f, DS4_Y_MAX)), buttonPressed = true)
+        val lifted = down.copy()
+
+        lifted.lift(OTHER_TIME_MS)
+
+        assertEquals(down.copy(finger0Active = false, finger1Active = false, buttonPressed = false, eventTimeMs = OTHER_TIME_MS), lifted)
+    }
+
+    @Test
+    fun `a finger or the click is a touch to lift, and an idle frame is none`() {
+        assertTrue(PadTouchFrame(finger0Active = true).holdsATouch())
+        assertTrue(PadTouchFrame(finger1Active = true).holdsATouch())
+        assertTrue(PadTouchFrame(buttonPressed = true).holdsATouch())
+        assertFalse(PadTouchFrame(eventTimeMs = EVENT_TIME_MS).holdsATouch())
+    }
+
+    // ---- per event, nothing is built ----
+
+    private val kept = PadTouchFrame()
 
     private val threeFingers =
         eventOf(TestPointer(9, DS4_X_MAX, 0f), TestPointer(2, 0f, DS4_Y_MAX), TestPointer(11, 10f, 10f))
 
     private fun mapEvents() {
-        repeat(MEASURED_EVENTS) { kept = frameOf(threeFingers, eventTimeMs = it.toLong()) }
-    }
-
-    // The same frame, built directly: what the mapping may cost and no more.
-    private fun buildFrames() {
-        repeat(MEASURED_EVENTS) { kept = PadTouchFrame(finger0Active = true, eventTimeMs = it.toLong()) }
+        repeat(MEASURED_EVENTS) { frame(threeFingers, NO_POINTER_LIFTING, buttonPressed = false, eventTimeMs = it.toLong(), into = kept) }
     }
 
     @Test
-    fun `mapping a captured event allocates nothing but the frame it keeps`() {
-        repeat(WARMUP_ROUNDS) {
-            mapEvents()
-            buildFrames()
-        }
-        val frames = allocatedBytesDuring(::buildFrames)
-        val mapped = allocatedBytesDuring(::mapEvents)
-        assertTrue("mapped $mapped bytes, frames alone $frames", mapped < frames + MEASURED_EVENTS * BYTES_PER_EVENT_BOUND)
+    fun `mapping a captured event into a frame allocates nothing`() {
+        repeat(WARMUP_ROUNDS) { mapEvents() }
+        val mapped = fewestAllocatedBytesDuring(MEASURED_RUNS, ::mapEvents)
+        assertEquals((MEASURED_EVENTS - 1).toLong(), kept.eventTimeMs)
+        assertTrue("mapped $mapped bytes", mapped < MEASURED_EVENTS * BYTES_PER_EVENT_BOUND)
     }
 
     private companion object {
@@ -227,9 +252,10 @@ class CapturedTouchpadMapperTest {
         const val SECOND_WIDE_ID = 0x2F4
         const val WARMUP_ROUNDS = 10
         const val MEASURED_EVENTS = 1000
+        const val MEASURED_RUNS = 3
 
-        // Half the smallest object: one allocation per event beyond the frame costs 16 bytes or
-        // more every event, while the JIT's one-off warm-up allocations stay flat as events grow.
+        // Half the smallest object: one allocation per event costs 16 bytes or more every event,
+        // while the JIT's one-off warm-up allocations stay flat as events grow.
         const val BYTES_PER_EVENT_BOUND = 8
     }
 }
