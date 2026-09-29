@@ -25,9 +25,12 @@ import javax.inject.Singleton
  * reference in [bars] keeps it alive for the whole stream (its finalizer would close it, turning the
  * bar off, if it were collected). Closing a session writes color 0 to the light it touched, so the
  * bar goes dark: that is the honest end state when a stream stops, since the API offers no "return
- * to the pad's own color". A session is only held once it has landed a color, because closing one
- * that never requested throws in the service. Identical colors are coalesced so an unchanged frame
- * never costs a binder round-trip.
+ * to the pad's own color". The input service then repaints the first other open session's request,
+ * any app's, onto that same pad by light id, and every pad numbers its lights from 1 (AOSP
+ * InputManagerService and PeripheralController, API 31-37), so a close while another pad's bar is
+ * lit paints that pad's color here. A session is only held once it has landed a color, because
+ * closing one that never requested throws in the service. Identical colors are coalesced so an
+ * unchanged frame never costs a binder round-trip.
  *
  * The Android I/O sits behind [Lightbars] so the open-once / reuse / coalesce / close lifecycle is
  * testable without the framework. The light object is re-resolved by rule on every write (see
@@ -60,12 +63,15 @@ class FrameworkLightGateway
         }
 
         // One pad's light bar and the session held on it, which has landed [shownArgb], the coalesce
-        // key.
+        // key: a color, or OFF_ARGB once the bar is turned off.
         private class Bar(
             val deviceId: Int,
             val session: Lightbar,
             var shownArgb: Int,
-        )
+        ) {
+            val isLit: Boolean
+                get() = shownArgb != OFF_ARGB
+        }
 
         // A few pads, scanned by id because a map lookup would box it. Touched from the feedback
         // receive threads and the lifecycle release hooks, always under [lock], so a pad's open /
@@ -92,14 +98,16 @@ class FrameworkLightGateway
             }
         }
 
-        /** Give [deviceId]'s light bar back to the system (turning it off). Idempotent. */
+        /** Turn [deviceId]'s light bar off, and give it back once no other bar is lit. Idempotent. */
         fun release(deviceId: Int) {
-            synchronized(lock) { barOf(deviceId)?.let(::drop) }
+            synchronized(lock) { barOf(deviceId)?.let(::releaseBar) }
         }
 
         /** Release every light bar, e.g. when physical-slot streaming stops process-wide. */
         fun releaseAll() {
             synchronized(lock) {
+                // Every bar goes dark before any is closed, so no close finds a lit one to repaint.
+                bars.toList().forEach(::turnOff)
                 bars.forEach { it.session.close() }
                 bars.clear()
             }
@@ -132,6 +140,16 @@ class FrameworkLightGateway
             if (isShownAlready) return
             if (bar.session.write(argb)) bar.shownArgb = argb else drop(bar)
         }
+
+        // Closing repaints another open session's request onto this pad (see the class comment), so
+        // a bar is closed only when no other bar is lit, and turned off and kept for its next color
+        // until then.
+        private fun releaseBar(bar: Bar) {
+            val anotherBarIsLit = bars.any { it !== bar && it.isLit }
+            if (anotherBarIsLit) turnOff(bar) else drop(bar)
+        }
+
+        private fun turnOff(bar: Bar) = show(bar, OFF_ARGB)
 
         private fun drop(bar: Bar) {
             bars.remove(bar)
@@ -200,3 +218,7 @@ private inline fun <T> lightCall(
     }
 
 private const val LIGHT_TAG = "FrameworkLightGateway"
+
+// What a closed session leaves on a light (the service's LightState(0)); every color a host sends
+// is opaque, so it never equals one.
+private const val OFF_ARGB = 0

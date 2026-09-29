@@ -52,22 +52,46 @@ internal class RepeatedColorCycles :
     override fun getAsLong(): Long = lightbar.writes
 }
 
+private const val FIRST_PAD = 9
+private const val SECOND_PAD = 12
+
+// What a closed session leaves on a light: the input service's LightState(0).
+private const val OFF_ARGB = 0
+private const val RED_ARGB = 0xFFFF0000.toInt()
+private const val GREEN_ARGB = 0xFF00FF00.toInt()
+private const val BLUE_ARGB = 0xFF0000FF.toInt()
+
+private const val CHANNEL_MASK = 0xFF
+private const val RED_SHIFT = 16
+private const val GREEN_SHIFT = 8
+
 // The session lifecycle: open lazily on the first color, reuse for later colors, coalesce identical
 // ones, close on release, and never resurrect a session for a device whose bar has gone. The Android
-// I/O is faked so this runs on the JVM.
+// I/O is faked so this runs on the JVM, with the input service's light sessions modelled as AOSP's
+// InputManagerService keeps them (API 31-37): one list for every app, and a close that turns the
+// closing session's lights off, then repaints the first remaining session's request onto the closing
+// pad by light id. PeripheralController numbers each pad's lights from 1, so every bar here is light 1.
 class FrameworkLightGatewayTest {
-    private class FakeLightbar : FrameworkLightGateway.Lightbar {
+    private class FakeLightbar(
+        private val service: FakeLightbars,
+        val deviceId: Int,
+    ) : FrameworkLightGateway.Lightbar {
         val writes = mutableListOf<Int>()
         var closes = 0
         var writeResult = true
+        var landedArgb: Int? = null
 
         override fun write(argb: Int): Boolean {
             writes += argb
-            return writeResult
+            if (!writeResult) return false
+            landedArgb = argb
+            service.paint(deviceId, argb)
+            return true
         }
 
         override fun close() {
             closes++
+            service.closeSession(this)
         }
     }
 
@@ -76,19 +100,55 @@ class FrameworkLightGatewayTest {
         var nextWriteResult = true
         val opens = mutableListOf<Int>()
         val handles = mutableMapOf<Int, FakeLightbar>()
+        private val openSessions = mutableListOf<FakeLightbar>()
+        private val barColors = mutableMapOf<Int, Int>()
 
         override fun open(deviceId: Int): FrameworkLightGateway.Lightbar? {
             if (deviceId !in withBar) return null
             opens += deviceId
-            return FakeLightbar().also {
-                it.writeResult = nextWriteResult
-                handles[deviceId] = it
-            }
+            val session = FakeLightbar(this, deviceId)
+            session.writeResult = nextWriteResult
+            handles[deviceId] = session
+            openSessions += session
+            return session
+        }
+
+        fun barColorOf(deviceId: Int): Int = barColors[deviceId] ?: OFF_ARGB
+
+        fun paint(
+            deviceId: Int,
+            argb: Int,
+        ) {
+            if (deviceId in withBar) barColors[deviceId] = argb
+        }
+
+        fun closeSession(session: FakeLightbar) {
+            paint(session.deviceId, OFF_ARGB)
+            openSessions -= session
+            val firstRemainingRequest = openSessions.firstOrNull()?.landedArgb ?: return
+            paint(session.deviceId, firstRemainingRequest)
         }
     }
 
     private val lightbars = FakeLightbars()
     private val gateway = FrameworkLightGateway(lightbars)
+
+    private fun hostSends(
+        deviceId: Int,
+        argb: Int,
+    ) {
+        val r = (argb shr RED_SHIFT) and CHANNEL_MASK
+        val g = (argb shr GREEN_SHIFT) and CHANNEL_MASK
+        val b = argb and CHANNEL_MASK
+        gateway.setColor(deviceId, r, g, b)
+    }
+
+    private fun lightTwoPads() {
+        lightbars.withBar += FIRST_PAD
+        lightbars.withBar += SECOND_PAD
+        hostSends(FIRST_PAD, RED_ARGB)
+        hostSends(SECOND_PAD, BLUE_ARGB)
+    }
 
     @Test
     fun `the first color opens a session and the next colors reuse it`() {
@@ -186,6 +246,84 @@ class FrameworkLightGatewayTest {
         lightbars.handles.getValue(9).writeResult = false
         gateway.setColor(9, 4, 5, 6)
         assertEquals(1, lightbars.handles.getValue(9).closes)
+    }
+
+    // ---- a close repaints another pad's request onto the closing pad ----
+
+    @Test
+    fun `a bar released while another pad's is lit goes dark instead of taking that pad's color`() {
+        lightTwoPads()
+
+        gateway.release(FIRST_PAD)
+
+        assertEquals(OFF_ARGB, lightbars.barColorOf(FIRST_PAD))
+        assertEquals(BLUE_ARGB, lightbars.barColorOf(SECOND_PAD))
+    }
+
+    @Test
+    fun `a bar released while another pad's is lit keeps its session for its next color`() {
+        lightTwoPads()
+        gateway.release(FIRST_PAD)
+
+        hostSends(FIRST_PAD, GREEN_ARGB)
+
+        assertEquals(listOf(FIRST_PAD, SECOND_PAD), lightbars.opens)
+        assertEquals(0, lightbars.handles.getValue(FIRST_PAD).closes)
+        assertEquals(GREEN_ARGB, lightbars.barColorOf(FIRST_PAD))
+    }
+
+    @Test
+    fun `releasing a turned-off bar again sends nothing`() {
+        lightTwoPads()
+        gateway.release(FIRST_PAD)
+
+        gateway.release(FIRST_PAD)
+
+        assertEquals(listOf(RED_ARGB, OFF_ARGB), lightbars.handles.getValue(FIRST_PAD).writes)
+        assertEquals(0, lightbars.handles.getValue(FIRST_PAD).closes)
+    }
+
+    @Test
+    fun `the last lit bar released is closed, and its close paints nothing onto either pad`() {
+        lightTwoPads()
+        gateway.release(SECOND_PAD)
+
+        gateway.release(FIRST_PAD)
+
+        assertEquals(1, lightbars.handles.getValue(FIRST_PAD).closes)
+        assertEquals(OFF_ARGB, lightbars.barColorOf(FIRST_PAD))
+        assertEquals(OFF_ARGB, lightbars.barColorOf(SECOND_PAD))
+    }
+
+    @Test
+    fun `a bar that cannot be turned off beside a lit one is closed, since it is gone`() {
+        lightTwoPads()
+        lightbars.handles.getValue(FIRST_PAD).writeResult = false
+
+        gateway.release(FIRST_PAD)
+
+        assertEquals(1, lightbars.handles.getValue(FIRST_PAD).closes)
+    }
+
+    @Test
+    fun `releaseAll leaves every pad's bar dark`() {
+        lightTwoPads()
+
+        gateway.releaseAll()
+
+        assertEquals(OFF_ARGB, lightbars.barColorOf(FIRST_PAD))
+        assertEquals(OFF_ARGB, lightbars.barColorOf(SECOND_PAD))
+    }
+
+    @Test
+    fun `releaseAll closes a turned-off bar too`() {
+        lightTwoPads()
+        gateway.release(FIRST_PAD)
+
+        gateway.releaseAll()
+
+        assertEquals(1, lightbars.handles.getValue(FIRST_PAD).closes)
+        assertEquals(1, lightbars.handles.getValue(SECOND_PAD).closes)
     }
 
     @Test
