@@ -162,6 +162,9 @@ class MoonlightPairFlowTest {
         every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns
             reply("""<root status_code="200"><hostname>PC</hostname><PairStatus>0</PairStatus></root>""")
         every { gateway.getHttpOn(any(), match { it.contains("/pair") }, any()) } answers { answerPair(secondArg()) }
+        // Phase 5, the first call over mutual TLS: the host confirms the pairing phases 1 to 4 made.
+        every { gateway.getHttpsOn(any(), match { it.contains("pairchallenge") }, any()) } returns
+            reply("""<root status_code="200"><paired>1</paired></root>""")
 
         store = mockk(relaxed = true)
         every { store.get(any()) } answers { rows[firstArg<String>()] }
@@ -302,6 +305,28 @@ class MoonlightPairFlowTest {
                 assertNull("$phase must leave nothing behind", rows[host.id])
                 collector.cancel()
             }
+            watching.cancel()
+        }
+
+    // B5. Phase 5 is the first call over mutual TLS and the one that proves the host accepts the
+    // certificate phases 1 to 4 agreed on; a host that does not confirm it has not paired with
+    // this device, whatever phase 4 said. It used to be recorded as paired all the same.
+    @Test
+    fun `a phase 5 the host does not confirm names itself and leaves no record`() =
+        runTest(dispatcher) {
+            val watching = watchForPin()
+            every { gateway.getHttpsOn(any(), match { it.contains("pairchallenge") }, any()) } returns UNANSWERED
+            val seen = mutableListOf<MoonlightConnectionEvent>()
+            val collector = launch { manager.events.toList(seen) }
+            dispatcher.scheduler.runCurrent()
+
+            assertFalse(manager.pairHost(host))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            val failure = seen.filterIsInstance<MoonlightConnectionEvent.PairingFailed>().single()
+            assertTrue("phase 5 was reported as: ${failure.reason}", failure.reason.contains("phase 5"))
+            assertNull(rows[host.id])
+            collector.cancel()
             watching.cancel()
         }
 

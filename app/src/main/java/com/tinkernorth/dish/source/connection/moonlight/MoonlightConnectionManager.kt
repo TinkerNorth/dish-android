@@ -716,7 +716,8 @@ class MoonlightConnectionManager
             gateway.forgetPin(host.id)
 
             // Phase 5 (HTTPS): confirm the client-cert-authenticated channel.
-            gateway.getHttpsOn(line, pairHttps(host.address, host.httpsPort, pairing.phase5Params(deviceId)), host.id)
+            val p5 = gateway.getHttpsOn(line, pairHttps(host.address, host.httpsPort, pairing.phase5Params(deviceId)), host.id)
+            verified(parsePairReply(p5.body)?.paired == true) { "phase 5 did not confirm the pairing over mutual TLS (HTTP ${p5.status})" }
         }
 
         // A phase's answer that must be there; the host refusing to give it ends the pairing.
