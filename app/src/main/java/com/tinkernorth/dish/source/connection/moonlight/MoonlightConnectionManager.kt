@@ -38,6 +38,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -560,7 +562,10 @@ class MoonlightConnectionManager
         suspend fun pairHost(host: MoonlightHost): Boolean =
             withContext(ioDispatcher) {
                 Log.i(TAG, "pair requested for ${host.name} at ${host.address} (${host.id})")
-                if (isPaired(host)) {
+                val trusted = isPaired(host)
+                // A Cancel that landed while the host was being asked ends the pairing before it records or shows anything.
+                ensureActive()
+                if (trusted) {
                     // Confirming trust is a pairing outcome and persists like one: a device that forgot
                     // a host the host still trusts is answered here without a PIN.
                     Log.i(TAG, "${host.address} already trusts this device; recording the pairing")
@@ -599,37 +604,44 @@ class MoonlightConnectionManager
             reason: String,
         ) : Exception(reason)
 
-        /** Runs the 5-phase pairing; phase 1 blocks until the user enters the PIN. */
+        /**
+         * Runs the 5-phase pairing; phase 1 blocks until the user enters the PIN. A Cancel hangs up
+         * whichever phase is on the line, so the host drops its half of the pairing too.
+         */
         private suspend fun pair(host: MoonlightHost): Boolean {
             val pin = randomPin()
             Log.i(TAG, "pairing ${host.address}: PIN issued, phase 1 will wait up to ${PAIR_WAIT_S}s for it")
             _events.emit(MoonlightConnectionEvent.PairingPinReady(host, pin))
             val pairing = MoonlightPairing(identity, pin)
-            return runCatching {
-                runPairingPhases(host, pairing)
-                Log.i(TAG, "paired with ${host.name} at ${host.address}")
-                rememberPaired(host, paired = true)
-                _events.emit(MoonlightConnectionEvent.Paired(host))
-                true
-            }.getOrElse { failure ->
-                // A cancelled pairing is the user's own doing, not a refusal: letting
-                // runCatching turn it into one would raise "the host did not accept the
-                // PIN" the moment they pressed Cancel.
-                if (failure is kotlinx.coroutines.CancellationException) throw failure
-                if (failure !is PairingRefused) Log.w(TAG, "pairing failed for ${host.address}: ${failure.message}", failure)
-                pairingRefused(host, failure.message ?: failure.javaClass.simpleName)
-            }
+            val phases = runCatching { hangingUpOnCancel { line -> runPairingPhases(host, pairing, line) } }
+            // A cancelled pairing is the user's own doing, not a refusal, and ends here with nothing
+            // written: the hung-up phase would otherwise read as "the host did not accept the PIN".
+            currentCoroutineContext().ensureActive()
+            return phases.fold(
+                onSuccess = {
+                    Log.i(TAG, "paired with ${host.name} at ${host.address}")
+                    rememberPaired(host, paired = true)
+                    _events.emit(MoonlightConnectionEvent.Paired(host))
+                    true
+                },
+                onFailure = { failure ->
+                    if (failure !is PairingRefused) Log.w(TAG, "pairing failed for ${host.address}: ${failure.message}", failure)
+                    pairingRefused(host, failure.message ?: failure.javaClass.simpleName)
+                },
+            )
         }
 
-        // Phases 1 to 5 in order; any phase the host cuts short throws PairingRefused.
+        // Phases 1 to 5 in order, on one line; any phase the host cuts short throws PairingRefused.
         private fun runPairingPhases(
             host: MoonlightHost,
             pairing: MoonlightPairing,
+            line: CallLine,
         ) {
             // Phase 1 (HTTP): the host prompts for the PIN and blocks until
             // entered, so this one waits on a human rather than on the network.
             val p1 =
-                gateway.getHttp(
+                gateway.getHttpOn(
+                    line,
                     pairHttp(host.address, host.httpPort, pairing.phase1Params(deviceId)),
                     MoonlightHttpGateway.PAIR_PIN_TIMEOUT_MS,
                 )
@@ -643,15 +655,15 @@ class MoonlightConnectionManager
                 ),
             )
 
-            val p2 = gateway.getHttp(pairHttp(host.address, host.httpPort, pairing.phase2Params(deviceId)))
+            val p2 = gateway.getHttpOn(line, pairHttp(host.address, host.httpPort, pairing.phase2Params(deviceId)))
             val challenge = required(parsePairReply(p2.body)?.challengeResponse) { "phase 2 returned no challenge response" }
             verified(pairing.onPhase2(challenge)) { "phase 2 challenge did not verify (wrong PIN)" }
 
-            val p3 = gateway.getHttp(pairHttp(host.address, host.httpPort, pairing.phase3Params(deviceId)))
+            val p3 = gateway.getHttpOn(line, pairHttp(host.address, host.httpPort, pairing.phase3Params(deviceId)))
             val secret = required(parsePairReply(p3.body)?.pairingSecret) { "phase 3 returned no pairing secret" }
             verified(pairing.onPhase3(secret)) { "phase 3 signature did not verify" }
 
-            val p4 = gateway.getHttp(pairHttp(host.address, host.httpPort, pairing.phase4Params(deviceId)))
+            val p4 = gateway.getHttpOn(line, pairHttp(host.address, host.httpPort, pairing.phase4Params(deviceId)))
             verified(parsePairReply(p4.body)?.paired == true) { "phase 4 did not confirm the pairing" }
 
             // Phases 1-4 proved the peer holds the PIN-derived key and signed with
@@ -660,7 +672,7 @@ class MoonlightConnectionManager
             gateway.forgetPin(host.id)
 
             // Phase 5 (HTTPS): confirm the client-cert-authenticated channel.
-            gateway.getHttps(pairHttps(host.address, host.httpsPort, pairing.phase5Params(deviceId)), host.id)
+            gateway.getHttpsOn(line, pairHttps(host.address, host.httpsPort, pairing.phase5Params(deviceId)), host.id)
         }
 
         // A phase's answer that must be there; the host refusing to give it ends the pairing.

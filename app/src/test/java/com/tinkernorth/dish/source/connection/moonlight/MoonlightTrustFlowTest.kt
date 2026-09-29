@@ -154,7 +154,7 @@ class MoonlightTrustFlowTest {
             manager.pairHost(host)
             dispatcher.scheduler.advanceUntilIdle()
 
-            verify(exactly = 0) { gateway.getHttp(match { it.contains("/pair") }, any()) }
+            verify(exactly = 0) { gateway.getHttpOn(any(), match { it.contains("/pair") }, any()) }
         }
 
     // The host was verified this visit, which is the only proof there is that the pairing
@@ -174,7 +174,7 @@ class MoonlightTrustFlowTest {
     fun `a host that refuses phase 1 fails with a reason and writes nothing`() =
         runTest(dispatcher) {
             every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } returns unreachable()
-            every { gateway.getHttp(match { it.contains("/pair") }, any()) } returns reply("""<root status_code="400"/>""")
+            every { gateway.getHttpOn(any(), match { it.contains("/pair") }, any()) } returns reply("""<root status_code="400"/>""")
             val seen = mutableListOf<MoonlightConnectionEvent>()
             val collector = launch { manager.events.toList(seen) }
             dispatcher.scheduler.runCurrent()
@@ -192,7 +192,7 @@ class MoonlightTrustFlowTest {
     fun `a PIN is offered before phase 1 blocks on the human`() =
         runTest(dispatcher) {
             every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } returns unreachable()
-            every { gateway.getHttp(match { it.contains("/pair") }, any()) } returns reply("""<root status_code="400"/>""")
+            every { gateway.getHttpOn(any(), match { it.contains("/pair") }, any()) } returns reply("""<root status_code="400"/>""")
             val seen = mutableListOf<MoonlightConnectionEvent>()
             val collector = launch { manager.events.toList(seen) }
             dispatcher.scheduler.runCurrent()

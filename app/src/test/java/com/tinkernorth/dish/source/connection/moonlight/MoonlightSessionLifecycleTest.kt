@@ -291,7 +291,8 @@ class MoonlightSessionLifecycleTest {
             bind("a")
 
             verify(exactly = 1) { gateway.getHttps(match { it.contains("/resume") }, any()) }
-            verify(exactly = 0) { gateway.getHttp(match { it.contains("/pair") }, any()) }
+            verify(exactly = 0) { gateway.getHttpOn(any(), match { it.contains("/pair") }, any()) }
+            assertTrue(seen.none { it is MoonlightConnectionEvent.PairingPinReady })
             assertTrue(seen.none { it is MoonlightConnectionEvent.AppAlreadyRunning })
             assertTrue(seen.none { it is MoonlightConnectionEvent.RejoinRefused })
             collector.cancel()

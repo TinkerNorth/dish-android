@@ -11,6 +11,7 @@ import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
 import com.tinkernorth.dish.core.net.moonlight.MoonlightReferenceServer
 import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
 import com.tinkernorth.dish.core.net.moonlight.throwawayIdentity
+import com.tinkernorth.dish.repository.RememberedMoonlightRepository
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -27,9 +28,11 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -38,7 +41,10 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.io.Closeable
 import java.net.URLDecoder
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -59,8 +65,15 @@ import java.util.concurrent.TimeUnit
 class MoonlightPairFlowTest {
     private val dispatcher = StandardTestDispatcher()
     private val watcher = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // Records each event inside the emit that raised it, so a test that has seen a pairing end has
+    // also seen everything that pairing said.
+    private val recorder = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    private lateinit var context: Context
+    private lateinit var store: RememberedMoonlightRepository
     private lateinit var gateway: MoonlightHttpGateway
     private lateinit var manager: MoonlightConnectionManager
+    private val heldReads = CopyOnWriteArrayList<HeldRead>()
 
     private val rows = linkedMapOf<String, RememberedMoonlight>()
     private val entries = MutableStateFlow<List<RememberedMoonlight>>(emptyList())
@@ -140,17 +153,17 @@ class MoonlightPairFlowTest {
     fun setUp() {
         val prefs = mockk<SharedPreferences>(relaxed = true)
         every { prefs.getString("uniqueid", null) } returns "7b5d0738cbb54d3e"
-        val context = mockk<Context>(relaxed = true)
+        context = mockk(relaxed = true)
         every { context.getSharedPreferences(any(), any()) } returns prefs
 
         gateway = mockk(relaxed = true)
         // Nothing is paired yet, so the shortcut that confirms standing trust must not fire.
-        every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } returns MoonlightHttpGateway.Reply(0, "")
+        every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } returns UNANSWERED
         every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns
             reply("""<root status_code="200"><hostname>PC</hostname><PairStatus>0</PairStatus></root>""")
-        every { gateway.getHttp(match { it.contains("/pair") }, any()) } answers { answerPair(firstArg()) }
+        every { gateway.getHttpOn(any(), match { it.contains("/pair") }, any()) } answers { answerPair(secondArg()) }
 
-        val store = mockk<com.tinkernorth.dish.repository.RememberedMoonlightRepository>(relaxed = true)
+        store = mockk(relaxed = true)
         every { store.get(any()) } answers { rows[firstArg<String>()] }
         every { store.entries } returns entries
         every { store.put(any<RememberedMoonlight>()) } answers {
@@ -173,6 +186,8 @@ class MoonlightPairFlowTest {
 
     @After
     fun tearDown() {
+        heldReads.forEach(HeldRead::close)
+        recorder.cancel()
         watcher.cancel()
     }
 
@@ -204,7 +219,7 @@ class MoonlightPairFlowTest {
             assertTrue(record!!.paired)
             assertEquals(host.address, record.address)
             // Phase 5 is the first mutual-TLS call ever made to this host, and it comes last.
-            verify { gateway.getHttps(match { it.contains("/pair") && it.contains("pairchallenge") }, host.id) }
+            verify { gateway.getHttpsOn(any(), match { it.contains("/pair") && it.contains("pairchallenge") }, host.id) }
             watching.cancel()
         }
 
@@ -220,7 +235,8 @@ class MoonlightPairFlowTest {
             dispatcher.scheduler.advanceUntilIdle()
 
             verify {
-                gateway.getHttp(
+                gateway.getHttpOn(
+                    any(),
                     match { it.contains("/pair") && it.contains("getservercert") },
                     MoonlightHttpGateway.PAIR_PIN_TIMEOUT_MS,
                 )
@@ -241,9 +257,9 @@ class MoonlightPairFlowTest {
             dispatcher.scheduler.advanceUntilIdle()
 
             verifyOrder {
-                gateway.getHttp(match { it.contains("clientpairingsecret") }, any())
+                gateway.getHttpOn(any(), match { it.contains("clientpairingsecret") }, any())
                 gateway.forgetPin(host.id)
-                gateway.getHttps(match { it.contains("pairchallenge") }, host.id)
+                gateway.getHttpsOn(any(), match { it.contains("pairchallenge") }, host.id)
             }
             watching.cancel()
         }
@@ -271,35 +287,176 @@ class MoonlightPairFlowTest {
             watching.cancel()
         }
 
-    // B5. Cancel is the user's own doing, not a refusal. Letting it fall through the
-    // catch-all raised "the host did not accept the PIN" the moment they pressed it.
+    // B5. A Cancel lands while phase 1 waits on the human, in a read only its socket closing can
+    // end. Waiting it out kept the host's pairing open for two minutes after the user had left,
+    // then reported the timeout as the host refusing the PIN.
     @Test
-    fun `a cancelled pairing is not reported as a refusal`() =
-        runTest(dispatcher) {
-            val seen = mutableListOf<MoonlightConnectionEvent>()
-            val collector = launch { manager.events.toList(seen) }
-            dispatcher.scheduler.runCurrent()
-            every { gateway.getHttp(match { it.contains("/pair") }, any()) } answers {
-                throw kotlinx.coroutines.CancellationException("the user pressed Cancel")
-            }
+    fun `a Cancel ends a pairing that is waiting for its PIN at once, and reports no outcome`() {
+        val phaseOne = holdPhaseOne()
+        val onWorkers = managerOnWorkerThreads()
+        val seen = recordEvents(onWorkers)
+        val pairing = watcher.launch { onWorkers.pairHost(host) }
+        assertTrue("phase 1 is waiting for the PIN", phaseOne.awaitWaiting())
 
-            val attempt = launch { runCatching { manager.pairHost(host) } }
-            dispatcher.scheduler.advanceUntilIdle()
+        pairing.cancel()
 
-            assertTrue(seen.none { it is MoonlightConnectionEvent.PairingFailed })
-            assertNull(rows[host.id])
-            attempt.cancel()
-            collector.cancel()
+        assertTrue("the pairing ends without waiting for the PIN", endsWithin(pairing, STOP_MS))
+        assertTrue(seen.none { it is MoonlightConnectionEvent.PairingFailed || it is MoonlightConnectionEvent.Paired })
+    }
+
+    // B5. The same Cancel, and then the PIN typed into the host anyway. The pairing used to wake
+    // up, run phases 2 to 5, and save the host, all after the user had cancelled it.
+    @Test
+    fun `a PIN typed after a Cancel pairs nothing and saves nothing`() {
+        val phaseOne = holdPhaseOne()
+        val onWorkers = managerOnWorkerThreads()
+        val seen = recordEvents(onWorkers)
+        val pairing = watcher.launch { onWorkers.pairHost(host) }
+        assertTrue("phase 1 is waiting for the PIN", phaseOne.awaitWaiting())
+        pairing.cancel()
+
+        phaseOne.answer(answerPair(phaseOne.url))
+        assertTrue(endsWithin(pairing, SETTLE_MS))
+
+        assertNull("the host is not remembered", rows[host.id])
+        assertTrue("nothing announces a pairing", seen.none { it is MoonlightConnectionEvent.Paired })
+        assertFalse("the host is never taken past phase 1", server?.paired == true)
+    }
+
+    // B5. A Cancel can land before any PIN exists, while the host is asked whether it already
+    // trusts this device; whatever it answers afterwards, the pairing is over.
+    @Test
+    fun `a pairing cancelled while it asks whether the host trusts this device shows no PIN`() {
+        val trustCheck = holdTrustCheck()
+        val onWorkers = managerOnWorkerThreads()
+        val seen = recordEvents(onWorkers)
+        val pairing = watcher.launch { onWorkers.pairHost(host) }
+        assertTrue("the host is being asked", trustCheck.awaitWaiting())
+        pairing.cancel()
+
+        trustCheck.answer(UNANSWERED)
+        assertTrue(endsWithin(pairing, SETTLE_MS))
+
+        assertTrue(seen.none { it is MoonlightConnectionEvent.PairingPinReady })
+    }
+
+    @Test
+    fun `a pairing cancelled while it asks whether the host trusts this device records no trust`() {
+        val trustCheck = holdTrustCheck()
+        val onWorkers = managerOnWorkerThreads()
+        val seen = recordEvents(onWorkers)
+        val pairing = watcher.launch { onWorkers.pairHost(host) }
+        assertTrue("the host is being asked", trustCheck.awaitWaiting())
+        pairing.cancel()
+
+        trustCheck.answer(reply(TRUSTED_INFO))
+        assertTrue(endsWithin(pairing, SETTLE_MS))
+
+        assertNull("the host is not remembered", rows[host.id])
+        assertTrue("nothing announces a pairing", seen.none { it is MoonlightConnectionEvent.Paired })
+    }
+
+    /**
+     * A request the host holds open, the way it holds phase 1 until a human types the PIN. The
+     * read under it ends when the host answers or when its socket is closed; a thread interrupt
+     * does not reach it, as none reaches a blocked socket read.
+     */
+    private class HeldRead : Closeable {
+        private val reply = CompletableFuture<MoonlightHttpGateway.Reply>()
+        private val waiting = CountDownLatch(1)
+
+        @Volatile var url: String = ""
+            private set
+
+        // join, not get: it waits through an interrupt, as a blocked socket read does. The read is
+        // on the line the request was given, as the socket under a real one is.
+        fun read(
+            url: String,
+            line: CallLine,
+        ): MoonlightHttpGateway.Reply {
+            this.url = url
+            line.attach(this)
+            waiting.countDown()
+            return reply.join()
         }
+
+        fun answer(answer: MoonlightHttpGateway.Reply) {
+            reply.complete(answer)
+        }
+
+        override fun close() {
+            reply.complete(UNANSWERED)
+        }
+
+        fun awaitWaiting(): Boolean = waiting.await(PIN_WAIT_S, TimeUnit.SECONDS)
+    }
+
+    private fun holdPhaseOne(): HeldRead {
+        val phaseOne = HeldRead().also(heldReads::add)
+        every { gateway.getHttpOn(any(), match { it.contains("getservercert") }, any()) } answers {
+            phaseOne.read(secondArg(), firstArg())
+        }
+        return phaseOne
+    }
+
+    private fun holdTrustCheck(): HeldRead {
+        val trustCheck = HeldRead().also(heldReads::add)
+        every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } answers { trustCheck.read(firstArg(), CallLine()) }
+        return trustCheck
+    }
+
+    // Pairing on worker threads, as in the app: a read the host holds blocks a thread of its own,
+    // and the Cancel arrives from another one.
+    private fun managerOnWorkerThreads() =
+        MoonlightConnectionManager(
+            context = context,
+            scope = watcher,
+            ioDispatcher = Dispatchers.IO,
+            discovery = mockk(relaxed = true),
+            gateway = gateway,
+            identity = CLIENT,
+            store = store,
+        )
+
+    // Everything the manager says, recorded inside the emit that says it, with each PIN carried on
+    // to the host half the way the user carries it to the host.
+    private fun recordEvents(manager: MoonlightConnectionManager): List<MoonlightConnectionEvent> {
+        val seen = CopyOnWriteArrayList<MoonlightConnectionEvent>()
+        manager.events
+            .onEach { event -> record(event, seen) }
+            .launchIn(recorder)
+        return seen
+    }
+
+    private fun record(
+        event: MoonlightConnectionEvent,
+        seen: MutableList<MoonlightConnectionEvent>,
+    ) {
+        seen += event
+        if (event is MoonlightConnectionEvent.PairingPinReady) pins.put(event.pin)
+    }
+
+    private fun endsWithin(
+        job: Job,
+        millis: Long,
+    ): Boolean = runBlocking { withTimeoutOrNull(millis) { job.join() } } != null
 
     /** Refuse the named phase by answering it with a reply the client cannot use. */
     private fun stopAfter(phase: String) {
-        every { gateway.getHttp(match { it.contains("/pair") }, any()) } answers { answerPair(firstArg(), stopAt = phase) }
+        every { gateway.getHttpOn(any(), match { it.contains("/pair") }, any()) } answers { answerPair(secondArg(), stopAt = phase) }
     }
 
     private companion object {
         const val PIN_WAIT_S = 5L
         const val TWO_MINUTES_MS = 120_000
+
+        // A Cancel that hangs up ends a pairing in milliseconds; this only has to outlast a busy machine.
+        const val STOP_MS = 2_000L
+        const val SETTLE_MS = 5_000L
+
+        // What the gateway hands back for a request whose socket closed before the host answered.
+        val UNANSWERED = MoonlightHttpGateway.Reply(status = 0, body = "")
+        const val TRUSTED_INFO = """<root status_code="200"><hostname>PC</hostname><PairStatus>1</PairStatus></root>"""
 
         // Minted once for the whole class: RSA-2048 keygen is the slowest thing here and
         // JUnit builds a fresh test instance per method.
