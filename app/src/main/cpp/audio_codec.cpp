@@ -11,18 +11,21 @@ namespace {
 // for knob. Both streams are 48 kHz, 20 ms, VBR with in-band FEC requested;
 // what differs is the application and the bitrate.
 //
-// Mic: 32 kbps mono under OPUS_APPLICATION_VOIP, with in-band FEC -- the
-// redundant low-rate copy of the previous frame that lets the satellite recover
-// a single lost packet instead of guessing at it. The expected-loss hint is
-// what makes the encoder actually spend bits on that copy; without it the flag
-// alone does nothing. It is also what picks the MODE: the hint forces SILK in,
-// so both streams encode as Hybrid fullband and both really do carry FEC.
-// Dropping it to zero would hand the speaker to CELT and silently delete that.
+// Mic: 32 kbps mono under OPUS_APPLICATION_VOIP encodes as SILK wideband on
+// band-limited input and as Hybrid fullband on broadband input. Both keep the
+// SILK layer, the only one with in-band FEC: the redundant low-rate copy of the
+// previous frame that lets the satellite recover a single lost packet instead of
+// guessing at it. The expected-loss hint is what makes the encoder actually
+// spend bits on that copy; without it the flag alone does nothing.
 //
 // Speaker: 96 kbps stereo under OPUS_APPLICATION_AUDIO, because that stream
 // carries game and chat audio a player listens to rather than speech a codec
-// can model. The client only decodes it, so these two are here for the test
-// suite and for whoever next asks what the far end is sending.
+// can model. The FEC request and the loss hint, not the application, pick its
+// mode: together they force SILK in, so it encodes as Hybrid (fullband, or
+// super-wideband for band-limited content) instead of CELT alone and carries
+// in-band FEC too; dropping either one would hand it to CELT. The client only
+// decodes it, so these two are here for the test suite and for whoever next
+// asks what the far end is sending.
 constexpr int OPUS_MIC_BITRATE_BPS = 32000;
 constexpr int OPUS_SPEAKER_BITRATE_BPS = 96000;
 constexpr int OPUS_EXPECTED_PACKET_LOSS_PCT = 10;
