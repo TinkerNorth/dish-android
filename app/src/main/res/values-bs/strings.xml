@@ -187,6 +187,7 @@
     <string name="ml_resume_failed_title">Nije moguće ponovo ući u sesiju na %1$s</string>
     <string name="ml_resume_failed_body">Host ima sesiju, ali je ne vraća. Zatvorite aplikaciju na %1$s i pokrenite novu.</string>
     <string name="ml_refused_title">%1$s je odbio sesiju: %2$s</string>
+    <string name="ml_refused_title_no_reason">%1$s je odbio sesiju</string>
     <string name="ml_refused_body">Ipak dodajte kontroler pa će Dish pokušati ponovo sljedeći put kada ga upotrijebite.</string>
     <string name="ml_setup_failed_title">Nije moguće dovršiti sesiju na %1$s</string>
     <string name="ml_setup_failed_body">Aplikacija se pokrenula, ali strim nije podignut, pa ju je Dish opet zatvorio.</string>

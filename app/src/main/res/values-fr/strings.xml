@@ -188,6 +188,7 @@
     <string name="ml_resume_failed_title">Impossible de rejoindre la session sur %1$s</string>
     <string name="ml_resume_failed_body">L\'hôte a une session mais refuse de la rendre. Fermez l\'appli sur %1$s et lancez-en une nouvelle.</string>
     <string name="ml_refused_title">%1$s a refusé la session : %2$s</string>
+    <string name="ml_refused_title_no_reason">%1$s a refusé la session</string>
     <string name="ml_refused_body">Ajoutez quand même la manette, Dish réessaiera à la prochaine utilisation.</string>
     <string name="ml_setup_failed_title">Impossible de finaliser la session sur %1$s</string>
     <string name="ml_setup_failed_body">L\'appli a démarré mais le flux ne s\'est pas établi, alors Dish l\'a refermée.</string>

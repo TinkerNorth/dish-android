@@ -186,6 +186,7 @@
     <string name="ml_resume_failed_title">Sitzung auf %1$s konnte nicht fortgesetzt werden</string>
     <string name="ml_resume_failed_body">Der Host hat eine Sitzung, gibt sie aber nicht zurück. Schließe die App auf %1$s und starte eine neue.</string>
     <string name="ml_refused_title">%1$s hat die Sitzung abgelehnt: %2$s</string>
+    <string name="ml_refused_title_no_reason">%1$s hat die Sitzung abgelehnt</string>
     <string name="ml_refused_body">Füge den Controller trotzdem hinzu; Dish versucht es beim nächsten Mal erneut.</string>
     <string name="ml_setup_failed_title">Sitzung auf %1$s konnte nicht abgeschlossen werden</string>
     <string name="ml_setup_failed_body">Die App startete, aber der Stream kam nicht zustande, also hat Dish sie wieder geschlossen.</string>

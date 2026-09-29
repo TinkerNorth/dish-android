@@ -220,7 +220,8 @@ sealed interface MoonlightSessionUi {
     data class Refused(
         val hostMessage: String,
     ) : MoonlightSessionUi {
-        override val titleRes: Int = R.string.ml_refused_title
+        override val titleRes: Int
+            get() = if (hostMessage.isBlank()) R.string.ml_refused_title_no_reason else R.string.ml_refused_title
         override val bodyRes: Int = R.string.ml_refused_body
     }
 

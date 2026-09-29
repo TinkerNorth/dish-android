@@ -189,6 +189,7 @@
     <string name="ml_resume_failed_title">Não foi possível voltar à sessão em %1$s</string>
     <string name="ml_resume_failed_body">O host tem uma sessão, mas não a devolve. Feche o app em %1$s e inicie uma nova.</string>
     <string name="ml_refused_title">%1$s recusou a sessão: %2$s</string>
+    <string name="ml_refused_title_no_reason">%1$s recusou a sessão</string>
     <string name="ml_refused_body">Adicione o controle mesmo assim e o Dish tentará de novo na próxima vez que você o usar.</string>
     <string name="ml_setup_failed_title">Não foi possível concluir a sessão em %1$s</string>
     <string name="ml_setup_failed_body">O app iniciou, mas a transmissão não subiu, então o Dish o fechou de novo.</string>

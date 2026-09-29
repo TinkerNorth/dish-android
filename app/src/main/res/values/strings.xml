@@ -232,6 +232,7 @@
     <string name="ml_resume_failed_title">Could not rejoin the session on %1$s</string>
     <string name="ml_resume_failed_body">The host has a session but would not hand it back. Close the app on %1$s and start a new one.</string>
     <string name="ml_refused_title">%1$s refused the session: %2$s</string>
+    <string name="ml_refused_title_no_reason">%1$s refused the session</string>
     <string name="ml_refused_body">Add the controller anyway and Dish will try again the next time you use it.</string>
     <string name="ml_setup_failed_title">Could not finish the session on %1$s</string>
     <string name="ml_setup_failed_body">The app started but the stream did not come up, so Dish closed it again.</string>
