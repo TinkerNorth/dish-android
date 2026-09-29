@@ -54,6 +54,8 @@ internal class RepeatedColorCycles :
 
 private const val FIRST_PAD = 9
 private const val SECOND_PAD = 12
+private const val THIRD_PAD = 15
+private const val UNCOLORED_PAD = 7
 
 // What a closed session leaves on a light: the input service's LightState(0).
 private const val OFF_ARGB = 0
@@ -316,6 +318,23 @@ class FrameworkLightGatewayTest {
     }
 
     @Test
+    fun `releaseAll darkens and closes every other bar when a gone pad's cannot be turned off`() {
+        lightTwoPads()
+        lightbars.withBar += THIRD_PAD
+        hostSends(THIRD_PAD, GREEN_ARGB)
+        lightbars.handles.getValue(FIRST_PAD).writeResult = false
+        lightbars.withBar -= FIRST_PAD
+
+        gateway.releaseAll()
+
+        assertEquals(1, lightbars.handles.getValue(FIRST_PAD).closes)
+        assertEquals(1, lightbars.handles.getValue(SECOND_PAD).closes)
+        assertEquals(1, lightbars.handles.getValue(THIRD_PAD).closes)
+        assertEquals(OFF_ARGB, lightbars.barColorOf(SECOND_PAD))
+        assertEquals(OFF_ARGB, lightbars.barColorOf(THIRD_PAD))
+    }
+
+    @Test
     fun `releaseAll closes a turned-off bar too`() {
         lightTwoPads()
         gateway.release(FIRST_PAD)
@@ -404,6 +423,19 @@ class FrameworkLightGatewayTest {
 
         assertEquals(listOf(FIRST_PAD), lightbars.opens)
         assertEquals(OFF_ARGB, lightbars.barColorOf(FIRST_PAD))
+    }
+
+    @Test
+    fun `forgetting a pad its host never colored keeps every other pad's color`() {
+        lightTwoPads()
+        gateway.releaseAll()
+
+        gateway.forget(UNCOLORED_PAD)
+        gateway.restore(FIRST_PAD)
+        gateway.restore(SECOND_PAD)
+
+        assertEquals(RED_ARGB, lightbars.barColorOf(FIRST_PAD))
+        assertEquals(BLUE_ARGB, lightbars.barColorOf(SECOND_PAD))
     }
 
     @Test
