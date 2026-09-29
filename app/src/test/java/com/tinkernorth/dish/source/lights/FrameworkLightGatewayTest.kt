@@ -3,9 +3,54 @@
 
 package com.tinkernorth.dish.source.lights
 
+import com.tinkernorth.dish.architecture.testing.fewestAllocatedBytesDuring
+import com.tinkernorth.dish.architecture.testing.freshAppInstanceOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.function.LongSupplier
+
+// Above the boxed-Integer cache (-128..127), so a lookup that boxed the id would allocate.
+private const val UNCACHED_DEVICE_ID = 300
+private const val COLORS_PER_CYCLE = 1000
+
+// A session that counts what reached it without keeping it.
+private class CountingLightbar : FrameworkLightGateway.Lightbar {
+    var writes = 0L
+
+    override fun write(argb: Int): Boolean {
+        writes++
+        return true
+    }
+
+    override fun close() = Unit
+}
+
+private class OneLightbar(
+    private val lightbar: CountingLightbar,
+) : FrameworkLightGateway.Lightbars {
+    override fun open(deviceId: Int): FrameworkLightGateway.Lightbar = lightbar
+}
+
+// A host asking again and again for the color a pad already shows. Reached through Runnable (one
+// cycle) and LongSupplier (the writes that reached the service) because the allocation test makes it
+// in a class loader of its own (freshAppInstanceOf).
+internal class RepeatedColorCycles :
+    Runnable,
+    LongSupplier {
+    private val lightbar = CountingLightbar()
+    private val gateway = FrameworkLightGateway(OneLightbar(lightbar))
+
+    init {
+        gateway.setColor(UNCACHED_DEVICE_ID, 1, 2, 3)
+    }
+
+    override fun run() {
+        repeat(COLORS_PER_CYCLE) { gateway.setColor(UNCACHED_DEVICE_ID, 1, 2, 3) }
+    }
+
+    override fun getAsLong(): Long = lightbar.writes
+}
 
 // The session lifecycle: open lazily on the first color, reuse for later colors, coalesce identical
 // ones, close on release, and never resurrect a session for a device whose bar has gone. The Android
@@ -141,5 +186,25 @@ class FrameworkLightGatewayTest {
         lightbars.handles.getValue(9).writeResult = false
         gateway.setColor(9, 4, 5, 6)
         assertEquals(1, lightbars.handles.getValue(9).closes)
+    }
+
+    @Test
+    fun `a repeated color allocates nothing`() {
+        val cycles = freshAppInstanceOf(RepeatedColorCycles::class.java)
+        val cycle = cycles as Runnable
+        repeat(WARMUP_CYCLES) { cycle.run() }
+
+        val allocated = fewestAllocatedBytesDuring(MEASURED_RUNS) { cycle.run() }
+
+        assertEquals("only the first color reached the service", 1L, (cycles as LongSupplier).asLong)
+        assertTrue("$allocated bytes over $COLORS_PER_CYCLE colors", allocated < COLORS_PER_CYCLE * BYTES_PER_COLOR_BOUND)
+    }
+
+    private companion object {
+        const val WARMUP_CYCLES = 20
+        const val MEASURED_RUNS = 3
+
+        // Half the smallest object: a boxed id or color costs 16 bytes or more every call.
+        const val BYTES_PER_COLOR_BOUND = 8
     }
 }
