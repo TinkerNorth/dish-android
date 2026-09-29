@@ -46,92 +46,113 @@ private val LOCALES = listOf("values", "values-es", "values-fr", "values-de", "v
 
 private val PLACEHOLDER = Regex("%(\\d+)\\\$s")
 
-class ConnectionErrorTextTest {
+class ConnectionErrorWordsTest {
     private val resDir: File =
         generateSequence(File(checkNotNull(System.getProperty("user.dir"))).absoluteFile) { it.parentFile }
             .flatMap { sequenceOf(File(it, "src/main/res"), File(it, "app/src/main/res")) }
             .first { File(it, "values/strings.xml").exists() }
 
     @Test
-    fun `an unreachable server reads as unreachable`() {
+    fun `an unreachable server says the satellite is not responding, and why that may be`() {
         assertEquals(
-            Lookup(R.string.conn_error_server_unreachable),
-            lookupOf { connectionErrorText(ConnectionError.ServerUnreachable, it) },
+            Words(R.string.notif_server_unreachable_title, Lookup(R.string.conn_error_server_unreachable)),
+            wordsOf(ConnectionError.ServerUnreachable),
         )
     }
 
     @Test
-    fun `a satellite that no longer knows this device asks for a re-pair`() {
-        assertEquals(Lookup(R.string.conn_error_repair_needed), lookupOf { connectionErrorText(ConnectionError.RepairNeeded, it) })
-    }
-
-    @Test
-    fun `a changed security identity says so`() {
-        assertEquals(Lookup(R.string.conn_error_identity_changed), lookupOf { connectionErrorText(ConnectionError.IdentityChanged, it) })
-    }
-
-    @Test
-    fun `a controller link that would not open says so`() {
-        assertEquals(Lookup(R.string.conn_error_wire_failed), lookupOf { connectionErrorText(ConnectionError.WireFailed, it) })
-    }
-
-    @Test
-    fun `a satellite too old for the app asks to update Satellite`() {
+    fun `a satellite that no longer knows this device says so and asks for a re-pair`() {
         assertEquals(
-            Lookup(R.string.conn_error_satellite_update_required),
-            lookupOf { connectionErrorText(ConnectionError.SatelliteUpdateRequired, it) },
+            Words(R.string.conn_error_title_repair_needed, Lookup(R.string.conn_error_repair_needed)),
+            wordsOf(ConnectionError.RepairNeeded),
         )
     }
 
     @Test
-    fun `a satellite newer than the app asks to update Dish`() {
+    fun `a changed security identity says the satellite has a new identity`() {
         assertEquals(
-            Lookup(R.string.conn_error_app_update_required),
-            lookupOf { connectionErrorText(ConnectionError.AppUpdateRequired, it) },
+            Words(R.string.conn_error_title_identity_changed, Lookup(R.string.conn_error_identity_changed)),
+            wordsOf(ConnectionError.IdentityChanged),
+        )
+    }
+
+    @Test
+    fun `a controller link that would not open says the link failed`() {
+        assertEquals(
+            Words(R.string.conn_error_title_wire_failed, Lookup(R.string.conn_error_wire_failed)),
+            wordsOf(ConnectionError.WireFailed),
+        )
+    }
+
+    @Test
+    fun `a satellite too old for the app says the satellite needs an update`() {
+        assertEquals(
+            Words(R.string.conn_error_title_satellite_update_required, Lookup(R.string.conn_error_satellite_update_required)),
+            wordsOf(ConnectionError.SatelliteUpdateRequired),
+        )
+    }
+
+    @Test
+    fun `a satellite newer than the app says Dish needs an update`() {
+        assertEquals(
+            Words(R.string.conn_error_title_app_update_required, Lookup(R.string.conn_error_app_update_required)),
+            wordsOf(ConnectionError.AppUpdateRequired),
         )
     }
 
     @Test
     fun `a declined approval says the satellite declined`() {
-        assertEquals(Lookup(R.string.conn_error_approval_declined), lookupOf { connectionErrorText(ConnectionError.ApprovalDeclined, it) })
-    }
-
-    @Test
-    fun `an approval nobody answered says it timed out`() {
-        assertEquals(Lookup(R.string.conn_error_approval_timed_out), lookupOf { connectionErrorText(ConnectionError.ApprovalTimedOut, it) })
-    }
-
-    @Test
-    fun `a pairing failure without a reason reads as a plain failure`() {
-        assertEquals(Lookup(R.string.conn_error_pairing_failed), lookupOf { connectionErrorText(ConnectionError.PairingFailed, it) })
-    }
-
-    @Test
-    fun `a refused pairing quotes the satellite's reason`() {
         assertEquals(
-            Lookup(R.string.conn_error_pairing_refused, listOf(REASON)),
-            lookupOf { connectionErrorText(ConnectionError.PairingRefused(REASON), it) },
+            Words(R.string.conn_error_title_approval_declined, Lookup(R.string.conn_error_approval_declined)),
+            wordsOf(ConnectionError.ApprovalDeclined),
         )
     }
 
     @Test
-    fun `a session refusal without a reason says the satellite refused`() {
-        assertEquals(Lookup(R.string.conn_error_session_failed), lookupOf { connectionErrorText(ConnectionError.SessionFailed, it) })
+    fun `an approval nobody answered says there was no answer`() {
+        assertEquals(
+            Words(R.string.conn_error_title_approval_timed_out, Lookup(R.string.conn_error_approval_timed_out)),
+            wordsOf(ConnectionError.ApprovalTimedOut),
+        )
     }
 
     @Test
-    fun `a refused session quotes the satellite's reason`() {
+    fun `a pairing failure without a reason says the pairing failed`() {
         assertEquals(
-            Lookup(R.string.conn_error_session_refused, listOf(REASON)),
-            lookupOf { connectionErrorText(ConnectionError.SessionRefused(REASON), it) },
+            Words(R.string.conn_error_title_pairing_failed, Lookup(R.string.conn_error_pairing_failed)),
+            wordsOf(ConnectionError.PairingFailed),
+        )
+    }
+
+    @Test
+    fun `a refused pairing says the pairing failed and quotes the satellite's reason`() {
+        assertEquals(
+            Words(R.string.conn_error_title_pairing_failed, Lookup(R.string.conn_error_pairing_refused, listOf(REASON))),
+            wordsOf(ConnectionError.PairingRefused(REASON)),
+        )
+    }
+
+    @Test
+    fun `a session refusal without a reason says the connection failed`() {
+        assertEquals(
+            Words(R.string.conn_error_title_session_failed, Lookup(R.string.conn_error_session_failed)),
+            wordsOf(ConnectionError.SessionFailed),
+        )
+    }
+
+    @Test
+    fun `a refused session says the connection failed and quotes the satellite's reason`() {
+        assertEquals(
+            Words(R.string.conn_error_title_session_failed, Lookup(R.string.conn_error_session_refused, listOf(REASON))),
+            wordsOf(ConnectionError.SessionRefused(REASON)),
         )
     }
 
     @Test
     fun `a controller the satellite could not apply names the satellite, then the failures`() {
         assertEquals(
-            Lookup(R.string.conn_error_apply_failed, listOf(SERVER, FAILURES)),
-            lookupOf { connectionErrorText(ConnectionError.ApplyFailed(SERVER, FAILURES), it) },
+            Words(R.string.conn_error_title_apply_failed, Lookup(R.string.conn_error_apply_failed, listOf(SERVER, FAILURES))),
+            wordsOf(ConnectionError.ApplyFailed(SERVER, FAILURES)),
         )
     }
 
@@ -168,21 +189,27 @@ class ConnectionErrorTextTest {
 
     @Test
     fun `every connection error reads as its own string`() {
-        val resources = EVERY_CONNECTION_ERROR.map(::connectionLookup).map { it.res }
+        val resources = EVERY_CONNECTION_ERROR.map(::wordsOf).map { it.body.res }
         assertEquals(resources.size, resources.toSet().size)
     }
 
     @Test
     fun `every string takes exactly the arguments its text passes, in every locale`() {
         val lookups =
-            EVERY_CONNECTION_ERROR.map(::connectionLookup) +
+            EVERY_CONNECTION_ERROR.map(::wordsOf).map { it.body } +
+                EVERY_CONNECTION_ERROR.map(::wordsOf).map { Lookup(it.title, listOf(SERVER)) } +
                 EVERY_MOONLIGHT_ERROR.map(::moonlightLookup) +
                 lookupOf { appCloseRequestedText(SERVER, it) }
         val mismatches = LOCALES.flatMap { locale -> mismatchesIn(locale, lookups) }
         assertTrue("strings whose placeholders do not match their arguments: $mismatches", mismatches.isEmpty())
     }
 
-    private fun connectionLookup(error: ConnectionError): Lookup = lookupOf { connectionErrorText(error, it) }
+    // The title's only placeholder is the satellite's name, which the screen fills in.
+    private fun wordsOf(error: ConnectionError): Words {
+        var title = 0
+        val body = lookupOf { strings -> connectionErrorWords(error, strings).also { title = it.title }.body }
+        return Words(title, body)
+    }
 
     private fun moonlightLookup(error: MoonlightError): Lookup = lookupOf { moonlightErrorText(error, it) }
 
@@ -221,6 +248,11 @@ class ConnectionErrorTextTest {
 
     private fun casesOf(sealed: Class<*>): Set<Class<*>> = sealed.declaredClasses.filter { sealed.isAssignableFrom(it) }.toSet()
 }
+
+private data class Words(
+    val title: Int,
+    val body: Lookup,
+)
 
 // The resource and arguments a text function asked the lookup for.
 private data class Lookup(

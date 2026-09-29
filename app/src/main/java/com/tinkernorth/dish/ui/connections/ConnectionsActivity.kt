@@ -63,17 +63,18 @@ import com.tinkernorth.dish.source.system.PERMISSION
 import com.tinkernorth.dish.source.system.evaluate
 import com.tinkernorth.dish.source.system.isGranted
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
-import com.tinkernorth.dish.ui.common.ContextStringLookup
+import com.tinkernorth.dish.ui.common.ConnectionErrorWords
 import com.tinkernorth.dish.ui.common.StaticViewAdapter
 import com.tinkernorth.dish.ui.common.appCloseRequestedText
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
-import com.tinkernorth.dish.ui.common.connectionErrorText
+import com.tinkernorth.dish.ui.common.connectionErrorWords
 import com.tinkernorth.dish.ui.common.moonlightErrorText
 import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setLoading
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.donate.attachDonatePill
+import com.tinkernorth.dish.ui.main.ContextStringLookup
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -324,7 +325,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     private fun onSatelliteEvent(ev: ConnectionEvent) {
         when (ev) {
-            is ConnectionEvent.Error -> onConnectionError(connectionErrorText(ev.error, ContextStringLookup(this)))
+            is ConnectionEvent.Error -> onConnectionError(connectionErrorWords(ev.error, ContextStringLookup(this)))
             is ConnectionEvent.PairingRequired -> satellitePairing.show(ev.server)
         }
     }
@@ -893,16 +894,12 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     // A pairing in flight owns the error: it belongs in the dialog the user is looking at, not in
     // a banner behind it.
-    private fun onConnectionError(message: String) {
-        if (satellitePairing.showError(message)) return
+    private fun onConnectionError(words: ConnectionErrorWords) {
+        if (satellitePairing.showError(words.body)) return
         notifications.error(
             glyph = R.drawable.ic_satellite_off,
-            title =
-                getString(
-                    R.string.notif_server_unreachable_title,
-                    satellitePairing.serverName ?: getString(R.string.satellite_fallback_name),
-                ),
-            body = message,
+            title = getString(words.title, satellitePairing.serverName ?: getString(R.string.satellite_fallback_name)),
+            body = words.body,
         )
     }
 

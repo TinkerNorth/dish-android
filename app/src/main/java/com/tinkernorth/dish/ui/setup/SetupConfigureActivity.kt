@@ -2,12 +2,10 @@
 
 package com.tinkernorth.dish.ui.setup
 
-import android.content.Context
 import android.os.Bundle
 import android.view.View
 import androidx.activity.addCallback
 import androidx.activity.viewModels
-import androidx.annotation.StringRes
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
@@ -37,8 +35,8 @@ import com.tinkernorth.dish.ui.main.BindingLink
 import com.tinkernorth.dish.ui.main.BindingSnapshot
 import com.tinkernorth.dish.ui.main.ConfigUiState
 import com.tinkernorth.dish.ui.main.ConfigureBindingsViewModel
+import com.tinkernorth.dish.ui.main.ContextStringLookup
 import com.tinkernorth.dish.ui.main.MoonlightAction
-import com.tinkernorth.dish.ui.main.StringLookup
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import com.tinkernorth.dish.ui.main.bindCompat
 import com.tinkernorth.dish.ui.main.bindMoonlightSession
@@ -57,7 +55,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     private lateinit var binding: ActivitySetupConfigureBinding
     private val nav by lazy { DishNavigator(this) }
     private val viewModel: ConfigureBindingsViewModel by viewModels()
-    private val strings = ContextStrings(this)
+    private val strings = ContextStringLookup(this)
 
     private var step = Step.TYPE
     private var current = ConfigUiState()
@@ -488,15 +486,4 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     }
 
     private fun visibleIf(condition: Boolean): Int = if (condition) View.VISIBLE else View.GONE
-}
-
-// The graph chooses its own format arguments, so the screen fills a string without knowing which
-// node it is drawing; this is the Context end of that seam.
-private class ContextStrings(
-    private val ctx: Context,
-) : StringLookup {
-    override fun format(
-        @StringRes res: Int,
-        vararg args: Any,
-    ): String = ctx.getString(res, *args)
 }

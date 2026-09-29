@@ -2,10 +2,8 @@
 
 package com.tinkernorth.dish.ui.main
 
-import android.content.Context
 import android.view.LayoutInflater
 import android.view.View
-import androidx.annotation.StringRes
 import com.google.android.material.button.MaterialButton
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.BindingSectionMoonlightBinding
@@ -22,7 +20,7 @@ fun BindingSectionMoonlightBinding.bindMoonlightSession(
     onAction: (MoonlightAction) -> Unit,
 ) {
     val ctx = root.context
-    val strings = ContextStrings(ctx)
+    val strings = ContextStringLookup(ctx)
     sessionSpinner.visibility = if (session.showsSpinner) View.VISIBLE else View.GONE
 
     val title = session.title(hostLabel, strings)
@@ -66,17 +64,6 @@ private fun BindingSectionMoonlightBinding.bindApps(
     }
 }
 
-// The state chooses its own format arguments, so the view can fill a string without
-// knowing which state it is drawing; this is the Context end of that seam.
-private class ContextStrings(
-    private val ctx: Context,
-) : StringLookup {
-    override fun format(
-        @StringRes res: Int,
-        vararg args: Any,
-    ): String = ctx.getString(res, *args)
-}
-
 // Rebuilt from scratch on every render rather than toggled, because the number of buttons
 // changes with the state. The first action gets the filled layout and the rest the outlined
 // one, so the ordering in MoonlightSessionUi.actions is what decides which of them reads as
@@ -87,7 +74,7 @@ private fun BindingSectionMoonlightBinding.bindActions(
     onAction: (MoonlightAction) -> Unit,
 ) {
     val ctx = root.context
-    val strings = ContextStrings(ctx)
+    val strings = ContextStringLookup(ctx)
     val inflater = LayoutInflater.from(ctx)
     sessionActions.removeAllViews()
     val actions = session.actions()

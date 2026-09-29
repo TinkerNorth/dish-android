@@ -22,14 +22,14 @@ import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.source.system.PERMISSION
 import com.tinkernorth.dish.source.system.isGranted
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
-import com.tinkernorth.dish.ui.common.ContextStringLookup
 import com.tinkernorth.dish.ui.common.DishNavigator
-import com.tinkernorth.dish.ui.common.connectionErrorText
+import com.tinkernorth.dish.ui.common.connectionErrorWords
 import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.paintTierBadge
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.connections.PairPinDialog
 import com.tinkernorth.dish.ui.connections.pairSubtitleRes
+import com.tinkernorth.dish.ui.main.ContextStringLookup
 import com.tinkernorth.dish.ui.main.bindCompat
 import com.tinkernorth.dish.ui.main.chipTextRes
 import dagger.hilt.android.AndroidEntryPoint
@@ -135,7 +135,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
         when (event) {
             is SetupConnectionViewModel.Event.ShowPairing -> pairing.show(event.server)
             is SetupConnectionViewModel.Event.Connected -> onConnected(event.hostId)
-            is SetupConnectionViewModel.Event.Error -> onConnectionError(connectionErrorText(event.error, ContextStringLookup(this)))
+            is SetupConnectionViewModel.Event.Error -> onConnectionError(connectionErrorWords(event.error, ContextStringLookup(this)).body)
         }
     }
 
