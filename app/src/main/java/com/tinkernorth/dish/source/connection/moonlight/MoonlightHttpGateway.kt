@@ -77,6 +77,13 @@ class MoonlightHttpGateway
             readTimeoutMs: Int = TIMEOUT_MS,
         ): Reply = plain.get(url, readTimeoutMs)
 
+        /** [getHttp] on a [line] the caller can hang up from another thread; see [hangingUpOnCancel]. */
+        internal fun getHttpOn(
+            line: CallLine,
+            url: String,
+            readTimeoutMs: Int = TIMEOUT_MS,
+        ): Reply = plain.get(url, readTimeoutMs, line)
+
         /**
          * Mutual-TLS GET (serverinfo / pair phase 5 / applist / launch / resume /
          * cancel), over its own socket, closed as soon as the host has answered.
@@ -104,10 +111,17 @@ class MoonlightHttpGateway
         fun getHttps(
             urlString: String,
             hostId: String,
+        ): Reply = getHttpsOn(CallLine(), urlString, hostId)
+
+        /** [getHttps] on a [line] the caller can hang up from another thread; see [hangingUpOnCancel]. */
+        internal fun getHttpsOn(
+            line: CallLine,
+            urlString: String,
+            hostId: String,
         ): Reply =
             MoonlightHttp11Client(HTTPS_TIMEOUT_MS, HTTPS_TIMEOUT_MS) { socket, host, port ->
                 openTls(socket, host, port, hostId)
-            }.get(urlString)
+            }.get(urlString, line = line)
 
         /**
          * Drop the pinned certificate for [hostId], re-arming TOFU for it. Lives
