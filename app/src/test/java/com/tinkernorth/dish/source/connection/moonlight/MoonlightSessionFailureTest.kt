@@ -330,6 +330,27 @@ class MoonlightSessionFailureTest {
             verify(exactly = 1) { gateway.getHttps(match { it.contains("/launch") && it.contains("appid=2") }, any()) }
         }
 
+    // A pick the host has since removed was launched, refused, and launched again on every retry,
+    // behind a refusal that hid the picker it could be changed in.
+    @Test
+    fun `a session on a host that no longer lists the picked app starts the first app the host lists`() =
+        runTest(dispatcher) {
+            rememberAs(remembered.copy(lastAppId = "9", lastAppName = "Removed"))
+            every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply(twoApps)
+
+            bindOnePad()
+
+            verify(exactly = 0) { gateway.getHttps(match { it.contains("/launch") && it.contains("appid=9") }, any()) }
+            verify(exactly = 1) { gateway.getHttps(match { it.contains("/launch") && it.contains("appid=1") }, any()) }
+        }
+
+    // The record as a store holds it, so what the probe writes is what the launch after it reads.
+    private fun rememberAs(record: RememberedMoonlight) {
+        var held = record
+        every { store.get(remembered.id) } answers { held }
+        every { store.put(any<RememberedMoonlight>()) } answers { held = firstArg() }
+    }
+
     @Test
     fun `a session on a host with no app picked starts the first app the host lists`() =
         runTest(dispatcher) {

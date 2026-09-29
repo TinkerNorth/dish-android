@@ -332,6 +332,21 @@ class MoonlightConnectionManager
             if (isTheFirstAnswer) store.put(record.copy(uniqueId = info.uniqueId))
         }
 
+        // The host's app list is its own word on what it can start. A pick it no longer lists would be
+        // refused on every attempt, behind a refusal that hides the picker it could be changed in, so it
+        // is forgotten, and the host's first app starts, as the card promises for a host with no pick.
+        private fun forgetAPickTheHostDropped(
+            hostId: String,
+            listed: List<MoonlightApp>,
+        ) {
+            val record = store.get(hostId) ?: return
+            val pick = record.lastAppId
+            val theHostDroppedIt = pick.isNotEmpty() && listed.none { it.id == pick }
+            if (!theHostDroppedIt) return
+            Log.i(TAG, "$hostId no longer lists app $pick; forgetting it as the pick")
+            store.put(record.copy(lastAppId = "", lastAppName = ""))
+        }
+
         // Plain HTTP answers any caller, paired or not, and names the machine behind the address.
         private fun plainServerInfo(host: MoonlightHost): ServerInfo? =
             gateway
@@ -415,6 +430,7 @@ class MoonlightConnectionManager
                     return@withContext MoonlightProbe(trust = trust)
                 }
                 val apps = runCatching { fetchAppList(host) }.getOrNull()
+                apps?.let { forgetAPickTheHostDropped(host.id, it) }
                 markVerified(host.id)
                 MoonlightProbe(
                     trust = MoonlightTrustState.PAIRED,
