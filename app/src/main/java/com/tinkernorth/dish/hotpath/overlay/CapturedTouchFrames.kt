@@ -84,8 +84,8 @@ internal class CapturedTouchFrames(
         val sink = sinks.sinkFor(slot.slotId)
         val due = slot.pacer.resendDue(slot.tookChange(resendFrame))
         val step = resendStepFor(due, hasSink = sink != null, routed = routed.isRouted(slot.slotId))
-        // By identity, not a when over the step: that reads its ordinal(), which allocates on
-        // every call in a test JVM whose MockK has rewritten java.lang.Enum.
+        // By identity, not a when over the step: that reads its ordinal(), which the allocation
+        // tests measure as MockK rewrites it, allocating on every call (ThreadAllocation.kt).
         when {
             step === ResendStep.SEND -> if (sink != null) send(sink, slot.slotId, resendFrame, resendReport)
             step === ResendStep.FORGET -> slot.forget(written)

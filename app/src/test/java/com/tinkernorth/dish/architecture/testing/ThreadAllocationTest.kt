@@ -29,6 +29,12 @@ private fun burst(calls: Int): Int {
     return sum
 }
 
+// An enum the measured code reads the ordinal of, the way a `when` over an enum does.
+private enum class Step {
+    FIRST,
+    SECOND,
+}
+
 // The allocation tests compare what a hot path allocates against zero or against a baseline, in a
 // JVM that earlier test classes have already warmed. That only means what it would on the phone if
 // the JIT cannot remove an allocation ART makes, which is what the test task's flags promise.
@@ -90,7 +96,28 @@ class ThreadAllocationTest {
         assertTrue("fewest bytes: $fewest", fewest >= ARRAY_BYTES)
     }
 
+    private var ordinals = 0
+
+    private fun readOrdinals() {
+        repeat(ORDINAL_READS) { ordinals += Step.entries[it % 2].ordinal }
+    }
+
+    // A relaxed MockK mock that hands out an enum anywhere in the suite rewrites java.lang.Enum
+    // for the rest of the JVM, and every ordinal() then allocates. Which test class ran first must
+    // not decide whether a hot path's `when` over an enum passes, so every measurement is taken
+    // with Enum already rewritten, even in a test class run alone.
+    @Test
+    fun `reading an enum's ordinal is counted, whichever test class ran first`() {
+        readOrdinals()
+
+        val fewest = fewestAllocatedBytesDuring(RUNS, ::readOrdinals)
+
+        assertTrue("fewest bytes: $fewest over $ORDINAL_READS reads", fewest >= ORDINAL_READS * SMALLEST_OBJECT_BYTES)
+    }
+
     private companion object {
+        const val ORDINAL_READS = 1000
+
         // Enough calls, twenty million in all, that C2 compiles the burst well before the last one.
         const val BURSTS = 2000
         const val CALLS_PER_BURST = 10_000

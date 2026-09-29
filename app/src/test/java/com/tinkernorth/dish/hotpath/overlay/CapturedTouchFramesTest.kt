@@ -15,7 +15,6 @@ import com.tinkernorth.dish.hotpath.input.normalize
 import com.tinkernorth.dish.source.connection.TelemetrySink
 import com.tinkernorth.dish.source.connection.TouchpadReport
 import com.tinkernorth.dish.ui.common.ResendPacer
-import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -82,14 +81,6 @@ private class CountingSink : TelemetrySink {
     ) {
         sent.incrementAndGet()
     }
-}
-
-// An enum only for MockK to mock. A relaxed mock that hands out an enum anywhere in the suite
-// makes MockK rewrite java.lang.Enum for the rest of the JVM, and every ordinal() then allocates;
-// a JDK class has no fresh copy to measure instead (freshAppInstanceOf), so the frame path must
-// not lean on one, and the allocation tests mock this first to hold it to that whatever ran before.
-private enum class RewrittenEnum {
-    ONLY,
 }
 
 private const val FIRST_SLOT = "7"
@@ -297,8 +288,7 @@ class CapturedTouchFramesTest {
     // ---- nothing is built per event or per tick ----
 
     @Test
-    fun `a captured event allocates nothing, even once MockK has rewritten java lang Enum`() {
-        mockk<RewrittenEnum>(relaxed = true).ordinal
+    fun `a captured event allocates nothing`() {
         val cycles = freshAppInstanceOf(CapturedEventCycles::class.java)
         val cycle = cycles as Runnable
         repeat(WARMUP_CYCLES) { cycle.run() }
@@ -310,8 +300,7 @@ class CapturedTouchFramesTest {
     }
 
     @Test
-    fun `a resend tick allocates nothing, even once MockK has rewritten java lang Enum`() {
-        mockk<RewrittenEnum>(relaxed = true).ordinal
+    fun `a resend tick allocates nothing`() {
         val cycles = freshAppInstanceOf(ResendTickCycles::class.java)
         val cycle = cycles as Runnable
         repeat(WARMUP_CYCLES) { cycle.run() }
