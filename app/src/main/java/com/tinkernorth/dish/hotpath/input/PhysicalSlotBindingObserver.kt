@@ -310,12 +310,7 @@ class PhysicalSlotBindingObserver
 
         private fun execute(op: BindOp) {
             when (op) {
-                is BindOp.Unbind -> {
-                    PhysicalSlotNative.unbindPhysicalSlot(op.deviceId)
-                    // The slot stopped streaming (unbound, host gone, or the device departed): give
-                    // any framework light bar back. A no-op for a device the gateway never lit.
-                    frameworkLights.release(op.deviceId)
-                }
+                is BindOp.Unbind -> PhysicalSlotNative.unbindPhysicalSlot(op.deviceId)
                 is BindOp.Forget -> PhysicalSlotNative.forgetPhysicalDevice(op.deviceId)
                 is BindOp.ReleaseHubBinding -> hub.unbind(op.deviceId.toString())
                 is BindOp.BindSatellite ->
@@ -324,5 +319,18 @@ class PhysicalSlotBindingObserver
                 is BindOp.BindMoonlight ->
                     PhysicalSlotNative.bindPhysicalSlotMoonlight(op.deviceId, op.connectionId, op.controllerNumber)
             }
+            frameworkLights.follow(op)
         }
     }
+
+// A pad's framework light bar follows its slot: dark while the slot is not streaming (unbound, host
+// gone, or the device departed), and its host's last color again once it is bound, since no host
+// re-sends an unchanged one. Each is a no-op for a pad the gateway never lit.
+internal fun FrameworkLightGateway.follow(op: BindOp) {
+    when (op) {
+        is BindOp.BindSatellite, is BindOp.BindBluetooth, is BindOp.BindMoonlight -> restore(op.deviceId)
+        is BindOp.Unbind -> release(op.deviceId)
+        is BindOp.Forget -> forget(op.deviceId)
+        is BindOp.ReleaseHubBinding -> Unit
+    }
+}

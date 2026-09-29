@@ -326,6 +326,86 @@ class FrameworkLightGatewayTest {
         assertEquals(1, lightbars.handles.getValue(SECOND_PAD).closes)
     }
 
+    // ---- a host sends a color once, so a bar lit again shows the one it sent last ----
+
+    @Test
+    fun `a bar released on unbind shows its host's last color again when its slot is bound again`() {
+        lightbars.withBar += FIRST_PAD
+        hostSends(FIRST_PAD, RED_ARGB)
+        gateway.release(FIRST_PAD)
+
+        gateway.restore(FIRST_PAD)
+
+        assertEquals(RED_ARGB, lightbars.barColorOf(FIRST_PAD))
+    }
+
+    @Test
+    fun `every bar given back when the app left shows its host's last color again on return`() {
+        lightTwoPads()
+        gateway.releaseAll()
+
+        gateway.restore(FIRST_PAD)
+        gateway.restore(SECOND_PAD)
+
+        assertEquals(RED_ARGB, lightbars.barColorOf(FIRST_PAD))
+        assertEquals(BLUE_ARGB, lightbars.barColorOf(SECOND_PAD))
+    }
+
+    @Test
+    fun `a bar turned off beside a lit one shows its host's color again on the session it kept`() {
+        lightTwoPads()
+        gateway.release(FIRST_PAD)
+
+        gateway.restore(FIRST_PAD)
+
+        assertEquals(RED_ARGB, lightbars.barColorOf(FIRST_PAD))
+        assertEquals(listOf(FIRST_PAD, SECOND_PAD), lightbars.opens)
+    }
+
+    @Test
+    fun `the host's latest color is the one shown again`() {
+        lightbars.withBar += FIRST_PAD
+        hostSends(FIRST_PAD, RED_ARGB)
+        hostSends(FIRST_PAD, GREEN_ARGB)
+        gateway.release(FIRST_PAD)
+
+        gateway.restore(FIRST_PAD)
+
+        assertEquals(GREEN_ARGB, lightbars.barColorOf(FIRST_PAD))
+    }
+
+    @Test
+    fun `restoring a bar that is still lit sends nothing`() {
+        lightbars.withBar += FIRST_PAD
+        hostSends(FIRST_PAD, RED_ARGB)
+
+        gateway.restore(FIRST_PAD)
+
+        assertEquals(listOf(RED_ARGB), lightbars.handles.getValue(FIRST_PAD).writes)
+    }
+
+    @Test
+    fun `restoring a pad its host never colored opens no session`() {
+        lightbars.withBar += FIRST_PAD
+
+        gateway.restore(FIRST_PAD)
+
+        assertTrue(lightbars.opens.isEmpty())
+    }
+
+    @Test
+    fun `a pad that has gone does not get its host's color back`() {
+        lightbars.withBar += FIRST_PAD
+        hostSends(FIRST_PAD, RED_ARGB)
+        gateway.release(FIRST_PAD)
+
+        gateway.forget(FIRST_PAD)
+        gateway.restore(FIRST_PAD)
+
+        assertEquals(listOf(FIRST_PAD), lightbars.opens)
+        assertEquals(OFF_ARGB, lightbars.barColorOf(FIRST_PAD))
+    }
+
     @Test
     fun `a repeated color allocates nothing`() {
         val cycles = freshAppInstanceOf(RepeatedColorCycles::class.java)
