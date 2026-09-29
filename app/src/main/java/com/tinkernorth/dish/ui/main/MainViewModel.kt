@@ -197,7 +197,7 @@ class MainViewModel
             when (event) {
                 is ConnectionEvent.PairingRequired ->
                     _events.emit(MainEvent.ShowPairingDialog(satelliteConnectionIdFor(event.server)))
-                is ConnectionEvent.Error -> _events.emit(MainEvent.ShowToast(event.message))
+                is ConnectionEvent.Error -> _events.emit(MainEvent.ShowConnectionError(event.error))
             }
         }
 

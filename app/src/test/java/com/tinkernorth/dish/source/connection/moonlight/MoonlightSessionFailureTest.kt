@@ -240,7 +240,7 @@ class MoonlightSessionFailureTest {
             dispatcher.scheduler.advanceUntilIdle()
 
             assertEquals(0, manager.get(remembered.id)?.padCount)
-            assertTrue(seen.any { it is MoonlightConnectionEvent.Notice })
+            assertTrue(MoonlightConnectionEvent.AppCloseRequested(remembered.toHost()) in seen)
             verify(exactly = 1) { gateway.getHttps(match { it.contains("/cancel") }, any()) }
             collector.cancel()
         }
@@ -284,7 +284,7 @@ class MoonlightSessionFailureTest {
             bindOnePad()
 
             val error = seen.filterIsInstance<MoonlightConnectionEvent.Error>().single()
-            assertEquals("No apps available on PC.", error.message)
+            assertEquals(MoonlightError.NoAppsAvailable("PC"), error.error)
             verify(exactly = 0) { gateway.getHttps(match { it.contains("/launch") }, any()) }
             assertEquals(MoonlightSessionState.Idle, manager.get(remembered.id)?.state?.value)
             collector.cancel()

@@ -1188,7 +1188,7 @@ internal fun seedDirectOn(
     }
 
 // What the Moonlight card keeps of an event: the pairing dialog's state and the last refusal.
-// A resumable app is not a refusal, and the manager's notices, errors and endings change neither.
+// A resumable app is not a refusal, and the manager's close requests, errors and endings change neither.
 // Recorded whatever host the screen shows, since only a Moonlight host renders them.
 private fun ConfigUiState.recordMoonlightEvent(event: MoonlightConnectionEvent): ConfigUiState =
     when (event) {
@@ -1202,5 +1202,5 @@ private fun ConfigUiState.recordMoonlightEvent(event: MoonlightConnectionEvent):
         is MoonlightConnectionEvent.SetupFailed -> copy(moonlightFailure = MoonlightFailure.SetupFailed)
         is MoonlightConnectionEvent.HostFull -> copy(moonlightFailure = MoonlightFailure.HostFull)
         is MoonlightConnectionEvent.HostReplaced, is MoonlightConnectionEvent.EndedByHost -> this
-        is MoonlightConnectionEvent.Error, is MoonlightConnectionEvent.Notice -> this
+        is MoonlightConnectionEvent.Error, is MoonlightConnectionEvent.AppCloseRequested -> this
     }

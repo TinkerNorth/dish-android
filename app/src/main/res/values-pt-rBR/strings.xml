@@ -316,6 +316,24 @@
     <string name="notif_pairing_needed_body">Abra Conexões para digitar o PIN de %1$s.</string>
     <string name="notif_server_unreachable_title">%1$s não responde</string>
 
+    <!-- Por que uma conexão falhou, uma string para cada tipo que os gerenciadores de conexão informam. -->
+    <string name="conn_error_server_unreachable">Servidor inacessível. Confira se ele está ligado e no mesmo Wi-Fi.</string>
+    <string name="conn_error_repair_needed">Este satélite não reconhece mais este dispositivo. É preciso parear de novo.</string>
+    <string name="conn_error_identity_changed">A identidade de segurança deste satélite mudou. Se ele foi reinstalado, esqueça-o aqui e pareie de novo.</string>
+    <string name="conn_error_wire_failed">O satélite aceitou, mas o link do controle não abriu. Tente de novo.</string>
+    <string name="conn_error_satellite_update_required">Este satélite é antigo demais para este app. Atualize o Satellite no computador que recebe.</string>
+    <string name="conn_error_app_update_required">Este satélite precisa de uma versão mais nova do app. Atualize o Dish neste dispositivo.</string>
+    <string name="conn_error_approval_declined">O satélite recusou o pedido de pareamento.</string>
+    <string name="conn_error_approval_timed_out">Sem resposta do satélite. O pedido de pareamento expirou.</string>
+    <string name="conn_error_pairing_failed">O pareamento falhou.</string>
+    <string name="conn_error_pairing_refused">O pareamento falhou: %1$s</string>
+    <string name="conn_error_session_failed">O satélite recusou a conexão.</string>
+    <string name="conn_error_session_refused">O satélite recusou a conexão: %1$s</string>
+    <string name="conn_error_apply_failed">Não foi possível aplicar o controle em %1$s: %2$s</string>
+    <string name="ml_error_no_host_answered">Nenhum host Moonlight respondeu em %1$s.</string>
+    <string name="ml_error_no_apps">Nenhum app disponível em %1$s.</string>
+    <string name="ml_notice_app_close_requested">Pedimos a %1$s que feche o app em execução.</string>
+
     <!-- Estado vazio dinâmico para a lista de satélites. -->
     <string name="discovery_empty_never_scanned">Toque em Buscar para encontrar satélites na sua rede</string>
     <string name="discovery_empty_no_results">Nenhum satélite encontrado às %1$s. Verifique o Wi-Fi e se seu host está ligado.</string>

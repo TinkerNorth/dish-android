@@ -22,6 +22,7 @@ import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightError
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightProbe
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightSessionState
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
@@ -396,16 +397,16 @@ class ConfigureBindingsMoonlightActionsTest {
         }
 
     @Test
-    fun `a notice or an ending leaves the last refusal in place`() =
+    fun `a close request, an error or an ending leaves the last refusal in place`() =
         runTest(dispatcher) {
             openOn(MoonlightTrustState.PAIRED)
             events.emit(MoonlightConnectionEvent.SetupFailed(host))
             dispatcher.scheduler.advanceUntilIdle()
 
-            events.emit(MoonlightConnectionEvent.Notice("hello"))
+            events.emit(MoonlightConnectionEvent.AppCloseRequested(host))
             events.emit(MoonlightConnectionEvent.EndedByHost(host))
             events.emit(MoonlightConnectionEvent.HostReplaced(host))
-            events.emit(MoonlightConnectionEvent.Error("oops"))
+            events.emit(MoonlightConnectionEvent.Error(MoonlightError.NoAppsAvailable("PC")))
             dispatcher.scheduler.advanceUntilIdle()
 
             assertEquals(MoonlightSessionUi.SetupFailed, vm.ui.value.moonlightSession)

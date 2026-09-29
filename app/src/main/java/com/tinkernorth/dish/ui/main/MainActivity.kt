@@ -39,11 +39,13 @@ import com.tinkernorth.dish.source.system.isGranted
 import com.tinkernorth.dish.source.update.UpdateNotices
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
+import com.tinkernorth.dish.ui.common.ContextStringLookup
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.DishSpinnerDrawable
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachGamepadHost
+import com.tinkernorth.dish.ui.common.connectionErrorText
 import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.openExternalLink
 import com.tinkernorth.dish.ui.donate.attachDonatePill
@@ -321,9 +323,9 @@ class MainActivity :
 
     private fun handleEvent(event: MainEvent) {
         when (event) {
-            is MainEvent.ShowToast ->
+            is MainEvent.ShowConnectionError ->
                 notifications.warn(
-                    title = event.message,
+                    title = connectionErrorText(event.error, ContextStringLookup(this)),
                     glyph = R.drawable.ic_satellite_off,
                 )
             is MainEvent.ShowPairingDialog ->

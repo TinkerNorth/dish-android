@@ -312,6 +312,24 @@
     <string name="notif_pairing_needed_body">Öffne Verbindungen, um den PIN für %1$s einzugeben.</string>
     <string name="notif_server_unreachable_title">%1$s antwortet nicht</string>
 
+    <!-- Warum eine Verbindung fehlschlug, ein String je Art, die die Verbindungsmanager melden. -->
+    <string name="conn_error_server_unreachable">Server nicht erreichbar. Prüfe, ob er eingeschaltet und im selben WLAN ist.</string>
+    <string name="conn_error_repair_needed">Dieser Satellit erkennt dieses Gerät nicht mehr. Bitte neu koppeln.</string>
+    <string name="conn_error_identity_changed">Die Sicherheitsidentität dieses Satelliten hat sich geändert. Wurde er neu installiert, entferne ihn hier und kopple ihn erneut.</string>
+    <string name="conn_error_wire_failed">Der Satellit hat zugestimmt, aber die Controller-Verbindung ließ sich nicht öffnen. Versuche es erneut.</string>
+    <string name="conn_error_satellite_update_required">Dieser Satellit ist zu alt für diese App. Aktualisiere Satellite auf dem empfangenden Rechner.</string>
+    <string name="conn_error_app_update_required">Dieser Satellit braucht eine neuere App-Version. Aktualisiere Dish auf diesem Gerät.</string>
+    <string name="conn_error_approval_declined">Der Satellit hat die Kopplungsanfrage abgelehnt.</string>
+    <string name="conn_error_approval_timed_out">Keine Antwort vom Satelliten. Die Kopplungsanfrage ist abgelaufen.</string>
+    <string name="conn_error_pairing_failed">Kopplung fehlgeschlagen.</string>
+    <string name="conn_error_pairing_refused">Kopplung fehlgeschlagen: %1$s</string>
+    <string name="conn_error_session_failed">Der Satellit hat die Verbindung abgelehnt.</string>
+    <string name="conn_error_session_refused">Der Satellit hat die Verbindung abgelehnt: %1$s</string>
+    <string name="conn_error_apply_failed">Controller konnte auf %1$s nicht angewendet werden: %2$s</string>
+    <string name="ml_error_no_host_answered">Unter %1$s hat kein Moonlight-Host geantwortet.</string>
+    <string name="ml_error_no_apps">Auf %1$s sind keine Apps verfügbar.</string>
+    <string name="ml_notice_app_close_requested">%1$s wurde gebeten, die laufende App zu schließen.</string>
+
     <!-- Dynamischer Leer­zustand für die Satellitenliste. -->
     <string name="discovery_empty_never_scanned">Tippe auf Suchen, um Satelliten in deinem Netzwerk zu finden</string>
     <string name="discovery_empty_no_results">Keine Satelliten bei %1$s gefunden. Prüfe das WLAN und ob dein Host eingeschaltet ist.</string>

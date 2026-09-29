@@ -22,7 +22,9 @@ import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.source.system.PERMISSION
 import com.tinkernorth.dish.source.system.isGranted
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
+import com.tinkernorth.dish.ui.common.ContextStringLookup
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.connectionErrorText
 import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.paintTierBadge
 import com.tinkernorth.dish.ui.common.setupDishToolbar
@@ -133,7 +135,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
         when (event) {
             is SetupConnectionViewModel.Event.ShowPairing -> pairing.show(event.server)
             is SetupConnectionViewModel.Event.Connected -> onConnected(event.hostId)
-            is SetupConnectionViewModel.Event.Error -> onConnectionError(event.message)
+            is SetupConnectionViewModel.Event.Error -> onConnectionError(connectionErrorText(event.error, ContextStringLookup(this)))
         }
     }
 

@@ -6,6 +6,7 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.core.net.DishProtocolCompat
+import com.tinkernorth.dish.source.connection.ConnectionError
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 
@@ -95,8 +96,8 @@ private fun ControllerSlot.isStreaming(): Boolean {
 const val VIRTUAL_SLOT_ID = "virtual"
 
 sealed class MainEvent {
-    data class ShowToast(
-        val message: String,
+    data class ShowConnectionError(
+        val error: ConnectionError,
     ) : MainEvent()
 
     data class ShowPairingDialog(

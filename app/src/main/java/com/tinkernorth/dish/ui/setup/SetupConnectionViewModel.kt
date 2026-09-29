@@ -13,6 +13,7 @@ import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.core.net.DishProtocolCompat
 import com.tinkernorth.dish.source.connection.ConnectIntent
+import com.tinkernorth.dish.source.connection.ConnectionError
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
@@ -92,7 +93,7 @@ class SetupConnectionViewModel
             ) : Event
 
             data class Error(
-                val message: String,
+                val error: ConnectionError,
             ) : Event
         }
 
@@ -232,7 +233,7 @@ class SetupConnectionViewModel
         private fun onConnectionEvent(event: ConnectionEvent) {
             when (event) {
                 is ConnectionEvent.PairingRequired -> emit(Event.ShowPairing(event.server))
-                is ConnectionEvent.Error -> emit(Event.Error(event.message))
+                is ConnectionEvent.Error -> emit(Event.Error(event.error))
             }
         }
 

@@ -37,7 +37,7 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
 
             assertTrue(
                 "expected unreachable Error, got: $events",
-                events.any { it is ConnectionEvent.Error && it.message.contains("unreachable", ignoreCase = true) },
+                events.any { it is ConnectionEvent.Error && it.error == ConnectionError.ServerUnreachable },
             )
             assertTrue(events.none { it is ConnectionEvent.PairingRequired })
             assertEquals(SatelliteSessionState.Idle, mgr.get(serverId)?.state?.value)
@@ -52,7 +52,7 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
             mgr.connect(server)
             scope.testScheduler.advanceUntilIdle()
 
-            assertTrue(events.any { it is ConnectionEvent.Error && it.message.contains("unreachable", ignoreCase = true) })
+            assertTrue(events.any { it is ConnectionEvent.Error && it.error == ConnectionError.ServerUnreachable })
         }
 
     @Test
@@ -75,7 +75,7 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
             mgr.pairWithPin(server, "1234")
             scope.testScheduler.advanceUntilIdle()
 
-            assertTrue(events.any { it is ConnectionEvent.Error && it.message.contains("unreachable", ignoreCase = true) })
+            assertTrue(events.any { it is ConnectionEvent.Error && it.error == ConnectionError.ServerUnreachable })
         }
 
     @Test
@@ -87,7 +87,30 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
             mgr.pairWithPin(server, "0000")
             scope.testScheduler.advanceUntilIdle()
 
-            assertTrue(events.any { it is ConnectionEvent.Error && it.message.contains("Invalid PIN") })
+            assertTrue(events.any { it is ConnectionEvent.Error && it.error == ConnectionError.PairingRefused("Invalid PIN") })
+        }
+
+    @Test
+    fun `pairWithPin returning ok=false without a reason reads as a plain pairing failure`() =
+        runMgrTest { mgr, events ->
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), "0000") } returns ok("""{"ok":false}""")
+
+            mgr.pairWithPin(server, "0000")
+            scope.testScheduler.advanceUntilIdle()
+
+            assertEquals(listOf(ConnectionEvent.Error(ConnectionError.PairingFailed)), events)
+        }
+
+    @Test
+    fun `pair 409 from an older satellite tells the user to update Satellite`() =
+        runMgrTest { mgr, events ->
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any()) } returns
+                reply(409, """{"error":"protocol version unsupported"}""")
+
+            mgr.connect(server, ConnectIntent.USER_INITIATED)
+            scope.testScheduler.advanceUntilIdle()
+
+            assertEquals(listOf(ConnectionEvent.Error(ConnectionError.SatelliteUpdateRequired)), events)
         }
 
     @Test
@@ -725,7 +748,7 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
             assertTrue(
                 "expected unreachable Error, got: $events",
                 events.any {
-                    it is ConnectionEvent.Error && it.message.contains("unreachable", ignoreCase = true)
+                    it is ConnectionEvent.Error && it.error == ConnectionError.ServerUnreachable
                 },
             )
         }
@@ -756,7 +779,7 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
 
             assertTrue(events.none { it is ConnectionEvent.PairingRequired })
             assertTrue(
-                events.any { it is ConnectionEvent.Error && it.message.contains("Update Dish") },
+                events.any { it is ConnectionEvent.Error && it.error == ConnectionError.AppUpdateRequired },
             )
             assertTrue(serverId !in mgr.staleSatelliteIds.value)
         }
@@ -795,7 +818,7 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
             scope.testScheduler.advanceUntilIdle()
 
             assertTrue(
-                events.any { it is ConnectionEvent.Error && it.message.contains("Update Dish") },
+                events.any { it is ConnectionEvent.Error && it.error == ConnectionError.AppUpdateRequired },
             )
         }
 
@@ -912,7 +935,7 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
 
             assertTrue(
                 "expected identity-changed Error, got: $events",
-                events.any { it is ConnectionEvent.Error && it.message.contains("identity", ignoreCase = true) },
+                events.any { it is ConnectionEvent.Error && it.error == ConnectionError.IdentityChanged },
             )
             verify(exactly = 0) { store.forgetSatelliteSharedKey(any()) }
             assertTrue(serverId !in mgr.staleSatelliteIds.value)
@@ -944,7 +967,7 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
             scope.testScheduler.advanceUntilIdle()
 
             assertTrue(
-                events.any { it is ConnectionEvent.Error && it.message.contains("identity", ignoreCase = true) },
+                events.any { it is ConnectionEvent.Error && it.error == ConnectionError.IdentityChanged },
             )
         }
 
@@ -1212,7 +1235,7 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
 
             assertTrue(
                 events.any {
-                    it is ConnectionEvent.Error && it.message.contains("unreachable", ignoreCase = true)
+                    it is ConnectionEvent.Error && it.error == ConnectionError.ServerUnreachable
                 },
             )
         }
@@ -1241,7 +1264,7 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
 
             assertTrue(
                 events.none {
-                    it is ConnectionEvent.Error && it.message.contains("declined", ignoreCase = true)
+                    it is ConnectionEvent.Error && it.error == ConnectionError.ApprovalDeclined
                 },
             )
             verify { store.setSatelliteSharedKey(serverId, "cc".repeat(32)) }

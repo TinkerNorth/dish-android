@@ -67,7 +67,7 @@ sealed class ConnectionEvent {
     ) : ConnectionEvent()
 
     data class Error(
-        val message: String,
+        val error: ConnectionError,
     ) : ConnectionEvent()
 }
 
@@ -212,10 +212,10 @@ class SatelliteConnectionManager
             return supported.takeIf { it in DISH_PROTOCOL_MIN..DISH_PROTOCOL_CURRENT }
         }
 
-        private fun protocolRejectMessage(body: String): String =
+        private fun protocolRejectMessage(body: String): ConnectionError =
             when {
-                (supportedVersionFrom(body) ?: 0) > DISH_PROTOCOL_CURRENT -> APP_UPDATE_REQUIRED_MSG
-                else -> SATELLITE_UPDATE_REQUIRED_MSG
+                (supportedVersionFrom(body) ?: 0) > DISH_PROTOCOL_CURRENT -> ConnectionError.AppUpdateRequired
+                else -> ConnectionError.SatelliteUpdateRequired
             }
 
         private fun supportedVersionFrom(body: String): Int? =
@@ -499,7 +499,7 @@ class SatelliteConnectionManager
                 runCatching { json.decodeFromString(PairResponse.serializer(), reply.body) }
                     .getOrNull()
             if (pair == null) {
-                return failSession(conn, server, intent, SERVER_UNREACHABLE_MSG, retry = false, generation)
+                return failSession(conn, server, intent, ConnectionError.ServerUnreachable, retry = false, generation)
             }
             if (!pair.ok || pair.sharedKey == null) {
                 // Reachable but no key and no PIN sent: first-time pair / server forgot us.
@@ -546,10 +546,10 @@ class SatelliteConnectionManager
                     runCatching { json.decodeFromString(PairResponse.serializer(), reply.body) }
                         .getOrNull()
                 if (pair == null) {
-                    return@launch failUserHandshake(conn, server, SERVER_UNREACHABLE_MSG, generation)
+                    return@launch failUserHandshake(conn, server, ConnectionError.ServerUnreachable, generation)
                 }
                 if (!pair.ok || pair.sharedKey == null) {
-                    return@launch failUserHandshake(conn, server, pair.error ?: "Pairing failed", generation)
+                    return@launch failUserHandshake(conn, server, pairingRefusal(pair.error), generation)
                 }
                 if (isSuperseded(id, generation)) return@launch
                 clearStale(id)
@@ -620,11 +620,11 @@ class SatelliteConnectionManager
                             return@launch
                         }
                         if (st is Status.Declined) {
-                            return@launch failUserHandshake(conn, server, APPROVAL_DECLINED_MSG, generation)
+                            return@launch failUserHandshake(conn, server, ConnectionError.ApprovalDeclined, generation)
                         }
                     }
                     if (conn.state.value != SatelliteSessionState.Live) {
-                        failUserHandshake(conn, server, APPROVAL_TIMEOUT_MSG, generation)
+                        failUserHandshake(conn, server, ConnectionError.ApprovalTimedOut, generation)
                     }
                 }
             approvalPollJobs[id] = job
@@ -669,7 +669,7 @@ class SatelliteConnectionManager
             // host. Every connect path funnels through here, so both discovery
             // transports are covered at one choke point.
             if (!isPrivateHostLiteral(server.ip)) {
-                return@withContext failSession(conn, server, intent, SERVER_UNREACHABLE_MSG, retry = false, generation)
+                return@withContext failSession(conn, server, intent, ConnectionError.ServerUnreachable, retry = false, generation)
             }
             val creds = credentialsFor(id) ?: return@withContext dropUntrustedKey(conn, intent, generation)
             val descriptors = conn.desiredDescriptors()
@@ -678,7 +678,7 @@ class SatelliteConnectionManager
                 return@withContext releaseStaleGrant(server, put?.reply, creds.proof)
             }
             if (put == null) {
-                return@withContext failSession(conn, server, intent, SATELLITE_UPDATE_REQUIRED_MSG, retry = false, generation)
+                return@withContext failSession(conn, server, intent, ConnectionError.SatelliteUpdateRequired, retry = false, generation)
             }
             val speak = put.speak
             val reply = put.reply
@@ -686,10 +686,10 @@ class SatelliteConnectionManager
                 return@withContext failSession(conn, server, intent, protocolRejectMessage(reply.body), retry = false, generation)
             }
             if (reply?.pinMismatch == true) {
-                return@withContext failSession(conn, server, intent, IDENTITY_CHANGED_MSG, retry = false, generation)
+                return@withContext failSession(conn, server, intent, ConnectionError.IdentityChanged, retry = false, generation)
             }
             if (reply == null || reply.unreachable) {
-                return@withContext failSession(conn, server, intent, SERVER_UNREACHABLE_MSG, retry = true, generation)
+                return@withContext failSession(conn, server, intent, ConnectionError.ServerUnreachable, retry = true, generation)
             }
             if (reply.status == HTTP_CONFLICT) {
                 return@withContext failSession(conn, server, intent, protocolRejectMessage(reply.body), retry = false, generation)
@@ -698,7 +698,7 @@ class SatelliteConnectionManager
                 runCatching { json.decodeFromString(SessionResponse.serializer(), reply.body) }
                     .getOrNull()
             if (resp == null) {
-                return@withContext failSession(conn, server, intent, SERVER_UNREACHABLE_MSG, retry = true, generation)
+                return@withContext failSession(conn, server, intent, ConnectionError.ServerUnreachable, retry = true, generation)
             }
             if (resp.unauthorized) {
                 // Terminal by contract: the server no longer trusts our key (or
@@ -709,7 +709,7 @@ class SatelliteConnectionManager
             val tokenHex = resp.token
             val saltHex = resp.sessionSalt
             if (connId == null || tokenHex == null || saltHex == null) {
-                val refusal = "Error: ${resp.error ?: "connection failed"}"
+                val refusal = sessionRefusal(resp.error)
                 return@withContext failSession(conn, server, intent, refusal, retry = true, generation)
             }
             // The response's own version is the settled truth (the satellite accepted the
@@ -718,7 +718,7 @@ class SatelliteConnectionManager
             val handle = openWire(server, creds.pairingKey, tokenHex, saltHex, negotiated)
             if (handle == null) {
                 releaseSession(server, connId, creds.proof)
-                return@withContext failSession(conn, server, intent, WIRE_FAILED_MSG, retry = false, generation)
+                return@withContext failSession(conn, server, intent, ConnectionError.WireFailed, retry = false, generation)
             }
             noteNegotiated(id, negotiated)
             store.rememberSatellite(server)
@@ -762,7 +762,7 @@ class SatelliteConnectionManager
             intent: ConnectIntent,
             generation: Int,
         ) {
-            if (dropRejectedSession(conn, generation)) emitErrorIfUserInitiated(intent, REPAIR_NEEDED_MSG)
+            if (dropRejectedSession(conn, generation)) emitErrorIfUserInitiated(intent, ConnectionError.RepairNeeded)
         }
 
         // Heartbeat death: the tuple is torn down at once and the silent backoff owns the return.
@@ -782,7 +782,7 @@ class SatelliteConnectionManager
         ) {
             val detail = failures.joinToString { "#${it.ctrlIdx}: ${it.result}" }
             scope.launch {
-                _events.emit(ConnectionEvent.Error("Couldn't apply controller on $serverName: $detail"))
+                _events.emit(ConnectionEvent.Error(ConnectionError.ApplyFailed(serverName, detail)))
             }
         }
 
@@ -1045,14 +1045,14 @@ class SatelliteConnectionManager
             if (resp.error == null) ifCurrent(id, generation) { conn.adoptEpoch(resp.epoch) }
         }
 
-        private fun unreachableMessage(reply: HttpReply?): String =
-            if (reply?.pinMismatch == true) IDENTITY_CHANGED_MSG else SERVER_UNREACHABLE_MSG
+        private fun unreachableMessage(reply: HttpReply?): ConnectionError =
+            if (reply?.pinMismatch == true) ConnectionError.IdentityChanged else ConnectionError.ServerUnreachable
 
         private suspend fun failSession(
             conn: SatelliteConnection,
             server: DiscoveredServer,
             intent: ConnectIntent,
-            message: String,
+            error: ConnectionError,
             retry: Boolean,
             generation: Int,
         ) {
@@ -1061,22 +1061,22 @@ class SatelliteConnectionManager
                     conn.markDisconnected()
                     if (retry) scheduleRetry(conn, server, intent, generation)
                 } != null
-            if (ended) emitErrorIfUserInitiated(intent, message)
+            if (ended) emitErrorIfUserInitiated(intent, error)
         }
 
         private suspend fun failUserHandshake(
             conn: SatelliteConnection,
             server: DiscoveredServer,
-            message: String,
+            error: ConnectionError,
             generation: Int,
-        ) = failSession(conn, server, ConnectIntent.USER_INITIATED, message, retry = false, generation)
+        ) = failSession(conn, server, ConnectIntent.USER_INITIATED, error, retry = false, generation)
 
         private suspend fun emitErrorIfUserInitiated(
             intent: ConnectIntent,
-            message: String,
+            error: ConnectionError,
         ) {
             if (intent == ConnectIntent.USER_INITIATED) {
-                _events.emit(ConnectionEvent.Error(message))
+                _events.emit(ConnectionEvent.Error(error))
             }
         }
 
@@ -1175,24 +1175,6 @@ class SatelliteConnectionManager
             private const val RETRY_MAX_MS = 60_000L
             private const val RETRY_MAX_SHIFT = 6
 
-            internal const val SERVER_UNREACHABLE_MSG =
-                "Server unreachable. Check it's powered on and on the same Wi-Fi."
-
-            internal const val REPAIR_NEEDED_MSG =
-                "This satellite no longer recognizes this device. Re-pair needed."
-
-            internal const val IDENTITY_CHANGED_MSG =
-                "This satellite's security identity changed. If it was reinstalled, forget it here and pair again."
-
-            internal const val WIRE_FAILED_MSG =
-                "The satellite accepted, but the controller link would not open. Try again."
-
-            internal const val SATELLITE_UPDATE_REQUIRED_MSG =
-                "This satellite is too old for this app. Update Satellite on the receiving machine."
-
-            internal const val APP_UPDATE_REQUIRED_MSG =
-                "This satellite needs a newer app. Update Dish on this device."
-
             private const val HTTP_CONFLICT = 409
 
             private const val APPROVAL_POLL_INTERVAL_MS = 2000L
@@ -1200,10 +1182,5 @@ class SatelliteConnectionManager
             // Matches the satellite's 2-minute pairing-request TTL. Stop waiting
             // once the request can no longer be accepted on the other side.
             private const val APPROVAL_TIMEOUT_MS = 120_000L
-
-            internal const val APPROVAL_DECLINED_MSG =
-                "The satellite declined the pairing request."
-            internal const val APPROVAL_TIMEOUT_MSG =
-                "No response from the satellite. The pairing request timed out."
         }
     }

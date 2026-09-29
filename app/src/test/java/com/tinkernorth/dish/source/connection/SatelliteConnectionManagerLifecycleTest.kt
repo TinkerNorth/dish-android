@@ -335,7 +335,7 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
     }
 
     private fun reportsWireFailure(events: List<ConnectionEvent>) {
-        assertEquals(listOf(ConnectionEvent.Error(SatelliteConnectionManager.WIRE_FAILED_MSG)), events)
+        assertEquals(listOf(ConnectionEvent.Error(ConnectionError.WireFailed)), events)
     }
 
     private fun staysQuiet(events: List<ConnectionEvent>) {
@@ -378,7 +378,7 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
             scope.testScheduler.advanceTimeBy(2100)
             scope.testScheduler.runCurrent()
 
-            assertTrue(events.any { it is ConnectionEvent.Error && it.message == SatelliteConnectionManager.APPROVAL_DECLINED_MSG })
+            assertTrue(events.any { it is ConnectionEvent.Error && it.error == ConnectionError.ApprovalDeclined })
             assertEquals(SatelliteSessionState.Idle, mgr.get(serverId)?.state?.value)
 
             scope.testScheduler.advanceTimeBy(10_000)
@@ -401,7 +401,7 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
             scope.testScheduler.advanceTimeBy(2000)
             scope.testScheduler.runCurrent()
 
-            assertTrue(events.any { it is ConnectionEvent.Error && it.message == SatelliteConnectionManager.APPROVAL_TIMEOUT_MSG })
+            assertTrue(events.any { it is ConnectionEvent.Error && it.error == ConnectionError.ApprovalTimedOut })
             assertEquals(SatelliteSessionState.Idle, mgr.get(serverId)?.state?.value)
         }
 
@@ -654,7 +654,7 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
 
             verify { store.forgetSatelliteSharedKey(serverId) }
             assertTrue(serverId in mgr.staleSatelliteIds.value)
-            assertTrue(events.any { it is ConnectionEvent.Error && it.message == SatelliteConnectionManager.REPAIR_NEEDED_MSG })
+            assertTrue(events.any { it is ConnectionEvent.Error && it.error == ConnectionError.RepairNeeded })
             coVerify(exactly = 0) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
         }
 
@@ -682,7 +682,21 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
             scope.testScheduler.advanceUntilIdle()
 
             assertEquals(SatelliteSessionState.Idle, mgr.get(serverId)?.state?.value)
-            assertTrue(events.any { it is ConnectionEvent.Error && it.message == "Error: no free pad" })
+            assertTrue(events.any { it is ConnectionEvent.Error && it.error == ConnectionError.SessionRefused("no free pad") })
+        }
+
+    @Test
+    fun `a session reply without a tuple or a reason tells the user the satellite refused`() =
+        runMgrTest { mgr, events ->
+            stubStoredKey()
+            coEvery {
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
+            } returns ok("""{"epoch":1}""")
+
+            mgr.connect(server, ConnectIntent.USER_INITIATED)
+            scope.testScheduler.advanceUntilIdle()
+
+            assertEquals(listOf(ConnectionEvent.Error(ConnectionError.SessionFailed)), events)
         }
 
     @Test
@@ -938,7 +952,7 @@ class SatelliteConnectionManagerLifecycleTest : SatelliteConnectionManagerFixtur
             scope.testScheduler.runCurrent()
 
             assertTrue(
-                events.any { it is ConnectionEvent.Error && it.message == "Couldn't apply controller on Pc: #0: backendUnavailable" },
+                events.any { it is ConnectionEvent.Error && it.error == ConnectionError.ApplyFailed("Pc", "#0: backendUnavailable") },
             )
         }
 }

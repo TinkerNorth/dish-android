@@ -61,12 +61,12 @@ sealed class MoonlightConnectionEvent {
     ) : MoonlightConnectionEvent()
 
     data class Error(
-        val message: String,
+        val error: MoonlightError,
     ) : MoonlightConnectionEvent()
 
-    /** Something went right and the user should hear about it. */
-    data class Notice(
-        val message: String,
+    /** The dish asked [host] to close the app it is running; the host does not say whether it will. */
+    data class AppCloseRequested(
+        val host: MoonlightHost,
     ) : MoonlightConnectionEvent()
 
     data class Paired(
@@ -125,6 +125,17 @@ sealed class MoonlightConnectionEvent {
     data class EndedByHost(
         val host: MoonlightHost,
     ) : MoonlightConnectionEvent()
+}
+
+/** Why a Moonlight request failed, as a kind the UI words in the user's language. */
+sealed interface MoonlightError {
+    data class NoHostAnswered(
+        val address: String,
+    ) : MoonlightError
+
+    data class NoAppsAvailable(
+        val hostName: String,
+    ) : MoonlightError
 }
 
 /** What a host's session must do next, pulled out of the converge for testability. */
@@ -282,7 +293,7 @@ class MoonlightConnectionManager
                 val info = probeServerInfo(address)
                 if (info == null) {
                     Log.w(TAG, "manual add: nothing answered /serverinfo at $address")
-                    _events.emit(MoonlightConnectionEvent.Error("No Moonlight host answered at $address."))
+                    _events.emit(MoonlightConnectionEvent.Error(MoonlightError.NoHostAnswered(address)))
                     return@launch
                 }
                 val host = manualHostFrom(address, info)
@@ -532,7 +543,7 @@ class MoonlightConnectionManager
             val appId = remembered?.lastAppId?.takeIf { it.isNotEmpty() } ?: probe.apps.firstOrNull()?.id
             if (appId == null) {
                 conn.markDisconnected()
-                _events.emit(MoonlightConnectionEvent.Error("No apps available on ${host.name}."))
+                _events.emit(MoonlightConnectionEvent.Error(MoonlightError.NoAppsAvailable(host.name)))
                 return
             }
             val appName =
@@ -833,7 +844,7 @@ class MoonlightConnectionManager
                 }
                 cancelHostApp(host)
                 publishSessionHosts()
-                _events.emit(MoonlightConnectionEvent.Notice("Asked ${host.name} to close the app it is running."))
+                _events.emit(MoonlightConnectionEvent.AppCloseRequested(host))
             }
         }
 

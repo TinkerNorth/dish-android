@@ -63,9 +63,13 @@ import com.tinkernorth.dish.source.system.PERMISSION
 import com.tinkernorth.dish.source.system.evaluate
 import com.tinkernorth.dish.source.system.isGranted
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
+import com.tinkernorth.dish.ui.common.ContextStringLookup
 import com.tinkernorth.dish.ui.common.StaticViewAdapter
+import com.tinkernorth.dish.ui.common.appCloseRequestedText
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
+import com.tinkernorth.dish.ui.common.connectionErrorText
+import com.tinkernorth.dish.ui.common.moonlightErrorText
 import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setLoading
 import com.tinkernorth.dish.ui.common.setupDishToolbar
@@ -320,7 +324,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     private fun onSatelliteEvent(ev: ConnectionEvent) {
         when (ev) {
-            is ConnectionEvent.Error -> onConnectionError(ev.message)
+            is ConnectionEvent.Error -> onConnectionError(connectionErrorText(ev.error, ContextStringLookup(this)))
             is ConnectionEvent.PairingRequired -> satellitePairing.show(ev.server)
         }
     }
@@ -338,7 +342,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             is MoonlightConnectionEvent.PairingPinReady -> showMoonlightPinDialog(ev.host, ev.pin)
             is MoonlightConnectionEvent.Paired -> onMoonlightPaired(ev)
             is MoonlightConnectionEvent.PairingFailed -> onMoonlightPairingFailed(ev)
-            is MoonlightConnectionEvent.Notice -> onMoonlightNotice(ev)
+            is MoonlightConnectionEvent.AppCloseRequested -> onMoonlightAppCloseRequested(ev)
             is MoonlightConnectionEvent.Error -> onMoonlightError(ev)
             // Every remaining event belongs to a session, and a session belongs to a binding; the
             // binding screen renders them where the user can act on them.
@@ -371,11 +375,11 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         )
     }
 
-    private fun onMoonlightNotice(ev: MoonlightConnectionEvent.Notice) {
+    private fun onMoonlightAppCloseRequested(ev: MoonlightConnectionEvent.AppCloseRequested) {
         notifications.info(
             glyph = R.drawable.ic_pc_monitor,
             title = getString(R.string.section_moonlight_hosts),
-            body = ev.message,
+            body = appCloseRequestedText(ev.host.name, ContextStringLookup(this)),
             key = "moonlight-notice",
         )
     }
@@ -385,7 +389,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         notifications.error(
             glyph = R.drawable.ic_pc_monitor,
             title = getString(R.string.section_moonlight_hosts),
-            body = ev.message,
+            body = moonlightErrorText(ev.error, ContextStringLookup(this)),
         )
     }
 

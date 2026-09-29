@@ -313,6 +313,24 @@
     <string name="notif_pairing_needed_body">Otvorite Veze da unesete PIN za %1$s.</string>
     <string name="notif_server_unreachable_title">%1$s ne odgovara</string>
 
+    <!-- Zašto veza nije uspjela, po jedan string za svaku vrstu koju prijavljuju upravitelji veza. -->
+    <string name="conn_error_server_unreachable">Server nije dostupan. Provjerite je li uključen i na istoj Wi-Fi mreži.</string>
+    <string name="conn_error_repair_needed">Ovaj satelit više ne prepoznaje ovaj uređaj. Potrebno je ponovo upariti.</string>
+    <string name="conn_error_identity_changed">Sigurnosni identitet ovog satelita se promijenio. Ako je ponovo instaliran, zaboravite ga ovdje i ponovo ga uparite.</string>
+    <string name="conn_error_wire_failed">Satelit je prihvatio, ali veza kontrolera se nije otvorila. Pokušajte ponovo.</string>
+    <string name="conn_error_satellite_update_required">Ovaj satelit je prestar za ovu aplikaciju. Ažurirajte Satellite na računaru koji prima.</string>
+    <string name="conn_error_app_update_required">Ovaj satelit traži noviju verziju aplikacije. Ažurirajte Dish na ovom uređaju.</string>
+    <string name="conn_error_approval_declined">Satelit je odbio zahtjev za uparivanje.</string>
+    <string name="conn_error_approval_timed_out">Satelit ne odgovara. Zahtjev za uparivanje je istekao.</string>
+    <string name="conn_error_pairing_failed">Uparivanje nije uspjelo.</string>
+    <string name="conn_error_pairing_refused">Uparivanje nije uspjelo: %1$s</string>
+    <string name="conn_error_session_failed">Satelit je odbio vezu.</string>
+    <string name="conn_error_session_refused">Satelit je odbio vezu: %1$s</string>
+    <string name="conn_error_apply_failed">Kontroler nije moguće primijeniti na %1$s: %2$s</string>
+    <string name="ml_error_no_host_answered">Nijedan Moonlight host nije odgovorio na %1$s.</string>
+    <string name="ml_error_no_apps">Nema dostupnih aplikacija na %1$s.</string>
+    <string name="ml_notice_app_close_requested">Poslan je zahtjev da %1$s zatvori pokrenutu aplikaciju.</string>
+
     <!-- Dinamičko prazno stanje liste satelita. -->
     <string name="discovery_empty_never_scanned">Dodirnite Skeniraj da pronađete satelite na vašoj mreži</string>
     <string name="discovery_empty_no_results">Nije pronađen nijedan satelit u %1$s. Provjerite Wi-Fi i da li je host uključen.</string>

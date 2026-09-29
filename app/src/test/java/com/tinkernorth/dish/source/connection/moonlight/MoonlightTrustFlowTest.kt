@@ -398,7 +398,7 @@ class MoonlightTrustFlowTest {
             manager.addManualHost("192.168.68.5")
             dispatcher.scheduler.advanceUntilIdle()
 
-            assertTrue(seen.any { it is MoonlightConnectionEvent.Error })
+            assertTrue(MoonlightConnectionEvent.Error(MoonlightError.NoHostAnswered("192.168.68.5")) in seen)
             assertTrue(rows.isEmpty())
             collector.cancel()
         }

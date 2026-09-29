@@ -22,6 +22,7 @@ import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
 import com.tinkernorth.dish.core.net.moonlight.XBOX
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
+import com.tinkernorth.dish.source.connection.ConnectionError
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
@@ -836,14 +837,14 @@ class MainViewModelTest {
         }
 
     @Test
-    fun `a connection error becomes a toast`() =
+    fun `a connection error becomes a connection-error event`() =
         runTest(dispatcher) {
             val (events, job) = collectEvents()
 
-            satelliteEvents.emit(ConnectionEvent.Error("no route"))
+            satelliteEvents.emit(ConnectionEvent.Error(ConnectionError.ServerUnreachable))
             dispatcher.scheduler.runCurrent()
 
-            assertEquals(listOf(MainEvent.ShowToast("no route")), events)
+            assertEquals(listOf(MainEvent.ShowConnectionError(ConnectionError.ServerUnreachable)), events)
             job.cancel()
         }
 

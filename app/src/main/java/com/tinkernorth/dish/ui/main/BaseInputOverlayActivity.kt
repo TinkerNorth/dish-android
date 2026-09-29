@@ -28,9 +28,11 @@ import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.system.NetworkStateObserver
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
+import com.tinkernorth.dish.ui.common.ContextStringLookup
 import com.tinkernorth.dish.ui.common.FoldAwareSession
 import com.tinkernorth.dish.ui.common.Posture
 import com.tinkernorth.dish.ui.common.ResendPacer
+import com.tinkernorth.dish.ui.common.connectionErrorText
 import com.tinkernorth.dish.ui.common.hingeInsetsFor
 import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.resendDeadlineFor
@@ -282,7 +284,7 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
         when (event) {
             is ConnectionEvent.Error ->
                 notifications.error(
-                    title = event.message,
+                    title = connectionErrorText(event.error, ContextStringLookup(this)),
                     glyph = R.drawable.ic_satellite_off,
                 )
             is ConnectionEvent.PairingRequired ->

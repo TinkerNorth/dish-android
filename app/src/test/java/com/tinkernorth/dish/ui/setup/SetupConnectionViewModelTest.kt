@@ -10,6 +10,7 @@ import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.net.DishProtocolCompat
 import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
 import com.tinkernorth.dish.source.connection.ConnectIntent
+import com.tinkernorth.dish.source.connection.ConnectionError
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
@@ -231,9 +232,9 @@ class SetupConnectionViewModelTest {
     fun `a connection error surfaces as an error event`() =
         runTest(dispatcher) {
             val seen = collectEvents()
-            events.emit(ConnectionEvent.Error("boom"))
+            events.emit(ConnectionEvent.Error(ConnectionError.WireFailed))
             dispatcher.scheduler.runCurrent()
-            assertEquals(listOf<SetupConnectionViewModel.Event>(SetupConnectionViewModel.Event.Error("boom")), seen)
+            assertEquals(listOf<SetupConnectionViewModel.Event>(SetupConnectionViewModel.Event.Error(ConnectionError.WireFailed)), seen)
         }
 
     @Test
