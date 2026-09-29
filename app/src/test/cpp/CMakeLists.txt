@@ -32,6 +32,7 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 enable_testing()
+find_package(Threads REQUIRED)
 
 set(SATELLITE_CPP "${CMAKE_SOURCE_DIR}/../../main/cpp")
 
@@ -79,7 +80,7 @@ add_executable(send_counter_test
 )
 target_include_directories(send_counter_test PRIVATE "${SATELLITE_CPP}")
 target_compile_options(send_counter_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
-target_link_libraries(send_counter_test PRIVATE GTest::gtest_main)
+target_link_libraries(send_counter_test PRIVATE GTest::gtest_main Threads::Threads)
 
 # Controller-audio reorder window. Header-only and dependency-free by design, so
 # this target links no codec at all: the ordering rules are exactly the part
@@ -102,7 +103,6 @@ target_include_directories(bridge_connection_ids_test PRIVATE "${SATELLITE_CPP}"
 target_compile_options(bridge_connection_ids_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(bridge_connection_ids_test PRIVATE GTest::gtest_main)
 
-find_package(Threads REQUIRED)
 add_executable(heartbeat_thread_test
     heartbeat_thread_test.cpp
 )

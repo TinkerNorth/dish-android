@@ -132,7 +132,9 @@ struct Session {
     uint8_t key[32] = {}; // per-session key (HKDF-derived in Kotlin), never the pairing key
     // 64-bit so exhaustion goes silent instead of wrapping (send_counter.h).
     std::atomic<uint64_t> counter{1};
-    // Linux UDP sendto is thread-safe per-socket; userspace lock would only serialise stalls.
+    // Held from a datagram's counter until it has left sendto (dish_counter::takeTurnAndCounter);
+    // the socket, the token, the key and the counter change only under it.
+    std::mutex sendTurnMtx;
 
     dish::HeartbeatThread heartbeat;
     std::atomic<int> missedAcks{0};
@@ -183,8 +185,22 @@ static std::shared_ptr<Session> getSession(int handle) {
     return it == g_sessions.end() ? nullptr : it->second;
 }
 
-static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
-                          uint16_t payloadLen);
+// One datagram's plaintext and counter, waiting to be sealed and sent, holding its session's turn
+// and a reference that keeps the session, and so the turn's mutex, alive until then.
+struct PendingDatagram {
+    std::shared_ptr<Session> session;
+    std::unique_lock<std::mutex> turn;
+    uint32_t counter = 0;
+    uint16_t msgType = 0;
+    uint16_t innerLen = 0;
+    uint8_t inner[dish_wire::INNER_HEADER_BYTES + dish_wire::MAX_INNER_PAYLOAD_BYTES];
+};
+
+static bool stageDatagram(const std::shared_ptr<Session>& session, uint16_t msgType,
+                          const uint8_t* payload, uint16_t payloadLen, PendingDatagram& out);
+static bool transmitDatagram(PendingDatagram& datagram);
+static bool sendEncrypted(const std::shared_ptr<Session>& session, uint16_t msgType,
+                          const uint8_t* payload, uint16_t payloadLen);
 
 using gamepad::DeviceState;
 
@@ -617,20 +633,35 @@ static XUSB_REPORT xusbReportOf(const DeviceState& s) {
 
 // The satellite takes the pad state as a wire XUSB report, straight out of the stack: one slot
 // byte then the report, no allocation on the per-packet path.
-static void sendGamepadReport(Session& session, const int controllerIndex,
-                              const XUSB_REPORT& report) {
+static void stageGamepadReport(const std::shared_ptr<Session>& session, const int controllerIndex,
+                               const XUSB_REPORT& report, PendingDatagram& out) {
     uint8_t payload[GAMEPAD_PAYLOAD_BYTES];
     payload[0] = (uint8_t)(controllerIndex & 0xFF);
     memcpy(payload + 1, &report, sizeof(report));
-    sendEncrypted(&session, MSG_GAMEPAD_DATA, payload, sizeof(payload));
-    session.sentByCtrl[controllerIndex & CTRL_INDEX_MASK].fetch_add(1, std::memory_order_relaxed);
+    stageDatagram(session, MSG_GAMEPAD_DATA, payload, sizeof(payload), out);
+    session->sentByCtrl[controllerIndex & CTRL_INDEX_MASK].fetch_add(1, std::memory_order_relaxed);
 }
 
-static void publishGamepadToSatellite(const SlotBinding& binding, const DeviceState& s) {
+static void sendGamepadReport(const std::shared_ptr<Session>& session, const int controllerIndex,
+                              const XUSB_REPORT& report) {
+    PendingDatagram datagram;
+    stageGamepadReport(session, controllerIndex, report, datagram);
+    transmitDatagram(datagram);
+}
+
+static void publishGamepadToSatellite(const SlotBinding& binding, const DeviceState& s,
+                                      PendingDatagram& out) {
     auto session = getSession(binding.sessionHandle);
     if (!session) return;
-    sendGamepadReport(*session, binding.controllerIndex, xusbReportOf(s));
-    hotpath::markGamepadSent(); // stage-1 end: the URB-driven packet has left sendto()
+    stageGamepadReport(session, binding.controllerIndex, xusbReportOf(s), out);
+}
+
+// A physical pad's datagram, staged under the device and slot locks, is sealed and sent once the
+// caller has let them go.
+static void transmitPublished(PendingDatagram& datagram) {
+    const bool isAGamepadReport = datagram.msgType == MSG_GAMEPAD_DATA;
+    transmitDatagram(datagram);
+    if (isAGamepadReport) hotpath::markGamepadSent(); // stage-1 end: the packet has left sendto()
 }
 
 // Bluetooth and Moonlight both leave through Kotlin, so the state is queued for the bridge thread
@@ -652,8 +683,10 @@ static void publishGamepadToBridge(const SlotBinding& binding, const DeviceState
     enqueueBridgeReport(std::move(r));
 }
 
-// Lock order: devices < slots < (sessions | btQueue).
-static void publishIfChanged(int32_t deviceId, DeviceState& s) {
+// Lock order: devices < slots < (sessions | btQueue | a session's send turn). The datagram is
+// staged here, under both locks, so a slot's reports take their counters in the order its latch
+// consumed them; the caller seals and sends it with transmitPublished after letting the locks go.
+static void publishIfChanged(int32_t deviceId, DeviceState& s, PendingDatagram& out) {
     std::lock_guard<std::mutex> lock(g_slotsMtx);
     auto it = g_slots.find(deviceId);
     if (it == g_slots.end()) return;
@@ -664,7 +697,7 @@ static void publishIfChanged(int32_t deviceId, DeviceState& s) {
     const SlotBinding& binding = it->second;
     switch (binding.kind) {
     case SLOT_SATELLITE:
-        publishGamepadToSatellite(binding, s);
+        publishGamepadToSatellite(binding, s, out);
         return;
     case SLOT_BLUETOOTH:
     case SLOT_MOONLIGHT:
@@ -678,12 +711,16 @@ static void publishIfChanged(int32_t deviceId, DeviceState& s) {
 // deviceId is reused across reconnects, so the new pad would inherit stale held inputs; reset and
 // re-arm so it syncs to neutral. Call without g_slotsMtx held: publishIfChanged retakes it.
 static void syncSlotBaseline(int32_t deviceId) {
-    std::lock_guard<std::mutex> lock(g_devicesMtx);
-    auto it = g_devices.find(deviceId);
-    if (it == g_devices.end()) return;
-    gamepad::resetState(it->second);
-    gamepad::resetPublishLatch(it->second);
-    publishIfChanged(deviceId, it->second);
+    PendingDatagram datagram;
+    {
+        std::lock_guard<std::mutex> lock(g_devicesMtx);
+        auto it = g_devices.find(deviceId);
+        if (it == g_devices.end()) return;
+        gamepad::resetState(it->second);
+        gamepad::resetPublishLatch(it->second);
+        publishIfChanged(deviceId, it->second, datagram);
+    }
+    transmitPublished(datagram);
 }
 
 // USB-direct reports skip gamepad::applyAxes, so the per-device flat (deadzone) is never applied; a
@@ -699,21 +736,22 @@ static inline void applyUsbStickDeadzone(int16_t& x, int16_t& y) {
 
 // Protocol 2 widened the payload to 19 bytes with the mouse buttons and the wheel; a protocol 1
 // satellite still gets the 16-byte form, which has neither, so those fields are dropped for it.
-static void sendTouchpadFrame(Session& session, const uint8_t idx, const gamepad::TouchpadState& t,
-                              const bool rightPressed, const bool middlePressed,
-                              const uint32_t eventTimeMs, const int16_t scrollDelta) {
+static void stageTouchpadFrame(const std::shared_ptr<Session>& session, const uint8_t idx,
+                               const gamepad::TouchpadState& t, const bool rightPressed,
+                               const bool middlePressed, const uint32_t eventTimeMs,
+                               const int16_t scrollDelta, PendingDatagram& out) {
     uint8_t payload[dish_wire::TOUCHPAD_V2_PAYLOAD_BYTES];
-    const bool isProtocol2 = session.protocolVersion.load() >= PROTOCOL_VERSION_TOUCHPAD_V2;
+    const bool isProtocol2 = session->protocolVersion.load() >= PROTOCOL_VERSION_TOUCHPAD_V2;
     if (isProtocol2) {
         dish_wire::encodeTouchpadPayloadV2(payload, idx, t.f0Active, t.f1Active, t.clickDown,
                                            rightPressed, middlePressed, t.f0Id, t.f0X, t.f0Y,
                                            t.f1Id, t.f1X, t.f1Y, eventTimeMs, scrollDelta);
-        sendEncrypted(&session, MSG_TOUCHPAD, payload, dish_wire::TOUCHPAD_V2_PAYLOAD_BYTES);
+        stageDatagram(session, MSG_TOUCHPAD, payload, dish_wire::TOUCHPAD_V2_PAYLOAD_BYTES, out);
         return;
     }
     dish_wire::encodeTouchpadPayloadV1(payload, idx, t.f0Active, t.f1Active, t.clickDown, t.f0Id,
                                        t.f0X, t.f0Y, t.f1Id, t.f1X, t.f1Y, eventTimeMs);
-    sendEncrypted(&session, MSG_TOUCHPAD, payload, dish_wire::TOUCHPAD_V1_PAYLOAD_BYTES);
+    stageDatagram(session, MSG_TOUCHPAD, payload, dish_wire::TOUCHPAD_V1_PAYLOAD_BYTES, out);
 }
 
 namespace dispatch {
@@ -767,25 +805,33 @@ static void mirrorTouchForInspector(const gamepad::DeviceState& nu, gamepad::Dev
 }
 
 void applyUsbReport(int32_t deviceId, const gamepad::DeviceState& nu) {
-    std::lock_guard<std::mutex> lock(g_devicesMtx);
-    auto& s = g_devices[deviceId];
-    copyPadAxes(nu, s);
-    applyUsbStickDeadzone(s.sLX, s.sLY);
-    applyUsbStickDeadzone(s.sRX, s.sRY);
-    const bool inspecting = g_inspect.load(std::memory_order_relaxed);
-    if (inspecting) {
-        mirrorMotionForInspector(nu, s);
-        mirrorTouchForInspector(nu, s);
+    PendingDatagram datagram;
+    {
+        std::lock_guard<std::mutex> lock(g_devicesMtx);
+        auto& s = g_devices[deviceId];
+        copyPadAxes(nu, s);
+        applyUsbStickDeadzone(s.sLX, s.sLY);
+        applyUsbStickDeadzone(s.sRX, s.sRY);
+        const bool inspecting = g_inspect.load(std::memory_order_relaxed);
+        if (inspecting) {
+            mirrorMotionForInspector(nu, s);
+            mirrorTouchForInspector(nu, s);
+        }
+        publishIfChanged(deviceId, s, datagram);
     }
-    publishIfChanged(deviceId, s);
+    transmitPublished(datagram);
 }
 
 void resetAndPublish(int32_t deviceId) {
-    std::lock_guard<std::mutex> lock(g_devicesMtx);
-    auto it = g_devices.find(deviceId);
-    if (it == g_devices.end()) return;
-    gamepad::resetState(it->second);
-    publishIfChanged(deviceId, it->second);
+    PendingDatagram datagram;
+    {
+        std::lock_guard<std::mutex> lock(g_devicesMtx);
+        auto it = g_devices.find(deviceId);
+        if (it == g_devices.end()) return;
+        gamepad::resetState(it->second);
+        publishIfChanged(deviceId, it->second, datagram);
+    }
+    transmitPublished(datagram);
 }
 
 void forgetDevice(int32_t deviceId) {
@@ -826,7 +872,8 @@ static void publishMotionToBridge(const SlotBinding& binding, const MotionSample
     enqueueBridgeReport(std::move(r));
 }
 
-static void publishMotionToSatellite(const SlotBinding& binding, const MotionSample& m) {
+static void publishMotionToSatellite(const SlotBinding& binding, const MotionSample& m,
+                                     PendingDatagram& out) {
     auto session = getSession(binding.sessionHandle);
     if (!session) return;
     uint8_t payload[dish_wire::MOTION_PAYLOAD_BYTES];
@@ -835,12 +882,12 @@ static void publishMotionToSatellite(const SlotBinding& binding, const MotionSam
     dish_wire::encodeMotionPayload(payload, (uint8_t)(binding.controllerIndex & 0xFF), m.gyro[0],
                                    m.gyro[1], m.gyro[2], m.accel[0], m.accel[1], m.accel[2],
                                    m.timestampDeltaUs);
-    sendEncrypted(session.get(), MSG_MOTION, payload, sizeof(payload));
+    stageDatagram(session, MSG_MOTION, payload, sizeof(payload), out);
 }
 
-void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyroZ, int16_t accelX,
-                    int16_t accelY, int16_t accelZ, uint32_t timestampDeltaUs) {
-    const MotionSample sample{{gyroX, gyroY, gyroZ}, {accelX, accelY, accelZ}, timestampDeltaUs};
+// Stages under the slot lock, so the caller sends out once the lock is let go.
+static void routeUsbMotion(const int32_t deviceId, const MotionSample& sample,
+                           PendingDatagram& out) {
     std::lock_guard<std::mutex> lock(g_slotsMtx);
     auto it = g_slots.find(deviceId);
     if (it == g_slots.end()) return;
@@ -850,12 +897,20 @@ void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyro
         publishMotionToBridge(binding, sample);
         return;
     case SLOT_SATELLITE:
-        publishMotionToSatellite(binding, sample);
+        publishMotionToSatellite(binding, sample, out);
         return;
     case SLOT_BLUETOOTH:
     case SLOT_NONE:
         return;
     }
+}
+
+void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyroZ, int16_t accelX,
+                    int16_t accelY, int16_t accelZ, uint32_t timestampDeltaUs) {
+    const MotionSample sample{{gyroX, gyroY, gyroZ}, {accelX, accelY, accelZ}, timestampDeltaUs};
+    PendingDatagram datagram;
+    routeUsbMotion(deviceId, sample, datagram);
+    transmitDatagram(datagram);
 }
 
 // The Bluetooth HID descriptor is a plain gamepad, so touch has nowhere to go on that
@@ -876,14 +931,16 @@ static void publishTouchToBridge(const SlotBinding& binding, const gamepad::Touc
 
 // A pad's own trackpad carries no mouse buttons and no wheel.
 static void publishTouchToSatellite(const SlotBinding& binding, const gamepad::TouchpadState& t,
-                                    const uint32_t eventTimeMs) {
+                                    const uint32_t eventTimeMs, PendingDatagram& out) {
     auto session = getSession(binding.sessionHandle);
     if (!session) return;
     const uint8_t idx = (uint8_t)(binding.controllerIndex & 0xFF);
-    sendTouchpadFrame(*session, idx, t, false, false, eventTimeMs, 0);
+    stageTouchpadFrame(session, idx, t, false, false, eventTimeMs, 0, out);
 }
 
-void applyUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_t eventTimeMs) {
+// Stages under the slot lock, so the caller sends out once the lock is let go.
+static void routeUsbTouchpad(const int32_t deviceId, const gamepad::TouchpadState& t,
+                             const uint32_t eventTimeMs, PendingDatagram& out) {
     std::lock_guard<std::mutex> lock(g_slotsMtx);
     auto it = g_slots.find(deviceId);
     if (it == g_slots.end()) return;
@@ -894,12 +951,18 @@ void applyUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_
         publishTouchToBridge(binding, t);
         return;
     case SLOT_SATELLITE:
-        publishTouchToSatellite(binding, t, eventTimeMs);
+        publishTouchToSatellite(binding, t, eventTimeMs, out);
         return;
     case SLOT_BLUETOOTH:
     case SLOT_NONE:
         return;
     }
+}
+
+void applyUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_t eventTimeMs) {
+    PendingDatagram datagram;
+    routeUsbTouchpad(deviceId, t, eventTimeMs, datagram);
+    transmitDatagram(datagram);
 }
 
 } // namespace dispatch
@@ -922,25 +985,32 @@ static_assert(gamepad::KEY_ACTION_DOWN == AKEY_EVENT_ACTION_DOWN &&
               "gamepad_input.h mirrors the NDK's key actions");
 
 // Caller holds g_devicesMtx; action is a down or up edge, the events keyVerdict answers APPLY.
-static void applyFrameworkKey(const int32_t deviceId, const int32_t keyCode, const int32_t action) {
+static void applyFrameworkKey(const int32_t deviceId, const int32_t keyCode, const int32_t action,
+                              PendingDatagram& out) {
     g_frameworkEventCounts[deviceId]++;
     auto& state = g_devices[deviceId];
     if (gamepad::applyKey(state, keyCode, action == AKEY_EVENT_ACTION_DOWN)) {
-        publishIfChanged(deviceId, state);
+        publishIfChanged(deviceId, state, out);
     }
+}
+
+// True when the key is the pad's to consume. Stages under the device lock, so the caller sends out
+// once the lock is let go.
+static bool filterFrameworkKey(const int32_t deviceId, const int32_t keyCode, const int32_t action,
+                               PendingDatagram& out) {
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    const gamepad::KeyVerdict verdict = gamepad::keyVerdict(keyCode, quirkFor(deviceId), action);
+    if (verdict == gamepad::KeyVerdict::PASS) return false;
+    if (verdict == gamepad::KeyVerdict::APPLY) applyFrameworkKey(deviceId, keyCode, action, out);
+    return true;
 }
 
 static bool gamepadKeyFilter(const GameActivityKeyEvent* ev) {
     if (!isGamepadSource(ev->source)) return false;
-    const int32_t kc = ev->keyCode;
-    const int32_t deviceId = ev->deviceId;
-    const int32_t action = ev->action;
-
-    std::lock_guard<std::mutex> lock(g_devicesMtx);
-    const gamepad::KeyVerdict verdict = gamepad::keyVerdict(kc, quirkFor(deviceId), action);
-    if (verdict == gamepad::KeyVerdict::PASS) return false;
-    if (verdict == gamepad::KeyVerdict::APPLY) applyFrameworkKey(deviceId, kc, action);
-    return true;
+    PendingDatagram datagram;
+    const bool consumed = filterFrameworkKey(ev->deviceId, ev->keyCode, ev->action, datagram);
+    transmitPublished(datagram);
+    return consumed;
 }
 
 // Right-stick layout varies by pad (Z/RZ against RX/RY); the larger-magnitude axis is the one
@@ -966,8 +1036,8 @@ static void applyJoystickSample(gamepad::DeviceState& state, const JoystickSampl
 }
 
 // Latest sample wins: historicals are intermediate states the next apply overwrites anyway.
-static void applyMotionAxes(const GameActivityMotionEvent* ev, gamepad::DeviceState& state) {
-    const JoystickSample sample{
+static JoystickSample joystickSampleOf(const GameActivityMotionEvent* ev) {
+    return JoystickSample{
         axisCur(ev, AMOTION_EVENT_AXIS_X),        axisCur(ev, AMOTION_EVENT_AXIS_Y),
         axisCur(ev, AMOTION_EVENT_AXIS_Z),        axisCur(ev, AMOTION_EVENT_AXIS_RZ),
         axisCur(ev, AMOTION_EVENT_AXIS_RX),       axisCur(ev, AMOTION_EVENT_AXIS_RY),
@@ -975,28 +1045,34 @@ static void applyMotionAxes(const GameActivityMotionEvent* ev, gamepad::DeviceSt
         axisCur(ev, AMOTION_EVENT_AXIS_LTRIGGER), axisCur(ev, AMOTION_EVENT_AXIS_RTRIGGER),
         axisCur(ev, AMOTION_EVENT_AXIS_BRAKE),    axisCur(ev, AMOTION_EVENT_AXIS_GAS),
     };
+}
+
+// action is already masked. Stages under the device lock, so the caller sends out once the lock is
+// let go.
+static void applyFrameworkMotion(const int32_t deviceId, const int32_t action,
+                                 const JoystickSample& sample, PendingDatagram& out) {
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    auto& state = g_devices[deviceId];
+
+    if (action == AMOTION_EVENT_ACTION_CANCEL) {
+        gamepad::resetState(state);
+        publishIfChanged(deviceId, state, out);
+        return;
+    }
+    if (action != AMOTION_EVENT_ACTION_MOVE) return;
+
+    g_frameworkEventCounts[deviceId]++;
     applyJoystickSample(state, sample);
+    publishIfChanged(deviceId, state, out);
 }
 
 static bool gamepadMotionFilter(const GameActivityMotionEvent* ev) {
     const bool isJoystick = (ev->source & AINPUT_SOURCE_JOYSTICK) == AINPUT_SOURCE_JOYSTICK;
     if (!isJoystick) return false;
     const int32_t action = ev->action & AMOTION_EVENT_ACTION_MASK;
-    const int32_t deviceId = ev->deviceId;
-
-    std::lock_guard<std::mutex> lock(g_devicesMtx);
-    auto& state = g_devices[deviceId];
-
-    if (action == AMOTION_EVENT_ACTION_CANCEL) {
-        gamepad::resetState(state);
-        publishIfChanged(deviceId, state);
-        return true;
-    }
-    if (action != AMOTION_EVENT_ACTION_MOVE) return true;
-
-    g_frameworkEventCounts[deviceId]++;
-    applyMotionAxes(ev, state);
-    publishIfChanged(deviceId, state);
+    PendingDatagram datagram;
+    applyFrameworkMotion(ev->deviceId, action, joystickSampleOf(ev), datagram);
+    transmitPublished(datagram);
     return true;
 }
 
@@ -1017,51 +1093,77 @@ static void putBE32(uint8_t* dst, uint32_t v) {
     dst[3] = (uint8_t)(v);
 }
 
-static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
-                          uint16_t payloadLen) {
-    if (!s || s->udpSock < 0) return false;
-
+// Frames one datagram's plaintext into out and takes the session's turn and its next counter, held
+// until transmitDatagram has sent it; false, with nothing held, for a payload past the contract's
+// ceiling, an exhausted counter or a closed socket. A thread stages at most one datagram of a
+// session before sending it: a second would wait on the turn the thread already holds.
+static bool stageDatagram(const std::shared_ptr<Session>& session, const uint16_t msgType,
+                          const uint8_t* payload, const uint16_t payloadLen, PendingDatagram& out) {
+    if (!session) return false;
     // Sized from the contract's datagram ceiling, not from the message set:
     // MSG_MIC_AUDIO carries a whole Opus packet, and the bound has to hold
     // structurally rather than by what today's senders happen to emit.
-    uint8_t inner[dish_wire::INNER_HEADER_BYTES + dish_wire::MAX_INNER_PAYLOAD_BYTES];
     if (!dish_wire::innerPayloadFits(payloadLen)) return false;
-    uint16_t innerLen = static_cast<uint16_t>(dish_wire::INNER_HEADER_BYTES + payloadLen);
-    putBE16(inner, msgType);
-    putBE16(inner + 2, payloadLen);
-    if (payloadLen > 0) memcpy(inner + 4, payload, payloadLen);
+    putBE16(out.inner, msgType);
+    putBE16(out.inner + 2, payloadLen);
+    if (payloadLen > 0) memcpy(out.inner + 4, payload, payloadLen);
 
-    uint32_t ctr = 0;
-    if (!dish_counter::acquireSendCounter(s->counter, &ctr)) return false;
+    Session& s = *session;
+    if (!dish_counter::takeTurnAndCounter(s.sendTurnMtx, s.counter, out.turn, &out.counter)) {
+        return false;
+    }
+    if (s.udpSock < 0) {
+        out.turn.unlock();
+        return false;
+    }
+    out.session = session;
+    out.msgType = msgType;
+    out.innerLen = static_cast<uint16_t>(dish_wire::INNER_HEADER_BYTES + payloadLen);
+    return true;
+}
+
+// Seals a staged datagram under its counter, sends it and gives the session's turn back; one never
+// staged sends nothing. The turn has been held since the counter was drawn, so the counter's place
+// on the wire is kept while the encryption runs outside the device and slot locks.
+static bool transmitDatagram(PendingDatagram& datagram) {
+    if (!datagram.turn.owns_lock()) return false;
+    const Session& s = *datagram.session;
 
     // Nonce: dir(1) | 0×7 | counter(4 BE). The direction byte keeps this
     // direction's nonces disjoint from the server's under the shared key.
     uint8_t nonce[12] = {};
     nonce[0] = CRYPTO_DIR_CLIENT_TO_SERVER;
-    putBE32(nonce + 8, ctr);
+    putBE32(nonce + 8, datagram.counter);
 
-    uint8_t ciphertext[sizeof(inner) + crypto_aead_chacha20poly1305_ietf_ABYTES];
-    unsigned long long cipherLen = 0;
-    crypto_aead_chacha20poly1305_ietf_encrypt(ciphertext, &cipherLen, inner, innerLen, s->token, 4,
-                                              nullptr, nonce, s->key);
-
-    uint8_t packet[8 + sizeof(ciphertext)];
+    uint8_t packet[dish_wire::MAX_DATAGRAM_BYTES];
     // The ceiling made structural: a full-size inner payload plus header and
     // tag is exactly one Ethernet MTU, so nothing this path emits can fragment.
-    static_assert(sizeof(packet) == dish_wire::MAX_DATAGRAM_BYTES,
+    static_assert(8 + sizeof(datagram.inner) + crypto_aead_chacha20poly1305_ietf_ABYTES ==
+                      sizeof(packet),
                   "send buffer must be exactly the contract's datagram ceiling");
-    memcpy(packet, s->token, 4);
-    putBE32(packet + 4, ctr);
-    memcpy(packet + 8, ciphertext, (size_t)cipherLen);
+    memcpy(packet, s.token, 4);
+    putBE32(packet + 4, datagram.counter);
+    unsigned long long cipherLen = 0;
+    crypto_aead_chacha20poly1305_ietf_encrypt(packet + 8, &cipherLen, datagram.inner,
+                                              datagram.innerLen, s.token, 4, nullptr, nonce, s.key);
 
-    size_t totalLen = 8 + (size_t)cipherLen;
+    const size_t totalLen = 8 + (size_t)cipherLen;
     // MSG_DONTWAIT: a blocking sendto was observed to stall 1.5s during Wi-Fi power-save
     // transitions.
-    ssize_t sent = sendto(s->udpSock, packet, totalLen, MSG_DONTWAIT, (struct sockaddr*)&s->dest,
-                          sizeof(s->dest));
+    const ssize_t sent = sendto(s.udpSock, packet, totalLen, MSG_DONTWAIT,
+                                (const struct sockaddr*)&s.dest, sizeof(s.dest));
+    const int sendErrno = errno;
+    datagram.turn.unlock();
     // Soft-drop on buffer-full: UDP semantics absorb it and the next tick refreshes state.
-    if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { return true; }
+    if (sent < 0 && (sendErrno == EAGAIN || sendErrno == EWOULDBLOCK)) { return true; }
     return sent == (ssize_t)totalLen;
+}
+
+static bool sendEncrypted(const std::shared_ptr<Session>& session, const uint16_t msgType,
+                          const uint8_t* payload, const uint16_t payloadLen) {
+    PendingDatagram datagram;
+    if (!stageDatagram(session, msgType, payload, payloadLen, datagram)) return false;
+    return transmitDatagram(datagram);
 }
 
 // stage-2: the round-trip clock starts here, on this session's own clock.
@@ -1094,7 +1196,7 @@ static void sleepUntilNextHeartbeat(Session& s, const int intervalMs) {
 static void heartbeatLoop(std::shared_ptr<Session> s) {
     LOGI("Heartbeat thread started (sock=%d)", s->udpSock);
     while (s->heartbeat.running()) {
-        sendEncrypted(s.get(), MSG_HEARTBEAT_PING, nullptr, 0);
+        sendEncrypted(s, MSG_HEARTBEAT_PING, nullptr, 0);
         s->rtt.pings.fetch_add(1, std::memory_order_relaxed);
         armLatencyPing(*s);
 
@@ -1232,9 +1334,12 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_closeSoc
         std::lock_guard<std::mutex> audioLock(s->audioMtx);
         s->audio.clear();
     }
-    if (s->udpSock >= 0) {
-        close(s->udpSock);
-        s->udpSock = -1;
+    {
+        std::lock_guard<std::mutex> turn(s->sendTurnMtx);
+        if (s->udpSock >= 0) {
+            close(s->udpSock);
+            s->udpSock = -1;
+        }
     }
     LOGI("UDP session %d closed", handle);
 }
@@ -1247,10 +1352,13 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_setConne
     if (!s) return;
     jbyte* tokenBytes = env->GetByteArrayElements(tokenArr, nullptr);
     jbyte* keyBytes = env->GetByteArrayElements(keyArr, nullptr);
-    memcpy(s->token, tokenBytes, 4);
-    memcpy(s->key, keyBytes, 32);
-    // Counters restart with each (token, sessionKey) pair (contract §Crypto).
-    s->counter.store(1);
+    {
+        std::lock_guard<std::mutex> turn(s->sendTurnMtx);
+        memcpy(s->token, tokenBytes, 4);
+        memcpy(s->key, keyBytes, 32);
+        // Counters restart with each (token, sessionKey) pair (contract §Crypto).
+        s->counter.store(1);
+    }
     s->lastRxCounter.store(0);
     s->missedAcks.store(0);
     s->connectionAlive.store(true);
@@ -1285,7 +1393,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendR
     report.sThumbLY = (int16_t)sLY;
     report.sThumbRX = (int16_t)sRX;
     report.sThumbRY = (int16_t)sRY;
-    sendGamepadReport(*s, controllerIndex, report);
+    sendGamepadReport(s, controllerIndex, report);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendMotion(
@@ -1297,7 +1405,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendM
     dish_wire::encodeMotionPayload(payload, (uint8_t)(controllerIndex & 0xFF), (int16_t)gyroX,
                                    (int16_t)gyroY, (int16_t)gyroZ, (int16_t)accelX, (int16_t)accelY,
                                    (int16_t)accelZ, (uint32_t)timestampDeltaUs);
-    sendEncrypted(s.get(), MSG_MOTION, payload, sizeof(payload));
+    sendEncrypted(s, MSG_MOTION, payload, sizeof(payload));
     s->motionByCtrl[controllerIndex & CTRL_INDEX_MASK].fetch_add(1, std::memory_order_relaxed);
 }
 
@@ -1308,7 +1416,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendB
     uint8_t payload[dish_wire::BATTERY_PAYLOAD_BYTES];
     dish_wire::encodeBatteryPayload(payload, (uint8_t)(controllerIndex & 0xFF),
                                     (uint8_t)(level & 0xFF), (uint8_t)(status & 0xFF));
-    sendEncrypted(s.get(), MSG_BATTERY, payload, sizeof(payload));
+    sendEncrypted(s, MSG_BATTERY, payload, sizeof(payload));
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendTouchpad(
@@ -1329,8 +1437,10 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendT
     t.f1X = (int16_t)f1x;
     t.f1Y = (int16_t)f1y;
     const uint8_t idx = (uint8_t)(controllerIndex & 0xFF);
-    sendTouchpadFrame(*s, idx, t, rightPressed == JNI_TRUE, middlePressed == JNI_TRUE,
-                      (uint32_t)(eventTimeMs & 0xFFFFFFFFLL), (int16_t)scrollDelta);
+    PendingDatagram datagram;
+    stageTouchpadFrame(s, idx, t, rightPressed == JNI_TRUE, middlePressed == JNI_TRUE,
+                       (uint32_t)(eventTimeMs & 0xFFFFFFFFLL), (int16_t)scrollDelta, datagram);
+    transmitDatagram(datagram);
 }
 
 // One 20 ms mono window straight from AudioRecord: encode it and put it on the
@@ -1375,7 +1485,7 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_s
     dish_wire::encodeAudioFrameHeader(payload, idx, seq);
     const uint16_t payloadLen =
         static_cast<uint16_t>(dish_wire::AUDIO_WIRE_HEADER_BYTES + opusBytes);
-    return sendEncrypted(s.get(), MSG_MIC_AUDIO, payload, payloadLen) ? JNI_TRUE : JNI_FALSE;
+    return sendEncrypted(s, MSG_MIC_AUDIO, payload, payloadLen) ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT void JNICALL
@@ -1744,11 +1854,10 @@ JNIEXPORT jboolean JNICALL
 Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_processGamepadKeyEvent(
     JNIEnv*, jobject, jint deviceId, jint /*source*/, jint action, jint keyCode) {
     // Source bits are unreliable; gate on the mapped-keycode check instead.
-    std::lock_guard<std::mutex> lock(g_devicesMtx);
-    const gamepad::KeyVerdict verdict = gamepad::keyVerdict(keyCode, quirkFor(deviceId), action);
-    if (verdict == gamepad::KeyVerdict::PASS) return JNI_FALSE;
-    if (verdict == gamepad::KeyVerdict::APPLY) applyFrameworkKey(deviceId, keyCode, action);
-    return JNI_TRUE;
+    PendingDatagram datagram;
+    const bool consumed = filterFrameworkKey(deviceId, keyCode, action, datagram);
+    transmitPublished(datagram);
+    return consumed ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT jboolean JNICALL
@@ -1758,28 +1867,23 @@ Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_processGamepadMotionEvent(
     jfloat brake, jfloat gas) {
     if ((source & AINPUT_SOURCE_JOYSTICK) != AINPUT_SOURCE_JOYSTICK) return JNI_FALSE;
     const int32_t maskedAction = action & AMOTION_EVENT_ACTION_MASK;
-    std::lock_guard<std::mutex> lock(g_devicesMtx);
-    auto& state = g_devices[deviceId];
-    if (maskedAction == AMOTION_EVENT_ACTION_CANCEL) {
-        gamepad::resetState(state);
-        publishIfChanged(deviceId, state);
-        return JNI_TRUE;
-    }
-    if (maskedAction != AMOTION_EVENT_ACTION_MOVE) return JNI_TRUE;
-    g_frameworkEventCounts[deviceId]++;
     const JoystickSample sample{x, y, z, rz, rx, ry, hatX, hatY, lTrigger, rTrigger, brake, gas};
-    applyJoystickSample(state, sample);
-    publishIfChanged(deviceId, state);
+    PendingDatagram datagram;
+    applyFrameworkMotion(deviceId, maskedAction, sample, datagram);
+    transmitPublished(datagram);
     return JNI_TRUE;
 }
 
+// Each device is reset and sent on its own, so no send happens under the device lock.
 JNIEXPORT void JNICALL
 Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_releaseAllPhysicalReports(JNIEnv*, jobject) {
-    std::lock_guard<std::mutex> lock(g_devicesMtx);
-    for (auto& kv : g_devices) {
-        gamepad::resetState(kv.second);
-        publishIfChanged(kv.first, kv.second);
+    std::vector<int32_t> deviceIds;
+    {
+        std::lock_guard<std::mutex> lock(g_devicesMtx);
+        deviceIds.reserve(g_devices.size());
+        for (const auto& kv : g_devices) deviceIds.push_back(kv.first);
     }
+    for (const int32_t deviceId : deviceIds) dispatch::resetAndPublish(deviceId);
 }
 
 // A bridge method that is missing degrades to a silent bridge rather than a pending exception:

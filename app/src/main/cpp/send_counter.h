@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <mutex>
 
 namespace dish_counter {
 
@@ -19,6 +20,19 @@ inline bool acquireSendCounter(std::atomic<uint64_t>& counter, uint32_t* out) {
     if (seq > kCounterMaxWire) return false;
     *out = static_cast<uint32_t>(seq);
     return true;
+}
+
+// The satellite drops a datagram whose counter is not above the last one it accepted from the
+// session, whichever slot it carries (satellite net/receiver.cpp), so a session's counters have to
+// reach the wire in the order they were drawn. A sender takes the session's turn, then draws, and
+// keeps the turn until its datagram has left sendto; false, with the turn given back, once the
+// counter space is exhausted.
+inline bool takeTurnAndCounter(std::mutex& turnMtx, std::atomic<uint64_t>& counter,
+                               std::unique_lock<std::mutex>& turn, uint32_t* out) {
+    turn = std::unique_lock<std::mutex>(turnMtx);
+    const bool drawn = acquireSendCounter(counter, out);
+    if (!drawn) turn.unlock();
+    return drawn;
 }
 
 // The counter as the Kotlin re-key poll reads it, clamped at the wire max.

@@ -83,8 +83,11 @@ The Kotlin → JNI → `sendto()` chain runs at gamepad polling rate
 - No allocations per event: the JNI uses a preallocated
   `XUSB_REPORT` and a packed `Int` for HID button + hat (a `Pair`
   would burn ~6 KB/s of garbage at 250 Hz).
-- The session map's `mutex` is the only lock the send path takes,
-  and it's released before the encrypted `sendto`.
+- The send path takes the device and slot locks, the session map's
+  briefly, and its session's send turn. A physical pad's datagram
+  takes its counter under the device and slot locks and is encrypted
+  and sent after they are released, with only the turn held, which
+  keeps the counters in order on the wire.
 - `IP_TOS = 0xB8` (DSCP EF) and `MSG_NOSIGNAL` stay set on every
   send.
 

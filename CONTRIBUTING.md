@@ -415,8 +415,12 @@ every `BaseGamepadHostActivity` forward to), the `core.jni` objects
 - No heap allocation per event: the `XUSB_REPORT`, the payload and the
   packet are stack buffers.
 - Take no lock the path does not already take, keep the order written at
-  `publishIfChanged` (devices, then slots, then sessions or the bridge
-  queue), hold each briefly, and never make a JVM upcall under one.
+  `publishIfChanged` (devices, then slots, then sessions, the bridge queue
+  or a session's send turn), hold each briefly, and never make a JVM upcall
+  under one. A datagram is staged under the device and slot locks and
+  sealed and sent after they are let go, holding only its session's turn
+  from its counter to `sendto()`: the satellite drops a counter that is not
+  above the last one it accepted, so the wire must carry them in order.
 - Preserve `IP_TOS = 0xB8` (DSCP EF) on the socket and `MSG_DONTWAIT` on
   every send.
 
