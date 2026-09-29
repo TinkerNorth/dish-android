@@ -18,11 +18,12 @@ data class MoonlightHost(
     // from /serverinfo when known and never assumed elsewhere.
     val httpPort: Int = DEFAULT_HTTP_PORT,
     val httpsPort: Int = DEFAULT_HTTPS_PORT,
-    // Stable identity from /serverinfo uniqueid; empty until first probed.
+    // The uniqueid the host answered /serverinfo with, empty until it has been asked: the witness
+    // that tells the machine this client paired with from another one behind the same address.
     val uniqueId: String = "",
     val manual: Boolean = false,
 ) {
-    val id: String get() = moonlightHostIdFor(address, uniqueId)
+    val id: String get() = moonlightHostIdFor(address)
 
     companion object {
         const val DEFAULT_HTTP_PORT = 47989
@@ -31,15 +32,9 @@ data class MoonlightHost(
     }
 }
 
-private const val STABLE_ID_MARKER = "uid:"
-
-internal fun moonlightHostIdFor(
-    address: String,
-    uniqueId: String,
-): String {
-    val hasStableId = uniqueId.isNotBlank()
-    return if (hasStableId) "${MoonlightHost.ID_PREFIX}$STABLE_ID_MARKER$uniqueId" else "${MoonlightHost.ID_PREFIX}$address"
-}
+// The address, and never the uniqueid: a scan meets a host before it has been asked who it is and
+// a typed address meets it after, so an id built from the answer named one host twice.
+internal fun moonlightHostIdFor(address: String): String = "${MoonlightHost.ID_PREFIX}$address"
 
 @Serializable
 data class RememberedMoonlight(
@@ -69,6 +64,24 @@ data class RememberedMoonlight(
             httpsPort = httpsPort,
             uniqueId = uniqueId,
         )
+}
+
+/**
+ * One host's two records as one: [refiled] under the id [filed] already has. Trust comes from
+ * either, and the uniqueid and the app pick from [refiled] where it has them.
+ */
+internal fun foldedRecords(
+    filed: RememberedMoonlight?,
+    refiled: RememberedMoonlight,
+): RememberedMoonlight {
+    if (filed == null) return refiled
+    val refiledPickedAnApp = refiled.lastAppId.isNotEmpty()
+    return refiled.copy(
+        uniqueId = refiled.uniqueId.ifEmpty { filed.uniqueId },
+        lastAppId = if (refiledPickedAnApp) refiled.lastAppId else filed.lastAppId,
+        lastAppName = if (refiledPickedAnApp) refiled.lastAppName else filed.lastAppName,
+        paired = refiled.paired || filed.paired,
+    )
 }
 
 /**

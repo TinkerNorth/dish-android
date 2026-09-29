@@ -179,7 +179,7 @@ class ConnectionsComposerMoonlightTest {
         const val ADDRESS = "10.0.0.5"
         const val NAME = "Desk PC"
         const val SLOT = "slot-A"
-        val ID = moonlightHostIdFor(ADDRESS, UID)
+        val ID = moonlightHostIdFor(ADDRESS)
         val REMEMBERED = RememberedMoonlight(id = ID, name = NAME, address = ADDRESS, uniqueId = UID)
         val DISCOVERED = MoonlightHost(name = "desk-pc.local", address = ADDRESS, uniqueId = UID)
         val RENAMED = MoonlightHost(name = "Renamed PC", address = ADDRESS, uniqueId = UID)

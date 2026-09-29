@@ -41,7 +41,7 @@ class MoonlightSessionFailureTest {
 
     private val remembered =
         RememberedMoonlight(
-            id = "moonlight:uid:abc",
+            id = "moonlight:10.0.0.5",
             name = "PC",
             address = "10.0.0.5",
             uniqueId = "abc",

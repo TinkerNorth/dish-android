@@ -136,6 +136,20 @@ class MoonlightHttpGateway
         }
 
         /**
+         * Carry the pin of [fromHostId] to [toHostId], the id the same host is filed under now. A
+         * pin [toHostId] already holds is the one kept: a call made under that id wrote it.
+         */
+        fun movePin(
+            fromHostId: String,
+            toHostId: String,
+        ) {
+            val pin = pins.pinnedFingerprint(fromHostId) ?: return
+            if (pins.pinnedFingerprint(toHostId) == null) pins.pin(toHostId, pin)
+            Log.i(TAG, "pinned cert for $fromHostId now answers for $toHostId")
+            pins.forget(fromHostId)
+        }
+
+        /**
          * Hands back a handshaken TLS socket that presents the dish's client
          * certificate, or throws once the host's certificate fails the pin
          * ([TofuTrustManager] decides inside the handshake, so a mismatch never

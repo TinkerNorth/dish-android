@@ -245,6 +245,24 @@ class MoonlightPairFlowTest {
             watching.cancel()
         }
 
+    // MOON-D6. "Pair again" is what a host reported as replaced offers, and the PIN proves the machine
+    // that answers now. Keeping the old uniqueid reported the host as replaced again straight after.
+    @Test
+    fun `a completed pairing records the uniqueid of the machine it paired with`() =
+        runTest(dispatcher) {
+            val replaced = RememberedMoonlight(id = host.id, name = "PC", address = host.address, uniqueId = "host-1")
+            store.put(replaced)
+            every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns
+                reply("""<root status_code="200"><hostname>PC</hostname><uniqueid>host-2</uniqueid><PairStatus>0</PairStatus></root>""")
+            val watching = watchForPin()
+
+            assertTrue(manager.pairHost(replaced.toHost()))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals("host-2", rows.getValue(host.id).uniqueId)
+            watching.cancel()
+        }
+
     // MOON-D14. Phases 1 to 4 proved the peer holds the PIN-derived key and signed with the
     // certificate it presented, which outranks a pin written for a host since rebuilt.
     // Without dropping it first, phase 5 is refused and nothing in the app can get past it.

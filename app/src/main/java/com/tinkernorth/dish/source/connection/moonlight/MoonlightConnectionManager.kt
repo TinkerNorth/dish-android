@@ -19,8 +19,10 @@ import com.tinkernorth.dish.core.net.moonlight.ServerInfo
 import com.tinkernorth.dish.core.net.moonlight.Status
 import com.tinkernorth.dish.core.net.moonlight.appList
 import com.tinkernorth.dish.core.net.moonlight.cancel
+import com.tinkernorth.dish.core.net.moonlight.foldedRecords
 import com.tinkernorth.dish.core.net.moonlight.fromStored
 import com.tinkernorth.dish.core.net.moonlight.launch
+import com.tinkernorth.dish.core.net.moonlight.moonlightHostIdFor
 import com.tinkernorth.dish.core.net.moonlight.pairHttp
 import com.tinkernorth.dish.core.net.moonlight.pairHttps
 import com.tinkernorth.dish.core.net.moonlight.parseAppList
@@ -258,7 +260,25 @@ class MoonlightConnectionManager
 
         @Volatile private var desired: Map<String, List<MoonlightPadRequest>> = emptyMap()
 
+        init {
+            fileHostsUnderTheirAddresses()
+        }
+
         fun get(id: String): MoonlightConnection? = _connections.value[id]
+
+        // An earlier version filed a host under its uniqueid once it knew it, which named one machine
+        // twice. Each such record, and its pin, moves to the address; at start-up, before any binding
+        // exists to point at the old name.
+        private fun fileHostsUnderTheirAddresses() {
+            for (record in store.all()) {
+                val addressId = moonlightHostIdFor(record.address)
+                if (record.id == addressId) continue
+                Log.i(TAG, "filing ${record.id} under $addressId")
+                store.put(foldedRecords(filed = store.get(addressId), refiled = record.copy(id = addressId)))
+                gateway.movePin(record.id, addressId)
+                store.remove(record.id)
+            }
+        }
 
         /**
          * Browse for hosts and MERGE the answer into what is already known. Assigning
@@ -297,8 +317,27 @@ class MoonlightConnectionManager
                 // Typing an address is durable interest, so the host outlives the discovery list
                 // it would otherwise be the only copy of.
                 rememberInterest(host)
+                keepFirstUniqueId(host.id, info)
             }
         }
+
+        // The first uniqueid a remembered host answers with is kept: it is the witness that later
+        // tells the machine this client paired with from another one behind the same address.
+        private fun keepFirstUniqueId(
+            hostId: String,
+            info: ServerInfo,
+        ) {
+            val record = store.get(hostId) ?: return
+            val isTheFirstAnswer = record.uniqueId.isEmpty() && info.uniqueId.isNotEmpty()
+            if (isTheFirstAnswer) store.put(record.copy(uniqueId = info.uniqueId))
+        }
+
+        // Plain HTTP answers any caller, paired or not, and names the machine behind the address.
+        private fun plainServerInfo(host: MoonlightHost): ServerInfo? =
+            gateway
+                .getHttp(serverInfoHttp(host.address, host.httpPort, deviceId))
+                .takeIf { it.ok }
+                ?.let { parseServerInfo(it.body) }
 
         // Plain HTTP on the default port: a host that has never been paired will not talk HTTPS
         // to this client yet, and the ports it really listens on come back in the answer.
@@ -344,12 +383,9 @@ class MoonlightConnectionManager
          */
         suspend fun probe(host: MoonlightHost): MoonlightProbe =
             withContext(ioDispatcher) {
-                val plain =
-                    gateway
-                        .getHttp(serverInfoHttp(host.address, host.httpPort, deviceId))
-                        .takeIf { it.ok }
-                        ?.let { parseServerInfo(it.body) }
+                val plain = plainServerInfo(host)
                 plain?.let { hostFacts.note(host.id, it) }
+                plain?.let { keepFirstUniqueId(host.id, it) }
                 // Holding a pairing is the paired flag, never a non-empty uniqueid: real hosts
                 // publish no uniqueid TXT record at all.
                 val record = store.get(host.id)?.takeIf { it.paired }
@@ -562,20 +598,28 @@ class MoonlightConnectionManager
         suspend fun pairHost(host: MoonlightHost): Boolean =
             withContext(ioDispatcher) {
                 Log.i(TAG, "pair requested for ${host.name} at ${host.address} (${host.id})")
-                val trusted = isPaired(host)
+                val answering = answeringNow(host)
+                val trusted = isPaired(answering)
                 // A Cancel that landed while the host was being asked ends the pairing before it records or shows anything.
                 ensureActive()
                 if (trusted) {
                     // Confirming trust is a pairing outcome and persists like one: a device that forgot
                     // a host the host still trusts is answered here without a PIN.
                     Log.i(TAG, "${host.address} already trusts this device; recording the pairing")
-                    rememberPaired(host, paired = true)
-                    _events.emit(MoonlightConnectionEvent.Paired(host))
+                    rememberPaired(answering, paired = true)
+                    _events.emit(MoonlightConnectionEvent.Paired(answering))
                     true
                 } else {
-                    pair(host)
+                    pair(answering)
                 }
             }
+
+        // The host with the uniqueid it answers with now, which is the machine a pairing proves,
+        // whoever answered at this address before; as it was, when it does not answer.
+        private fun answeringNow(host: MoonlightHost): MoonlightHost {
+            val answered = plainServerInfo(host)?.uniqueId.orEmpty()
+            return if (answered.isEmpty()) host else host.copy(uniqueId = answered)
+        }
 
         /** Fetch the host's app list (empty when unreachable/unpaired). */
         suspend fun fetchApps(host: MoonlightHost): List<MoonlightApp> = withContext(ioDispatcher) { fetchAppList(host) }
@@ -981,6 +1025,7 @@ class MoonlightConnectionManager
             appName: String = store.get(host.id)?.lastAppName.orEmpty(),
             paired: Boolean,
         ) {
+            val known = store.get(host.id)
             store.put(
                 RememberedMoonlight(
                     id = host.id,
@@ -988,13 +1033,14 @@ class MoonlightConnectionManager
                     address = host.address,
                     httpPort = host.httpPort,
                     httpsPort = host.httpsPort,
-                    uniqueId = host.uniqueId,
+                    // A host that was not asked this time is still the machine that answered before.
+                    uniqueId = host.uniqueId.ifEmpty { known?.uniqueId.orEmpty() },
                     lastAppId = appId,
                     lastAppName = appName,
                     emulatedType = rememberedEmulatedType(host.id),
                     // Trust only ever climbs here: a launch on a host already paired
                     // must not demote it, and interest must not promote it.
-                    paired = paired || store.get(host.id)?.paired == true,
+                    paired = paired || known?.paired == true,
                 ),
             )
         }

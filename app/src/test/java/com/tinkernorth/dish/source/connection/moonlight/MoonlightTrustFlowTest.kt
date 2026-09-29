@@ -66,6 +66,11 @@ class MoonlightTrustFlowTest {
         """<root status_code="200"><hostname>PC</hostname><uniqueid>host-1</uniqueid>
            <PairStatus>0</PairStatus><currentgame>0</currentgame></root>"""
 
+    // Another machine behind the same address: a reinstall, or a new PC given the old one's lease.
+    private val rebuiltInfo =
+        """<root status_code="200"><hostname>PC</hostname><uniqueid>host-2</uniqueid>
+           <PairStatus>0</PairStatus><currentgame>0</currentgame></root>"""
+
     private val appList =
         """<root status_code="200"><App><AppTitle>Desktop</AppTitle><ID>1</ID></App></root>"""
 
@@ -387,6 +392,52 @@ class MoonlightTrustFlowTest {
             assertFalse("adding is not pairing", record.paired)
         }
 
+    // MOON-D6. A scan finds the host by its address alone, since no host publishes its uniqueid
+    // over mDNS, and a typed address is answered with one. Keying on that answer made two rows,
+    // two records and two pins out of one machine.
+    @Test
+    fun `a host found by a scan and then added by its address is one host`() =
+        runTest(dispatcher) {
+            coEvery { discovery.discover(any()) } returns listOf(host)
+            manager.startDiscovery()
+            dispatcher.scheduler.advanceUntilIdle()
+
+            manager.addManualHost(host.address)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(listOf(host.id), manager.discovered.value.map { it.id })
+            assertEquals(listOf(host.id), rows.keys.toList())
+        }
+
+    @Test
+    fun `a host added by its address and then found by a scan is one host`() =
+        runTest(dispatcher) {
+            manager.addManualHost(host.address)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            coEvery { discovery.discover(any()) } returns listOf(host)
+            manager.startDiscovery()
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(listOf(host.id), manager.discovered.value.map { it.id })
+            assertEquals(listOf(host.id), rows.keys.toList())
+        }
+
+    // The typed address is answered with the uniqueid, which a host remembered from a scan has never
+    // been asked for.
+    @Test
+    fun `adding by address records the uniqueid of a host already remembered from a scan`() =
+        runTest(dispatcher) {
+            manager.rememberInterest(host)
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals("", rows.getValue(host.id).uniqueId)
+
+            manager.addManualHost(host.address)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals("host-1", rows.getValue(host.id).uniqueId)
+        }
+
     @Test
     fun `an address nothing answers is reported and not remembered`() =
         runTest(dispatcher) {
@@ -552,6 +603,46 @@ class MoonlightTrustFlowTest {
                 MoonlightTrustState.REPLACED,
                 manager.probe(host.copy(uniqueId = "host-1")).trust,
             )
+        }
+
+    // MOON-D6. The uniqueid is the witness that tells the machine that was paired from another one
+    // at the same address, so the first answer a remembered host gives has to be kept.
+    @Test
+    fun `the first answer a remembered host gives records its uniqueid`() =
+        runTest(dispatcher) {
+            manager.rememberInterest(host)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            manager.probe(host)
+
+            assertEquals("host-1", rows.getValue(host.id).uniqueId)
+        }
+
+    // MOON-D6. A host paired from a scan used to be remembered with no uniqueid at all, so a rebuild
+    // behind the same address could only ever read as trust lost, and "pair again" as the answer to
+    // a pairing the host had merely forgotten.
+    @Test
+    fun `a rebuilt host remembered from a scan reads as replaced, not as untrusted`() =
+        runTest(dispatcher) {
+            manager.pairHost(host)
+            dispatcher.scheduler.advanceUntilIdle()
+            every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns reply(rebuiltInfo)
+            every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } returns unreachable()
+
+            assertEquals(MoonlightTrustState.REPLACED, manager.probe(host).trust)
+        }
+
+    // A pairing that cannot ask the host who it is has nothing better to write than what it knew.
+    @Test
+    fun `a pairing that cannot ask the host its uniqueid keeps the one remembered`() =
+        runTest(dispatcher) {
+            store.put(RememberedMoonlight(id = host.id, name = "PC", address = host.address, uniqueId = "host-1"))
+            every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns unreachable()
+
+            manager.pairHost(host)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals("host-1", rows.getValue(host.id).uniqueId)
         }
 
     @Test

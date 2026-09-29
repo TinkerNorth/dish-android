@@ -196,7 +196,7 @@ class MoonlightPadDepartureTest {
     }
 
     private companion object {
-        const val HOST_ID = "moonlight:uid:abc"
+        const val HOST_ID = "moonlight:10.0.0.5"
         const val PAD_ID = 1
         const val PAD_SLOT = "1"
     }
