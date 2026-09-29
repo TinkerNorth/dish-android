@@ -213,6 +213,13 @@ class SatelliteConnectionManager
         // decides the change, so a disconnect lands wholly before or wholly after it, never between.
         private val transitionLock = Any()
 
+        // Satellites the user disconnected: every reconnect the app makes on its own (the foreground
+        // auto reconnect, a reappearing host, a silent retry) leaves them down until the user connects
+        // one again or forgets it. A teardown the manager makes itself marks nothing. In memory only,
+        // for this process. Added and checked under transitionLock, so a user disconnect lands wholly
+        // before or after a silent connect's check.
+        private val userDisconnected: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
         // Single-flight reconcile guard per id: heartbeat ticks fire every
         // second, the reconcile round-trip can take longer.
         private val reconcileInFlight = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
@@ -402,12 +409,16 @@ class SatelliteConnectionManager
         // Idempotent on live/in-flight: a foreground kick must not restart pair/auth mid-handshake, so a
         // connection that is not Idle only takes the fresh address, and null says no handshake began.
         // The Idle check and the turn to Linking are one locked step: of two connects landing together,
-        // exactly one finds the connection Idle.
+        // exactly one finds the connection Idle. A connect the user did not ask for begins nothing on
+        // a satellite the user disconnected.
         private fun beginHandshakeIfIdle(
             conn: SatelliteConnection,
             server: DiscoveredServer,
+            intent: ConnectIntent,
         ): Int? =
             synchronized(transitionLock) {
+                val isHeldDownByTheUser = intent != ConnectIntent.USER_INITIATED && conn.id in userDisconnected
+                if (isHeldDownByTheUser) return null
                 if (conn.state.value != SatelliteSessionState.Idle) {
                     conn.updateServer(server)
                     return null
@@ -496,10 +507,13 @@ class SatelliteConnectionManager
             // Only user-initiated connects (which prompt) may open LAN sockets before the Android 17 grant.
             if (intent != ConnectIntent.USER_INITIATED && !isGranted(context)) return
             val id = satelliteConnectionIdFor(server)
-            if (intent == ConnectIntent.USER_INITIATED) retryAttempts.remove(id)
+            if (intent == ConnectIntent.USER_INITIATED) {
+                retryAttempts.remove(id)
+                userDisconnected.remove(id)
+            }
             // Atomic find-or-create: prevents two concurrent first-time connects allocating duplicates.
             val conn = findOrCreate(id, server)
-            val generation = beginHandshakeIfIdle(conn, server) ?: return
+            val generation = beginHandshakeIfIdle(conn, server, intent) ?: return
             scope.launch {
                 if (store.satelliteSharedKey(id) != null) {
                     openSession(conn, server, intent, generation)
@@ -557,6 +571,7 @@ class SatelliteConnectionManager
         ) {
             val id = satelliteConnectionIdFor(server)
             retryAttempts.remove(id)
+            userDisconnected.remove(id)
             // Atomic find-or-create (as in connect): concurrent PIN submits must not
             // allocate duplicates, and a submit must not stack on a live session.
             val conn = findOrCreate(id, server)
@@ -599,6 +614,7 @@ class SatelliteConnectionManager
         ) {
             val id = satelliteConnectionIdFor(server)
             retryAttempts.remove(id)
+            userDisconnected.remove(id)
             val conn = findOrCreate(id, server)
             // A re-issued request supersedes any prior poll for this id, so two polls can't race to
             // openSession on the same satellite. The new poll is registered in the same locked step
@@ -1152,8 +1168,12 @@ class SatelliteConnectionManager
             _staleSatelliteIds.update { if (id in it) it - id else it }
         }
 
+        // The user's disconnect: it also holds the satellite down against the app's own reconnects.
         fun disconnect(id: String) {
-            disconnectAt(id)
+            synchronized(transitionLock) {
+                userDisconnected += id
+                disconnectAt(id)
+            }
         }
 
         // Returns the generation this disconnect began: the one a retry scheduled after it is judged by.
@@ -1209,6 +1229,7 @@ class SatelliteConnectionManager
                 }
             }
             disconnect(id)
+            userDisconnected.remove(id)
             store.forgetSatellite(id)
             clearStale(id)
             retryAttempts.remove(id)
