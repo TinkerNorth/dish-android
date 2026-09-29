@@ -58,6 +58,16 @@ private const val APPROVED = """{"status":"approved","sharedKey":"aaaaaaaaaaaaaa
 private const val EMPTY_VIEW_AT_EPOCH_9 =
     """{"connectionId":"conn_1","epoch":9,"controllers":[],"hostFeatures":{"mouseControl":{"granted":false}}}"""
 
+private const val DECLINED = """{"status":"denied"}"""
+
+// A second satellite on the LAN, whose teardown holds the transition lock every satellite shares.
+private const val OTHER_IP = "10.0.0.6"
+private const val OTHER_SOCKET = 9
+private const val PAIRING_KEY_HEX = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+// The approval poll asks every 2 s.
+private const val ONE_APPROVAL_POLL_MS = 2000L
+
 private const val NOT_PAIRED_YET = """{"ok":false}"""
 private const val REJECTED = """{"error":"unauthorized","code":"NOT_PAIRED"}"""
 
@@ -122,6 +132,171 @@ class SatelliteConnectionManagerRaceTest : SatelliteConnectionManagerFixture() {
             mgr.disconnect(serverId)
         }
     }
+
+    private val otherServer by lazy { server.copy(name = "Other", ip = OTHER_IP) }
+
+    // A second satellite, live: its disconnect closes its socket while holding the transition lock,
+    // and [whileHeld] runs there. The returned thread runs that disconnect once started.
+    private fun liveOtherSatelliteWhoseTeardownRuns(
+        mgr: SatelliteConnectionManager,
+        whileHeld: () -> Unit,
+    ): OnAnotherThread {
+        val otherId = satelliteConnectionIdFor(otherServer)
+        every { store.satelliteSharedKey(otherId) } returns PAIRING_KEY_HEX
+        coEvery {
+            discoveryRepo.putSession(OTHER_IP, any(), any(), any(), any(), any(), any(), any())
+        } returns ok(sessionGrantBody())
+        every { controllerRepo.openSocket(OTHER_IP, any()) } returns OTHER_SOCKET
+        every { controllerRepo.closeSocket(OTHER_SOCKET) } answers { whileHeld() }
+        mgr.connect(otherServer, ConnectIntent.USER_INITIATED)
+        scope.testScheduler.runCurrent()
+        return OnAnotherThread { mgr.disconnect(otherId) }
+    }
+
+    private fun startQueuedOnTheLock(call: OnAnotherThread) {
+        call.start()
+        awaitQueuedOnTheLock(call.thread)
+    }
+
+    // Both taps reach the lock while another satellite's teardown holds it, so each has made every
+    // decision it makes outside the lock before either makes one inside it.
+    @Test
+    fun `two connects that meet at the transition lock start one handshake`() =
+        runMgrTest { mgr, events ->
+            stubLiveSession()
+            val taps = List(2) { OnAnotherThread { mgr.connect(server, ConnectIntent.USER_INITIATED) } }
+            val teardown = liveOtherSatelliteWhoseTeardownRuns(mgr) { taps.forEach(::startQueuedOnTheLock) }
+
+            teardown.start()
+            teardown.awaitDone()
+            taps.forEach(OnAnotherThread::awaitDone)
+            scope.testScheduler.runCurrent()
+
+            assertEquals(SatelliteSessionState.Live, stateOf(mgr))
+            coVerify(exactly = 1) { discoveryRepo.putSession(server.ip, any(), any(), any(), any(), any(), any(), any()) }
+            verify(exactly = 1) { controllerRepo.openSocket(server.ip, any()) }
+            assertNoBanner(events)
+        }
+
+    /**
+     * The answer that ends an approval request arrives while a second satellite's teardown holds the
+     * transition lock, and the user re-issues the request inside that hold once the ending step is
+     * queued on it: past the first request's last cancellation point, before its terminal transition.
+     */
+    private inner class ReissueBeforeTheEndingStep(
+        private val mgr: SatelliteConnectionManager,
+    ) {
+        private val requestThread = Thread.currentThread()
+        private val holding = java.util.concurrent.CountDownLatch(1)
+        private val answered = java.util.concurrent.CountDownLatch(1)
+
+        private val teardown = liveOtherSatelliteWhoseTeardownRuns(mgr, ::reissueOnceTheEndingStepIsQueued)
+
+        // Called from the round trip whose answer ends the first request, just before it answers.
+        fun endingAnswerArrives() {
+            if (answered.count == 0L) return
+            teardown.start()
+            awaitOpened(holding)
+            answered.countDown()
+        }
+
+        fun awaitReissued() = teardown.awaitDone()
+
+        private fun reissueOnceTheEndingStepIsQueued() {
+            holding.countDown()
+            awaitOpened(answered)
+            awaitQueuedOnTheLock(requestThread)
+            mgr.requestApproval(server, OTHER_CLIENT_PIN)
+        }
+    }
+
+    private fun reissuedRequestIsStillLinking(
+        mgr: SatelliteConnectionManager,
+        events: List<ConnectionEvent>,
+        reissue: ReissueBeforeTheEndingStep,
+    ) {
+        reissue.awaitReissued()
+        assertEquals(SatelliteSessionState.Linking, stateOf(mgr))
+        assertTrue("the first request's end is no failure of the second: $events", events.isEmpty())
+        coVerify(exactly = 1) { discoveryRepo.pair(any(), any(), any(), any(), any(), OTHER_CLIENT_PIN, any(), any()) }
+    }
+
+    @Test
+    fun `a re-issued approval request is not ended by the first one's pair failing just before it`() =
+        runMgrTest { mgr, events ->
+            val reissue = ReissueBeforeTheEndingStep(mgr)
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any(), CLIENT_PIN, any(), any()) } answers {
+                reissue.endingAnswerArrives()
+                unreachable()
+            }
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any(), OTHER_CLIENT_PIN, any(), any()) } returns ok(PENDING)
+
+            mgr.requestApproval(server, CLIENT_PIN)
+            scope.testScheduler.runCurrent()
+
+            reissuedRequestIsStillLinking(mgr, events, reissue)
+        }
+
+    @Test
+    fun `a re-issued approval request is not ended by the first one's decline answering just before it`() =
+        runMgrTest { mgr, events ->
+            val reissue = ReissueBeforeTheEndingStep(mgr)
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), any()) } returns ok(PENDING)
+            coEvery { discoveryRepo.pairStatus(any(), any(), any(), any()) } answers {
+                reissue.endingAnswerArrives()
+                ok(DECLINED)
+            }
+
+            mgr.requestApproval(server, CLIENT_PIN)
+            scope.testScheduler.advanceTimeBy(ONE_APPROVAL_POLL_MS)
+            scope.testScheduler.runCurrent()
+
+            reissuedRequestIsStillLinking(mgr, events, reissue)
+        }
+
+    @Test
+    fun `a re-issued approval request is not timed out by the first one's last poll answering just before it`() =
+        runMgrTest { mgr, events ->
+            val reissue = ReissueBeforeTheEndingStep(mgr)
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), any()) } returns ok(PENDING)
+            var polls = 0
+            coEvery { discoveryRepo.pairStatus(any(), any(), any(), any()) } answers {
+                polls++
+                if (polls == APPROVAL_POLLS) reissue.endingAnswerArrives()
+                ok(PENDING)
+            }
+
+            mgr.requestApproval(server, CLIENT_PIN)
+            scope.testScheduler.advanceTimeBy(LAST_APPROVAL_POLL_MS)
+            scope.testScheduler.runCurrent()
+
+            assertEquals(APPROVAL_POLLS, polls)
+            reissuedRequestIsStillLinking(mgr, events, reissue)
+        }
+
+    // The satellite paired this device whichever request it accepted: the key is this device's, and
+    // the session it opens is the one the re-issued request was waiting for.
+    @Test
+    fun `an approval that answers just as the request is re-issued still pairs and goes live`() =
+        runMgrTest { mgr, events ->
+            stubLiveSession()
+            val reissue = ReissueBeforeTheEndingStep(mgr)
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), any()) } returns ok(PENDING)
+            coEvery { discoveryRepo.pairStatus(any(), any(), any(), any()) } answers {
+                reissue.endingAnswerArrives()
+                ok(APPROVED)
+            }
+
+            mgr.requestApproval(server, CLIENT_PIN)
+            scope.testScheduler.advanceTimeBy(ONE_APPROVAL_POLL_MS)
+            scope.testScheduler.runCurrent()
+            reissue.awaitReissued()
+            scope.testScheduler.runCurrent()
+
+            assertEquals(SatelliteSessionState.Live, stateOf(mgr))
+            verify(exactly = 1) { store.setSatelliteSharedKey(serverId, PAIRING_KEY_HEX) }
+            assertNoBanner(events)
+        }
 
     @Test
     fun `a disconnect during an approval request's first pair leaves the connect after it to go live`() =

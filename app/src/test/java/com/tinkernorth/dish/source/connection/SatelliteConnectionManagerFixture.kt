@@ -18,6 +18,7 @@ import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelChildren
@@ -32,11 +33,60 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Before
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 // What wireCaps resolves for a pad with nothing else on.
 internal const val BASE_WIRE_CAPS =
     com.tinkernorth.dish.core.net.ControllerDescriptor.CAP_ANALOG_TRIGGERS or
         com.tinkernorth.dish.core.net.ControllerDescriptor.CAP_RUMBLE
+
+// How long a thread is given to reach the state a test waits for before the test fails instead of hanging.
+private const val QUEUE_DEADLINE_NS = 10_000_000_000L
+
+/**
+ * A call landing on the manager from a thread of its own, the way the UI thread's taps land while a
+ * worker runs a handshake. [awaitDone] waits for it and rethrows whatever it threw.
+ */
+internal class OnAnotherThread(
+    block: () -> Unit,
+) {
+    @Volatile private var failure: Throwable? = null
+
+    val thread = Thread(block)
+
+    init {
+        thread.setUncaughtExceptionHandler { _, thrown -> failure = thrown }
+    }
+
+    fun start() = thread.start()
+
+    fun awaitDone() {
+        thread.join()
+        failure?.let { throw it }
+    }
+}
+
+// Returns once [thread] is in [state]; fails rather than hangs should it never get there.
+internal fun awaitThreadState(
+    thread: Thread,
+    state: Thread.State,
+) {
+    val deadline = System.nanoTime() + QUEUE_DEADLINE_NS
+    while (thread.state != state) {
+        check(System.nanoTime() < deadline) { "${thread.name} never reached $state" }
+        Thread.yield()
+    }
+}
+
+// Returns once [latch] opens; fails rather than hangs should it never open.
+internal fun awaitOpened(latch: CountDownLatch) {
+    check(latch.await(QUEUE_DEADLINE_NS, TimeUnit.NANOSECONDS)) { "the latch never opened" }
+}
+
+// Returns once [thread] is queued on a monitor another thread holds. In the steps these tests drive,
+// the only monitor a caller of the manager can queue on is its transition lock.
+internal fun awaitQueuedOnTheLock(thread: Thread) = awaitThreadState(thread, Thread.State.BLOCKED)
 
 // The mocks, scope and manager factory every SatelliteConnectionManager suite drives; the suites
 // extend it so each stays under the class-size gate without repeating any of it.
@@ -191,7 +241,7 @@ open class SatelliteConnectionManagerFixture {
 
     protected val hostFeaturesStore = SatelliteHostFeaturesStore()
 
-    protected fun manager(): SatelliteConnectionManager =
+    protected fun manager(io: CoroutineDispatcher = ioDispatcher): SatelliteConnectionManager =
         SatelliteConnectionManager(
             context = context,
             scope = scope,
@@ -199,7 +249,7 @@ open class SatelliteConnectionManagerFixture {
             controllerRepo = controllerRepo,
             store = store,
             json = json,
-            ioDispatcher = ioDispatcher,
+            ioDispatcher = io,
             capabilityProvider = capabilityProvider,
             hostFacts =
                 SatelliteHostFacts(
@@ -211,21 +261,23 @@ open class SatelliteConnectionManagerFixture {
                 ),
         )
 
-    protected fun runMgrTest(block: suspend (SatelliteConnectionManager, MutableList<ConnectionEvent>) -> Unit) =
-        runTest(scope.testScheduler) {
-            val mgr = manager()
-            val events = mutableListOf<ConnectionEvent>()
-            scope.launch { mgr.events.collect { events += it } }
-            try {
-                block(mgr, events)
-            } finally {
-                // A live session's heartbeat poll reschedules itself forever, and so does a silent
-                // retry chain against an unreachable satellite, so the scheduler never goes idle
-                // while either exists. Cancel everything the manager started before the final
-                // drain, on assertion failure too, or the drain spins virtual time into OOM. This
-                // runs after the body, so it cannot hide what the body asserted.
-                scope.coroutineContext.job.cancelChildren()
-                scope.testScheduler.advanceUntilIdle()
-            }
+    protected fun runMgrTest(
+        io: CoroutineDispatcher = ioDispatcher,
+        block: suspend (SatelliteConnectionManager, MutableList<ConnectionEvent>) -> Unit,
+    ) = runTest(scope.testScheduler) {
+        val mgr = manager(io)
+        val events = mutableListOf<ConnectionEvent>()
+        scope.launch { mgr.events.collect { events += it } }
+        try {
+            block(mgr, events)
+        } finally {
+            // A live session's heartbeat poll reschedules itself forever, and so does a silent
+            // retry chain against an unreachable satellite, so the scheduler never goes idle
+            // while either exists. Cancel everything the manager started before the final
+            // drain, on assertion failure too, or the drain spins virtual time into OOM. This
+            // runs after the body, so it cannot hide what the body asserted.
+            scope.coroutineContext.job.cancelChildren()
+            scope.testScheduler.advanceUntilIdle()
         }
+    }
 }
