@@ -33,6 +33,7 @@ private val EVERY_CONNECTION_ERROR: List<ConnectionError> =
         ConnectionError.SessionFailed,
         ConnectionError.SessionRefused(REASON),
         ConnectionError.ApplyFailed(SERVER, FAILURES),
+        ConnectionError.Ipv6Unsupported,
     )
 
 private val EVERY_MOONLIGHT_ERROR: List<MoonlightError> =
@@ -81,6 +82,14 @@ class ConnectionErrorWordsTest {
         assertEquals(
             Words(R.string.conn_error_title_wire_failed, Lookup(R.string.conn_error_wire_failed)),
             wordsOf(ConnectionError.WireFailed),
+        )
+    }
+
+    @Test
+    fun `an IPv6 satellite address says to reach the satellite over IPv4`() {
+        assertEquals(
+            Words(R.string.conn_error_title_ipv6_unsupported, Lookup(R.string.conn_error_ipv6_unsupported)),
+            wordsOf(ConnectionError.Ipv6Unsupported),
         )
     }
 

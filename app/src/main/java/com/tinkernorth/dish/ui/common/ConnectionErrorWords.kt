@@ -27,6 +27,8 @@ internal fun connectionErrorWords(
             ConnectionErrorWords(R.string.conn_error_title_identity_changed, strings.format(R.string.conn_error_identity_changed))
         ConnectionError.WireFailed ->
             ConnectionErrorWords(R.string.conn_error_title_wire_failed, strings.format(R.string.conn_error_wire_failed))
+        ConnectionError.Ipv6Unsupported ->
+            ConnectionErrorWords(R.string.conn_error_title_ipv6_unsupported, strings.format(R.string.conn_error_ipv6_unsupported))
         ConnectionError.SatelliteUpdateRequired ->
             ConnectionErrorWords(
                 R.string.conn_error_title_satellite_update_required,

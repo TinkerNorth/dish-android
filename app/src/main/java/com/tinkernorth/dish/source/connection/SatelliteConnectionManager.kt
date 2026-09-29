@@ -26,6 +26,7 @@ import com.tinkernorth.dish.core.net.deriveSessionKey
 import com.tinkernorth.dish.core.net.dishProtocolSpeakFor
 import com.tinkernorth.dish.core.net.hexToBytes
 import com.tinkernorth.dish.core.net.hmacProof
+import com.tinkernorth.dish.core.net.isIpv6Literal
 import com.tinkernorth.dish.core.net.isPrivateHostLiteral
 import com.tinkernorth.dish.di.IoDispatcher
 import com.tinkernorth.dish.repository.ConnectionStore
@@ -119,6 +120,9 @@ private fun ControllerRepository.openWire(
     setConnectionParams(handle, token, sessionKey, negotiated)
     return handle
 }
+
+private fun unreachableMessage(reply: HttpReply?): ConnectionError =
+    if (reply?.pinMismatch == true) ConnectionError.IdentityChanged else ConnectionError.ServerUnreachable
 
 private fun rejectsOurCredentials(code: String?): Boolean =
     code == SessionResponse.CODE_NOT_PAIRED || code == SessionResponse.CODE_BAD_PROOF
@@ -500,12 +504,25 @@ class SatelliteConnectionManager
                     map + (id to newConnection(id, server))
                 }.getValue(id)
 
+        // The satellite is IPv4 end to end (its receiver and discovery bind AF_INET, as does the
+        // dish's UDP socket), so an IPv6 address is refused before any round trip or connection row,
+        // and a user who asked is told to use its IPv4 address.
+        private fun refusedAsIpv6(
+            server: DiscoveredServer,
+            intent: ConnectIntent,
+        ): Boolean {
+            if (!isIpv6Literal(server.ip)) return false
+            scope.launch { emitErrorIfUserInitiated(intent, ConnectionError.Ipv6Unsupported) }
+            return true
+        }
+
         fun connect(
             server: DiscoveredServer,
             intent: ConnectIntent = ConnectIntent.USER_INITIATED,
         ) {
             // Only user-initiated connects (which prompt) may open LAN sockets before the Android 17 grant.
             if (intent != ConnectIntent.USER_INITIATED && !isGranted(context)) return
+            if (refusedAsIpv6(server, intent)) return
             val id = satelliteConnectionIdFor(server)
             if (intent == ConnectIntent.USER_INITIATED) {
                 retryAttempts.remove(id)
@@ -569,6 +586,7 @@ class SatelliteConnectionManager
             server: DiscoveredServer,
             pin: String,
         ) {
+            if (refusedAsIpv6(server, ConnectIntent.USER_INITIATED)) return
             val id = satelliteConnectionIdFor(server)
             retryAttempts.remove(id)
             userDisconnected.remove(id)
@@ -612,6 +630,7 @@ class SatelliteConnectionManager
             server: DiscoveredServer,
             clientPin: String,
         ) {
+            if (refusedAsIpv6(server, ConnectIntent.USER_INITIATED)) return
             val id = satelliteConnectionIdFor(server)
             retryAttempts.remove(id)
             userDisconnected.remove(id)
@@ -1124,9 +1143,6 @@ class SatelliteConnectionManager
                     .getOrNull() ?: return
             if (resp.error == null) ifSessionCurrent(conn, live.session) { conn.adoptEpoch(resp.epoch) }
         }
-
-        private fun unreachableMessage(reply: HttpReply?): ConnectionError =
-            if (reply?.pinMismatch == true) ConnectionError.IdentityChanged else ConnectionError.ServerUnreachable
 
         private suspend fun failSession(
             conn: SatelliteConnection,

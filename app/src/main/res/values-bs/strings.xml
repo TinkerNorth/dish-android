@@ -318,6 +318,7 @@
     <string name="conn_error_repair_needed">Ovaj satelit više ne prepoznaje ovaj uređaj. Potrebno je ponovo upariti.</string>
     <string name="conn_error_identity_changed">Sigurnosni identitet ovog satelita se promijenio. Ako je ponovo instaliran, zaboravite ga ovdje i ponovo ga uparite.</string>
     <string name="conn_error_wire_failed">Satelit je prihvatio, ali veza kontrolera se nije otvorila. Pokušajte ponovo.</string>
+    <string name="conn_error_ipv6_unsupported">Satelit prihvata veze samo preko IPv4. Koristite njegovu IPv4 adresu (npr. 192.168.1.20) umjesto IPv6 adrese.</string>
     <string name="conn_error_satellite_update_required">Ovaj satelit je prestar za ovu aplikaciju. Ažurirajte Satellite na računaru koji prima.</string>
     <string name="conn_error_app_update_required">Ovaj satelit traži noviju verziju aplikacije. Ažurirajte Dish na ovom uređaju.</string>
     <string name="conn_error_approval_declined">Satelit je odbio zahtjev za uparivanje.</string>
@@ -330,6 +331,7 @@
     <string name="conn_error_title_repair_needed">%1$s više ne prepoznaje ovaj uređaj</string>
     <string name="conn_error_title_identity_changed">%1$s ima novi identitet</string>
     <string name="conn_error_title_wire_failed">Veza sa %1$s se nije otvorila</string>
+    <string name="conn_error_title_ipv6_unsupported">%1$s treba IPv4 adresu</string>
     <string name="conn_error_title_satellite_update_required">%1$s treba ažuriranje</string>
     <string name="conn_error_title_app_update_required">%1$s traži noviju verziju Disha</string>
     <string name="conn_error_title_approval_declined">%1$s je odbio uparivanje</string>

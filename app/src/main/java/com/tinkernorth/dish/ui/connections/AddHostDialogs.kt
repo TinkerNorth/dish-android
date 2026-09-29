@@ -34,7 +34,12 @@ private class AddSatelliteFields(
         context: Context,
         rejected: TypedSatelliteResult.Rejected,
     ) {
-        hostLayout.error = if (rejected.hostMissing) context.getString(R.string.add_satellite_error_host) else null
+        hostLayout.error =
+            when {
+                rejected.hostMissing -> context.getString(R.string.add_satellite_error_host)
+                rejected.hostIsIpv6 -> context.getString(R.string.conn_error_ipv6_unsupported)
+                else -> null
+            }
         httpsLayout.error = if (rejected.httpsPortInvalid) context.getString(R.string.add_satellite_error_port) else null
         udpLayout.error = if (rejected.udpPortInvalid) context.getString(R.string.add_satellite_error_port) else null
     }

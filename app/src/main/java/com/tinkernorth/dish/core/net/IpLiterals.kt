@@ -47,6 +47,17 @@ fun isPrivateHostLiteral(host: String): Boolean {
     return false
 }
 
+/**
+ * True for any IPv6 literal, bracketed or not, with or without a zone index ("fe80::1%wlan0"),
+ * including an IPv4-mapped one. The satellite is reachable over IPv4 only, so this names an
+ * address it can never be reached at.
+ */
+fun isIpv6Literal(host: String): Boolean {
+    val unbracketed = if (host.startsWith("[") && host.endsWith("]")) host.substring(1, host.length - 1) else host
+    val address = unbracketed.substringBefore('%')
+    return parseIpv6(address) != null
+}
+
 private fun parseIpv4(host: String): IntArray? {
     val parts = host.split('.')
     if (parts.size != IPV4_OCTETS) return null

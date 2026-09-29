@@ -3,6 +3,8 @@
 
 package com.tinkernorth.dish.ui.connections
 
+import com.tinkernorth.dish.core.net.isIpv6Literal
+
 private const val MIN_PORT = 1
 private const val MAX_PORT = 65535
 
@@ -23,6 +25,7 @@ internal sealed interface TypedSatelliteResult {
         val hostMissing: Boolean,
         val httpsPortInvalid: Boolean,
         val udpPortInvalid: Boolean,
+        val hostIsIpv6: Boolean,
     ) : TypedSatelliteResult
 }
 
@@ -35,11 +38,13 @@ internal fun parseTypedSatellite(
     val https = parsePort(httpsPort)
     val udp = parsePort(udpPort)
     val hostMissing = trimmedHost.isEmpty()
-    if (hostMissing || https == null || udp == null) {
+    val hostIsIpv6 = isIpv6Literal(trimmedHost)
+    if (hostMissing || hostIsIpv6 || https == null || udp == null) {
         return TypedSatelliteResult.Rejected(
             hostMissing = hostMissing,
             httpsPortInvalid = https == null,
             udpPortInvalid = udp == null,
+            hostIsIpv6 = hostIsIpv6,
         )
     }
     return TypedSatelliteResult.Accepted(TypedSatellite(trimmedHost, https, udp))

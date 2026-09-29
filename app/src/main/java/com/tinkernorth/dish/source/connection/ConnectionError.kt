@@ -15,6 +15,9 @@ sealed interface ConnectionError {
 
     data object WireFailed : ConnectionError
 
+    // The address is IPv6; the satellite and the dish's UDP socket speak IPv4 only.
+    data object Ipv6Unsupported : ConnectionError
+
     data object SatelliteUpdateRequired : ConnectionError
 
     data object AppUpdateRequired : ConnectionError

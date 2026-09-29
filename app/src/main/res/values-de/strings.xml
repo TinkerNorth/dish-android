@@ -317,6 +317,7 @@
     <string name="conn_error_repair_needed">Dieser Satellit erkennt dieses Gerät nicht mehr. Bitte neu koppeln.</string>
     <string name="conn_error_identity_changed">Die Sicherheitsidentität dieses Satelliten hat sich geändert. Wurde er neu installiert, entferne ihn hier und kopple ihn erneut.</string>
     <string name="conn_error_wire_failed">Der Satellit hat zugestimmt, aber die Controller-Verbindung ließ sich nicht öffnen. Versuche es erneut.</string>
+    <string name="conn_error_ipv6_unsupported">Der Satellit nimmt Verbindungen nur über IPv4 an. Verwende seine IPv4-Adresse (etwa 192.168.1.20) statt einer IPv6-Adresse.</string>
     <string name="conn_error_satellite_update_required">Dieser Satellit ist zu alt für diese App. Aktualisiere Satellite auf dem empfangenden Rechner.</string>
     <string name="conn_error_app_update_required">Dieser Satellit braucht eine neuere App-Version. Aktualisiere Dish auf diesem Gerät.</string>
     <string name="conn_error_approval_declined">Der Satellit hat die Kopplungsanfrage abgelehnt.</string>
@@ -329,6 +330,7 @@
     <string name="conn_error_title_repair_needed">%1$s erkennt dieses Gerät nicht mehr</string>
     <string name="conn_error_title_identity_changed">%1$s hat eine neue Identität</string>
     <string name="conn_error_title_wire_failed">Verbindung zu %1$s ließ sich nicht öffnen</string>
+    <string name="conn_error_title_ipv6_unsupported">%1$s braucht eine IPv4-Adresse</string>
     <string name="conn_error_title_satellite_update_required">%1$s braucht ein Update</string>
     <string name="conn_error_title_app_update_required">%1$s braucht eine neuere Dish-Version</string>
     <string name="conn_error_title_approval_declined">%1$s hat die Kopplung abgelehnt</string>

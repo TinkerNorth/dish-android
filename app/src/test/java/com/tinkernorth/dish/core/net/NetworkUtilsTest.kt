@@ -140,6 +140,22 @@ class NetworkUtilsTest {
     }
 
     @Test
+    fun `isIpv6Literal holds for every IPv6 literal, bracketed, zoned or IPv4-mapped`() {
+        val ipv6Hosts = listOf("fd00::5", "::1", "[fe80::1]", "fe80::1%wlan0", "::ffff:10.0.0.5", "2001:db8::1")
+        for (h in ipv6Hosts) {
+            assertTrue("expected $h to read as IPv6", isIpv6Literal(h))
+        }
+    }
+
+    @Test
+    fun `isIpv6Literal is false for an IPv4 literal, a hostname, a host with a port and a malformed literal`() {
+        val otherHosts = listOf("10.0.0.5", "[10.0.0.5]", "satellite.local", "10.0.0.5:9443", "", "fe80:::1", "%wlan0")
+        for (h in otherHosts) {
+            assertFalse("expected $h not to read as IPv6", isIpv6Literal(h))
+        }
+    }
+
+    @Test
     fun `parseServers empty array`() {
         assertEquals(emptyList<DiscoveredServer>(), parseServers("[]"))
     }

@@ -366,6 +366,7 @@
     <string name="conn_error_repair_needed">This satellite no longer recognizes this device. Re-pair needed.</string>
     <string name="conn_error_identity_changed">This satellite\'s security identity changed. If it was reinstalled, forget it here and pair again.</string>
     <string name="conn_error_wire_failed">The satellite accepted, but the controller link would not open. Try again.</string>
+    <string name="conn_error_ipv6_unsupported">The satellite only accepts connections over IPv4. Use its IPv4 address (such as 192.168.1.20) instead of an IPv6 one.</string>
     <string name="conn_error_satellite_update_required">This satellite is too old for this app. Update Satellite on the receiving machine.</string>
     <string name="conn_error_app_update_required">This satellite needs a newer app. Update Dish on this device.</string>
     <string name="conn_error_approval_declined">The satellite declined the pairing request.</string>
@@ -378,6 +379,7 @@
     <string name="conn_error_title_repair_needed">%1$s no longer knows this device</string>
     <string name="conn_error_title_identity_changed">%1$s has a new identity</string>
     <string name="conn_error_title_wire_failed">Couldn\'t open the link to %1$s</string>
+    <string name="conn_error_title_ipv6_unsupported">%1$s needs an IPv4 address</string>
     <string name="conn_error_title_satellite_update_required">%1$s needs an update</string>
     <string name="conn_error_title_app_update_required">%1$s needs a newer Dish</string>
     <string name="conn_error_title_approval_declined">%1$s declined the pairing</string>

@@ -320,6 +320,7 @@
     <string name="conn_error_repair_needed">Ce satellite ne reconnaît plus cet appareil. Un nouvel appairage est nécessaire.</string>
     <string name="conn_error_identity_changed">L\'identité de sécurité de ce satellite a changé. S\'il a été réinstallé, oubliez-le ici et appairez-le à nouveau.</string>
     <string name="conn_error_wire_failed">Le satellite a accepté, mais la liaison de la manette ne s\'est pas ouverte. Réessayez.</string>
+    <string name="conn_error_ipv6_unsupported">Le satellite n\'accepte que les connexions en IPv4. Utilisez son adresse IPv4 (par exemple 192.168.1.20) plutôt qu\'une adresse IPv6.</string>
     <string name="conn_error_satellite_update_required">Ce satellite est trop ancien pour cette appli. Mettez à jour Satellite sur la machine réceptrice.</string>
     <string name="conn_error_app_update_required">Ce satellite nécessite une version plus récente de l\'appli. Mettez à jour Dish sur cet appareil.</string>
     <string name="conn_error_approval_declined">Le satellite a refusé la demande d\'appairage.</string>
@@ -332,6 +333,7 @@
     <string name="conn_error_title_repair_needed">%1$s ne reconnaît plus cet appareil</string>
     <string name="conn_error_title_identity_changed">%1$s a une nouvelle identité</string>
     <string name="conn_error_title_wire_failed">Impossible d\'ouvrir la liaison avec %1$s</string>
+    <string name="conn_error_title_ipv6_unsupported">%1$s nécessite une adresse IPv4</string>
     <string name="conn_error_title_satellite_update_required">%1$s doit être mis à jour</string>
     <string name="conn_error_title_app_update_required">%1$s nécessite une version plus récente de Dish</string>
     <string name="conn_error_title_approval_declined">%1$s a refusé l\'appairage</string>
