@@ -88,7 +88,7 @@ The Kotlin → JNI → `sendto()` chain runs at gamepad polling rate
   takes its counter under the device and slot locks and is encrypted
   and sent after they are released, with only the turn held, which
   keeps the counters in order on the wire.
-- `IP_TOS = 0xB8` (DSCP EF) and `MSG_NOSIGNAL` stay set on every
+- `IP_TOS = 0xB8` (DSCP EF) and `MSG_DONTWAIT` stay set on every
   send.
 
 Anything that wants to ride the hot path lives in `hotpath/` (e.g.
