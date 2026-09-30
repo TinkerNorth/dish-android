@@ -624,7 +624,7 @@ class MoonlightConnectionManager
                     // Confirming trust is a pairing outcome and persists like one: a device that forgot
                     // a host the host still trusts is answered here without a PIN.
                     Log.i(TAG, "${host.address} already trusts this device; recording the pairing")
-                    rememberPaired(check.answering, paired = true)
+                    rememberPaired(check.answering, paired = true, answeredUniqueId = check.answering.uniqueId)
                     _events.emit(MoonlightConnectionEvent.Paired(check.answering))
                     true
                 } else {
@@ -647,14 +647,16 @@ class MoonlightConnectionManager
         }
 
         // The host with the uniqueid it answers with now, which is the machine a pairing proves,
-        // whoever answered at this address before; as it was, when it does not answer.
+        // whoever answered at this address before; with the one remembered, when it does not answer.
+        // The caller's copy may have been read before the last pairing named another machine.
         private fun answeringNow(
             host: MoonlightHost,
             line: CallLine,
         ): MoonlightHost {
             val answer = gateway.getHttpOn(line, serverInfoHttp(host.address, host.httpPort, deviceId))
             val answered = serverInfoIn(answer)?.uniqueId.orEmpty()
-            return if (answered.isEmpty()) host else host.copy(uniqueId = answered)
+            val remembered = store.get(host.id)?.uniqueId.orEmpty()
+            return host.copy(uniqueId = answered.ifEmpty { remembered })
         }
 
         /** Fetch the host's app list (empty when unreachable/unpaired). */
@@ -705,7 +707,7 @@ class MoonlightConnectionManager
             return phases.fold(
                 onSuccess = {
                     Log.i(TAG, "paired with ${host.name} at ${host.address}")
-                    rememberPaired(host, paired = true)
+                    rememberPaired(host, paired = true, answeredUniqueId = host.uniqueId)
                     _events.emit(MoonlightConnectionEvent.Paired(host))
                     true
                 },
@@ -1064,11 +1066,17 @@ class MoonlightConnectionManager
             rememberInterest(host)
         }
 
+        /**
+         * Write [host]'s record. Only a pairing names the machine, with [answeredUniqueId]: the one
+         * the host answered as when the pairing began. Every other write passes none and keeps the
+         * machine remembered, since a host held from before the last pairing still names the one before.
+         */
         private fun rememberPaired(
             host: MoonlightHost,
             appId: String = store.get(host.id)?.lastAppId.orEmpty(),
             appName: String = store.get(host.id)?.lastAppName.orEmpty(),
             paired: Boolean,
+            answeredUniqueId: String = "",
         ) {
             val known = store.get(host.id)
             store.put(
@@ -1078,8 +1086,7 @@ class MoonlightConnectionManager
                     address = host.address,
                     httpPort = host.httpPort,
                     httpsPort = host.httpsPort,
-                    // A host that was not asked this time is still the machine that answered before.
-                    uniqueId = host.uniqueId.ifEmpty { known?.uniqueId.orEmpty() },
+                    uniqueId = answeredUniqueId.ifEmpty { known?.uniqueId.orEmpty() },
                     lastAppId = appId,
                     lastAppName = appName,
                     emulatedType = rememberedEmulatedType(host.id),

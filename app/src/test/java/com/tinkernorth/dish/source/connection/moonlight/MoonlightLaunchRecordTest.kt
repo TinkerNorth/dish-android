@@ -1,0 +1,155 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+// Copyright (C) 2026 Dish contributors.
+
+package com.tinkernorth.dish.source.connection.moonlight
+
+import android.content.Context
+import android.content.SharedPreferences
+import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
+import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
+import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
+import com.tinkernorth.dish.repository.RememberedMoonlightRepository
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import java.net.DatagramSocket
+import java.net.InetAddress
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
+
+/**
+ * What a session that comes up writes about its host. The host is on loopback and answers the
+ * launch, the RTSP handshake and the control channel's handshake the way a real one does, so the
+ * session goes live through every step it takes against one.
+ */
+class MoonlightLaunchRecordTest {
+    private val loopback = InetAddress.getByName("127.0.0.1")
+    private val control = EnetHandshakeHost()
+    private val video = DatagramSocket(0, loopback)
+    private val audio = DatagramSocket(0, loopback)
+    private val rtsp = RtspHost(controlPort = control.port, videoPort = video.localPort, audioPort = audio.localPort)
+
+    // Sessions run on worker threads, as in the app: the RTSP and control handshakes block on sockets.
+    private val sessions = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val recorder = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+
+    private val rows = ConcurrentHashMap<String, RememberedMoonlight>()
+    private val entries = MutableStateFlow<List<RememberedMoonlight>>(emptyList())
+    private val host = MoonlightHost(name = "PC", address = "127.0.0.1")
+    private lateinit var manager: MoonlightConnectionManager
+
+    private fun reply(body: String) = MoonlightHttpGateway.Reply(status = 200, body = body)
+
+    @Before
+    fun setUp() {
+        val gateway = mockk<MoonlightHttpGateway>(relaxed = true)
+        answerEveryLineAlike(gateway)
+        every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns reply(REBUILT_INFO)
+        every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } returns reply(REBUILT_TRUSTING_INFO)
+        every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply(APP_LIST)
+        every { gateway.getHttps(match { it.contains("/launch") }, any()) } returns
+            reply("""<root status_code="200"><sessionUrl0>rtsp://127.0.0.1:${rtsp.port}</sessionUrl0><gamesession>1</gamesession></root>""")
+        every { gateway.getHttps(match { it.contains("/cancel") }, any()) } returns reply(CANCELLED)
+
+        val store = mockk<RememberedMoonlightRepository>(relaxed = true)
+        every { store.get(any()) } answers { rows[firstArg<String>()] }
+        every { store.all() } answers { rows.values.toList() }
+        every { store.entries } returns entries
+        every { store.put(any<RememberedMoonlight>()) } answers {
+            val row = firstArg<RememberedMoonlight>()
+            rows[row.id] = row
+            entries.value = rows.values.toList()
+        }
+
+        manager =
+            MoonlightConnectionManager(
+                context = contextWithADeviceId(),
+                scope = sessions,
+                ioDispatcher = Dispatchers.IO,
+                discovery = mockk(relaxed = true),
+                gateway = gateway,
+                identity = mockk<MoonlightIdentity>(relaxed = true),
+                store = store,
+            )
+    }
+
+    @After
+    fun tearDown() {
+        sessions.cancel()
+        recorder.cancel()
+        rtsp.close()
+        control.close()
+        video.close()
+        audio.close()
+    }
+
+    private fun contextWithADeviceId(): Context {
+        val prefs = mockk<SharedPreferences>(relaxed = true)
+        every { prefs.getString("uniqueid", null) } returns "7b5d0738cbb54d3e"
+        val context = mockk<Context>(relaxed = true)
+        every { context.getSharedPreferences(any(), any()) } returns prefs
+        return context
+    }
+
+    // MOON-D6. "Pair again" on a host reported as replaced records the machine that answers now. The
+    // session that followed wrote the machine before back over it, from the host its binding had held
+    // since before the pairing, and the next time the host was asked it read as replaced again.
+    @Test
+    fun `a session on a host paired again keeps the uniqueid the pairing recorded`() {
+        rows[host.id] = RememberedMoonlight(id = host.id, name = "PC", address = host.address, uniqueId = "host-1", paired = true)
+        val seen = recordEvents()
+        manager.applyDesired(mapOf(host.id to listOf(PAD)))
+        assertTrue("the host is reported as replaced", within(WAIT_MS) { seen.any { it is MoonlightConnectionEvent.HostReplaced } })
+
+        val pairedAgain = runBlocking { manager.pairHost(manager.rememberedHost(host.id)!!) }
+        manager.retrySessions()
+
+        assertTrue(pairedAgain)
+        assertTrue("the session comes up", within(WAIT_MS) { rows[host.id]?.lastAppId == "1" })
+        assertEquals("host-2", rows.getValue(host.id).uniqueId)
+    }
+
+    private fun recordEvents(): List<MoonlightConnectionEvent> {
+        val seen = CopyOnWriteArrayList<MoonlightConnectionEvent>()
+        manager.events
+            .onEach(seen::add)
+            .launchIn(recorder)
+        return seen
+    }
+
+    private fun within(
+        millis: Long,
+        holds: () -> Boolean,
+    ): Boolean {
+        val deadline = System.currentTimeMillis() + millis
+        while (!holds() && System.currentTimeMillis() < deadline) Thread.sleep(POLL_MS)
+        return holds()
+    }
+
+    private companion object {
+        const val WAIT_MS = 10_000L
+        const val POLL_MS = 10L
+        val PAD = MoonlightPadRequest(slotId = "a", emulatedType = 1, capabilities = 0x03, supportedButtons = 0xFFFF)
+
+        // The machine now behind the address, which still trusts this device.
+        const val REBUILT_INFO =
+            """<root status_code="200"><hostname>PC</hostname><uniqueid>host-2</uniqueid><PairStatus>0</PairStatus></root>"""
+        const val REBUILT_TRUSTING_INFO =
+            """<root status_code="200"><hostname>PC</hostname><uniqueid>host-2</uniqueid><PairStatus>1</PairStatus>
+               <currentgame>0</currentgame></root>"""
+        const val APP_LIST = """<root status_code="200"><App><AppTitle>Desktop</AppTitle><ID>1</ID></App></root>"""
+        const val CANCELLED = """<root status_code="200"><cancel>1</cancel></root>"""
+    }
+}

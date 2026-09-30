@@ -704,6 +704,20 @@ class MoonlightTrustFlowTest {
             assertEquals("host-1", rows.getValue(host.id).uniqueId)
         }
 
+    // MOON-D6. A screen hands over the host as it read it, which can be from before the last pairing
+    // recorded another machine; only the host's own answer may change which machine is remembered.
+    @Test
+    fun `a pairing that cannot ask the host its uniqueid keeps the one remembered over the one it is handed`() =
+        runTest(dispatcher) {
+            store.put(RememberedMoonlight(id = host.id, name = "PC", address = host.address, uniqueId = "host-2", paired = true))
+            every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns unreachable()
+
+            manager.pairHost(host.copy(uniqueId = "host-1"))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals("host-2", rows.getValue(host.id).uniqueId)
+        }
+
     @Test
     fun `a host that will not answer mutual TLS has lost trust once it was paired`() =
         runTest(dispatcher) {
