@@ -221,7 +221,7 @@ class MoonlightPairFlowTest {
             assertNotNull("a completed pairing has to persist", record)
             assertTrue(record!!.paired)
             assertEquals(host.address, record.address)
-            // Phase 5 is the first mutual-TLS call ever made to this host, and it comes last.
+            // Phase 5 is the pairing's own call over mutual TLS, and it comes last.
             verify { gateway.getHttpsOn(any(), match { it.contains("/pair") && it.contains("pairchallenge") }, host.id) }
             watching.cancel()
         }
@@ -308,6 +308,26 @@ class MoonlightPairFlowTest {
             watching.cancel()
         }
 
+    // B5. A host that refuses a phase can say why. Sunshine refuses a new pairing while it still holds
+    // the last one for this device, and saying only that no certificate came back hid that reason.
+    @Test
+    fun `a phase the host refuses in its own words is reported in them`() =
+        runTest(dispatcher) {
+            every { gateway.getHttpOn(any(), match { it.contains("getservercert") }, any()) } returns
+                reply("""<root status_code="409" status_message="$PAIRING_ALREADY_HELD"/>""")
+            val seen = mutableListOf<MoonlightConnectionEvent>()
+            val collector = launch { manager.events.toList(seen) }
+            dispatcher.scheduler.runCurrent()
+
+            assertFalse(manager.pairHost(host))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            val failure = seen.filterIsInstance<MoonlightConnectionEvent.PairingFailed>().single()
+            assertTrue(failure.reason, failure.reason.contains("phase 1"))
+            assertTrue(failure.reason, failure.reason.contains(PAIRING_ALREADY_HELD))
+            collector.cancel()
+        }
+
     // B5. Phase 5 is the first call over mutual TLS and the one that proves the host accepts the
     // certificate phases 1 to 4 agreed on; a host that does not confirm it has not paired with
     // this device, whatever phase 4 said. It used to be recorded as paired all the same.
@@ -331,7 +351,7 @@ class MoonlightPairFlowTest {
         }
 
     // B5. A Cancel lands while phase 1 waits on the human, in a read only its socket closing can
-    // end. Waiting it out kept the host's pairing open for two minutes after the user had left,
+    // end. Waiting it out held this side of the pairing for two minutes after the user had left,
     // then reported the timeout as the host refusing the PIN.
     @Test
     fun `a Cancel ends a pairing that is waiting for its PIN at once, and reports no outcome`() {
@@ -500,6 +520,7 @@ class MoonlightPairFlowTest {
         // What the gateway hands back for a request whose socket closed before the host answered.
         val UNANSWERED = MoonlightHttpGateway.Reply(status = 0, body = "")
         const val TRUSTED_INFO = """<root status_code="200"><hostname>PC</hostname><PairStatus>1</PairStatus></root>"""
+        const val PAIRING_ALREADY_HELD = "A pairing session with this uniqueid already exists"
 
         // Minted once for the whole class: RSA-2048 keygen is the slowest thing here and
         // JUnit builds a fresh test instance per method.

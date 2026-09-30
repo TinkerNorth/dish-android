@@ -666,7 +666,9 @@ class MoonlightConnectionManager
 
         /**
          * Runs the 5-phase pairing; phase 1 blocks until the user enters the PIN. A Cancel hangs up
-         * whichever phase is on the line, so the host drops its half of the pairing too.
+         * whichever phase is on the line and leaves nothing written on this side. The host keeps its
+         * half: Wolf still takes a PIN typed later and refuses the next phase 1 once as out of order,
+         * and Sunshine holds the pending pairing a while and refuses a new one until it lapses.
          */
         private suspend fun pair(host: MoonlightHost): Boolean {
             val pin = randomPin()
@@ -706,7 +708,7 @@ class MoonlightConnectionManager
                     MoonlightHttpGateway.PAIR_PIN_TIMEOUT_MS,
                 )
             val cert =
-                required(parsePairReply(p1.body)?.plainCert) { "phase 1 returned no host certificate (HTTP ${p1.status})" }
+                required(parsePairReply(p1.body)?.plainCert) { "phase 1 returned no host certificate (${hostSaid(p1)})" }
             pairing.onPhase1(
                 String(
                     com.tinkernorth.dish.core.net
@@ -716,15 +718,17 @@ class MoonlightConnectionManager
             )
 
             val p2 = gateway.getHttpOn(line, pairHttp(host.address, host.httpPort, pairing.phase2Params(deviceId)))
-            val challenge = required(parsePairReply(p2.body)?.challengeResponse) { "phase 2 returned no challenge response" }
+            val challenge =
+                required(parsePairReply(p2.body)?.challengeResponse) { "phase 2 returned no challenge response (${hostSaid(p2)})" }
             verified(pairing.onPhase2(challenge)) { "phase 2 challenge did not verify (wrong PIN)" }
 
             val p3 = gateway.getHttpOn(line, pairHttp(host.address, host.httpPort, pairing.phase3Params(deviceId)))
-            val secret = required(parsePairReply(p3.body)?.pairingSecret) { "phase 3 returned no pairing secret" }
+            val secret =
+                required(parsePairReply(p3.body)?.pairingSecret) { "phase 3 returned no pairing secret (${hostSaid(p3)})" }
             verified(pairing.onPhase3(secret)) { "phase 3 signature did not verify" }
 
             val p4 = gateway.getHttpOn(line, pairHttp(host.address, host.httpPort, pairing.phase4Params(deviceId)))
-            verified(parsePairReply(p4.body)?.paired == true) { "phase 4 did not confirm the pairing" }
+            verified(parsePairReply(p4.body)?.paired == true) { "phase 4 did not confirm the pairing (${hostSaid(p4)})" }
 
             // Phases 1-4 proved the peer holds the PIN-derived key and signed with
             // the certificate it presented, which outranks the pin this would keep.
@@ -733,7 +737,13 @@ class MoonlightConnectionManager
 
             // Phase 5 (HTTPS): confirm the client-cert-authenticated channel.
             val p5 = gateway.getHttpsOn(line, pairHttps(host.address, host.httpsPort, pairing.phase5Params(deviceId)), host.id)
-            verified(parsePairReply(p5.body)?.paired == true) { "phase 5 did not confirm the pairing over mutual TLS (HTTP ${p5.status})" }
+            verified(parsePairReply(p5.body)?.paired == true) { "phase 5 did not confirm the pairing over mutual TLS (${hostSaid(p5)})" }
+        }
+
+        // A phase reply as the host gave it: its status line, and its own words when it had any.
+        private fun hostSaid(reply: MoonlightHttpGateway.Reply): String {
+            val words = parseStatus(reply.body)?.message.orEmpty()
+            return if (words.isBlank()) "HTTP ${reply.status}" else "HTTP ${reply.status}: $words"
         }
 
         // A phase's answer that must be there; the host refusing to give it ends the pairing.
