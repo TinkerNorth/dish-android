@@ -187,6 +187,15 @@ data class MoonlightPadRequest(
     val supportedButtons: Int,
 )
 
+// What a host says about itself in a /serverinfo reply, when it answered one.
+private fun serverInfoIn(reply: MoonlightHttpGateway.Reply): ServerInfo? = reply.takeIf { it.ok }?.let { parseServerInfo(it.body) }
+
+// A phase reply as the host gave it: its status line, and its own words when it had any.
+private fun hostSaid(reply: MoonlightHttpGateway.Reply): String {
+    val words = parseStatus(reply.body)?.message.orEmpty()
+    return if (words.isBlank()) "HTTP ${reply.status}" else "HTTP ${reply.status}: $words"
+}
+
 /**
  * Orchestrates the Moonlight host path: discovery, PIN pairing, app launch, the
  * RTSP stream setup, and the live control session. The sibling of
@@ -349,18 +358,12 @@ class MoonlightConnectionManager
 
         // Plain HTTP answers any caller, paired or not, and names the machine behind the address.
         private fun plainServerInfo(host: MoonlightHost): ServerInfo? =
-            gateway
-                .getHttp(serverInfoHttp(host.address, host.httpPort, deviceId))
-                .takeIf { it.ok }
-                ?.let { parseServerInfo(it.body) }
+            serverInfoIn(gateway.getHttp(serverInfoHttp(host.address, host.httpPort, deviceId)))
 
         // Plain HTTP on the default port: a host that has never been paired will not talk HTTPS
         // to this client yet, and the ports it really listens on come back in the answer.
         private suspend fun probeServerInfo(address: String): ServerInfo? =
-            gateway
-                .getHttp(serverInfoHttp(address, MoonlightHost.DEFAULT_HTTP_PORT, deviceId))
-                .takeIf { it.ok }
-                ?.let { parseServerInfo(it.body) }
+            serverInfoIn(gateway.getHttp(serverInfoHttp(address, MoonlightHost.DEFAULT_HTTP_PORT, deviceId)))
 
         // A host that answers with no hostname is shown by the address that was typed, which is
         // the only name the user has for it.
@@ -614,26 +617,43 @@ class MoonlightConnectionManager
         suspend fun pairHost(host: MoonlightHost): Boolean =
             withContext(ioDispatcher) {
                 Log.i(TAG, "pair requested for ${host.name} at ${host.address} (${host.id})")
-                val answering = answeringNow(host)
-                val trusted = isPaired(answering)
-                // A Cancel that landed while the host was being asked ends the pairing before it records or shows anything.
-                ensureActive()
-                if (trusted) {
+                // A host that does not answer holds these questions to their whole budget. A Cancel hangs
+                // them up and ends the pairing before it records or shows anything.
+                val check = hangingUpOnCancel { line -> checkTrust(host, line) }
+                if (check.trusted) {
                     // Confirming trust is a pairing outcome and persists like one: a device that forgot
                     // a host the host still trusts is answered here without a PIN.
                     Log.i(TAG, "${host.address} already trusts this device; recording the pairing")
-                    rememberPaired(answering, paired = true)
-                    _events.emit(MoonlightConnectionEvent.Paired(answering))
+                    rememberPaired(check.answering, paired = true)
+                    _events.emit(MoonlightConnectionEvent.Paired(check.answering))
                     true
                 } else {
-                    pair(answering)
+                    pair(check.answering)
                 }
             }
 
+        // Who answers at a host's address as a pairing starts, and whether that machine already trusts this device.
+        private class TrustCheck(
+            val answering: MoonlightHost,
+            val trusted: Boolean,
+        )
+
+        private fun checkTrust(
+            host: MoonlightHost,
+            line: CallLine,
+        ): TrustCheck {
+            val answering = answeringNow(host, line)
+            return TrustCheck(answering, isPaired(answering, line))
+        }
+
         // The host with the uniqueid it answers with now, which is the machine a pairing proves,
         // whoever answered at this address before; as it was, when it does not answer.
-        private fun answeringNow(host: MoonlightHost): MoonlightHost {
-            val answered = plainServerInfo(host)?.uniqueId.orEmpty()
+        private fun answeringNow(
+            host: MoonlightHost,
+            line: CallLine,
+        ): MoonlightHost {
+            val answer = gateway.getHttpOn(line, serverInfoHttp(host.address, host.httpPort, deviceId))
+            val answered = serverInfoIn(answer)?.uniqueId.orEmpty()
             return if (answered.isEmpty()) host else host.copy(uniqueId = answered)
         }
 
@@ -646,8 +666,11 @@ class MoonlightConnectionManager
             return parseAppList(reply.body)
         }
 
-        private fun isPaired(host: MoonlightHost): Boolean {
-            val reply = gateway.getHttps(serverInfoHttps(host.address, host.httpsPort, deviceId), host.id)
+        private fun isPaired(
+            host: MoonlightHost,
+            line: CallLine,
+        ): Boolean {
+            val reply = gateway.getHttpsOn(line, serverInfoHttps(host.address, host.httpsPort, deviceId), host.id)
             if (!reply.ok) {
                 Log.i(TAG, "${host.address} did not answer mutual TLS (HTTP ${reply.status}): a PIN is needed")
                 return false
@@ -738,12 +761,6 @@ class MoonlightConnectionManager
             // Phase 5 (HTTPS): confirm the client-cert-authenticated channel.
             val p5 = gateway.getHttpsOn(line, pairHttps(host.address, host.httpsPort, pairing.phase5Params(deviceId)), host.id)
             verified(parsePairReply(p5.body)?.paired == true) { "phase 5 did not confirm the pairing over mutual TLS (${hostSaid(p5)})" }
-        }
-
-        // A phase reply as the host gave it: its status line, and its own words when it had any.
-        private fun hostSaid(reply: MoonlightHttpGateway.Reply): String {
-            val words = parseStatus(reply.body)?.message.orEmpty()
-            return if (words.isBlank()) "HTTP ${reply.status}" else "HTTP ${reply.status}: $words"
         }
 
         // A phase's answer that must be there; the host refusing to give it ends the pairing.

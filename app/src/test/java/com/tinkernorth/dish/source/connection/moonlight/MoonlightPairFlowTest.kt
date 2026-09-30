@@ -157,6 +157,7 @@ class MoonlightPairFlowTest {
         every { context.getSharedPreferences(any(), any()) } returns prefs
 
         gateway = mockk(relaxed = true)
+        answerEveryLineAlike(gateway)
         // Nothing is paired yet, so the shortcut that confirms standing trust must not fire.
         every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } returns UNANSWERED
         every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns
@@ -403,6 +404,32 @@ class MoonlightPairFlowTest {
         assertTrue(seen.none { it is MoonlightConnectionEvent.PairingPinReady })
     }
 
+    // B5. The questions a pairing starts with are calls a host that does not answer holds to their
+    // whole budget, so a Cancel has to end them as it ends phase 1.
+    @Test
+    fun `a Cancel ends a pairing that is asking whether the host trusts this device at once`() {
+        val trustCheck = holdTrustCheck()
+        val onWorkers = managerOnWorkerThreads()
+        val pairing = watcher.launch { onWorkers.pairHost(host) }
+        assertTrue("the host is being asked", trustCheck.awaitWaiting())
+
+        pairing.cancel()
+
+        assertTrue("the pairing ends without waiting for the answer", endsWithin(pairing, STOP_MS))
+    }
+
+    @Test
+    fun `a Cancel ends a pairing that is asking who answers at the host's address at once`() {
+        val identityCheck = holdIdentityCheck()
+        val onWorkers = managerOnWorkerThreads()
+        val pairing = watcher.launch { onWorkers.pairHost(host) }
+        assertTrue("the host is being asked", identityCheck.awaitWaiting())
+
+        pairing.cancel()
+
+        assertTrue("the pairing ends without waiting for the answer", endsWithin(pairing, STOP_MS))
+    }
+
     @Test
     fun `a pairing cancelled while it asks whether the host trusts this device records no trust`() {
         val trustCheck = holdTrustCheck()
@@ -462,9 +489,22 @@ class MoonlightPairFlowTest {
         return phaseOne
     }
 
+    // The host holds the question on whichever line it is asked; one of its own is a line nobody can hang up.
+    private fun holdIdentityCheck(): HeldRead {
+        val identityCheck = HeldRead().also(heldReads::add)
+        every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } answers { identityCheck.read(firstArg(), CallLine()) }
+        every { gateway.getHttpOn(any(), match { it.contains("/serverinfo") }, any()) } answers {
+            identityCheck.read(secondArg(), firstArg())
+        }
+        return identityCheck
+    }
+
     private fun holdTrustCheck(): HeldRead {
         val trustCheck = HeldRead().also(heldReads::add)
         every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } answers { trustCheck.read(firstArg(), CallLine()) }
+        every { gateway.getHttpsOn(any(), match { it.contains("/serverinfo") }, any()) } answers {
+            trustCheck.read(secondArg(), firstArg())
+        }
         return trustCheck
     }
 

@@ -90,6 +90,7 @@ class MoonlightTrustFlowTest {
         every { context.getSharedPreferences(any(), any()) } returns prefs
 
         gateway = mockk(relaxed = true)
+        answerEveryLineAlike(gateway)
         every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns reply(pairedInfo)
         every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } returns reply(pairedInfo)
         every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply(appList)
