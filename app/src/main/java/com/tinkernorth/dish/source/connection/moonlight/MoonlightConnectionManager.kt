@@ -6,6 +6,7 @@ package com.tinkernorth.dish.source.connection.moonlight
 import android.util.Log
 import androidx.core.content.edit
 import com.tinkernorth.dish.core.net.bytesToHex
+import com.tinkernorth.dish.core.net.hexToBytes
 import com.tinkernorth.dish.core.net.moonlight.AUTO
 import com.tinkernorth.dish.core.net.moonlight.BITS_READ_AT_ARRIVAL
 import com.tinkernorth.dish.core.net.moonlight.MoonlightApp
@@ -26,6 +27,7 @@ import com.tinkernorth.dish.core.net.moonlight.moonlightHostIdFor
 import com.tinkernorth.dish.core.net.moonlight.pairHttp
 import com.tinkernorth.dish.core.net.moonlight.pairHttps
 import com.tinkernorth.dish.core.net.moonlight.parseAppList
+import com.tinkernorth.dish.core.net.moonlight.parseMoonlightCert
 import com.tinkernorth.dish.core.net.moonlight.parsePairReply
 import com.tinkernorth.dish.core.net.moonlight.parseServerInfo
 import com.tinkernorth.dish.core.net.moonlight.parseStatus
@@ -54,6 +56,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.security.cert.X509Certificate
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -698,10 +701,11 @@ class MoonlightConnectionManager
         ) : Exception(reason)
 
         /**
-         * Runs the 5-phase pairing; phase 1 blocks until the user enters the PIN. A Cancel hangs up
-         * whichever phase is on the line and leaves nothing written on this side. The host keeps its
-         * half: Wolf still takes a PIN typed later and refuses the next phase 1 once as out of order,
-         * and Sunshine holds the pending pairing a while and refuses a new one until it lapses.
+         * Runs the 5-phase pairing; phase 1 blocks until the user enters the PIN. Nothing is written on
+         * this side, the pin included, until phase 5 has confirmed it, so a Cancel, which hangs up
+         * whichever phase is on the line, leaves this side as it was. The host keeps its half: Wolf
+         * still takes a PIN typed later and refuses the next phase 1 once as out of order, and Sunshine
+         * holds the pending pairing a while and refuses a new one until it lapses.
          */
         private suspend fun pair(host: MoonlightHost): Boolean {
             val pin = randomPin()
@@ -713,8 +717,9 @@ class MoonlightConnectionManager
             // written: the hung-up phase would otherwise read as "the host did not accept the PIN".
             currentCoroutineContext().ensureActive()
             return phases.fold(
-                onSuccess = {
+                onSuccess = { proven ->
                     Log.i(TAG, "paired with ${host.name} at ${host.address}")
+                    gateway.pinProven(host.id, proven)
                     rememberPaired(host, paired = true, answeredUniqueId = host.uniqueId)
                     _events.emit(MoonlightConnectionEvent.Paired(host))
                     true
@@ -727,11 +732,12 @@ class MoonlightConnectionManager
         }
 
         // Phases 1 to 5 in order, on one line; any phase the host cuts short throws PairingRefused.
+        // Hands back the host certificate the pairing proved.
         private fun runPairingPhases(
             host: MoonlightHost,
             pairing: MoonlightPairing,
             line: CallLine,
-        ) {
+        ): X509Certificate {
             // Phase 1 (HTTP): the host prompts for the PIN and blocks until
             // entered, so this one waits on a human rather than on the network.
             val p1 =
@@ -742,13 +748,8 @@ class MoonlightConnectionManager
                 )
             val cert =
                 required(parsePairReply(p1.body)?.plainCert) { "phase 1 returned no host certificate (${hostSaid(p1)})" }
-            pairing.onPhase1(
-                String(
-                    com.tinkernorth.dish.core.net
-                        .hexToBytes(cert),
-                    Charsets.US_ASCII,
-                ),
-            )
+            val certificatePem = String(hexToBytes(cert), Charsets.US_ASCII)
+            pairing.onPhase1(certificatePem)
 
             val p2 = gateway.getHttpOn(line, pairHttp(host.address, host.httpPort, pairing.phase2Params(deviceId)))
             val challenge =
@@ -763,14 +764,14 @@ class MoonlightConnectionManager
             val p4 = gateway.getHttpOn(line, pairHttp(host.address, host.httpPort, pairing.phase4Params(deviceId)))
             verified(parsePairReply(p4.body)?.paired == true) { "phase 4 did not confirm the pairing (${hostSaid(p4)})" }
 
-            // Phases 1-4 proved the peer holds the PIN-derived key and signed with
-            // the certificate it presented, which outranks the pin this would keep.
-            // Without re-arming, a rebuilt host is refused with no way past it.
-            gateway.forgetPin(host.id)
-
-            // Phase 5 (HTTPS): confirm the client-cert-authenticated channel.
-            val p5 = gateway.getHttpsOn(line, pairHttps(host.address, host.httpsPort, pairing.phase5Params(deviceId)), host.id)
+            // Phases 1-4 proved the peer holds the PIN-derived key and signed with the certificate it
+            // presented. Phase 5 (HTTPS) trusts that certificate and no other, whatever is pinned: the
+            // pin of a host since rebuilt would refuse it, and any other certificate is not the host
+            // that paired.
+            val proven = parseMoonlightCert(certificatePem)
+            val p5 = gateway.getHttpsTrustingOn(line, pairHttps(host.address, host.httpsPort, pairing.phase5Params(deviceId)), proven)
             verified(parsePairReply(p5.body)?.paired == true) { "phase 5 did not confirm the pairing over mutual TLS (${hostSaid(p5)})" }
+            return proven
         }
 
         // A phase's answer that must be there; the host refusing to give it ends the pairing.

@@ -160,6 +160,51 @@ class MoonlightHttpGatewayTest {
         assertEquals(sha256FingerprintHex(hostHeld.certificate.encoded), pinned[HOST_ID])
     }
 
+    // A pairing's fifth phase trusts the certificate its first four proved, and only that one.
+    @Test
+    fun `a call trusting the certificate a pairing proved reaches the host that presents it, and pins nothing`() {
+        val base = start()
+
+        val reply = gateway().getHttpsTrustingOn(CallLine(), "$base/pair?phrase=pairchallenge", hostHeld.certificate)
+
+        assertEquals(200, reply.status)
+        assertTrue(pinned.isEmpty())
+    }
+
+    // Every Sunshine host names itself alike, so the name on a certificate proves nothing: the key does.
+    @Test
+    fun `a call trusting the certificate a pairing proved is refused by a host that presents another`() {
+        val base = start(impostorHeld)
+
+        val reply = gateway().getHttpsTrustingOn(CallLine(), "$base/pair?phrase=pairchallenge", hostHeld.certificate)
+
+        assertEquals(0, reply.status)
+        assertTrue("a refused host must never see the request", host.headOrNull().isNullOrEmpty())
+        assertTrue(pinned.isEmpty())
+    }
+
+    // The pin of a host since rebuilt is what used to refuse the pairing that replaces it.
+    @Test
+    fun `a call trusting the certificate a pairing proved does not answer to the pin`() {
+        val base = start()
+        val oldPin = sha256FingerprintHex(impostorHeld.certificate.encoded)
+        pinned[HOST_ID] = oldPin
+
+        val reply = gateway().getHttpsTrustingOn(CallLine(), "$base/pair?phrase=pairchallenge", hostHeld.certificate)
+
+        assertEquals(200, reply.status)
+        assertEquals(oldPin, pinned[HOST_ID])
+    }
+
+    @Test
+    fun `pinning the certificate a pairing proved replaces the pin held`() {
+        pinned[HOST_ID] = sha256FingerprintHex(impostorHeld.certificate.encoded)
+
+        gateway().pinProven(HOST_ID, hostHeld.certificate)
+
+        assertEquals(sha256FingerprintHex(hostHeld.certificate.encoded), pinned[HOST_ID])
+    }
+
     /**
      * A loopback TLS host that requires a client certificate, answers every
      * request the same way, and records what it saw.

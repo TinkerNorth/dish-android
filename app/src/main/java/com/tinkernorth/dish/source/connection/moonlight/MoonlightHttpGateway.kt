@@ -8,9 +8,11 @@ import com.tinkernorth.dish.core.net.TofuTrustManager
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
 import com.tinkernorth.dish.core.net.moonlight.parseMoonlightCert
 import com.tinkernorth.dish.repository.SatellitePinRepository
+import com.tinkernorth.dish.repository.sha256FingerprintHex
 import java.net.Socket
 import java.security.KeyStore
 import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import javax.inject.Inject
 import javax.inject.Singleton
 import javax.net.ssl.KeyManager
@@ -19,6 +21,7 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManager
+import javax.net.ssl.TrustManagerFactory
 
 /**
  * Opens the Moonlight HTTP (47989, plaintext) and HTTPS (47984, mutual-TLS)
@@ -120,14 +123,40 @@ class MoonlightHttpGateway
             hostId: String,
         ): Reply =
             MoonlightHttp11Client(HTTPS_TIMEOUT_MS, HTTPS_TIMEOUT_MS) { socket, host, port ->
-                openTls(socket, host, port, hostId)
+                openTls(socket, host, port, arrayOf(TofuTrustManager(hostId, pins)))
             }.get(urlString, line = line)
+
+        /**
+         * [getHttpsOn], trusting [certificate] and nothing else, whatever is pinned: the certificate
+         * the first four phases of a pairing proved, for its fifth. The platform's own trust manager
+         * checks it, with that certificate as its only anchor, and nothing is pinned.
+         */
+        internal fun getHttpsTrustingOn(
+            line: CallLine,
+            urlString: String,
+            certificate: X509Certificate,
+        ): Reply =
+            MoonlightHttp11Client(HTTPS_TIMEOUT_MS, HTTPS_TIMEOUT_MS) { socket, host, port ->
+                openTls(socket, host, port, trustingOnly(certificate))
+            }.get(urlString, line = line)
+
+        /**
+         * Pin [certificate] for [hostId] in place of whatever was pinned: a pairing proved it, which
+         * outranks a pin written for a host since rebuilt.
+         */
+        fun pinProven(
+            hostId: String,
+            certificate: X509Certificate,
+        ) {
+            Log.i(TAG, "pinning the certificate a pairing proved for $hostId")
+            pins.pin(hostId, sha256FingerprintHex(certificate.encoded))
+        }
 
         /**
          * Drop the pinned certificate for [hostId], re-arming TOFU for it. Lives
          * here because the thing that reads a pin should be the thing that clears
-         * one. Both callers are moments the user authorised: forgetting the host,
-         * and a PIN-confirmed pairing, which is a stronger claim than the pin.
+         * one. Both callers are moments that settle which machine the host is:
+         * forgetting the host, and folding two records of it into one.
          */
         fun forgetPin(hostId: String) {
             if (pins.pinnedFingerprint(hostId) == null) return
@@ -161,10 +190,10 @@ class MoonlightHttpGateway
 
         /**
          * Hands back a handshaken TLS socket that presents the dish's client
-         * certificate, or throws once the host's certificate fails the pin
-         * ([TofuTrustManager] decides inside the handshake, so a mismatch never
-         * completes one). Throwing is the rejection: [MoonlightHttp11Client]
-         * never writes a request through a socket it did not get back.
+         * certificate, or throws once the host's certificate fails [trust]
+         * (which decides inside the handshake, so a mismatch never completes
+         * one). Throwing is the rejection: [MoonlightHttp11Client] never writes
+         * a request through a socket it did not get back.
          *
          * A FRESH SSLContext PER CONNECTION, and that is the whole point of
          * building it here rather than once. An SSLContext owns the client
@@ -186,19 +215,32 @@ class MoonlightHttpGateway
             socket: Socket,
             host: String,
             port: Int,
-            hostId: String,
+            trust: Array<TrustManager>,
         ): Socket {
-            val tls = mutualTlsFactory(hostId).createSocket(socket, host, port, true) as SSLSocket
+            val tls = mutualTlsFactory(trust).createSocket(socket, host, port, true) as SSLSocket
             tls.startHandshake()
             return tls
         }
 
         /** A context of its own, and with it a session cache that is always empty. */
-        private fun mutualTlsFactory(hostId: String): SSLSocketFactory =
+        private fun mutualTlsFactory(trust: Array<TrustManager>): SSLSocketFactory =
             SSLContext
                 .getInstance("TLS")
-                .apply { init(clientCredential, arrayOf<TrustManager>(TofuTrustManager(hostId, pins)), SecureRandom()) }
+                .apply { init(clientCredential, trust, SecureRandom()) }
                 .socketFactory
+
+        // The platform's trust manager, with [certificate] as its only anchor.
+        private fun trustingOnly(certificate: X509Certificate): Array<TrustManager> {
+            val anchors =
+                KeyStore.getInstance(KeyStore.getDefaultType()).apply {
+                    load(null)
+                    setCertificateEntry(PROVEN_ALIAS, certificate)
+                }
+            return TrustManagerFactory
+                .getInstance(TrustManagerFactory.getDefaultAlgorithm())
+                .apply { init(anchors) }
+                .trustManagers
+        }
 
         // Present the client certificate; the host authorises by it after pairing.
         private fun clientKeyManagers(): Array<KeyManager> {
@@ -223,6 +265,7 @@ class MoonlightHttpGateway
         companion object {
             private const val TAG = "MoonlightHttpGateway"
             private const val TIMEOUT_MS = 5_000
+            private const val PROVEN_ALIAS = "proven"
 
             /**
              * The HTTPS half's budget. Wider than the plaintext one because every

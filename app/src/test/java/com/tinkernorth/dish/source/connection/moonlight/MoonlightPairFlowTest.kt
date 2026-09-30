@@ -10,6 +10,7 @@ import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
 import com.tinkernorth.dish.core.net.moonlight.MoonlightReferenceServer
 import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
+import com.tinkernorth.dish.core.net.moonlight.parseMoonlightCert
 import com.tinkernorth.dish.core.net.moonlight.throwawayIdentity
 import com.tinkernorth.dish.repository.RememberedMoonlightRepository
 import io.mockk.every
@@ -163,8 +164,8 @@ class MoonlightPairFlowTest {
         every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns
             reply("""<root status_code="200"><hostname>PC</hostname><PairStatus>0</PairStatus></root>""")
         every { gateway.getHttpOn(any(), match { it.contains("/pair") }, any()) } answers { answerPair(secondArg()) }
-        // Phase 5, the first call over mutual TLS: the host confirms the pairing phases 1 to 4 made.
-        every { gateway.getHttpsOn(any(), match { it.contains("pairchallenge") }, any()) } returns
+        // Phase 5, over mutual TLS: the host confirms the pairing phases 1 to 4 made.
+        every { gateway.getHttpsTrustingOn(any(), match { it.contains("pairchallenge") }, any()) } returns
             reply("""<root status_code="200"><paired>1</paired></root>""")
 
         store = mockk(relaxed = true)
@@ -223,7 +224,7 @@ class MoonlightPairFlowTest {
             assertTrue(record!!.paired)
             assertEquals(host.address, record.address)
             // Phase 5 is the pairing's own call over mutual TLS, and it comes last.
-            verify { gateway.getHttpsOn(any(), match { it.contains("/pair") && it.contains("pairchallenge") }, host.id) }
+            verify { gateway.getHttpsTrustingOn(any(), match { it.contains("/pair") && it.contains("pairchallenge") }, any()) }
             watching.cancel()
         }
 
@@ -268,20 +269,22 @@ class MoonlightPairFlowTest {
         }
 
     // MOON-D14. Phases 1 to 4 proved the peer holds the PIN-derived key and signed with the
-    // certificate it presented, which outranks a pin written for a host since rebuilt.
-    // Without dropping it first, phase 5 is refused and nothing in the app can get past it.
+    // certificate it presented, which outranks a pin written for a host since rebuilt: that pin
+    // refused phase 5 and nothing in the app could get past it. Phase 5 trusts the proved
+    // certificate whatever is pinned, and the pairing it confirms pins that certificate.
     @Test
-    fun `the pinned certificate is dropped once the PIN is proved, before phase 5`() =
+    fun `phase 5 trusts the certificate phases 1 to 4 proved, and a confirmed pairing pins it`() =
         runTest(dispatcher) {
             val watching = watchForPin()
+            val proven = parseMoonlightCert(HOST.certificatePem)
 
             manager.pairHost(host)
             dispatcher.scheduler.advanceUntilIdle()
 
             verifyOrder {
                 gateway.getHttpOn(any(), match { it.contains("clientpairingsecret") }, any())
-                gateway.forgetPin(host.id)
-                gateway.getHttpsOn(any(), match { it.contains("pairchallenge") }, host.id)
+                gateway.getHttpsTrustingOn(any(), match { it.contains("pairchallenge") }, proven)
+                gateway.pinProven(host.id, proven)
             }
             watching.cancel()
         }
@@ -336,7 +339,7 @@ class MoonlightPairFlowTest {
     fun `a phase 5 the host does not confirm names itself and leaves no record`() =
         runTest(dispatcher) {
             val watching = watchForPin()
-            every { gateway.getHttpsOn(any(), match { it.contains("pairchallenge") }, any()) } returns UNANSWERED
+            every { gateway.getHttpsTrustingOn(any(), match { it.contains("pairchallenge") }, any()) } returns UNANSWERED
             val seen = mutableListOf<MoonlightConnectionEvent>()
             val collector = launch { manager.events.toList(seen) }
             dispatcher.scheduler.runCurrent()
@@ -350,6 +353,37 @@ class MoonlightPairFlowTest {
             collector.cancel()
             watching.cancel()
         }
+
+    // B5. A pairing that does not end in a confirmed phase 5 is no pairing, so it must not change the
+    // certificate this device trusts the host by.
+    @Test
+    fun `a phase 5 the host does not confirm leaves the pinned certificate as it was`() =
+        runTest(dispatcher) {
+            val watching = watchForPin()
+            every { gateway.getHttpsTrustingOn(any(), match { it.contains("pairchallenge") }, any()) } returns UNANSWERED
+
+            assertFalse(manager.pairHost(host))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            verify(exactly = 0) { gateway.forgetPin(any()) }
+            verify(exactly = 0) { gateway.pinProven(any(), any()) }
+            watching.cancel()
+        }
+
+    @Test
+    fun `a Cancel during phase 5 leaves the pinned certificate as it was`() {
+        val phaseFive = holdPhaseFive()
+        val onWorkers = managerOnWorkerThreads()
+        recordEvents(onWorkers)
+        val pairing = watcher.launch { onWorkers.pairHost(host) }
+        assertTrue("phase 5 is waiting on the host", phaseFive.awaitWaiting())
+
+        pairing.cancel()
+
+        assertTrue(endsWithin(pairing, STOP_MS))
+        verify(exactly = 0) { gateway.forgetPin(any()) }
+        verify(exactly = 0) { gateway.pinProven(any(), any()) }
+    }
 
     // B5. A Cancel lands while phase 1 waits on the human, in a read only its socket closing can
     // end. Waiting it out held this side of the pairing for two minutes after the user had left,
@@ -487,6 +521,14 @@ class MoonlightPairFlowTest {
             phaseOne.read(secondArg(), firstArg())
         }
         return phaseOne
+    }
+
+    private fun holdPhaseFive(): HeldRead {
+        val phaseFive = HeldRead().also(heldReads::add)
+        every { gateway.getHttpsTrustingOn(any(), match { it.contains("pairchallenge") }, any()) } answers {
+            phaseFive.read(secondArg(), firstArg())
+        }
+        return phaseFive
     }
 
     // The host holds the question on whichever line it is asked; one of its own is a line nobody can hang up.
