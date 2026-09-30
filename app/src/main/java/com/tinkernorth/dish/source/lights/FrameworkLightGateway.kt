@@ -119,15 +119,20 @@ class FrameworkLightGateway
             }
         }
 
-        /** [deviceId] has gone: forget its host's color, so nothing shows it again. */
+        /** [deviceId] has gone: forget its host's color and give its bar back, so nothing shows it again. */
         fun forget(deviceId: Int) {
             synchronized(lock) {
-                val hostColor = hostColors.recordOf(deviceId) ?: return
-                hostColors.remove(hostColor)
+                hostColors.recordOf(deviceId)?.let(hostColors::remove)
+                // Only a pad the registry no longer has is forgotten, so the close's repaint of
+                // another session's request finds no light of this pad to land on.
+                bars.recordOf(deviceId)?.let(::drop)
             }
         }
 
-        /** Turn [deviceId]'s light bar off, and give it back once no other bar is lit. Idempotent. */
+        /**
+         * Turn [deviceId]'s light bar off. It is given back now when no other bar is lit, and
+         * otherwise kept for its next color until [releaseAll] or [forget]. Idempotent.
+         */
         fun release(deviceId: Int) {
             synchronized(lock) { bars.recordOf(deviceId)?.let(::releaseBar) }
         }

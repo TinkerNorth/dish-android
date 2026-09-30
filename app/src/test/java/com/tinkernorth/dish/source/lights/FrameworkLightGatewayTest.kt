@@ -426,6 +426,18 @@ class FrameworkLightGatewayTest {
     }
 
     @Test
+    fun `a bar kept beside a lit one is given back when its pad departs`() {
+        lightTwoPads()
+        gateway.release(SECOND_PAD)
+        lightbars.withBar -= SECOND_PAD
+
+        gateway.forget(SECOND_PAD)
+
+        assertEquals(1, lightbars.handles.getValue(SECOND_PAD).closes)
+        assertEquals(RED_ARGB, lightbars.barColorOf(FIRST_PAD))
+    }
+
+    @Test
     fun `forgetting a pad its host never colored keeps every other pad's color`() {
         lightTwoPads()
         gateway.releaseAll()
