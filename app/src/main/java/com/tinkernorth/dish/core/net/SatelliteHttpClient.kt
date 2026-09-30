@@ -4,9 +4,6 @@ package com.tinkernorth.dish.core.net
 
 import android.util.Log
 import com.tinkernorth.dish.repository.SatellitePinRepository
-import com.tinkernorth.dish.repository.TofuVerdict
-import com.tinkernorth.dish.repository.sha256FingerprintHex
-import com.tinkernorth.dish.repository.tofuVerdict
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -47,30 +44,17 @@ class SatelliteHttpClient
         private val pins: SatellitePinRepository,
     ) {
         // One context per request: the trust manager is bound to the satellite id it pins for.
-        private fun pinningSocketFactory(
-            satelliteId: String,
-            onMismatch: () -> Unit,
-        ): SSLSocketFactory =
+        private fun socketFactoryOver(trust: TofuTrustManager): SSLSocketFactory =
             SSLContext
                 .getInstance(TLS_CONTEXT)
-                .apply {
-                    init(null, arrayOf<TrustManager>(TofuTrustManager(satelliteId, pins, onMismatch)), SecureRandom())
-                }.socketFactory
+                .apply { init(null, arrayOf<TrustManager>(trust), SecureRandom()) }
+                .socketFactory
 
         // The cert names no host the URL stack could match (a self-signed cert for a LAN IP), so the
         // platform verifier is replaced by the one check that means something here: the negotiated
-        // session carries the certificate pinned for this satellite.
-        private fun verifyPinnedSession(
-            satelliteId: String,
-            session: SSLSession?,
-        ): Boolean {
-            val cert = session?.peerCertificates?.firstOrNull() ?: return false
-            val presented = sha256FingerprintHex(cert.encoded)
-            return tofuVerdict(pins.pinnedFingerprint(satelliteId), presented) == TofuVerdict.MATCH
-        }
-
-        private fun pinnedSessionVerifier(satelliteId: String): HostnameVerifier =
-            HostnameVerifier { _: String?, session: SSLSession? -> verifyPinnedSession(satelliteId, session) }
+        // session carries the certificate the handshake's own trust manager accepted.
+        private fun sessionVerifierOver(trust: TofuTrustManager): HostnameVerifier =
+            HostnameVerifier { _: String?, session: SSLSession? -> trust.accepted(session) }
 
         // PUT /api/connections: the declarative session upsert.
         fun putSession(
@@ -334,15 +318,17 @@ class SatelliteHttpClient
             method: String,
             satelliteId: String,
             onMismatch: () -> Unit,
-        ): HttpsURLConnection =
-            (url.openConnection() as HttpsURLConnection).apply {
-                sslSocketFactory = pinningSocketFactory(satelliteId, onMismatch)
-                hostnameVerifier = pinnedSessionVerifier(satelliteId)
+        ): HttpsURLConnection {
+            val trust = TofuTrustManager(satelliteId, pins, onMismatch)
+            return (url.openConnection() as HttpsURLConnection).apply {
+                sslSocketFactory = socketFactoryOver(trust)
+                hostnameVerifier = sessionVerifierOver(trust)
                 requestMethod = method
                 connectTimeout = CONNECT_TIMEOUT_MS
                 readTimeout = READ_TIMEOUT_MS
                 setRequestProperty(HEADER_CONTENT_TYPE, MIME_JSON)
             }
+        }
 
         private fun HttpsURLConnection.applyHeaders(
             deviceId: String?,

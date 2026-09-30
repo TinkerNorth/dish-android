@@ -430,6 +430,31 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
         }
 
     @Test
+    fun `forget drops the pin again once the unpair is answered, so a forgotten satellite keeps none`() =
+        runMgrTest { mgr, _ ->
+            every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
+            coEvery {
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
+            } returns ok("")
+            // The unpair's own handshake pins the satellite again once the synchronous forget has
+            // dropped the pin, so the drop that counts is the one after the answer.
+            var pinDrops = 0
+            var dropsBeforeTheAnswer = -1
+            every { store.satellitePins.forget(server.ip) } answers { pinDrops++ }
+            coEvery { discoveryRepo.unpair(any(), any(), any(), any(), any()) } answers {
+                dropsBeforeTheAnswer = pinDrops
+                ok("""{"ok":true}""")
+            }
+            mgr.connect(server)
+            scope.testScheduler.advanceUntilIdle()
+
+            mgr.forget(serverId)
+            scope.testScheduler.advanceUntilIdle()
+
+            assertEquals("one drop, after the unpair was answered", dropsBeforeTheAnswer + 1, pinDrops)
+        }
+
+    @Test
     fun `forget clears Stale marker`() =
         runMgrTest { mgr, _ ->
             coEvery { discoveryRepo.pair(any(), any(), any(), any(), any()) } returns ok("""{"ok":false}""")

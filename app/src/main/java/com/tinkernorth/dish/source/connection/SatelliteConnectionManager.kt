@@ -1242,6 +1242,9 @@ class SatelliteConnectionManager
                 val srv = conn.server.value
                 scope.launch(ioDispatcher) {
                     replyOrNull { discoveryRepo.unpair(srv.ip, srv.httpPort, deviceId, proof) }
+                    // The unpair's own handshake pins the satellite again when the forget below has
+                    // already dropped the pin: a forgotten satellite keeps none.
+                    store.satellitePins.forget(srv.ip)
                 }
             }
             disconnect(id)
