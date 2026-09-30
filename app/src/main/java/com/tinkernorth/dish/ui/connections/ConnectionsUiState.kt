@@ -43,6 +43,12 @@ sealed interface BluetoothRow {
     ) : BluetoothRow
 }
 
+/** What the PIN dialog of a Moonlight pairing the hosts screen started shows. */
+data class MoonlightPinPrompt(
+    val hostName: String,
+    val pin: String,
+)
+
 /** Rows for the Moonlight-hosts section, the sibling of [SatelliteRow]. */
 sealed interface MoonlightRow {
     data class Known(

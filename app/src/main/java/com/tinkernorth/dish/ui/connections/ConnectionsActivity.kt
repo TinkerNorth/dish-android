@@ -199,11 +199,11 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 reportMoonlightHostGone(summary.label, summary.id)
                 return
             }
-            startMoonlightPairing(host)
+            viewModel.pairMoonlight(host)
         }
 
         override fun onPairDiscovered(host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost) {
-            startMoonlightPairing(host)
+            viewModel.pairMoonlight(host)
         }
 
         override fun onQuitSession(id: String) {
@@ -224,9 +224,8 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     private var moonlightPinDialog: AlertDialog? = null
 
-    // Held so Cancel actually cancels. Without it the dialog closed and phase 1 kept
-    // its socket open for the whole two-minute PIN window.
-    private var moonlightPairingJob: Job? = null
+    // The prompt the dialog on screen shows, so a state that did not change does not reopen it.
+    private var shownMoonlightPin: MoonlightPinPrompt? = null
 
     private val btPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { _ -> onBtPermissionResult() }
@@ -302,6 +301,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     private fun observeUiState() {
         observeWhileStarted(viewModel.ui) { state -> renderConnections(state) }
+        observeWhileStarted(viewModel.moonlightPin, ::renderMoonlightPin)
     }
 
     private fun renderConnections(state: ConnectionsUiState) {
@@ -340,7 +340,8 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     private fun onMoonlightEvent(ev: MoonlightConnectionEvent) {
         when (ev) {
-            is MoonlightConnectionEvent.PairingPinReady -> showMoonlightPinDialog(ev.host, ev.pin)
+            // The view model holds the PIN, so a screen recreated mid-pairing shows it too.
+            is MoonlightConnectionEvent.PairingPinReady -> Unit
             is MoonlightConnectionEvent.Paired -> onMoonlightPaired(ev)
             is MoonlightConnectionEvent.PairingFailed -> onMoonlightPairingFailed(ev)
             is MoonlightConnectionEvent.AppCloseRequested -> onMoonlightAppCloseRequested(ev)
@@ -355,8 +356,6 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     // device answers without a PIN, so there is no dialog to dismiss and the row's chip is the
     // only other feedback there would be.
     private fun onMoonlightPaired(ev: MoonlightConnectionEvent.Paired) {
-        cancelMoonlightPairing()
-        moonlightPinDialog?.dismiss()
         notifications.info(
             glyph = R.drawable.ic_pc_monitor,
             title = getString(R.string.ml_paired_title, ev.host.name),
@@ -366,8 +365,6 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     }
 
     private fun onMoonlightPairingFailed(ev: MoonlightConnectionEvent.PairingFailed) {
-        cancelMoonlightPairing()
-        moonlightPinDialog?.dismiss()
         Log.w(TAG, "pairing with ${ev.host.address} failed: ${ev.reason}")
         notifications.error(
             glyph = R.drawable.ic_pc_monitor,
@@ -386,7 +383,6 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     }
 
     private fun onMoonlightError(ev: MoonlightConnectionEvent.Error) {
-        moonlightPinDialog?.dismiss()
         notifications.error(
             glyph = R.drawable.ic_pc_monitor,
             title = getString(R.string.section_moonlight_hosts),
@@ -835,16 +831,6 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     // The hosts screen owns trust and nothing else: pairing, forgetting, and the
     // escape hatch that closes an app the host is holding. The controller type,
     // the app, and the session itself belong to the binding.
-    private fun startMoonlightPairing(host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost) {
-        moonlightPairingJob?.cancel()
-        moonlightPairingJob = lifecycleScope.launch { moonlight.pairHost(host) }
-    }
-
-    private fun cancelMoonlightPairing() {
-        moonlightPairingJob?.cancel()
-        moonlightPairingJob = null
-    }
-
     private fun reportMoonlightHostGone(
         label: String,
         id: String,
@@ -877,17 +863,22 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 ?.toHost()
             ?: moonlight.discovered.value.firstOrNull { it.id == id }
 
-    private fun showMoonlightPinDialog(
-        host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost,
-        pin: String,
-    ) {
+    // The PIN dialog follows the view model: it opens for a pairing's PIN, closes when the pairing
+    // ends, and opens again on a screen recreated while it runs.
+    private fun renderMoonlightPin(prompt: MoonlightPinPrompt?) {
+        if (prompt == shownMoonlightPin) return
+        shownMoonlightPin = prompt
         moonlightPinDialog?.dismiss()
-        val message = getString(R.string.ml_pair_pin_body, pin, host.name) + "\n\n" + getString(R.string.ml_pair_waiting)
+        if (prompt != null) showMoonlightPinDialog(prompt)
+    }
+
+    private fun showMoonlightPinDialog(prompt: MoonlightPinPrompt) {
+        val message = getString(R.string.ml_pair_pin_body, prompt.pin, prompt.hostName) + "\n\n" + getString(R.string.ml_pair_waiting)
         moonlightPinDialog =
             MaterialAlertDialogBuilder(this)
-                .setTitle(getString(R.string.moonlight_pin_title, host.name))
+                .setTitle(getString(R.string.moonlight_pin_title, prompt.hostName))
                 .setMessage(message)
-                .setNegativeButton(R.string.action_cancel) { _, _ -> cancelMoonlightPairing() }
+                .setNegativeButton(R.string.action_cancel) { _, _ -> viewModel.cancelMoonlightPairing() }
                 .setOnDismissListener { moonlightPinDialog = null }
                 .show()
     }
