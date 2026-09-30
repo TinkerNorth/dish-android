@@ -664,7 +664,12 @@ class MoonlightConnectionManager
 
         private fun fetchAppList(host: MoonlightHost): List<MoonlightApp> {
             val reply = gateway.getHttps(appList(host.address, host.httpsPort, deviceId), host.id)
-            if (!reply.ok) throw java.io.IOException("applist refused by ${host.address}: HTTP ${reply.status}")
+            // A refusal, in the status line or in the body, lists nothing, and neither does a reply that
+            // does not parse: none of them says anything about what the host can start.
+            val status = parseStatus(reply.body)
+            val isAList = reply.ok && status?.ok == true
+            val hostStatus = status?.code?.toString() ?: "unreadable"
+            if (!isAList) throw java.io.IOException("no app list from ${host.address}: HTTP ${reply.status}, host $hostStatus")
             return parseAppList(reply.body)
         }
 

@@ -568,6 +568,41 @@ class MoonlightTrustFlowTest {
             assertEquals("9", rows.getValue(host.id).lastAppId)
         }
 
+    // A reply cut off mid-list parses as no apps at all, which is not the host saying it dropped one.
+    @Test
+    fun `a pick stays when the host's app list does not parse`() =
+        runTest(dispatcher) {
+            store.put(RememberedMoonlight(id = host.id, name = "PC", address = host.address, lastAppId = "9", lastAppName = "Removed"))
+            every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply(CUT_OFF_APP_LIST)
+
+            manager.probe(host)
+
+            assertEquals("9", rows.getValue(host.id).lastAppId)
+        }
+
+    // A host refuses in the body as often as in the status line, and a refusal lists no apps.
+    @Test
+    fun `a pick stays when the host refuses its app list in the body`() =
+        runTest(dispatcher) {
+            store.put(RememberedMoonlight(id = host.id, name = "PC", address = host.address, lastAppId = "9", lastAppName = "Removed"))
+            every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply(REFUSED_IN_THE_BODY)
+
+            manager.probe(host)
+
+            assertEquals("9", rows.getValue(host.id).lastAppId)
+        }
+
+    @Test
+    fun `an app list the host refuses in the body is reported as not loaded`() =
+        runTest(dispatcher) {
+            every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply(REFUSED_IN_THE_BODY)
+
+            val probe = manager.probe(host)
+
+            assertTrue(probe.appsFailed)
+            assertFalse(probe.appsFetched)
+        }
+
     @Test
     fun `an app picked on a paired host does not disturb its trust`() =
         runTest(dispatcher) {
@@ -779,6 +814,9 @@ class MoonlightTrustFlowTest {
     private companion object {
         // Anything longer than this is a subscription, not a scan.
         const val MAX_SCAN_MS = 10_000
+        const val CUT_OFF_APP_LIST = """<root status_code="200"><App><AppTitle>Desktop</AppTitle><ID>1</ID></App><App><AppTi"""
+        const val REFUSED_IN_THE_BODY =
+            """<root status_code="401" status_message="The client is not authorized. Certificate verification failed."/>"""
     }
 
     @Test
