@@ -206,7 +206,7 @@ class FeedbackRouterTest {
         val r = router()
         r.dispatchTriggerRumbleToSlot("-1000", 100, 200)
         r.dispatchLightbarToSlot("-1000", MOONLIGHT_PAD, 5, 6, 7)
-        verify(exactly = 1) { native.sendUsbTriggerRumble(-1000, 100, 200) }
+        verify(exactly = 1) { rumble.driveDirectTriggers(-1000, 100, 200, any()) }
         verify(exactly = 1) { native.sendUsbLightbar(-1000, 5, 6, 7) }
 
         // Virtual: trigger rumble folds through the rumble path (toggle + stop
@@ -218,8 +218,16 @@ class FeedbackRouterTest {
 
         // Framework: nothing reachable.
         r.dispatchTriggerRumbleToSlot("9", 1, 2)
-        verify(exactly = 0) { native.sendUsbTriggerRumble(9, any(), any()) }
+        verify(exactly = 0) { rumble.driveDirectTriggers(9, any(), any(), any()) }
         verify(exactly = 0) { rumble.dispatchToSlot("9", any(), any(), any()) }
+    }
+
+    @Test
+    fun `a Direct pad's trigger rumble goes through the rumble router, which stops it when its host goes quiet`() {
+        router().dispatchTriggerRumbleToSlot("-1000", 100, 200)
+
+        verify(exactly = 1) { rumble.driveDirectTriggers(-1000, 100, 200, any()) }
+        verify(exactly = 0) { native.sendUsbTriggerRumble(any(), any(), any()) }
     }
 
     // ---- trigger rumble is rumble, so the slot's rumble switch covers it ----
@@ -230,8 +238,8 @@ class FeedbackRouterTest {
 
         router().dispatchTriggerRumbleToSlot("-1000", 100, 200)
 
-        verify(exactly = 0) { native.sendUsbTriggerRumble(-1000, 100, 200) }
-        verify(exactly = 1) { native.sendUsbTriggerRumble(-1000, 0, 0) }
+        verify(exactly = 0) { rumble.driveDirectTriggers(-1000, 100, 200, any()) }
+        verify(exactly = 1) { rumble.driveDirectTriggers(-1000, 0, 0, any()) }
     }
 
     @Test
@@ -259,7 +267,7 @@ class FeedbackRouterTest {
 
         router().testTriggerRumble("-1000", 100, 200)
 
-        verify(exactly = 1) { native.sendUsbTriggerRumble(-1000, 100, 200) }
+        verify(exactly = 1) { rumble.driveDirectTriggers(-1000, 100, 200, any()) }
     }
 
     // ---- the inspector's light bar bench ----
@@ -362,7 +370,7 @@ class FeedbackRouterTest {
         r.testTriggerRumble("-1000", 100, 200)
 
         assertEquals(1L, activity.snapshot()["-1000"]?.count)
-        verify(exactly = 2) { native.sendUsbTriggerRumble(-1000, 100, 200) }
+        verify(exactly = 2) { rumble.driveDirectTriggers(-1000, 100, 200, any()) }
     }
 
     @Test

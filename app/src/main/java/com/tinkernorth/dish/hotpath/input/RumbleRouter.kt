@@ -66,6 +66,7 @@ class RumbleRouter
         // A claimed USB pad has no oneshot duration, so a dropped session could leave it buzzing;
         // each rumble schedules a stop at the clamped duration, cancelled by the next rumble.
         private val usbStopJobs = ConcurrentHashMap<Int, Job>()
+        private val triggerStopJobs = ConcurrentHashMap<Int, Job>()
 
         private val phoneVibratorManager: VibratorManager? =
             if (atLeast(Build.VERSION_CODES.S)) {
@@ -93,6 +94,28 @@ class RumbleRouter
             val target = classifyTarget(slotId)
             if (target is RumbleTarget.None) return
             actuate(target, strongMagnitude, weakMagnitude, rumbleSafeDurationMs(durationMs).toLong())
+        }
+
+        // A claimed pad's trigger motors hold a level until the next write, and a host that went
+        // away writes no stop of its own: each level is stopped when its hold runs out, unless a
+        // newer one replaced it.
+        fun driveDirectTriggers(
+            deviceId: Int,
+            leftMagnitude: Int,
+            rightMagnitude: Int,
+            holdMs: Int,
+        ) {
+            triggerStopJobs.remove(deviceId)?.cancel()
+            native.sendUsbTriggerRumble(deviceId, leftMagnitude, rightMagnitude)
+            val isStop = leftMagnitude == TRIGGERS_OFF && rightMagnitude == TRIGGERS_OFF
+            if (isStop) return
+            val job =
+                scope.launch {
+                    delay(rumbleSafeDurationMs(holdMs).toLong())
+                    native.sendUsbTriggerRumble(deviceId, TRIGGERS_OFF, TRIGGERS_OFF)
+                }
+            triggerStopJobs[deviceId] = job
+            job.invokeOnCompletion { triggerStopJobs.remove(deviceId, job) }
         }
 
         fun dispatch(
@@ -375,3 +398,5 @@ private const val MOTOR_MAX = 255
 private const val ROUND_HALF = WIRE_MAGNITUDE_MAX / 2
 
 internal const val RUMBLE_MAX_MS = 1500
+
+private const val TRIGGERS_OFF = 0

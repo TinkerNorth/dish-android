@@ -338,6 +338,55 @@ class RumbleRouterTest {
             verify(exactly = 1) { h.native.sendUsbRumble(-1000, 0, 0) }
         }
 
+    // ---- a Direct pad's trigger motors hold a level until the next write ----
+
+    @Test
+    fun `a Direct pad's trigger level stops when its hold runs out with nothing newer`() =
+        runTest(dispatcher) {
+            val h = DispatchHarness(slotId = "-1000", controllerIndex = 0, rumbleOn = true, scope = this)
+
+            h.router.driveDirectTriggers(deviceId = -1000, leftMagnitude = 100, rightMagnitude = 200, holdMs = TRIGGER_HOLD_MS)
+
+            dispatcher.scheduler.advanceTimeBy(TRIGGER_HOLD_MS - 1L)
+            dispatcher.scheduler.runCurrent()
+            verify(exactly = 0) { h.native.sendUsbTriggerRumble(-1000, 0, 0) }
+            dispatcher.scheduler.advanceTimeBy(1L)
+            dispatcher.scheduler.runCurrent()
+            verify(exactly = 1) { h.native.sendUsbTriggerRumble(-1000, 0, 0) }
+        }
+
+    @Test
+    fun `a newer trigger level replaces the pending stop`() =
+        runTest(dispatcher) {
+            val h = DispatchHarness(slotId = "-1000", controllerIndex = 0, rumbleOn = true, scope = this)
+            h.router.driveDirectTriggers(deviceId = -1000, leftMagnitude = 100, rightMagnitude = 200, holdMs = TRIGGER_HOLD_MS)
+            dispatcher.scheduler.advanceTimeBy(REFRESH_AFTER_MS)
+            dispatcher.scheduler.runCurrent()
+
+            h.router.driveDirectTriggers(deviceId = -1000, leftMagnitude = 100, rightMagnitude = 200, holdMs = TRIGGER_HOLD_MS)
+
+            dispatcher.scheduler.advanceTimeBy(TRIGGER_HOLD_MS - 1L)
+            dispatcher.scheduler.runCurrent()
+            verify(exactly = 0) { h.native.sendUsbTriggerRumble(-1000, 0, 0) }
+            dispatcher.scheduler.advanceTimeBy(1L)
+            dispatcher.scheduler.runCurrent()
+            verify(exactly = 1) { h.native.sendUsbTriggerRumble(-1000, 0, 0) }
+        }
+
+    @Test
+    fun `a trigger stop goes out at once and leaves no stop pending`() =
+        runTest(dispatcher) {
+            val h = DispatchHarness(slotId = "-1000", controllerIndex = 0, rumbleOn = true, scope = this)
+            h.router.driveDirectTriggers(deviceId = -1000, leftMagnitude = 100, rightMagnitude = 200, holdMs = TRIGGER_HOLD_MS)
+
+            h.router.driveDirectTriggers(deviceId = -1000, leftMagnitude = 0, rightMagnitude = 0, holdMs = TRIGGER_HOLD_MS)
+
+            verify(exactly = 1) { h.native.sendUsbTriggerRumble(-1000, 0, 0) }
+            dispatcher.scheduler.advanceTimeBy(TRIGGER_HOLD_MS + 1L)
+            dispatcher.scheduler.runCurrent()
+            verify(exactly = 1) { h.native.sendUsbTriggerRumble(-1000, 0, 0) }
+        }
+
     @Test
     fun `a second usb rumble cancels the first pending stop`() =
         runTest(dispatcher) {
@@ -612,6 +661,9 @@ class RumbleRouterTest {
     private fun padWithMotor(motor: Vibrator): InputDevice = mockk<InputDevice>().also { stubLegacyVibrator(it, motor) }
 
     private companion object {
+        // The hold a host's trigger level gets, and a refresh well inside it.
+        const val TRIGGER_HOLD_MS = 1500
+        const val REFRESH_AFTER_MS = 1000L
         const val PHONE_MOTOR = 1
         const val PAD_STRONG = 10
         const val PAD_WEAK = 11

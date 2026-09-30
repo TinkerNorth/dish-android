@@ -182,7 +182,7 @@ class FeedbackRouter
         ) {
             when (val target = classifyTarget(slotId)) {
                 is RumbleTarget.DirectUsb ->
-                    native.sendUsbTriggerRumble(target.deviceId, leftMagnitude, rightMagnitude)
+                    rumble.driveDirectTriggers(target.deviceId, leftMagnitude, rightMagnitude, TRIGGER_RUMBLE_HOLD_MS)
                 // The phone IS the virtual pad's motors: fold the trigger pair through
                 // the rumble path (left -> strong, right -> weak) so the delivery
                 // toggle, the stop-on-zero rule and the duration clamp all apply.
