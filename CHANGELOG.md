@@ -20,7 +20,16 @@ computer. Those lines say "update Satellite too".
   pinned certificate changes only once the pairing is recorded.
 - **Forgetting a Moonlight host while Dish is still asking it about itself,
   or while its session is starting, leaves it forgotten.** A late answer
-  used to verify the host again or write its record back.
+  used to verify the host again or write its record back. The same holds
+  while a pairing runs: a PIN typed after the host was forgotten, or a host
+  answering that it already trusts this phone, no longer brings it back.
+- **The PIN dialog's Back cancels the pairing**, like its Cancel button,
+  instead of leaving the pairing waiting for the PIN behind a closed
+  dialog, and the dialog is closed with the screen and reopened by the
+  rebuilt one.
+- **A host saved by an older build keeps its trusted certificate** when its
+  record is moved under its address on the first start, even where a scan
+  had left a stray certificate at that address.
 - **A Moonlight host is one host, however Dish found it.** A host found by a
   scan and the same host added by its address were filed under different
   ids, with two records and two pins for one machine, and a rebuilt machine
