@@ -136,17 +136,27 @@ class MoonlightHttpGateway
         }
 
         /**
-         * Carry the pin of [fromHostId] to [toHostId], the id the same host is filed under now. A
-         * pin [toHostId] already holds is the one kept: a call made under that id wrote it.
+         * File the pins of one host's two ids under [toHostId], the id it is filed under now, keeping
+         * the one [trustedHostId] held: the id of the record that describes the machine it trusts,
+         * which may hold none. Two pins that disagree are two machines, or one that changed its
+         * certificate, so neither is kept. Returns whether they agreed.
          */
-        fun movePin(
+        fun foldPins(
             fromHostId: String,
             toHostId: String,
-        ) {
-            val pin = pins.pinnedFingerprint(fromHostId) ?: return
-            if (pins.pinnedFingerprint(toHostId) == null) pins.pin(toHostId, pin)
-            Log.i(TAG, "pinned cert for $fromHostId now answers for $toHostId")
-            pins.forget(fromHostId)
+            trustedHostId: String,
+        ): Boolean {
+            val moving = pins.pinnedFingerprint(fromHostId)
+            val staying = pins.pinnedFingerprint(toHostId)
+            val agree = moving == null || staying == null || moving == staying
+            val kept = pins.pinnedFingerprint(trustedHostId)?.takeIf { agree }
+            Log.i(TAG, "pins of $fromHostId and $toHostId ${if (agree) "agree" else "disagree"}; keeping ${kept ?: "none"}")
+            forgetPin(fromHostId)
+            if (kept != staying) {
+                forgetPin(toHostId)
+                kept?.let { pins.pin(toHostId, it) }
+            }
+            return agree
         }
 
         /**

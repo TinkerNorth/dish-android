@@ -33,6 +33,7 @@ import com.tinkernorth.dish.core.net.moonlight.randomBytes
 import com.tinkernorth.dish.core.net.moonlight.resume
 import com.tinkernorth.dish.core.net.moonlight.serverInfoHttp
 import com.tinkernorth.dish.core.net.moonlight.serverInfoHttps
+import com.tinkernorth.dish.core.net.moonlight.trustedOf
 import com.tinkernorth.dish.di.IoDispatcher
 import com.tinkernorth.dish.repository.RememberedMoonlightRepository
 import com.tinkernorth.dish.source.store.MoonlightHostFactsStore
@@ -276,15 +277,17 @@ class MoonlightConnectionManager
         fun get(id: String): MoonlightConnection? = _connections.value[id]
 
         // An earlier version filed a host under its uniqueid once it knew it, which named one machine
-        // twice. Each such record, and its pin, moves to the address; at start-up, before any binding
-        // exists to point at the old name.
+        // twice. Each such record moves to the address, with the pin of the record whose trust is kept;
+        // at start-up, before any binding exists to point at the old name.
         private fun fileHostsUnderTheirAddresses() {
             for (record in store.all()) {
                 val addressId = moonlightHostIdFor(record.address)
                 if (record.id == addressId) continue
                 Log.i(TAG, "filing ${record.id} under $addressId")
-                store.put(foldedRecords(filed = store.get(addressId), refiled = record.copy(id = addressId)))
-                gateway.movePin(record.id, addressId)
+                val filed = store.get(addressId)
+                val trustedId = filed?.let { trustedOf(it, record).id } ?: record.id
+                val pinsAgree = gateway.foldPins(record.id, addressId, trustedHostId = trustedId)
+                store.put(foldedRecords(filed = filed, refiled = record.copy(id = addressId), pinsAgree = pinsAgree))
                 store.remove(record.id)
             }
         }

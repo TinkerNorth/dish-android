@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -86,7 +87,7 @@ class MoonlightHostAddressIdsTest {
 
     // The two rows MOON-D6 made of one host: found by a scan, and typed in by its address.
     @Test
-    fun `a host remembered both ways becomes one record that keeps its trust, its uniqueid and its app`() {
+    fun `a host remembered both ways becomes one record that keeps its trust and its app`() {
         remember(byAddress.copy(paired = true))
         remember(byUniqueId.copy(paired = false, lastAppId = "7", lastAppName = "Steam"))
 
@@ -95,9 +96,46 @@ class MoonlightHostAddressIdsTest {
         assertEquals(listOf(ADDRESS_ID), rows.keys.toList())
         val record = rows.getValue(ADDRESS_ID)
         assertTrue("trust from either record", record.paired)
-        assertEquals(UNIQUE_ID, record.uniqueId)
         assertEquals("7", record.lastAppId)
         assertEquals("Steam", record.lastAppName)
+    }
+
+    // The uniqueid, the pin and the pairing describe one machine, the one this device paired with, so
+    // they come from the record that paired. Taking them from both could claim a pairing with one
+    // machine under the certificate or the uniqueid of another.
+    @Test
+    fun `the uniqueid comes from the record that paired`() {
+        remember(byAddress.copy(uniqueId = OTHER_UNIQUE_ID, paired = true))
+        remember(byUniqueId.copy(paired = false))
+
+        startTheApp()
+
+        assertEquals(OTHER_UNIQUE_ID, rows.getValue(ADDRESS_ID).uniqueId)
+    }
+
+    @Test
+    fun `the pin comes from the record that paired, even when it holds none`() {
+        remember(byAddress.copy(paired = true))
+        remember(byUniqueId.copy(paired = false))
+        pinned[UNIQUE_ID_KEY] = "bb22"
+
+        startTheApp()
+
+        assertEquals(emptyMap<String, String>(), pinned)
+    }
+
+    // With neither record paired there is no pairing to follow, and the record filed by uniqueid is
+    // the one an earlier version kept up to date.
+    @Test
+    fun `with neither record paired the uniqueid and the pin come from the record filed by uniqueid`() {
+        remember(byAddress.copy(uniqueId = OTHER_UNIQUE_ID, paired = false))
+        remember(byUniqueId.copy(paired = false))
+        pinned[ADDRESS_ID] = "aa11"
+
+        startTheApp()
+
+        assertEquals(UNIQUE_ID, rows.getValue(ADDRESS_ID).uniqueId)
+        assertEquals(emptyMap<String, String>(), pinned)
     }
 
     @Test
@@ -121,18 +159,32 @@ class MoonlightHostAddressIdsTest {
         assertEquals(mapOf(ADDRESS_ID to "ab12"), pinned)
     }
 
-    // A pin under the address was written by a mutual-TLS call made to it by address, which is how
-    // every call to the host is made from now on.
+    // Two certificates are two machines, or one that changed its certificate, and nothing here can
+    // tell which of them answers at the address now. The next pairing settles it.
     @Test
-    fun `a pin already held under the address is the one kept`() {
-        remember(byAddress)
-        remember(byUniqueId)
+    fun `two pins that disagree leave the host with neither, and not paired`() {
+        remember(byAddress.copy(paired = true))
+        remember(byUniqueId.copy(paired = true))
         pinned[ADDRESS_ID] = "aa11"
         pinned[UNIQUE_ID_KEY] = "bb22"
 
         startTheApp()
 
+        assertEquals(emptyMap<String, String>(), pinned)
+        assertFalse(rows.getValue(ADDRESS_ID).paired)
+    }
+
+    @Test
+    fun `two pins that agree are kept, and so is the pairing`() {
+        remember(byAddress.copy(paired = true))
+        remember(byUniqueId.copy(paired = true))
+        pinned[ADDRESS_ID] = "aa11"
+        pinned[UNIQUE_ID_KEY] = "aa11"
+
+        startTheApp()
+
         assertEquals(mapOf(ADDRESS_ID to "aa11"), pinned)
+        assertTrue(rows.getValue(ADDRESS_ID).paired)
     }
 
     @Test
@@ -150,6 +202,7 @@ class MoonlightHostAddressIdsTest {
     private companion object {
         const val ADDRESS = "192.168.68.98"
         const val UNIQUE_ID = "host-1"
+        const val OTHER_UNIQUE_ID = "host-2"
         const val ADDRESS_ID = "moonlight:$ADDRESS"
 
         // The id an earlier version filed a host under once it knew the host's uniqueid.

@@ -67,21 +67,34 @@ data class RememberedMoonlight(
 }
 
 /**
- * One host's two records as one: [refiled] under the id [filed] already has. Trust comes from
- * either, and the uniqueid and the app pick from [refiled] where it has them.
+ * One host's two records as one: [refiled] under the id [filed] already has. The machine this device
+ * trusts is described whole by one of them, [trustedOf] the two, so the uniqueid and the pairing come
+ * from that one; a pairing whose two records hold pins that disagree ([pinsAgree] false) is not kept.
+ * The app pick comes from [refiled] where it has one.
  */
 internal fun foldedRecords(
     filed: RememberedMoonlight?,
     refiled: RememberedMoonlight,
+    pinsAgree: Boolean,
 ): RememberedMoonlight {
     if (filed == null) return refiled
+    val trusted = trustedOf(filed, refiled)
     val refiledPickedAnApp = refiled.lastAppId.isNotEmpty()
     return refiled.copy(
-        uniqueId = refiled.uniqueId.ifEmpty { filed.uniqueId },
+        uniqueId = trusted.uniqueId,
         lastAppId = if (refiledPickedAnApp) refiled.lastAppId else filed.lastAppId,
         lastAppName = if (refiledPickedAnApp) refiled.lastAppName else filed.lastAppName,
-        paired = refiled.paired || filed.paired,
+        paired = trusted.paired && pinsAgree,
     )
+}
+
+/** Of one host's two records, the one that describes the machine it trusts: the one that paired, else [refiled]. */
+internal fun trustedOf(
+    filed: RememberedMoonlight,
+    refiled: RememberedMoonlight,
+): RememberedMoonlight {
+    val onlyTheFiledOnePaired = filed.paired && !refiled.paired
+    return if (onlyTheFiledOnePaired) filed else refiled
 }
 
 /**

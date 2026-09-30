@@ -42,20 +42,40 @@ class MoonlightHostModelsTest {
 
     @Test
     fun `a record refiled onto an id nothing holds is kept as it is`() {
-        assertEquals(REFILED, foldedRecords(filed = null, refiled = REFILED))
+        assertEquals(REFILED, foldedRecords(filed = null, refiled = REFILED, pinsAgree = true))
     }
 
     @Test
     fun `a fold keeps the trust either record holds`() {
-        assertTrue(foldedRecords(FILED.copy(paired = true), REFILED.copy(paired = false)).paired)
-        assertTrue(foldedRecords(FILED.copy(paired = false), REFILED.copy(paired = true)).paired)
-        assertFalse(foldedRecords(FILED.copy(paired = false), REFILED.copy(paired = false)).paired)
+        assertTrue(foldedRecords(FILED.copy(paired = true), REFILED.copy(paired = false), pinsAgree = true).paired)
+        assertTrue(foldedRecords(FILED.copy(paired = false), REFILED.copy(paired = true), pinsAgree = true).paired)
+        assertFalse(foldedRecords(FILED.copy(paired = false), REFILED.copy(paired = false), pinsAgree = true).paired)
+    }
+
+    // Pins that disagree are two machines, and nothing here can tell which one the pairing was with.
+    @Test
+    fun `a fold whose pins disagree keeps no trust`() {
+        assertFalse(foldedRecords(FILED.copy(paired = true), REFILED.copy(paired = true), pinsAgree = false).paired)
+    }
+
+    // The uniqueid is the witness of the machine a pairing was with, so it comes from the record that paired.
+    @Test
+    fun `a fold takes the uniqueid of the record that paired`() {
+        val onlyFiledPaired = foldedRecords(FILED.copy(uniqueId = "old", paired = true), REFILED.copy(paired = false), pinsAgree = true)
+        val onlyRefiledPaired = foldedRecords(FILED.copy(uniqueId = "old", paired = false), REFILED.copy(paired = true), pinsAgree = true)
+
+        assertEquals("old", onlyFiledPaired.uniqueId)
+        assertEquals("abc", onlyRefiledPaired.uniqueId)
     }
 
     @Test
-    fun `a fold keeps the refiled uniqueid, or the filed one when the refiled record has none`() {
-        assertEquals("abc", foldedRecords(FILED.copy(uniqueId = "old"), REFILED.copy(uniqueId = "abc")).uniqueId)
-        assertEquals("old", foldedRecords(FILED.copy(uniqueId = "old"), REFILED.copy(uniqueId = "")).uniqueId)
+    fun `a fold of two records that both paired, or neither, takes the refiled uniqueid, even an empty one`() {
+        val filed = FILED.copy(uniqueId = "old")
+        val neitherPaired = foldedRecords(filed.copy(paired = false), REFILED.copy(paired = false), pinsAgree = true)
+
+        assertEquals("abc", foldedRecords(filed, REFILED, pinsAgree = true).uniqueId)
+        assertEquals("", foldedRecords(filed, REFILED.copy(uniqueId = ""), pinsAgree = true).uniqueId)
+        assertEquals("abc", neitherPaired.uniqueId)
     }
 
     // An app id and its title are one pick, so they come from the same record.
@@ -63,8 +83,8 @@ class MoonlightHostModelsTest {
     fun `a fold keeps the refiled app pick, or the filed one when the refiled record has none`() {
         val filedPick = FILED.copy(lastAppId = "3", lastAppName = "Desktop")
 
-        val refiledPicked = foldedRecords(filedPick, REFILED.copy(lastAppId = "7", lastAppName = "Steam"))
-        val refiledDidNot = foldedRecords(filedPick, REFILED)
+        val refiledPicked = foldedRecords(filedPick, REFILED.copy(lastAppId = "7", lastAppName = "Steam"), pinsAgree = true)
+        val refiledDidNot = foldedRecords(filedPick, REFILED, pinsAgree = true)
 
         assertEquals("7" to "Steam", refiledPicked.lastAppId to refiledPicked.lastAppName)
         assertEquals("3" to "Desktop", refiledDidNot.lastAppId to refiledDidNot.lastAppName)
