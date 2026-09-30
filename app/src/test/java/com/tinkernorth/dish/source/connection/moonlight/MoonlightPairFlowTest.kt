@@ -176,6 +176,10 @@ class MoonlightPairFlowTest {
             rows[row.id] = row
             entries.value = rows.values.toList()
         }
+        every { store.remove(any<String>()) } answers {
+            rows.remove(firstArg<String>())
+            entries.value = rows.values.toList()
+        }
 
         manager =
             MoonlightConnectionManager(
@@ -477,6 +481,46 @@ class MoonlightPairFlowTest {
         assertTrue(endsWithin(pairing, SETTLE_MS))
 
         assertNull("the host is not remembered", rows[host.id])
+        assertTrue("nothing announces a pairing", seen.none { it is MoonlightConnectionEvent.Paired })
+    }
+
+    // A Forget that lands while the PIN is on screen. The PIN typed afterwards used to run phases 2 to
+    // 5 and write the forgotten host back, pin and all.
+    @Test
+    fun `a host forgotten while its PIN is on screen is not written back by the PIN typed after`() {
+        val phaseOne = holdPhaseOne()
+        val onWorkers = managerOnWorkerThreads()
+        val seen = recordEvents(onWorkers)
+        val pairing = watcher.launch { onWorkers.pairHost(host) }
+        assertTrue("phase 1 is waiting for the PIN", phaseOne.awaitWaiting())
+        onWorkers.forget(host.id)
+        verify(timeout = SETTLE_MS) { store.remove(host.id) }
+
+        phaseOne.answer(answerPair(phaseOne.url))
+        assertTrue(endsWithin(pairing, SETTLE_MS))
+
+        assertNull("the host is not remembered", rows[host.id])
+        verify(exactly = 0) { gateway.pinProven(any(), any()) }
+        assertTrue("nothing announces a pairing", seen.none { it is MoonlightConnectionEvent.Paired })
+    }
+
+    // The same Forget, landing while the host is asked whether it already trusts this device. Its
+    // answer used to record the pairing and mark the host verified, both from under the forget.
+    @Test
+    fun `a host forgotten while it is asked whether it trusts this device is not recorded by its answer`() {
+        val trustCheck = holdTrustCheck()
+        val onWorkers = managerOnWorkerThreads()
+        val seen = recordEvents(onWorkers)
+        val pairing = watcher.launch { onWorkers.pairHost(host) }
+        assertTrue("the host is being asked", trustCheck.awaitWaiting())
+        onWorkers.forget(host.id)
+        verify(timeout = SETTLE_MS) { store.remove(host.id) }
+
+        trustCheck.answer(reply(TRUSTED_INFO))
+        assertTrue(endsWithin(pairing, SETTLE_MS))
+
+        assertNull("the host is not remembered", rows[host.id])
+        assertFalse("nor verified", host.id in onWorkers.verifiedHostIds.value)
         assertTrue("nothing announces a pairing", seen.none { it is MoonlightConnectionEvent.Paired })
     }
 

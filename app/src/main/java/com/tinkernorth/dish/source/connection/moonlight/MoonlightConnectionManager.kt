@@ -317,6 +317,9 @@ class MoonlightConnectionManager
                 if (record.id == addressId) continue
                 Log.i(TAG, "filing ${record.id} under $addressId")
                 val filed = store.get(addressId)
+                // A pin at the address with no record behind it was written on first use, by a probe of
+                // whoever answered there, and pairs with nothing: the record's own pin outranks it.
+                if (filed == null) gateway.forgetPin(addressId)
                 val trustedId = filed?.let { trustedOf(it, record).id } ?: record.id
                 val pinsAgree = gateway.foldPins(record.id, addressId, trustedHostId = trustedId)
                 store.put(foldedRecords(filed = filed, refiled = record.copy(id = addressId), pinsAgree = pinsAgree))
@@ -422,7 +425,7 @@ class MoonlightConnectionManager
             withContext(ioDispatcher) {
                 val epoch = epochOf(host.id)
                 val plain = plainServerInfo(host)
-                if (epochOf(host.id) != epoch) return@withContext FORGOTTEN
+                if (forgottenSince(host.id, epoch)) return@withContext FORGOTTEN
                 plain?.let { hostFacts.note(host.id, it) }
                 plain?.let { keepFirstUniqueId(host.id, it) }
                 // Holding a pairing is the paired flag, never a non-empty uniqueid: real hosts
@@ -451,7 +454,7 @@ class MoonlightConnectionManager
             // The plaintext PairStatus is not an answer about pairing: Sunshine computes it only
             // on the mutual-TLS route and hands every plaintext caller a 0.
             val secure = gateway.getHttps(serverInfoHttps(host.address, host.httpsPort, deviceId), host.id)
-            if (epochOf(host.id) != epoch) return FORGOTTEN
+            if (forgottenSince(host.id, epoch)) return FORGOTTEN
             val untrusted = if (holdsAPairing) MoonlightTrustState.TRUST_LOST else MoonlightTrustState.NOT_PAIRED
             if (!secure.ok) {
                 Log.i(TAG, "${host.address} refused mutual TLS (HTTP ${secure.status}): $untrusted")
@@ -464,7 +467,7 @@ class MoonlightConnectionManager
                 return MoonlightProbe(trust = untrusted)
             }
             val apps = runCatching { fetchAppList(host) }.getOrNull()
-            if (epochOf(host.id) != epoch) return FORGOTTEN
+            if (forgottenSince(host.id, epoch)) return FORGOTTEN
             apps?.let { forgetAPickTheHostDropped(host.id, it) }
             markVerified(host.id)
             return MoonlightProbe(
@@ -478,6 +481,13 @@ class MoonlightConnectionManager
         }
 
         private fun epochOf(hostId: String): Int = epochs[hostId] ?: 0
+
+        // Whether [hostId] was forgotten since its epoch read [epoch]. Nothing read before that is
+        // written after it: a forget is over when it is over.
+        private fun forgottenSince(
+            hostId: String,
+            epoch: Int,
+        ): Boolean = epochOf(hostId) != epoch
 
         /**
          * Converge every host's session on the pads its bindings ask for. The only
@@ -651,18 +661,24 @@ class MoonlightConnectionManager
         suspend fun pairHost(host: MoonlightHost): Boolean =
             withContext(ioDispatcher) {
                 Log.i(TAG, "pair requested for ${host.name} at ${host.address} (${host.id})")
+                val epoch = epochOf(host.id)
                 // A host that does not answer holds these questions to their whole budget. A Cancel hangs
                 // them up and ends the pairing before it records or shows anything.
                 val check = hangingUpOnCancel { line -> checkTrust(host, line) }
-                if (check.trusted) {
-                    // Confirming trust is a pairing outcome and persists like one: a device that forgot
-                    // a host the host still trusts is answered here without a PIN.
-                    Log.i(TAG, "${host.address} already trusts this device; recording the pairing")
-                    rememberPaired(check.answering, paired = true, answeredUniqueId = check.answering.uniqueId)
-                    _events.emit(MoonlightConnectionEvent.Paired(check.answering))
-                    true
-                } else {
-                    pair(check.answering)
+                when {
+                    // A Forget while the host was being asked ends the pairing the same way: the answer
+                    // is about a host this device no longer holds.
+                    forgottenSince(host.id, epoch) -> false
+                    check.trusted -> {
+                        // Confirming trust is a pairing outcome and persists like one: a device that forgot
+                        // a host the host still trusts is answered here without a PIN.
+                        Log.i(TAG, "${host.address} already trusts this device; recording the pairing")
+                        markVerified(host.id)
+                        rememberPaired(check.answering, paired = true, answeredUniqueId = check.answering.uniqueId)
+                        _events.emit(MoonlightConnectionEvent.Paired(check.answering))
+                        true
+                    }
+                    else -> pair(check.answering, epoch)
                 }
             }
 
@@ -693,9 +709,6 @@ class MoonlightConnectionManager
             return host.copy(uniqueId = answered.ifEmpty { remembered })
         }
 
-        /** Fetch the host's app list (empty when unreachable/unpaired). */
-        suspend fun fetchApps(host: MoonlightHost): List<MoonlightApp> = withContext(ioDispatcher) { fetchAppList(host) }
-
         private fun fetchAppList(host: MoonlightHost): List<MoonlightApp> {
             val reply = gateway.getHttps(appList(host.address, host.httpsPort, deviceId), host.id)
             // A refusal, in the status line or in the body, lists nothing, and neither does a reply that
@@ -718,7 +731,6 @@ class MoonlightConnectionManager
             }
             val paired = parseServerInfo(reply.body)?.paired == true
             Log.i(TAG, "${host.address} answered mutual TLS, PairStatus paired=$paired")
-            if (paired) markVerified(host.id)
             return paired
         }
 
@@ -731,11 +743,15 @@ class MoonlightConnectionManager
         /**
          * Runs the 5-phase pairing; phase 1 blocks until the user enters the PIN. Nothing is written on
          * this side, the pin included, until phase 5 has confirmed it, so a Cancel, which hangs up
-         * whichever phase is on the line, leaves this side as it was. The host keeps its half: Wolf
+         * whichever phase is on the line, leaves this side as it was, and so does a Forget that lands
+         * while the PIN is on screen, which moves the host past [epoch]. The host keeps its half: Wolf
          * still takes a PIN typed later and refuses the next phase 1 once as out of order, and Sunshine
          * holds the pending pairing a while and refuses a new one until it lapses.
          */
-        private suspend fun pair(host: MoonlightHost): Boolean {
+        private suspend fun pair(
+            host: MoonlightHost,
+            epoch: Int,
+        ): Boolean {
             val pin = randomPin()
             Log.i(TAG, "pairing ${host.address}: PIN issued, phase 1 will wait up to ${PAIR_WAIT_S}s for it")
             _events.emit(MoonlightConnectionEvent.PairingPinReady(host, pin))
@@ -744,6 +760,7 @@ class MoonlightConnectionManager
             // A cancelled pairing is the user's own doing, not a refusal, and ends here with nothing
             // written: the hung-up phase would otherwise read as "the host did not accept the PIN".
             currentCoroutineContext().ensureActive()
+            if (forgottenSince(host.id, epoch)) return false
             return phases.fold(
                 onSuccess = { proven ->
                     Log.i(TAG, "paired with ${host.name} at ${host.address}")
@@ -1040,6 +1057,10 @@ class MoonlightConnectionManager
                     _connections.updateAndGet { it - id }
                     _discovered.value = _discovered.value.filterNot { it.id == id }
                     _verifiedHostIds.value = _verifiedHostIds.value - id
+                    // Moved on again, now that everything is gone: a probe that began while the cancel
+                    // above waited on the host read the epoch after the first move, and would write the
+                    // host back as verified once it was answered.
+                    epochs.merge(id, 1, Int::plus)
                     publishSessionHosts()
                 }
             }

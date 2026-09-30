@@ -88,8 +88,8 @@ class MoonlightHttpGateway
         ): Reply = plain.get(url, readTimeoutMs, line)
 
         /**
-         * Mutual-TLS GET (serverinfo / pair phase 5 / applist / launch / resume /
-         * cancel), over its own socket, closed as soon as the host has answered.
+         * Mutual-TLS GET (serverinfo / applist / launch / resume / cancel), over
+         * its own socket, closed as soon as the host has answered.
          *
          * This used to ride HttpsURLConnection, and against a real Sunshine host
          * every call after the first one timed out. The URL stack pools

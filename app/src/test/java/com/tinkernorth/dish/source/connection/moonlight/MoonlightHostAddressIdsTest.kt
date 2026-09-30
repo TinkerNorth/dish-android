@@ -187,6 +187,21 @@ class MoonlightHostAddressIdsTest {
         assertTrue(rows.getValue(ADDRESS_ID).paired)
     }
 
+    // A pin at the address with no record behind it was written on first use by a probe of whoever
+    // answered there. It used to count as a second opinion, and disagreeing with the record's own
+    // pin, the one a pairing proved, cost the host both.
+    @Test
+    fun `a record filed under its uniqueid alone keeps its own pin over a stray one at its address`() {
+        remember(byUniqueId.copy(paired = true))
+        pinned[UNIQUE_ID_KEY] = "bb22"
+        pinned[ADDRESS_ID] = "aa11"
+
+        startTheApp()
+
+        assertEquals(mapOf(ADDRESS_ID to "bb22"), pinned)
+        assertTrue(rows.getValue(ADDRESS_ID).paired)
+    }
+
     @Test
     fun `a host already filed under its address is left as it is`() {
         remember(byAddress.copy(uniqueId = UNIQUE_ID, paired = true))

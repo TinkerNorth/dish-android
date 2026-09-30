@@ -14,6 +14,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.launchIn
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -151,6 +153,35 @@ class MoonlightLaunchRecordTest {
 
         assertTrue("the session came up", sessionRecorded.await(WAIT_MS, TimeUnit.MILLISECONDS))
         assertTrue("and the host stays forgotten", within(WAIT_MS) { rows[host.id] == null && manager.get(host.id) == null })
+    }
+
+    // A forget cancels the host's session under the converge lock, which takes as long as the host
+    // takes to answer. A probe that began meanwhile read the epoch the forget had already moved on
+    // to, and once the host answered it, after the forget was over, wrote the host back as verified.
+    @Test
+    fun `a host probed while its forget waits on the host stays forgotten`() {
+        rows[host.id] = RememberedMoonlight(id = host.id, name = "PC", address = host.address, uniqueId = "host-2", paired = true)
+        manager.applyDesired(mapOf(host.id to listOf(PAD)))
+        assertTrue("the session is live", sessionRecorded.await(WAIT_MS, TimeUnit.MILLISECONDS))
+        assertTrue("and published", within(WAIT_MS) { host.id in manager.sessionHostIds.value })
+        val cancelAsked = CountDownLatch(1)
+        val cancelAnswer = CompletableFuture<MoonlightHttpGateway.Reply>()
+        every { gateway.getHttps(match { it.contains("/cancel") }, any()) } answers {
+            cancelAsked.countDown()
+            cancelAnswer.join()
+        }
+        val probeAnswer = CompletableFuture<MoonlightHttpGateway.Reply>()
+        every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } answers { probeAnswer.join() }
+
+        manager.forget(host.id)
+        assertTrue("the cancel is on the wire", cancelAsked.await(WAIT_MS, TimeUnit.MILLISECONDS))
+        val probe = sessions.async { manager.probe(host) }
+        cancelAnswer.complete(reply(CANCELLED))
+        assertTrue("the forget is over", within(WAIT_MS) { host.id !in manager.sessionHostIds.value })
+        probeAnswer.complete(reply(REBUILT_TRUSTING_INFO))
+
+        assertEquals(MoonlightTrustState.NOT_PAIRED, runBlocking { probe.await() }.trust)
+        assertFalse("the host is not verified", host.id in manager.verifiedHostIds.value)
     }
 
     private fun launchReply() =

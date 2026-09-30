@@ -879,8 +879,18 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 .setTitle(getString(R.string.moonlight_pin_title, prompt.hostName))
                 .setMessage(message)
                 .setNegativeButton(R.string.action_cancel) { _, _ -> viewModel.cancelMoonlightPairing() }
+                // Back, or a tap beside the dialog, is the same Cancel: a pairing left running behind a
+                // closed dialog would hold phase 1 open for the PIN window with no way to end it.
+                .setOnCancelListener { viewModel.cancelMoonlightPairing() }
                 .setOnDismissListener { moonlightPinDialog = null }
                 .show()
+    }
+
+    override fun onDestroy() {
+        // The dialog is this window's; the pairing it shows is the view model's, and the screen
+        // recreated after a rotation opens it again.
+        moonlightPinDialog?.dismiss()
+        super.onDestroy()
     }
 
     // A pairing in flight owns the error: it belongs in the dialog the user is looking at, not in
