@@ -26,8 +26,11 @@ import org.junit.Before
 import org.junit.Test
 import java.net.DatagramSocket
 import java.net.InetAddress
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * What a session that comes up writes about its host. The host is on loopback and answers the
@@ -46,21 +49,24 @@ class MoonlightLaunchRecordTest {
     private val recorder = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
 
     private val rows = ConcurrentHashMap<String, RememberedMoonlight>()
+
+    // Counted down by the record a session writes once it is live, the only write that picks app "1".
+    private val sessionRecorded = CountDownLatch(1)
     private val entries = MutableStateFlow<List<RememberedMoonlight>>(emptyList())
     private val host = MoonlightHost(name = "PC", address = "127.0.0.1")
+    private lateinit var gateway: MoonlightHttpGateway
     private lateinit var manager: MoonlightConnectionManager
 
     private fun reply(body: String) = MoonlightHttpGateway.Reply(status = 200, body = body)
 
     @Before
     fun setUp() {
-        val gateway = mockk<MoonlightHttpGateway>(relaxed = true)
+        gateway = mockk(relaxed = true)
         answerEveryLineAlike(gateway)
         every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns reply(REBUILT_INFO)
         every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } returns reply(REBUILT_TRUSTING_INFO)
         every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply(APP_LIST)
-        every { gateway.getHttps(match { it.contains("/launch") }, any()) } returns
-            reply("""<root status_code="200"><sessionUrl0>rtsp://127.0.0.1:${rtsp.port}</sessionUrl0><gamesession>1</gamesession></root>""")
+        every { gateway.getHttps(match { it.contains("/launch") }, any()) } returns reply(launchReply())
         every { gateway.getHttps(match { it.contains("/cancel") }, any()) } returns reply(CANCELLED)
 
         val store = mockk<RememberedMoonlightRepository>(relaxed = true)
@@ -70,6 +76,11 @@ class MoonlightLaunchRecordTest {
         every { store.put(any<RememberedMoonlight>()) } answers {
             val row = firstArg<RememberedMoonlight>()
             rows[row.id] = row
+            entries.value = rows.values.toList()
+            if (row.lastAppId == "1") sessionRecorded.countDown()
+        }
+        every { store.remove(any<String>()) } answers {
+            rows.remove(firstArg<String>())
             entries.value = rows.values.toList()
         }
 
@@ -120,6 +131,30 @@ class MoonlightLaunchRecordTest {
         assertTrue("the session comes up", within(WAIT_MS) { rows[host.id]?.lastAppId == "1" })
         assertEquals("host-2", rows.getValue(host.id).uniqueId)
     }
+
+    // B6. A forget waits for a session coming up on the same host and then takes it down with the
+    // rest. It used to run beside it, and the session, once live, wrote the record straight back.
+    @Test
+    fun `a host forgotten while its session comes up stays forgotten`() {
+        rows[host.id] = RememberedMoonlight(id = host.id, name = "PC", address = host.address, uniqueId = "host-2", paired = true)
+        val launchAsked = CountDownLatch(1)
+        val launchAnswer = CompletableFuture<MoonlightHttpGateway.Reply>()
+        every { gateway.getHttps(match { it.contains("/launch") }, any()) } answers {
+            launchAsked.countDown()
+            launchAnswer.join()
+        }
+        manager.applyDesired(mapOf(host.id to listOf(PAD)))
+        assertTrue("the launch is on the wire", launchAsked.await(WAIT_MS, TimeUnit.MILLISECONDS))
+
+        manager.forget(host.id)
+        launchAnswer.complete(reply(launchReply()))
+
+        assertTrue("the session came up", sessionRecorded.await(WAIT_MS, TimeUnit.MILLISECONDS))
+        assertTrue("and the host stays forgotten", within(WAIT_MS) { rows[host.id] == null && manager.get(host.id) == null })
+    }
+
+    private fun launchReply() =
+        """<root status_code="200"><sessionUrl0>rtsp://127.0.0.1:${rtsp.port}</sessionUrl0><gamesession>1</gamesession></root>"""
 
     private fun recordEvents(): List<MoonlightConnectionEvent> {
         val seen = CopyOnWriteArrayList<MoonlightConnectionEvent>()
