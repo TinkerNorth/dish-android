@@ -355,7 +355,7 @@ private fun closeQuietly(socket: Closeable) {
 /**
  * Runs the blocking [request] on a line that cancelling the caller hangs up, so a request the host
  * is holding open ends when the caller is cancelled rather than when the host answers. A cancelled
- * caller gets its CancellationException, never the reply the hung-up line left behind.
+ * caller gets its CancellationException, never the reply or the failure the hung-up line left behind.
  */
 internal suspend fun <T> hangingUpOnCancel(request: (CallLine) -> T): T {
     val line = CallLine()
@@ -363,12 +363,8 @@ internal suspend fun <T> hangingUpOnCancel(request: (CallLine) -> T): T {
     // the caller itself cannot end until the blocked request returns.
     val callerWatch = Job(currentCoroutineContext().job)
     callerWatch.invokeOnCompletion(line::hangUpIfCancelled)
-    val answer =
-        try {
-            request(line)
-        } finally {
-            callerWatch.complete()
-        }
+    val outcome = runCatching { request(line) }
+    callerWatch.complete()
     currentCoroutineContext().ensureActive()
-    return answer
+    return outcome.getOrThrow()
 }

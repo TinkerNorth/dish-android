@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.source.connection.moonlight
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -375,6 +376,36 @@ class MoonlightHttp11ClientTest {
 
         assertTrue(endsWithin(caller, STOP_MS))
         assertNull("the unanswered reply is not handed back", handedBack.get())
+    }
+
+    // A call that throws once its socket is closed under it must not hand that throw to a caller
+    // that was cancelled: the caller asked to stop, and a failure it did not cause is not an answer.
+    @Test
+    fun `a cancelled caller gets its cancellation even when the hung-up call throws`() {
+        val waiting = CountDownLatch(1)
+        val outcome = CompletableFuture<Throwable>()
+        val caller =
+            callers.launch {
+                runCatching { hangingUpOnCancel { line -> throwOnceHungUp(line, waiting) } }
+                    .onFailure { outcome.complete(it) }
+            }
+        assertTrue("the call is waiting", waiting.await(HOLD_WAIT_MS, TimeUnit.MILLISECONDS))
+
+        caller.cancel()
+
+        assertTrue(outcome.get(STOP_MS, TimeUnit.MILLISECONDS) is CancellationException)
+    }
+
+    // Waits on its line until it is hung up, then fails the way a read fails on a closed socket.
+    private fun throwOnceHungUp(
+        line: CallLine,
+        waiting: CountDownLatch,
+    ): Nothing {
+        val hungUp = CountDownLatch(1)
+        line.attach { hungUp.countDown() }
+        waiting.countDown()
+        hungUp.await()
+        error("the socket closed under the read")
     }
 
     @Test
