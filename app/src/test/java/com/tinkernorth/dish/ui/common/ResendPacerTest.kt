@@ -63,4 +63,26 @@ class ResendPacerTest {
         // The next tick crosses the interval: one keepalive send.
         assertTrue(tick(changed = false))
     }
+
+    // The resend loop's deadline: kept while merely late, re-anchored once the backlog is
+    // runaway, so a stalled thread never replays a burst of back-dated reports.
+    @Test
+    fun `a deadline within the backlog window is kept`() {
+        val deadlineNs = nowNs
+        val lateBy = ResendPacer.MAX_BACKLOG_FACTOR * tickNs
+        assertEquals(deadlineNs, resendDeadlineFor(deadlineNs, nowNs = deadlineNs + lateBy, intervalNs = tickNs))
+    }
+
+    @Test
+    fun `a deadline still in the future is kept`() {
+        val deadlineNs = nowNs + tickNs
+        assertEquals(deadlineNs, resendDeadlineFor(deadlineNs, nowNs = nowNs, intervalNs = tickNs))
+    }
+
+    @Test
+    fun `a runaway backlog re-anchors the deadline one interval past now`() {
+        val deadlineNs = nowNs
+        val runawayNow = deadlineNs + ResendPacer.MAX_BACKLOG_FACTOR * tickNs + 1
+        assertEquals(runawayNow + tickNs, resendDeadlineFor(deadlineNs, nowNs = runawayNow, intervalNs = tickNs))
+    }
 }

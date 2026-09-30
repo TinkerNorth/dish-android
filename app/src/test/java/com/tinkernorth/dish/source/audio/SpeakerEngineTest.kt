@@ -123,7 +123,7 @@ class SpeakerEngineTest {
 
     private fun plan(vararg targets: SpeakerTarget) =
         SpeakerPlayoutPlan(
-            targets.associateBy { SpeakerPlayoutPlan.routeKey(it.sessionHandle, it.controllerIndex, it.lane) },
+            targets.associateBy { speakerRouteKey(it.sessionHandle, it.controllerIndex, it.lane) },
         )
 
     private fun window(fill: Short = TONE) = ShortArray(SpeakerEngine.FRAME_SAMPLES) { fill }
@@ -414,5 +414,17 @@ class SpeakerEngineTest {
         engine.apply(plan(target(playbackDeviceId = 7, channels = PlayoutLane.QUAD_CHANNELS)))
         assertEquals(1, sink.closes.get())
         assertEquals(2, sink.opens.size)
+    }
+
+    @Test
+    fun `a slot rename on the same endpoint keeps the open track`() {
+        engine.apply(plan(target(slotId = "slot-a", playbackDeviceId = 7)))
+
+        engine.apply(plan(target(slotId = "slot-b", playbackDeviceId = 7)))
+
+        assertEquals(1, sink.opens.size)
+        assertEquals(0, sink.closes.get())
+        deliver(pcm = window(0x21))
+        assertEquals(1, sink.written.size)
     }
 }

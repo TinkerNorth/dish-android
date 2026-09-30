@@ -7,14 +7,16 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.DiscoveredServer
-import com.tinkernorth.dish.core.net.DishProtocol
+import com.tinkernorth.dish.core.net.DishProtocolCompat
 import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
 import com.tinkernorth.dish.source.connection.ConnectIntent
+import com.tinkernorth.dish.source.connection.ConnectionError
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import io.mockk.every
 import io.mockk.mockk
@@ -55,7 +57,7 @@ class SetupConnectionViewModelTest {
     private val events = MutableSharedFlow<ConnectionEvent>(extraBufferCapacity = 8)
 
     private val server = DiscoveredServer(name = "Living Room", ip = "10.0.0.5", machineId = "abc123")
-    private val id = SatelliteConnection.idFor(server)
+    private val id = satelliteConnectionIdFor(server)
 
     @Before
     fun setUp() {
@@ -90,7 +92,7 @@ class SetupConnectionViewModelTest {
             val host =
                 vm.state.value.hosts
                     .first { it.id == id }
-            assertEquals(DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE, host.compat)
+            assertEquals(DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE, host.compat)
         }
 
     @Test
@@ -102,7 +104,7 @@ class SetupConnectionViewModelTest {
             val host =
                 vm.state.value.hosts
                     .first { it.id == id }
-            assertEquals(DishProtocol.Compat.UNKNOWN, host.compat)
+            assertEquals(DishProtocolCompat.UNKNOWN, host.compat)
         }
 
     @Test
@@ -230,9 +232,9 @@ class SetupConnectionViewModelTest {
     fun `a connection error surfaces as an error event`() =
         runTest(dispatcher) {
             val seen = collectEvents()
-            events.emit(ConnectionEvent.Error("boom"))
+            events.emit(ConnectionEvent.Error(ConnectionError.WireFailed))
             dispatcher.scheduler.runCurrent()
-            assertEquals(listOf<SetupConnectionViewModel.Event>(SetupConnectionViewModel.Event.Error("boom")), seen)
+            assertEquals(listOf<SetupConnectionViewModel.Event>(SetupConnectionViewModel.Event.Error(ConnectionError.WireFailed)), seen)
         }
 
     @Test

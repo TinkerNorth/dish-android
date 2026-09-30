@@ -11,10 +11,19 @@ import org.junit.Test
 
 abstract class AbstractRepositoryContract<K, V> {
     private lateinit var repo: Repository<K, V>
+    private var keysIssued = 0
 
     protected abstract fun newRepository(): Repository<K, V>
 
-    protected abstract fun newKey(): K
+    // The nth key a test asks for is keyFor(n): distinct by construction, and the same on every
+    // run, so a failure replays exactly. JUnit makes a fresh instance per test, so n restarts at 0.
+    protected abstract fun keyFor(index: Int): K
+
+    protected fun newKey(): K {
+        val index = keysIssued
+        keysIssued += 1
+        return keyFor(index)
+    }
 
     protected abstract fun newValue(key: K): V
 
@@ -81,5 +90,16 @@ abstract class AbstractRepositoryContract<K, V> {
     fun remove_absent_key_is_noop() {
         repo.remove(newKey())
         assertTrue(repo.all().isEmpty())
+    }
+
+    // Every test above that holds two keys needs them to differ; this is the sample that says so.
+    @Test
+    fun keys_issued_within_one_test_are_distinct() {
+        val keys = List(DISTINCT_KEY_SAMPLE) { newKey() }
+        assertEquals(keys.size, keys.toSet().size)
+    }
+
+    private companion object {
+        const val DISTINCT_KEY_SAMPLE = 2_000
     }
 }

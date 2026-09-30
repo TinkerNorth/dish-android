@@ -10,7 +10,7 @@ class BluetoothBatteryReaderTest {
     @Test
     fun `exact name match is found`() {
         val match =
-            BluetoothBatteryReader.matchBondedDeviceName(
+            matchBondedDeviceName(
                 "DualSense Wireless Controller",
                 listOf("Pixel Buds", "DualSense Wireless Controller", "Car Audio"),
             )
@@ -20,7 +20,7 @@ class BluetoothBatteryReaderTest {
     @Test
     fun `match is case-insensitive`() {
         val match =
-            BluetoothBatteryReader.matchBondedDeviceName(
+            matchBondedDeviceName(
                 "8bitdo pro 2",
                 listOf("8BitDo Pro 2"),
             )
@@ -30,7 +30,7 @@ class BluetoothBatteryReaderTest {
     @Test
     fun `surrounding whitespace is tolerated on both sides`() {
         val match =
-            BluetoothBatteryReader.matchBondedDeviceName(
+            matchBondedDeviceName(
                 "  Xbox Wireless Controller  ",
                 listOf("Xbox Wireless Controller "),
             )
@@ -40,7 +40,7 @@ class BluetoothBatteryReaderTest {
     @Test
     fun `no match returns null`() {
         assertNull(
-            BluetoothBatteryReader.matchBondedDeviceName(
+            matchBondedDeviceName(
                 "USB Gamepad",
                 listOf("Headphones", "Keyboard"),
             ),
@@ -49,18 +49,18 @@ class BluetoothBatteryReaderTest {
 
     @Test
     fun `empty input name never matches`() {
-        assertNull(BluetoothBatteryReader.matchBondedDeviceName("", listOf("", "Pad")))
+        assertNull(matchBondedDeviceName("", listOf("", "Pad")))
     }
 
     @Test
     fun `empty bonded set returns null`() {
-        assertNull(BluetoothBatteryReader.matchBondedDeviceName("Pad", emptyList()))
+        assertNull(matchBondedDeviceName("Pad", emptyList()))
     }
 
     @Test
     fun `first match wins when names collide`() {
         val match =
-            BluetoothBatteryReader.matchBondedDeviceName(
+            matchBondedDeviceName(
                 "Controller",
                 listOf("Controller", "Controller"),
             )

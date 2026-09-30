@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.core.net.moonlight
 
+import com.tinkernorth.dish.core.net.bytesToHex
 import java.io.ByteArrayInputStream
 import java.security.PrivateKey
 import java.security.PublicKey
@@ -18,7 +19,7 @@ import java.security.cert.X509Certificate
  * Certificate GENERATION is platform-specific (Android keystore / provider) and
  * lives behind this interface; the crypto that consumes it stays pure and
  * host-testable. This mirrors how the repo keeps TLS/identity at the edges and
- * the protocol crypto ([MoonlightCrypto]) pure.
+ * the protocol crypto (MoonlightCrypto.kt) pure.
  */
 interface MoonlightIdentity {
     /** PEM of the self-signed client certificate (sent as hex in phase 1). */
@@ -31,35 +32,20 @@ interface MoonlightIdentity {
     val privateKey: PrivateKey
 }
 
-/**
- * Parses a peer certificate PEM into the fields the pairing crypto needs.
- * Uses the platform [CertificateFactory] (present on Android and the host JVM),
- * so this is exercised in unit tests without any keystore.
- */
-object MoonlightCert {
-    /** X.509 signature bytes of the certificate encoded in [pem]. */
-    fun signatureOf(pem: String): ByteArray = parse(pem).signature
+// Parses a peer certificate PEM into the fields the pairing crypto needs.
+// Uses the platform [CertificateFactory] (present on Android and the host JVM),
+// so this is exercised in unit tests without any keystore.
 
-    fun publicKeyOf(pem: String): PublicKey = parse(pem).publicKey
+/** X.509 signature bytes of the certificate encoded in [pem]. */
+fun signatureOf(pem: String): ByteArray = parseMoonlightCert(pem).signature
 
-    fun sha256FingerprintHex(pem: String): String = bytesHex(MoonlightCrypto.sha256(parse(pem).encoded))
+fun publicKeyOf(pem: String): PublicKey = parseMoonlightCert(pem).publicKey
 
-    fun parse(pem: String): X509Certificate {
-        val factory = CertificateFactory.getInstance("X.509")
-        return ByteArrayInputStream(pem.toByteArray(Charsets.US_ASCII)).use {
-            factory.generateCertificate(it) as X509Certificate
-        }
-    }
+fun sha256FingerprintHex(pem: String): String = bytesToHex(sha256(parseMoonlightCert(pem).encoded))
 
-    private val hexDigits = "0123456789abcdef".toCharArray()
-
-    private fun bytesHex(bytes: ByteArray): String {
-        val out = CharArray(bytes.size * 2)
-        for (i in bytes.indices) {
-            val v = bytes[i].toInt() and 0xFF
-            out[i * 2] = hexDigits[v ushr 4]
-            out[i * 2 + 1] = hexDigits[v and 0x0F]
-        }
-        return String(out)
+fun parseMoonlightCert(pem: String): X509Certificate {
+    val factory = CertificateFactory.getInstance("X.509")
+    return ByteArrayInputStream(pem.toByteArray(Charsets.US_ASCII)).use {
+        factory.generateCertificate(it) as X509Certificate
     }
 }

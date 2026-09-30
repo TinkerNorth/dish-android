@@ -13,13 +13,13 @@ class TransportProfilesTest {
     fun `satellite carries every feature except trigger rumble`() {
         // Trigger rumble has no satellite wire message: no virtual-pad backend
         // has trigger motors to source it from.
-        val caps = TransportProfiles.forKind(ConnectionKind.SATELLITE)
+        val caps = transportProfileFor(ConnectionKind.SATELLITE)
         assertEquals(Feature.entries.toSet() - Feature.TRIGGER_RUMBLE, caps.features)
     }
 
     @Test
     fun `bluetooth carries only the fixed HID gamepad surface`() {
-        val caps = TransportProfiles.forKind(ConnectionKind.BLUETOOTH)
+        val caps = transportProfileFor(ConnectionKind.BLUETOOTH)
         assertTrue(Feature.GAMEPAD in caps)
         assertTrue(Feature.ANALOG_TRIGGERS in caps)
         assertFalse(Feature.MOTION in caps)
@@ -29,7 +29,7 @@ class TransportProfilesTest {
 
     @Test
     fun `moonlight carries the pad, the pointer surfaces and feedback, but no keyboard`() {
-        val caps = TransportProfiles.forKind(ConnectionKind.MOONLIGHT)
+        val caps = transportProfileFor(ConnectionKind.MOONLIGHT)
         assertTrue(Feature.GAMEPAD in caps)
         assertTrue(Feature.TOUCHPAD in caps)
         assertTrue(Feature.MOUSE in caps)
@@ -42,15 +42,15 @@ class TransportProfilesTest {
         // The satellite protocol carries the pad's own audio endpoints in both
         // directions; the Moonlight control protocol has no such message and no
         // microphone channel at all, and Bluetooth is a fixed HID gamepad.
-        val satellite = TransportProfiles.forKind(ConnectionKind.SATELLITE)
+        val satellite = transportProfileFor(ConnectionKind.SATELLITE)
         assertTrue(Feature.MIC in satellite)
         assertTrue(Feature.SPEAKER in satellite)
 
-        val moonlight = TransportProfiles.forKind(ConnectionKind.MOONLIGHT)
+        val moonlight = transportProfileFor(ConnectionKind.MOONLIGHT)
         assertFalse(Feature.MIC in moonlight)
         assertFalse(Feature.SPEAKER in moonlight)
 
-        val bluetooth = TransportProfiles.forKind(ConnectionKind.BLUETOOTH)
+        val bluetooth = transportProfileFor(ConnectionKind.BLUETOOTH)
         assertFalse(Feature.MIC in bluetooth)
         assertFalse(Feature.SPEAKER in bluetooth)
     }

@@ -4,7 +4,8 @@
 package com.tinkernorth.dish.source.connection.moonlight
 
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
-import com.tinkernorth.dish.core.net.moonlight.ThrowawayIdentity
+import com.tinkernorth.dish.core.net.moonlight.identityOf
+import com.tinkernorth.dish.core.net.moonlight.throwawayCertificate
 import com.tinkernorth.dish.repository.SatellitePinRepository
 import com.tinkernorth.dish.repository.sha256FingerprintHex
 import io.mockk.every
@@ -43,11 +44,11 @@ import javax.net.ssl.X509TrustManager
  * one to resume.
  */
 class MoonlightHttpGatewayTest {
-    private val clientHeld = ThrowawayIdentity.heldCertificate("dish-gateway-test-client")
-    private val hostHeld = ThrowawayIdentity.heldCertificate("Sunshine Gamestream Host")
-    private val impostorHeld = ThrowawayIdentity.heldCertificate("Sunshine Gamestream Host")
+    private val clientHeld = throwawayCertificate("dish-gateway-test-client")
+    private val hostHeld = throwawayCertificate("Sunshine Gamestream Host")
+    private val impostorHeld = throwawayCertificate("Sunshine Gamestream Host")
 
-    private val identity: MoonlightIdentity = ThrowawayIdentity.of(clientHeld)
+    private val identity: MoonlightIdentity = identityOf(clientHeld)
 
     private val pinned = mutableMapOf<String, String>()
     private val pins =
@@ -105,7 +106,9 @@ class MoonlightHttpGatewayTest {
         // One accept per call, and the host read EOF on each: nothing of ours is
         // still open, which is exactly what the pooled URL-stack version leaked.
         assertEquals(CALLS, host.awaitHeads(CALLS).size)
+        assertTrue("the host has seen every call to its close", host.awaitServed())
         assertEquals(CALLS, host.closedByPeer.size)
+        assertTrue("every connection must have ended at end-of-stream", host.closedByPeer.all { it })
     }
 
     @Test
@@ -154,6 +157,51 @@ class MoonlightHttpGatewayTest {
         // so the host sees a connection; what it must never see is a request.
         assertTrue("a rejected host must never see the request", host.headOrNull().isNullOrEmpty())
         // The stored pin is the real host's; a mismatch must not overwrite it.
+        assertEquals(sha256FingerprintHex(hostHeld.certificate.encoded), pinned[HOST_ID])
+    }
+
+    // A pairing's fifth phase trusts the certificate its first four proved, and only that one.
+    @Test
+    fun `a call trusting the certificate a pairing proved reaches the host that presents it, and pins nothing`() {
+        val base = start()
+
+        val reply = gateway().getHttpsTrustingOn(CallLine(), "$base/pair?phrase=pairchallenge", hostHeld.certificate)
+
+        assertEquals(200, reply.status)
+        assertTrue(pinned.isEmpty())
+    }
+
+    // Every Sunshine host names itself alike, so the name on a certificate proves nothing: the key does.
+    @Test
+    fun `a call trusting the certificate a pairing proved is refused by a host that presents another`() {
+        val base = start(impostorHeld)
+
+        val reply = gateway().getHttpsTrustingOn(CallLine(), "$base/pair?phrase=pairchallenge", hostHeld.certificate)
+
+        assertEquals(0, reply.status)
+        assertTrue("a refused host must never see the request", host.headOrNull().isNullOrEmpty())
+        assertTrue(pinned.isEmpty())
+    }
+
+    // The pin of a host since rebuilt is what used to refuse the pairing that replaces it.
+    @Test
+    fun `a call trusting the certificate a pairing proved does not answer to the pin`() {
+        val base = start()
+        val oldPin = sha256FingerprintHex(impostorHeld.certificate.encoded)
+        pinned[HOST_ID] = oldPin
+
+        val reply = gateway().getHttpsTrustingOn(CallLine(), "$base/pair?phrase=pairchallenge", hostHeld.certificate)
+
+        assertEquals(200, reply.status)
+        assertEquals(oldPin, pinned[HOST_ID])
+    }
+
+    @Test
+    fun `pinning the certificate a pairing proved replaces the pin held`() {
+        pinned[HOST_ID] = sha256FingerprintHex(impostorHeld.certificate.encoded)
+
+        gateway().pinProven(HOST_ID, hostHeld.certificate)
+
         assertEquals(sha256FingerprintHex(hostHeld.certificate.encoded), pinned[HOST_ID])
     }
 
@@ -218,10 +266,14 @@ class MoonlightHttpGatewayTest {
                         )
                         flush()
                     }
-                    // The client asked us to close, so it must not send anything
-                    // more: what comes back has to be end-of-stream.
-                    closedByPeer += socket.getInputStream().read() < 0
                 }
+                // The client asked us to close, so nothing more may come back. A clean
+                // end-of-stream and a reset both mean that, and a throw here is never data.
+                // Recorded OUTSIDE the block above on purpose: it used to sit inside, so a read
+                // that threw dropped the observation while served.countDown() still fired, and
+                // awaitHeads then returned before closedByPeer was complete. That is what made
+                // this test fail on a loaded runner and pass everywhere else.
+                closedByPeer += runCatching { socket.getInputStream().read() < 0 }.getOrDefault(true)
                 served.countDown()
             }
         }
@@ -241,6 +293,9 @@ class MoonlightHttpGatewayTest {
             waitFor(count)
             return heads.toList()
         }
+
+        // The host reads each call's close on its own thread, which can come after the call returned.
+        fun awaitServed(): Boolean = served.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
 
         fun awaitClientPrincipals(): List<String> {
             waitFor(1)

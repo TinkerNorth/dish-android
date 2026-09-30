@@ -8,8 +8,8 @@ import com.tinkernorth.dish.architecture.testing.probe
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.net.ControllerDescriptor
-import com.tinkernorth.dish.core.net.moonlight.MoonlightControlProtocol
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.moonlight.CAP_RGB_LED
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.audio.PadAudioRoute
@@ -74,6 +74,7 @@ class CapabilityComposerLightbarTest {
                 every { this@mockk.bindings } returns MutableStateFlow(bindings)
                 every { this@mockk.connections } returns MutableStateFlow(connections)
                 every { satTypes } returns MutableStateFlow(emptyMap())
+                every { moonlightSessions } returns MutableStateFlow(emptyMap())
             }
         val native: PhysicalInputNative =
             mockk {
@@ -183,13 +184,13 @@ class CapabilityComposerLightbarTest {
             val caps =
                 composer.capabilityForCandidate(
                     slotId = "9",
-                    candidateType = MoonlightEmulatedType.PLAYSTATION,
+                    candidateType = PLAYSTATION,
                     candidateHostKind = ConnectionKind.MOONLIGHT,
                     candidateHostId = "moon-A",
                 )
             assertTrue(Feature.LIGHTBAR in caps.available)
-            val bits = MoonlightCatalog.capabilityBits(MoonlightEmulatedType.PLAYSTATION, caps.available)
-            assertEquals(MoonlightControlProtocol.CAP_RGB_LED, bits and MoonlightControlProtocol.CAP_RGB_LED)
+            val bits = capabilityBits(PLAYSTATION, caps.available)
+            assertEquals(CAP_RGB_LED, bits and CAP_RGB_LED)
         }
 
     @Test

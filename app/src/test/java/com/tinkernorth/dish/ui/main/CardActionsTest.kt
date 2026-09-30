@@ -9,8 +9,11 @@ import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.hotpath.input.Transport
-import com.tinkernorth.dish.repository.TouchpadModeValue
+import com.tinkernorth.dish.repository.TOUCHPAD_MODE_DS4
+import com.tinkernorth.dish.repository.TOUCHPAD_MODE_MOUSE
+import com.tinkernorth.dish.repository.TOUCHPAD_MODE_OFF
 import com.tinkernorth.dish.source.usb.PathChoice
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -46,7 +49,7 @@ class CardActionsTest {
     private fun pointer(
         touchpad: Boolean = false,
         mouse: Boolean = false,
-    ) = PointerSlotUi(mode = TouchpadModeValue.DS4, touchpadOpenable = touchpad, mouseOpenable = mouse)
+    ) = PointerSlotUi(mode = TOUCHPAD_MODE_DS4, touchpadOpenable = touchpad, mouseOpenable = mouse)
 
     private fun pathCard(
         wiredSwitchAvailable: Boolean = false,
@@ -71,7 +74,7 @@ class CardActionsTest {
         connections: List<ConnectionSummary> = listOf(summary()),
         pointer: PointerSlotUi? = null,
         pathCard: PathCard? = null,
-    ) = ControllerAdapter.Row(slot = slot, connections = connections, pointer = pointer, pathCard = pathCard)
+    ) = ControllerRow(slot = slot, connections = connections, pointer = pointer, pathCard = pathCard)
 
     private fun kinds(actions: CardActions): List<CardActionKind> = actions.filled.map { it.kind }
 
@@ -210,7 +213,7 @@ class CardActionsTest {
         SlotCapabilities(
             controller = CapabilitySet.EMPTY,
             transport = CapabilitySet.EMPTY,
-            type = CapabilitySet.of(Feature.TOUCHPAD),
+            type = capabilitySetOf(Feature.TOUCHPAD),
             host = CapabilitySet.EMPTY,
             userEnabled = CapabilitySet.EMPTY,
             runtimeDown = CapabilitySet.EMPTY,
@@ -230,7 +233,7 @@ class CardActionsTest {
         val mouseRow =
             row(
                 slot(SlotInputType.VIRTUAL),
-                pointer = PointerSlotUi(mode = TouchpadModeValue.MOUSE, touchpadOpenable = false, mouseOpenable = true),
+                pointer = PointerSlotUi(mode = TOUCHPAD_MODE_MOUSE, touchpadOpenable = false, mouseOpenable = true),
             )
         assertEquals(listOf(PointerPillFact.MOUSE_READY), pointerFuncFacts(mouseRow))
     }
@@ -240,7 +243,7 @@ class CardActionsTest {
         val offRow =
             row(
                 slot(SlotInputType.PHYSICAL),
-                pointer = PointerSlotUi(mode = TouchpadModeValue.OFF, touchpadOpenable = false, mouseOpenable = false),
+                pointer = PointerSlotUi(mode = TOUCHPAD_MODE_OFF, touchpadOpenable = false, mouseOpenable = false),
             ).copy(motionCap = padTypeCaps())
         assertEquals(listOf(PointerPillFact.PAD_OFF), pointerFuncFacts(offRow))
     }

@@ -6,8 +6,10 @@ import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.lights.FrameworkLightGateway
+import com.tinkernorth.dish.source.lights.LightSource
 import com.tinkernorth.dish.source.store.FeedbackActivityStore
 import com.tinkernorth.dish.source.store.FeedbackKind
+import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.source.store.VirtualPadFeedbackStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import javax.inject.Inject
@@ -43,6 +45,7 @@ class FeedbackRouter
         private val rumble: RumbleRouter,
         private val feedbackActivity: FeedbackActivityStore,
         private val frameworkLights: FrameworkLightGateway,
+        private val rumbleEnabled: RumbleEnabledStore,
     ) {
         fun dispatchLightbar(
             sessionHandle: Int,
@@ -51,9 +54,11 @@ class FeedbackRouter
             g: Int,
             b: Int,
         ) {
-            val target = resolveTarget(sessionHandle, controllerIndex)
+            val connections = connectionSnapshots()
+            val target = resolveRumble(connections, sessionHandle, controllerIndex)
             noteHost(target, FeedbackKind.LIGHTBAR)
-            actuateLightbar(target, r, g, b)
+            val connectionId = connectionForHandle(connections, sessionHandle)?.connectionId.orEmpty()
+            actuateLightbar(target, LightSource(connectionId, controllerIndex), r, g, b)
         }
 
         fun dispatchTriggerEffects(
@@ -100,11 +105,37 @@ class FeedbackRouter
         /** Slot-addressed entry points: the Moonlight path and the inspector's test bench already know the slot. */
         fun dispatchLightbarToSlot(
             slotId: String,
+            source: LightSource,
             r: Int,
             g: Int,
             b: Int,
         ) {
-            actuateLightbar(classifyTarget(slotId), r, g, b)
+            actuateLightbar(classifyTarget(slotId), source, r, g, b)
+        }
+
+        /** The bench's light bar: the same actuation, never taken for the host's color. */
+        fun testLightbar(
+            slotId: String,
+            r: Int,
+            g: Int,
+            b: Int,
+        ) {
+            when (val target = classifyTarget(slotId)) {
+                is RumbleTarget.DirectUsb -> native.sendUsbLightbar(target.deviceId, r, g, b)
+                is RumbleTarget.Framework -> frameworkLights.paint(target.deviceId, r, g, b)
+                else -> Unit
+            }
+        }
+
+        // A framework pad gets its host's color back. The phone keeps no host color for a Direct
+        // pad, so the bench turns that bar off.
+        fun endLightbarTest(slotId: String) {
+            when (val target = classifyTarget(slotId)) {
+                is RumbleTarget.DirectUsb ->
+                    native.sendUsbLightbar(target.deviceId, LIGHTBAR_CHANNEL_OFF, LIGHTBAR_CHANNEL_OFF, LIGHTBAR_CHANNEL_OFF)
+                is RumbleTarget.Framework -> frameworkLights.showHostColor(target.deviceId)
+                else -> Unit
+            }
         }
 
         fun dispatchTriggerEffectsToSlot(
@@ -128,13 +159,19 @@ class FeedbackRouter
             actuateMicLed(classifyTarget(slotId), state)
         }
 
+        // Trigger rumble is rumble, so the slot's rumble switch covers it. Off, the host's event
+        // lands as a stop rather than being dropped: a Direct pad's trigger motors hold their last
+        // level until the next write, so a dropped stop could leave them running.
         fun dispatchTriggerRumbleToSlot(
             slotId: String,
             leftMagnitude: Int,
             rightMagnitude: Int,
         ) {
             feedbackActivity.note(slotId, FeedbackKind.TRIGGER_RUMBLE)
-            testTriggerRumble(slotId, leftMagnitude, rightMagnitude)
+            val rumbleOn = rumbleEnabled.isEnabled(slotId)
+            val left = if (rumbleOn) leftMagnitude else TRIGGER_RUMBLE_STOP
+            val right = if (rumbleOn) rightMagnitude else TRIGGER_RUMBLE_STOP
+            testTriggerRumble(slotId, left, right)
         }
 
         /** The bench's entry: the same actuation without counting it as host feedback. */
@@ -145,7 +182,7 @@ class FeedbackRouter
         ) {
             when (val target = classifyTarget(slotId)) {
                 is RumbleTarget.DirectUsb ->
-                    native.sendUsbTriggerRumble(target.deviceId, leftMagnitude, rightMagnitude)
+                    rumble.driveDirectTriggers(target.deviceId, leftMagnitude, rightMagnitude, TRIGGER_RUMBLE_HOLD_MS)
                 // The phone IS the virtual pad's motors: fold the trigger pair through
                 // the rumble path (left -> strong, right -> weak) so the delivery
                 // toggle, the stop-on-zero rule and the duration clamp all apply.
@@ -171,13 +208,14 @@ class FeedbackRouter
 
         private fun actuateLightbar(
             target: RumbleTarget,
+            source: LightSource,
             r: Int,
             g: Int,
             b: Int,
         ) {
             when (target) {
                 is RumbleTarget.DirectUsb -> native.sendUsbLightbar(target.deviceId, r, g, b)
-                is RumbleTarget.Framework -> frameworkLights.setColor(target.deviceId, r, g, b)
+                is RumbleTarget.Framework -> frameworkLights.setColor(target.deviceId, source, r, g, b)
                 RumbleTarget.Phone -> virtualFeedback.setLightbar(r, g, b)
                 RumbleTarget.None -> Unit
             }
@@ -223,17 +261,17 @@ class FeedbackRouter
         private fun resolveTarget(
             sessionHandle: Int,
             controllerIndex: Int,
-        ): RumbleTarget {
-            val snapshot =
-                satellite.connections.value.values.map { conn ->
-                    RumbleConnectionSnapshot(
-                        handle = conn.handle,
-                        connected = conn.state.value == SatelliteSessionState.Live,
-                        slots = conn.slots.value,
-                    )
-                }
-            return resolveRumble(snapshot, sessionHandle, controllerIndex)
-        }
+        ): RumbleTarget = resolveRumble(connectionSnapshots(), sessionHandle, controllerIndex)
+
+        private fun connectionSnapshots(): List<RumbleConnectionSnapshot> =
+            satellite.connections.value.values.map { conn ->
+                RumbleConnectionSnapshot(
+                    connectionId = conn.id,
+                    handle = conn.handle,
+                    connected = conn.state.value == SatelliteSessionState.Live,
+                    slots = conn.slots.value,
+                )
+            }
 
         companion object {
             // Wire order of MSG_TRIGGER_EFFECTS blocks: left (0..10), right (11..21);
@@ -244,9 +282,14 @@ class FeedbackRouter
             // Matches the Moonlight rumble hold: refreshed by the host well before expiry.
             private const val TRIGGER_RUMBLE_HOLD_MS = 1500
 
-            private fun triggerEffectActive(
-                blocks: ByteArray,
-                offset: Int,
-            ): Boolean = blocks.size > offset && blocks[offset].toInt() != 0
+            private const val TRIGGER_RUMBLE_STOP = 0
+
+            private const val LIGHTBAR_CHANNEL_OFF = 0
         }
     }
+
+// A block whose mode byte is present and non-zero holds an effect; a truncated array reads as off.
+private fun triggerEffectActive(
+    blocks: ByteArray,
+    offset: Int,
+): Boolean = blocks.size > offset && blocks[offset].toInt() != 0

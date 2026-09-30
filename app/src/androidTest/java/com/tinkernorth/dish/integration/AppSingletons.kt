@@ -104,29 +104,29 @@ object AppSingletons {
             .forEach { bindingStore.unbind(it) }
         Thread.sleep(300)
     }
+}
 
-    fun await(
-        timeoutMs: Long = 25_000,
-        condition: () -> Boolean,
-    ): Boolean {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            if (condition()) return true
-            Thread.sleep(100)
-        }
-        return condition()
+internal fun await(
+    timeoutMs: Long = 25_000,
+    condition: () -> Boolean,
+): Boolean {
+    val deadline = System.currentTimeMillis() + timeoutMs
+    while (System.currentTimeMillis() < deadline) {
+        if (condition()) return true
+        Thread.sleep(100)
     }
+    return condition()
+}
 
-    fun Any.fieldValue(name: String): Any {
-        var cls: Class<*>? = javaClass
-        while (cls != null) {
-            val field = cls.declaredFields.firstOrNull { it.name == name }
-            if (field != null) {
-                field.isAccessible = true
-                return field.get(this) ?: error("field $name is null on ${javaClass.name}")
-            }
-            cls = cls.superclass
+internal fun Any.fieldValue(name: String): Any {
+    var cls: Class<*>? = javaClass
+    while (cls != null) {
+        val field = cls.declaredFields.firstOrNull { it.name == name }
+        if (field != null) {
+            field.isAccessible = true
+            return field.get(this) ?: error("field $name is null on ${javaClass.name}")
         }
-        error("field $name not found on ${javaClass.name}")
+        cls = cls.superclass
     }
+    error("field $name not found on ${javaClass.name}")
 }

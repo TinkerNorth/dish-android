@@ -25,22 +25,21 @@ enum class ThemeMode(
             DARK -> STORAGE_DARK
             SYSTEM -> STORAGE_SYSTEM
         }
-
-    companion object {
-        // Storage values are user-facing through cloud-backup of user_preferences.xml; renaming
-        // is a schema migration. Add new values, do not rename existing ones.
-        private const val STORAGE_SYSTEM = "system"
-        private const val STORAGE_LIGHT = "light"
-        private const val STORAGE_DARK = "dark"
-
-        fun fromStorageValue(value: String?): ThemeMode =
-            when (value) {
-                STORAGE_LIGHT -> LIGHT
-                STORAGE_DARK -> DARK
-                else -> SYSTEM
-            }
-    }
 }
+
+// Storage values are user-facing through cloud-backup of user_preferences.xml; renaming
+// is a schema migration. Add new values, do not rename existing ones.
+private const val STORAGE_SYSTEM = "system"
+private const val STORAGE_LIGHT = "light"
+private const val STORAGE_DARK = "dark"
+
+// Anything this build does not know, including nothing stored yet, follows the system.
+internal fun themeModeFromStorage(value: String?): ThemeMode =
+    when (value) {
+        STORAGE_LIGHT -> ThemeMode.LIGHT
+        STORAGE_DARK -> ThemeMode.DARK
+        else -> ThemeMode.SYSTEM
+    }
 
 // Stored in user_preferences (cloud-backed) rather than connection_store (excluded from backup
 // because it holds shared keys). setMode is the controller: persisting and flipping
@@ -51,7 +50,7 @@ class ThemePreferenceStore
     constructor(
         @ApplicationContext context: Context,
     ) : AbstractStateSource<ThemeMode>(
-            initialState = readInitial(context),
+            initialState = readInitialThemeMode(context),
         ) {
         private val prefs: SharedPreferences =
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -71,10 +70,10 @@ class ThemePreferenceStore
         companion object {
             const val PREFS_NAME = "user_preferences"
             const val KEY_THEME_MODE = "theme_mode"
-
-            private fun readInitial(context: Context): ThemeMode {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                return ThemeMode.fromStorageValue(prefs.getString(KEY_THEME_MODE, null))
-            }
         }
     }
+
+private fun readInitialThemeMode(context: Context): ThemeMode {
+    val prefs = context.getSharedPreferences(ThemePreferenceStore.PREFS_NAME, Context.MODE_PRIVATE)
+    return themeModeFromStorage(prefs.getString(ThemePreferenceStore.KEY_THEME_MODE, null))
+}

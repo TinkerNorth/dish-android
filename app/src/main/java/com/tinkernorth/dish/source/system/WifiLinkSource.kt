@@ -33,18 +33,19 @@ enum class WifiBand {
     GHZ_5,
     GHZ_6,
     UNKNOWN,
-    ;
-
-    companion object {
-        fun fromFrequencyMhz(frequencyMhz: Int): WifiBand =
-            when (frequencyMhz) {
-                in 2400..2500 -> GHZ_2_4
-                in 4900..5899 -> GHZ_5
-                in 5925..7125 -> GHZ_6
-                else -> UNKNOWN
-            }
-    }
 }
+
+private val BAND_2_4_GHZ_MHZ = 2400..2500
+private val BAND_5_GHZ_MHZ = 4900..5899
+private val BAND_6_GHZ_MHZ = 5925..7125
+
+fun wifiBandForFrequency(frequencyMhz: Int): WifiBand =
+    when (frequencyMhz) {
+        in BAND_2_4_GHZ_MHZ -> WifiBand.GHZ_2_4
+        in BAND_5_GHZ_MHZ -> WifiBand.GHZ_5
+        in BAND_6_GHZ_MHZ -> WifiBand.GHZ_6
+        else -> WifiBand.UNKNOWN
+    }
 
 enum class WifiGeneration {
     UNKNOWN,
@@ -53,56 +54,51 @@ enum class WifiGeneration {
     WIFI_5,
     WIFI_6,
     WIFI_7,
-    ;
-
-    companion object {
-        private const val STANDARD_LEGACY = 1
-        private const val STANDARD_11N = 4
-        private const val STANDARD_11AC = 5
-        private const val STANDARD_11AX = 6
-        private const val STANDARD_11BE = 8
-
-        fun fromWifiStandard(standard: Int): WifiGeneration =
-            when (standard) {
-                STANDARD_LEGACY -> LEGACY
-                STANDARD_11N -> WIFI_4
-                STANDARD_11AC -> WIFI_5
-                STANDARD_11AX -> WIFI_6
-                STANDARD_11BE -> WIFI_7
-                else -> UNKNOWN
-            }
-    }
 }
 
-object WifiSubnet {
-    private const val IPV4_BITS = 32
-    private const val OCTET_BITS = 8
-    private const val OCTET_MASK = 0xFF
+private const val STANDARD_LEGACY = 1
+private const val STANDARD_11N = 4
+private const val STANDARD_11AC = 5
+private const val STANDARD_11AX = 6
+private const val STANDARD_11BE = 8
 
-    // Null when either side is not a dotted IPv4 literal (a hostname, an IPv6 address, no link).
-    fun sameSubnet(
-        phoneIpv4: String?,
-        prefixLength: Int,
-        hostIp: String,
-    ): Boolean? {
-        val phone = parseIpv4(phoneIpv4 ?: return null) ?: return null
-        val host = parseIpv4(hostIp) ?: return null
-        if (prefixLength <= 0 || prefixLength > IPV4_BITS) return null
-        val mask = if (prefixLength == IPV4_BITS) -1 else (-1 shl (IPV4_BITS - prefixLength))
-        return (phone and mask) == (host and mask)
+fun wifiGenerationForStandard(standard: Int): WifiGeneration =
+    when (standard) {
+        STANDARD_LEGACY -> WifiGeneration.LEGACY
+        STANDARD_11N -> WifiGeneration.WIFI_4
+        STANDARD_11AC -> WifiGeneration.WIFI_5
+        STANDARD_11AX -> WifiGeneration.WIFI_6
+        STANDARD_11BE -> WifiGeneration.WIFI_7
+        else -> WifiGeneration.UNKNOWN
     }
 
-    private fun parseIpv4(text: String): Int? {
-        val parts = text.trim().split('.')
-        if (parts.size != 4) return null
-        var value = 0
-        for (part in parts) {
-            val octet = part.toIntOrNull() ?: return null
-            if (octet < 0 || octet > OCTET_MASK) return null
-            value = (value shl OCTET_BITS) or octet
-        }
-        return value
+private const val IPV4_BITS = 32
+private const val OCTET_BITS = 8
+private const val OCTET_MASK = 0xFF
+
+// Null when either side is not a dotted IPv4 literal (a hostname, an IPv6 address, no link).
+internal fun sameSubnet(
+    phoneIpv4: String?,
+    prefixLength: Int,
+    hostIp: String,
+): Boolean? {
+    val phone = parseIpv4(phoneIpv4 ?: return null) ?: return null
+    val host = parseIpv4(hostIp) ?: return null
+    if (prefixLength <= 0 || prefixLength > IPV4_BITS) return null
+    val mask = if (prefixLength == IPV4_BITS) -1 else (-1 shl (IPV4_BITS - prefixLength))
+    return (phone and mask) == (host and mask)
+}
+
+private fun parseIpv4(text: String): Int? {
+    val parts = text.trim().split('.')
+    if (parts.size != 4) return null
+    var value = 0
+    for (part in parts) {
+        val octet = part.toIntOrNull() ?: return null
+        if (octet < 0 || octet > OCTET_MASK) return null
+        value = (value shl OCTET_BITS) or octet
     }
+    return value
 }
 
 /**
@@ -155,7 +151,7 @@ class WifiLinkSource
 
         private fun generationOf(info: WifiInfo): WifiGeneration =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                WifiGeneration.fromWifiStandard(info.wifiStandard)
+                wifiGenerationForStandard(info.wifiStandard)
             } else {
                 WifiGeneration.UNKNOWN
             }

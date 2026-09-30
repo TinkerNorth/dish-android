@@ -15,11 +15,13 @@ import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
+import com.tinkernorth.dish.integration.fieldValue
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.ControllerTypeStore
@@ -31,8 +33,10 @@ import com.tinkernorth.dish.ui.main.MainActivity
 import com.tinkernorth.dish.ui.main.MainViewModel
 import com.tinkernorth.dish.ui.main.TouchpadOverlayActivity
 import com.tinkernorth.dish.ui.settings.SettingsActivity
+import com.tinkernorth.dish.ui.setup.EXTRA_INPUT_TYPE
+import com.tinkernorth.dish.ui.setup.EXTRA_SLOT_ID
+import com.tinkernorth.dish.ui.setup.INPUT_ONSCREEN
 import com.tinkernorth.dish.ui.setup.SetupConnectionActivity
-import com.tinkernorth.dish.ui.setup.SetupFlow
 import com.tinkernorth.dish.ui.setup.SetupInputActivity
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
@@ -108,12 +112,12 @@ class DishScreenshots {
         DiscoveredServer(name = "Office PC", ip = "192.168.1.52", machineId = "office-pc")
     private val livingRoomServer =
         DiscoveredServer(name = "Living Room PC", ip = "192.168.1.51", machineId = "living-room-pc")
-    private val gamingId get() = SatelliteConnection.idFor(gamingServer)
+    private val gamingId get() = satelliteConnectionIdFor(gamingServer)
 
     private fun liveSession(server: DiscoveredServer): SatelliteConnection {
         val session =
             SatelliteConnection(
-                id = SatelliteConnection.idFor(server),
+                id = satelliteConnectionIdFor(server),
                 server = server,
                 scope = MainScope(),
                 controllerRepo = satellite.controllerRepo,
@@ -230,8 +234,8 @@ class DishScreenshots {
     fun shot03_setup_connection() {
         val intent =
             Intent(targetContext, SetupConnectionActivity::class.java).apply {
-                putExtra(SetupFlow.EXTRA_INPUT_TYPE, SetupFlow.INPUT_ONSCREEN)
-                putExtra(SetupFlow.EXTRA_SLOT_ID, "virtual")
+                putExtra(EXTRA_INPUT_TYPE, INPUT_ONSCREEN)
+                putExtra(EXTRA_SLOT_ID, "virtual")
             }
         ActivityScenario.launch<SetupConnectionActivity>(intent).use {
             settle(1200)
@@ -338,19 +342,6 @@ class DishScreenshots {
 
     private fun batteryClear(slotId: String) {
         batteryStore.clear(slotId)
-    }
-
-    private fun Any.fieldValue(name: String): Any {
-        var cls: Class<*>? = javaClass
-        while (cls != null) {
-            val f = cls.declaredFields.firstOrNull { it.name == name }
-            if (f != null) {
-                f.isAccessible = true
-                return f.get(this) ?: error("field $name is null on ${javaClass.name}")
-            }
-            cls = cls.superclass
-        }
-        error("field $name not found on ${javaClass.name}")
     }
 
     // The flow is reached by field name, so its value is set the same way: through the

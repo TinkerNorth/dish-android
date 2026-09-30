@@ -7,10 +7,13 @@ import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.lights.FrameworkLightGateway
+import com.tinkernorth.dish.source.lights.LightSource
 import com.tinkernorth.dish.source.store.FeedbackActivityStore
+import com.tinkernorth.dish.source.store.FeedbackKind
 import com.tinkernorth.dish.source.store.MIC_LED_OFF
 import com.tinkernorth.dish.source.store.MIC_LED_ON
 import com.tinkernorth.dish.source.store.MIC_LED_PULSE
+import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.source.store.VirtualPadFeedbackStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import io.mockk.every
@@ -21,6 +24,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+
+private const val CONNECTION_ID = "c"
+private val MOONLIGHT_PAD = LightSource("moonlight:pc", 0)
 
 /**
  * The router's one job: land feedback on what the slot can actuate — a
@@ -34,6 +40,12 @@ class FeedbackRouterTest {
     private val store = VirtualPadFeedbackStore()
     private val rumble: RumbleRouter = mockk(relaxed = true)
     private val frameworkLights: FrameworkLightGateway = mockk(relaxed = true)
+    private val activity = FeedbackActivityStore()
+
+    // Each slot's rumble switch, on unless a test turns it off.
+    private val rumbleOff = mutableSetOf<String>()
+    private val rumbleEnabled: RumbleEnabledStore =
+        mockk { every { isEnabled(any()) } answers { firstArg<String>() !in rumbleOff } }
 
     private fun managerWith(
         handle: Int,
@@ -41,6 +53,7 @@ class FeedbackRouterTest {
         controllerIndex: Int = 0,
     ): SatelliteConnectionManager {
         val conn = mockk<SatelliteConnection>()
+        every { conn.id } returns CONNECTION_ID
         every { conn.handle } returns handle
         every { conn.state } returns MutableStateFlow(SatelliteSessionState.Live)
         every { conn.slots } returns
@@ -48,12 +61,14 @@ class FeedbackRouterTest {
                 mapOf(slotId to SatelliteConnection.SlotBinding(controllerIndex = controllerIndex, controllerType = 2, registered = true)),
             )
         val manager = mockk<SatelliteConnectionManager>()
-        every { manager.connections } returns MutableStateFlow(mapOf("c" to conn))
+        every { manager.connections } returns MutableStateFlow(mapOf(CONNECTION_ID to conn))
         return manager
     }
 
     private fun router(manager: SatelliteConnectionManager = mockk(relaxed = true)) =
-        FeedbackRouter(manager, native, store, rumble, FeedbackActivityStore(), frameworkLights)
+        FeedbackRouter(manager, native, store, rumble, activity, frameworkLights, rumbleEnabled)
+
+    private fun lastKindNoted(slotId: String): FeedbackKind? = activity.snapshot()[slotId]?.lastKind
 
     @Test
     fun `lightbar reaches a Direct-claimed pad through the session resolve`() {
@@ -150,7 +165,7 @@ class FeedbackRouterTest {
     fun `a framework pad's lightbar reaches the framework light gateway, not the USB writer or the skin`() {
         router(managerWith(handle = 7, slotId = "9"))
             .dispatchLightbar(7, 0, 1, 2, 3)
-        verify(exactly = 1) { frameworkLights.setColor(9, 1, 2, 3) }
+        verify(exactly = 1) { frameworkLights.setColor(9, LightSource(CONNECTION_ID, 0), 1, 2, 3) }
         verify(exactly = 0) { native.sendUsbLightbar(any(), any(), any(), any()) }
         assertEquals(null, store.state.value.lightbarColor)
     }
@@ -166,15 +181,15 @@ class FeedbackRouterTest {
         verify(exactly = 0) { native.sendUsbTriggerEffects(any(), any()) }
         verify(exactly = 0) { native.sendUsbPlayerLeds(any(), any()) }
         verify(exactly = 0) { native.sendUsbMicMuteLed(any(), any()) }
-        verify(exactly = 0) { frameworkLights.setColor(any(), any(), any(), any()) }
+        verify(exactly = 0) { frameworkLights.setColor(any(), any(), any(), any(), any()) }
     }
 
     @Test
     fun `the slot-addressed lightbar reaches the framework gateway for a framework pad`() {
         // The Moonlight path and the diagnostics bench come in slot-addressed; a framework slot id
         // must land on the gateway the same way the session-addressed satellite path does.
-        router().dispatchLightbarToSlot("9", 5, 6, 7)
-        verify(exactly = 1) { frameworkLights.setColor(9, 5, 6, 7) }
+        router().dispatchLightbarToSlot("9", MOONLIGHT_PAD, 5, 6, 7)
+        verify(exactly = 1) { frameworkLights.setColor(9, MOONLIGHT_PAD, 5, 6, 7) }
         verify(exactly = 0) { native.sendUsbLightbar(any(), any(), any(), any()) }
     }
 
@@ -190,21 +205,101 @@ class FeedbackRouterTest {
     fun `moonlight slot-addressed dispatch actuates Direct pads and the virtual sinks`() {
         val r = router()
         r.dispatchTriggerRumbleToSlot("-1000", 100, 200)
-        r.dispatchLightbarToSlot("-1000", 5, 6, 7)
-        verify(exactly = 1) { native.sendUsbTriggerRumble(-1000, 100, 200) }
+        r.dispatchLightbarToSlot("-1000", MOONLIGHT_PAD, 5, 6, 7)
+        verify(exactly = 1) { rumble.driveDirectTriggers(-1000, 100, 200, any()) }
         verify(exactly = 1) { native.sendUsbLightbar(-1000, 5, 6, 7) }
 
         // Virtual: trigger rumble folds through the rumble path (toggle + stop
         // rules apply there); the lightbar paints the skin.
         r.dispatchTriggerRumbleToSlot(VIRTUAL_SLOT_ID, 300, 400)
         verify(exactly = 1) { rumble.dispatchToSlot(VIRTUAL_SLOT_ID, 300, 400, any()) }
-        r.dispatchLightbarToSlot(VIRTUAL_SLOT_ID, 9, 8, 7)
+        r.dispatchLightbarToSlot(VIRTUAL_SLOT_ID, MOONLIGHT_PAD, 9, 8, 7)
         assertEquals(0xFF090807.toInt(), store.state.value.lightbarColor)
 
         // Framework: nothing reachable.
         r.dispatchTriggerRumbleToSlot("9", 1, 2)
-        verify(exactly = 0) { native.sendUsbTriggerRumble(9, any(), any()) }
+        verify(exactly = 0) { rumble.driveDirectTriggers(9, any(), any(), any()) }
         verify(exactly = 0) { rumble.dispatchToSlot("9", any(), any(), any()) }
+    }
+
+    @Test
+    fun `a Direct pad's trigger rumble goes through the rumble router, which stops it when its host goes quiet`() {
+        router().dispatchTriggerRumbleToSlot("-1000", 100, 200)
+
+        verify(exactly = 1) { rumble.driveDirectTriggers(-1000, 100, 200, any()) }
+        verify(exactly = 0) { native.sendUsbTriggerRumble(any(), any(), any()) }
+    }
+
+    // ---- trigger rumble is rumble, so the slot's rumble switch covers it ----
+
+    @Test
+    fun `a host's trigger rumble to a Direct pad whose rumble is off lands as a stop`() {
+        rumbleOff += "-1000"
+
+        router().dispatchTriggerRumbleToSlot("-1000", 100, 200)
+
+        verify(exactly = 0) { rumble.driveDirectTriggers(-1000, 100, 200, any()) }
+        verify(exactly = 1) { rumble.driveDirectTriggers(-1000, 0, 0, any()) }
+    }
+
+    @Test
+    fun `a host's trigger rumble to the virtual pad whose rumble is off asks the rumble path for a stop`() {
+        rumbleOff += VIRTUAL_SLOT_ID
+
+        router().dispatchTriggerRumbleToSlot(VIRTUAL_SLOT_ID, 300, 400)
+
+        verify(exactly = 0) { rumble.dispatchToSlot(VIRTUAL_SLOT_ID, 300, 400, any()) }
+        verify(exactly = 1) { rumble.dispatchToSlot(VIRTUAL_SLOT_ID, 0, 0, any()) }
+    }
+
+    @Test
+    fun `a host's trigger rumble to a slot whose rumble is off is still noted as host activity`() {
+        rumbleOff += "-1000"
+
+        router().dispatchTriggerRumbleToSlot("-1000", 100, 200)
+
+        assertEquals(FeedbackKind.TRIGGER_RUMBLE, lastKindNoted("-1000"))
+    }
+
+    @Test
+    fun `the bench's trigger rumble ignores the rumble switch, as the motors' test buzz does`() {
+        rumbleOff += "-1000"
+
+        router().testTriggerRumble("-1000", 100, 200)
+
+        verify(exactly = 1) { rumble.driveDirectTriggers(-1000, 100, 200, any()) }
+    }
+
+    // ---- the inspector's light bar bench ----
+
+    @Test
+    fun `the bench paints a framework pad's light bar without it counting as the host's`() {
+        router().testLightbar("9", 1, 2, 3)
+
+        verify(exactly = 1) { frameworkLights.paint(9, 1, 2, 3) }
+        verify(exactly = 0) { frameworkLights.setColor(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `the bench drives a Direct pad's light bar`() {
+        router().testLightbar("-1000", 1, 2, 3)
+
+        verify(exactly = 1) { native.sendUsbLightbar(-1000, 1, 2, 3) }
+    }
+
+    @Test
+    fun `ending the bench shows a framework pad's host color again`() {
+        router().endLightbarTest("9")
+
+        verify(exactly = 1) { frameworkLights.showHostColor(9) }
+        verify(exactly = 0) { frameworkLights.setColor(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `ending the bench turns a Direct pad's light bar off, since the phone keeps no host color for it`() {
+        router().endLightbarTest("-1000")
+
+        verify(exactly = 1) { native.sendUsbLightbar(-1000, 0, 0, 0) }
     }
 
     @Test
@@ -233,5 +328,71 @@ class FeedbackRouterTest {
         verify(exactly = 0) { native.sendUsbPlayerLeds(any(), any()) }
         verify(exactly = 0) { native.sendUsbTriggerEffects(any(), any()) }
         verify(exactly = 0) { native.sendUsbMicMuteLed(any(), any()) }
+    }
+
+    // ---- host activity, the diagnostics "last feedback" line ----
+
+    @Test
+    fun `session-addressed feedback records host activity against the resolved slot`() {
+        router(managerWith(handle = 7, slotId = VIRTUAL_SLOT_ID)).dispatchLightbar(7, 0, 1, 2, 3)
+        router(managerWith(handle = 7, slotId = "9")).dispatchLightbar(7, 0, 1, 2, 3)
+        router(managerWith(handle = 7, slotId = "-1000")).dispatchLightbar(7, 0, 1, 2, 3)
+
+        assertEquals(FeedbackKind.LIGHTBAR, lastKindNoted(VIRTUAL_SLOT_ID))
+        assertEquals(FeedbackKind.LIGHTBAR, lastKindNoted("9"))
+        assertEquals(FeedbackKind.LIGHTBAR, lastKindNoted("-1000"))
+    }
+
+    @Test
+    fun `session-addressed feedback that resolves to nothing records no activity`() {
+        router(managerWith(handle = 7, slotId = "-1000")).dispatchLightbar(sessionHandle = 8, controllerIndex = 0, r = 1, g = 2, b = 3)
+        assertTrue(activity.snapshot().isEmpty())
+    }
+
+    @Test
+    fun `each feedback kind is noted under its own kind`() {
+        val r = router(managerWith(handle = 7, slotId = "-1000"))
+        r.dispatchTriggerEffects(7, 0, ByteArray(22))
+        assertEquals(FeedbackKind.TRIGGER_EFFECTS, lastKindNoted("-1000"))
+        r.dispatchPlayerLeds(7, 0, 0x1F)
+        assertEquals(FeedbackKind.PLAYER_LEDS, lastKindNoted("-1000"))
+        r.dispatchMicLed(7, 0, MIC_LED_ON)
+        assertEquals(FeedbackKind.MIC_LED, lastKindNoted("-1000"))
+    }
+
+    @Test
+    fun `trigger rumble to a slot notes host activity but the bench entry does not`() {
+        val r = router()
+        r.dispatchTriggerRumbleToSlot("-1000", 100, 200)
+        assertEquals(FeedbackKind.TRIGGER_RUMBLE, lastKindNoted("-1000"))
+        assertEquals(1L, activity.snapshot()["-1000"]?.count)
+
+        r.testTriggerRumble("-1000", 100, 200)
+
+        assertEquals(1L, activity.snapshot()["-1000"]?.count)
+        verify(exactly = 2) { rumble.driveDirectTriggers(-1000, 100, 200, any()) }
+    }
+
+    @Test
+    fun `slot-addressed feedback is not counted as host activity`() {
+        val r = router()
+        r.dispatchLightbarToSlot("-1000", MOONLIGHT_PAD, 1, 2, 3)
+        r.dispatchTriggerEffectsToSlot("-1000", ByteArray(22))
+        r.dispatchPlayerLedsToSlot("-1000", 0x1F)
+        r.dispatchMicLedToSlot("-1000", MIC_LED_ON)
+        assertTrue(activity.snapshot().isEmpty())
+    }
+
+    @Test
+    fun `a truncated block array treats the missing trigger as inactive`() {
+        val r = router(managerWith(handle = 7, slotId = VIRTUAL_SLOT_ID))
+        val leftOnlyAndShort = ByteArray(5).also { it[0] = 0x21 }
+        r.dispatchTriggerEffects(7, 0, leftOnlyAndShort)
+        assertTrue(store.state.value.leftTriggerEffect)
+        assertFalse(store.state.value.rightTriggerEffect)
+
+        r.dispatchTriggerEffects(7, 0, ByteArray(0))
+        assertFalse(store.state.value.leftTriggerEffect)
+        assertFalse(store.state.value.rightTriggerEffect)
     }
 }

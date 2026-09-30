@@ -8,18 +8,26 @@ import android.view.InputDevice
 import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.annotation.RequiresApi
 
-object PhysicalMotionProbe {
-    // The per-device sensor API exists from 31; the annotation is the contract lint checks
-    // callers of probeGyro against.
-    @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.S)
-    private fun perDeviceSensorsAvailable(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+// The per-device sensor API exists from 31.
+internal fun hasGyro(
+    deviceId: Int,
+    sdkInt: Int,
+): Boolean {
+    if (!atLeast(Build.VERSION_CODES.S, sdkInt)) return false
+    return probeGyro(InputDevice.getDevice(deviceId))
+}
 
-    fun hasGyro(deviceId: Int): Boolean = perDeviceSensorsAvailable() && probeGyro(InputDevice.getDevice(deviceId))
+// The annotation is what lets lint read a caller-supplied API level as the gate probeGyro needs;
+// a bare `sdkInt >= api` comparison it cannot see through.
+@ChecksSdkIntAtLeast(parameter = 0)
+private fun atLeast(
+    api: Int,
+    sdkInt: Int,
+): Boolean = sdkInt >= api
 
-    // Split from hasGyro so the read itself is unit-testable against a mocked InputDevice.
-    @RequiresApi(Build.VERSION_CODES.S)
-    fun probeGyro(device: InputDevice?): Boolean {
-        if (device == null) return false
-        return device.sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE) != null
-    }
+// Split from hasGyro so the read itself is unit-testable against a mocked InputDevice.
+@RequiresApi(Build.VERSION_CODES.S)
+internal fun probeGyro(device: InputDevice?): Boolean {
+    if (device == null) return false
+    return device.sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE) != null
 }

@@ -11,7 +11,7 @@ import com.tinkernorth.dish.core.model.SlotCapabilities
 // The Moonlight pointer story is simpler than the satellite's mode machinery:
 // pad touch streams whenever the layers carry it, and the mouse rides the
 // control stream natively.
-internal fun moonlightPointerFacts(row: ControllerAdapter.Row): List<PointerPillFact> =
+internal fun moonlightPointerFacts(row: ControllerRow): List<PointerPillFact> =
     buildList {
         if (Feature.TOUCHPAD in row.motionCap.available) add(PointerPillFact.PAD_ON)
         if (Feature.MOUSE in row.motionCap.available) add(PointerPillFact.MOUSE_READY)

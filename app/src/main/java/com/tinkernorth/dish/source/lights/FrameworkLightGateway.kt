@@ -22,12 +22,15 @@ import javax.inject.Singleton
  * color into an open session plus a `requestLights` call.
  *
  * A session is opened lazily on the first color for a device and reused for later colors; the strong
- * reference in [held] keeps it alive for the whole stream (its finalizer would close it, turning the
+ * reference in [bars] keeps it alive for the whole stream (its finalizer would close it, turning the
  * bar off, if it were collected). Closing a session writes color 0 to the light it touched, so the
  * bar goes dark: that is the honest end state when a stream stops, since the API offers no "return
- * to the pad's own color". A session is only closed once it has landed at least one color (tracked
- * by [Held.lastArgb]), because closing one that never requested throws in the service. Identical
- * colors are coalesced so an unchanged frame never costs a binder round-trip.
+ * to the pad's own color". The input service then repaints the first other open session's request,
+ * any app's, onto that same pad by light id, and every pad numbers its lights from 1 (AOSP
+ * InputManagerService and PeripheralController, API 31-37), so a close while another pad's bar is
+ * lit paints that pad's color here. A session is only held once it has landed a color, because
+ * closing one that never requested throws in the service. Identical colors are coalesced so an
+ * unchanged frame never costs a binder round-trip.
  *
  * The Android I/O sits behind [Lightbars] so the open-once / reuse / coalesce / close lifecycle is
  * testable without the framework. The light object is re-resolved by rule on every write (see
@@ -59,69 +62,209 @@ class FrameworkLightGateway
             fun close()
         }
 
-        private class Held(
-            val lightbar: Lightbar,
-        ) {
-            // Null until a color has successfully landed; also the coalesce key. A session that never
-            // landed a color must not be closed (that throws in the service), only dropped.
-            var lastArgb: Int? = null
+        // What the gateway keeps per pad, in lists scanned by id because a map lookup would box it.
+        private interface PadRecord {
+            val deviceId: Int
         }
 
-        // Small map, touched from the feedback receive threads and the lifecycle release hooks; all
-        // access is under [lock] so a device's open / write / close can never interleave with itself.
-        private val held = HashMap<Int, Held>()
+        // One pad's light bar and the session held on it, which has landed [shownArgb], the coalesce
+        // key: a color, or OFF_ARGB once the bar is turned off.
+        private class Bar(
+            override val deviceId: Int,
+            val session: Lightbar,
+            var shownArgb: Int,
+        ) : PadRecord {
+            val isLit: Boolean
+                get() = shownArgb != OFF_ARGB
+        }
+
+        // The last color a pad's host sent (never a bench color) and the host binding it came in
+        // under. It is kept across the bar's release for that binding's return, since a host sends a
+        // color when the game changes it and a satellite repeats it only when a new session first
+        // reaches the phone; a bind to anything else forgets it. [showing] is false while released.
+        private class HostColor(
+            override val deviceId: Int,
+            var argb: Int,
+            var source: LightSource,
+        ) : PadRecord {
+            var showing = true
+
+            fun remember(
+                argb: Int,
+                source: LightSource,
+            ) {
+                this.argb = argb
+                this.source = source
+                showing = true
+            }
+        }
+
+        // A few pads each. Touched from the feedback receive threads and the lifecycle hooks, always
+        // under [lock], so a pad's open / write / close can never interleave with itself.
+        private val bars = ArrayList<Bar>()
+        private val hostColors = ArrayList<HostColor>()
         private val lock = Any()
 
         /**
-         * Paint [deviceId]'s light bar the given color. A no-op for a device with no drivable light
-         * bar; redundant colors are dropped so an unchanged frame never reaches the input service.
+         * Paint [deviceId]'s light bar the color its host [source] sent, and keep it for [boundTo]. A
+         * no-op for a device with no drivable light bar; redundant colors are dropped so an unchanged
+         * frame never reaches the input service.
          */
         fun setColor(
             deviceId: Int,
+            source: LightSource,
             r: Int,
             g: Int,
             b: Int,
         ) {
             // Alpha is brightness on the native side (it scales the LEDs and drives the global
             // channel), so full opacity is what makes the requested color land at full strength.
-            val argb = 0xFF000000.toInt() or ((r and 0xFF) shl 16) or ((g and 0xFF) shl 8) or (b and 0xFF)
+            val argb = opaqueArgb(r, g, b)
             synchronized(lock) {
-                val current = held[deviceId]
-                if (current != null && current.lastArgb == argb) return
-                val holder = current ?: lightbars.open(deviceId)?.let { Held(it).also { h -> held[deviceId] = h } } ?: return
-                if (holder.lightbar.write(argb)) {
-                    holder.lastArgb = argb
-                } else {
-                    dropLocked(deviceId, holder)
-                }
+                rememberHostColor(deviceId, argb, source)
+                showColor(deviceId, argb)
             }
         }
 
-        /** Give [deviceId]'s light bar back to the system (turning it off). Idempotent. */
-        fun release(deviceId: Int) {
-            synchronized(lock) { held.remove(deviceId)?.let { closeLocked(it) } }
+        /** Show a color on [deviceId]'s light bar without taking it for the host's: the bench. */
+        fun paint(
+            deviceId: Int,
+            r: Int,
+            g: Int,
+            b: Int,
+        ) {
+            val argb = opaqueArgb(r, g, b)
+            synchronized(lock) { showColor(deviceId, argb) }
         }
 
-        /** Release every light bar, e.g. when physical-slot streaming stops process-wide. */
+        /** After the bench: show [deviceId]'s host color again, or turn the bar off when no host has it. */
+        fun showHostColor(deviceId: Int) {
+            synchronized(lock) {
+                val hostColor = hostColors.recordOf(deviceId)
+                val hostHasTheBar = hostColor != null && hostColor.showing
+                if (hostHasTheBar) showColor(deviceId, hostColor.argb) else bars.recordOf(deviceId)?.let(::releaseBar)
+            }
+        }
+
+        /**
+         * [deviceId]'s slot is bound to [source]: the color that binding last sent shows again. A
+         * color another binding sent is forgotten and the bar turned off, since the host bound now
+         * never asked for it.
+         */
+        fun boundTo(
+            deviceId: Int,
+            source: LightSource,
+        ) {
+            synchronized(lock) {
+                val hostColor = hostColors.recordOf(deviceId) ?: return
+                val sameBinding = hostColor.source == source
+                if (sameBinding) showAgain(hostColor) else displace(hostColor)
+            }
+        }
+
+        /** [deviceId] has gone: forget its host's color and give its bar back, so nothing shows it again. */
+        fun forget(deviceId: Int) {
+            synchronized(lock) {
+                hostColors.recordOf(deviceId)?.let(hostColors::remove)
+                // Only a pad the registry no longer has is forgotten, so the close's repaint of
+                // another session's request finds no light of this pad to land on.
+                bars.recordOf(deviceId)?.let(::drop)
+            }
+        }
+
+        /**
+         * Turn [deviceId]'s light bar off. It is given back now when no other bar is lit, and
+         * otherwise kept for its next color until [releaseAll] or [forget]. Idempotent.
+         */
+        fun release(deviceId: Int) {
+            synchronized(lock) {
+                hostColors.recordOf(deviceId)?.showing = false
+                bars.recordOf(deviceId)?.let(::releaseBar)
+            }
+        }
+
+        /**
+         * Release every light bar, e.g. when physical-slot streaming stops process-wide. Each pad's
+         * host color is kept for [boundTo].
+         */
         fun releaseAll() {
             synchronized(lock) {
-                held.values.forEach { closeLocked(it) }
-                held.clear()
+                hostColors.forEach { it.showing = false }
+                // Every bar goes dark before any is closed, so no close finds a lit one to repaint.
+                bars.toList().forEach(::turnOff)
+                bars.forEach { it.session.close() }
+                bars.clear()
             }
         }
 
-        // The write said the bar is gone. Forget it either way; close it only if it had landed a
-        // color, since closing an un-requested session throws (its finalizer reclaims that one).
-        private fun dropLocked(
-            deviceId: Int,
-            holder: Held,
-        ) {
-            held.remove(deviceId)
-            if (holder.lastArgb != null) holder.lightbar.close()
+        private fun <T : PadRecord> List<T>.recordOf(deviceId: Int): T? {
+            for (index in indices) {
+                val record = this[index]
+                if (record.deviceId == deviceId) return record
+            }
+            return null
         }
 
-        private fun closeLocked(holder: Held) {
-            if (holder.lastArgb != null) holder.lightbar.close()
+        private fun rememberHostColor(
+            deviceId: Int,
+            argb: Int,
+            source: LightSource,
+        ) {
+            val hostColor = hostColors.recordOf(deviceId)
+            if (hostColor == null) hostColors += HostColor(deviceId, argb, source) else hostColor.remember(argb, source)
+        }
+
+        private fun showAgain(hostColor: HostColor) {
+            hostColor.showing = true
+            showColor(hostColor.deviceId, hostColor.argb)
+        }
+
+        private fun displace(hostColor: HostColor) {
+            hostColors.remove(hostColor)
+            bars.recordOf(hostColor.deviceId)?.let(::releaseBar)
+        }
+
+        private fun showColor(
+            deviceId: Int,
+            argb: Int,
+        ) {
+            val bar = bars.recordOf(deviceId)
+            if (bar == null) openShowing(deviceId, argb) else show(bar, argb)
+        }
+
+        // A first color that did not land leaves its session unrequested, and closing one of those
+        // throws in the service, so it is never held.
+        private fun openShowing(
+            deviceId: Int,
+            argb: Int,
+        ) {
+            val session = lightbars.open(deviceId) ?: return
+            if (session.write(argb)) bars += Bar(deviceId, session, argb)
+        }
+
+        // A write that fails means the bar is gone: the session has landed a color, so it is closed.
+        private fun show(
+            bar: Bar,
+            argb: Int,
+        ) {
+            val isShownAlready = bar.shownArgb == argb
+            if (isShownAlready) return
+            if (bar.session.write(argb)) bar.shownArgb = argb else drop(bar)
+        }
+
+        // Closing repaints another open session's request onto this pad (see the class comment), so
+        // a bar is closed only when no other bar is lit, and turned off and kept for its next color
+        // until then.
+        private fun releaseBar(bar: Bar) {
+            val anotherBarIsLit = bars.any { it !== bar && it.isLit }
+            if (anotherBarIsLit) turnOff(bar) else drop(bar)
+        }
+
+        private fun turnOff(bar: Bar) = show(bar, OFF_ARGB)
+
+        private fun drop(bar: Bar) {
+            bars.remove(bar)
+            bar.session.close()
         }
     }
 
@@ -139,7 +282,7 @@ private class AndroidLightbars(
     private fun openSession(deviceId: Int): FrameworkLightGateway.Lightbar? {
         val device = inputManager.getInputDevice(deviceId) ?: return null
         // Confirm a bar exists before opening, so a pad with none never holds an idle session.
-        if (FrameworkLightProbe.lightbarOf(device) == null) return null
+        if (lightbarOf(device, Build.VERSION.SDK_INT) == null) return null
         val session = lightCall("openSession", deviceId) { device.lightsManager.openSession() } ?: return null
         return AndroidLightbar(inputManager, deviceId, session)
     }
@@ -155,7 +298,7 @@ private class AndroidLightbar(
         // Re-resolve every write: the service reassigns light ids when the merged device gains a
         // sub-device, and a stale id is silently ignored, so a cached light could go dead-quiet.
         val device = inputManager.getInputDevice(deviceId) ?: return false
-        val light = FrameworkLightProbe.lightbarOf(device) ?: return false
+        val light = lightbarOf(device, Build.VERSION.SDK_INT) ?: return false
         val request = LightsRequest.Builder().addLight(light, LightState.Builder().setColor(argb).build()).build()
         return lightCall("requestLights", deviceId) { session.requestLights(request) } != null
     }
@@ -186,3 +329,7 @@ private inline fun <T> lightCall(
     }
 
 private const val LIGHT_TAG = "FrameworkLightGateway"
+
+// What a closed session leaves on a light (the service's LightState(0)); every color a host sends
+// is opaque, so it never equals one.
+private const val OFF_ARGB = 0

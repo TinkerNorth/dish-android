@@ -11,15 +11,13 @@ import android.view.View
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivitySetupBluetoothControllerBinding
 import com.tinkernorth.dish.databinding.SetupBtcPairedRowBinding
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -48,7 +46,7 @@ class SetupBluetoothControllerActivity : BaseGamepadHostActivity() {
         super.onCreate(savedInstanceState)
         binding = setScaffoldContent(ActivitySetupBluetoothControllerBinding::inflate)
         setupDishToolbar(binding.toolbar)
-        wireSetupSkip(binding.toolbar, onboarding)
+        wireSetupSkip(binding.toolbar, onboarding, nav)
         binding.toolbar.setNavigationOnClickListener { handleBack() }
         binding.breadcrumb.applyStep(SETUP_STEP_INPUT)
 
@@ -68,20 +66,13 @@ class SetupBluetoothControllerActivity : BaseGamepadHostActivity() {
     }
 
     private fun observe() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.state.collect { render(it) }
-            }
-        }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.events.collect { event ->
-                    when (event) {
-                        is SetupBluetoothControllerViewModel.Event.Proceed ->
-                            nav.toSetupConnection(SetupFlow.INPUT_BLUETOOTH, event.slotId)
-                    }
-                }
-            }
+        observeWhileStarted(viewModel.state) { render(it) }
+        observeWhileStarted(viewModel.events) { onEvent(it) }
+    }
+
+    private fun onEvent(event: SetupBluetoothControllerViewModel.Event) {
+        when (event) {
+            is SetupBluetoothControllerViewModel.Event.Proceed -> nav.toSetupConnection(INPUT_BLUETOOTH, event.slotId)
         }
     }
 

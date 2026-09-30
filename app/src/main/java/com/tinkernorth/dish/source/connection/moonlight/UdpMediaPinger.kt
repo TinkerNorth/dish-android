@@ -4,7 +4,9 @@
 package com.tinkernorth.dish.source.connection.moonlight
 
 import android.util.Log
-import com.tinkernorth.dish.core.net.moonlight.MoonlightMediaPing
+import com.tinkernorth.dish.core.net.moonlight.legacy
+import com.tinkernorth.dish.core.net.moonlight.ssPing
+import com.tinkernorth.dish.core.net.moonlight.usable
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -45,15 +47,15 @@ class UdpMediaPinger(
     /** The local ports the host will stream to, for the session log. */
     val localPorts: String get() = "video ${video.localPort}, audio ${audio.localPort}"
 
-    val mode: String get() = if (MoonlightMediaPing.usable(payload)) "SS_PING" else "legacy PING"
+    val mode: String get() = if (usable(payload)) "SS_PING" else "legacy PING"
 
     /** Send one ping to each media port. Safe to call after [close]. */
     fun ping() {
         val datagram =
-            if (MoonlightMediaPing.usable(payload)) {
-                MoonlightMediaPing.ssPing(payload, sequence)
+            if (usable(payload)) {
+                ssPing(payload, sequence)
             } else {
-                MoonlightMediaPing.legacy()
+                legacy()
             }
         sequence += 1
         send(video, videoPort, datagram)

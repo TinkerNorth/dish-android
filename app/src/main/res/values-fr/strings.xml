@@ -188,6 +188,7 @@
     <string name="ml_resume_failed_title">Impossible de rejoindre la session sur %1$s</string>
     <string name="ml_resume_failed_body">L\'hôte a une session mais refuse de la rendre. Fermez l\'appli sur %1$s et lancez-en une nouvelle.</string>
     <string name="ml_refused_title">%1$s a refusé la session : %2$s</string>
+    <string name="ml_refused_title_no_reason">%1$s a refusé la session</string>
     <string name="ml_refused_body">Ajoutez quand même la manette, Dish réessaiera à la prochaine utilisation.</string>
     <string name="ml_setup_failed_title">Impossible de finaliser la session sur %1$s</string>
     <string name="ml_setup_failed_body">L\'appli a démarré mais le flux ne s\'est pas établi, alors Dish l\'a refermée.</string>
@@ -314,6 +315,36 @@
     <string name="notif_pairing_needed_title">Appairage requis</string>
     <string name="notif_pairing_needed_body">Ouvrez Connexions pour saisir le PIN de %1$s.</string>
     <string name="notif_server_unreachable_title">%1$s ne répond pas</string>
+
+    <!-- Pourquoi une connexion a échoué, une chaîne par type signalé par les gestionnaires de connexion. -->
+    <string name="conn_error_server_unreachable">Serveur injoignable. Vérifiez qu\'il est allumé et sur le même Wi-Fi.</string>
+    <string name="conn_error_repair_needed">Ce satellite ne reconnaît plus cet appareil. Un nouvel appairage est nécessaire.</string>
+    <string name="conn_error_identity_changed">L\'identité de sécurité de ce satellite a changé. S\'il a été réinstallé, oubliez-le ici et appairez-le à nouveau.</string>
+    <string name="conn_error_wire_failed">Le satellite a accepté, mais la liaison de la manette ne s\'est pas ouverte. Réessayez.</string>
+    <string name="conn_error_ipv6_unsupported">Le satellite n\'accepte que les connexions en IPv4. Utilisez son adresse IPv4 (par exemple 192.168.1.20) plutôt qu\'une adresse IPv6.</string>
+    <string name="conn_error_satellite_update_required">Ce satellite est trop ancien pour cette appli. Mettez à jour Satellite sur la machine réceptrice.</string>
+    <string name="conn_error_app_update_required">Ce satellite nécessite une version plus récente de l\'appli. Mettez à jour Dish sur cet appareil.</string>
+    <string name="conn_error_approval_declined">Le satellite a refusé la demande d\'appairage.</string>
+    <string name="conn_error_approval_timed_out">Aucune réponse du satellite. La demande d\'appairage a expiré.</string>
+    <string name="conn_error_pairing_failed">L\'appairage a échoué.</string>
+    <string name="conn_error_pairing_refused">L\'appairage a échoué : %1$s</string>
+    <string name="conn_error_session_failed">Le satellite a refusé la connexion.</string>
+    <string name="conn_error_session_refused">Le satellite a refusé la connexion : %1$s</string>
+    <string name="conn_error_apply_failed">Impossible d\'appliquer la manette sur %1$s : %2$s</string>
+    <string name="conn_error_title_repair_needed">%1$s ne reconnaît plus cet appareil</string>
+    <string name="conn_error_title_identity_changed">%1$s a une nouvelle identité</string>
+    <string name="conn_error_title_wire_failed">Impossible d\'ouvrir la liaison avec %1$s</string>
+    <string name="conn_error_title_ipv6_unsupported">%1$s nécessite une adresse IPv4</string>
+    <string name="conn_error_title_satellite_update_required">%1$s doit être mis à jour</string>
+    <string name="conn_error_title_app_update_required">%1$s nécessite une version plus récente de Dish</string>
+    <string name="conn_error_title_approval_declined">%1$s a refusé l\'appairage</string>
+    <string name="conn_error_title_approval_timed_out">Aucune réponse de %1$s</string>
+    <string name="conn_error_title_pairing_failed">Échec de l\'appairage avec %1$s</string>
+    <string name="conn_error_title_session_failed">Impossible de se connecter à %1$s</string>
+    <string name="conn_error_title_apply_failed">Manette non configurée sur %1$s</string>
+    <string name="ml_error_no_host_answered">Aucun hôte Moonlight n\'a répondu à %1$s.</string>
+    <string name="ml_error_no_apps">Aucune appli disponible sur %1$s.</string>
+    <string name="ml_notice_app_close_requested">Demande envoyée à %1$s pour fermer l\'appli en cours.</string>
 
     <!-- État vide dynamique de la liste satellite. -->
     <string name="discovery_empty_never_scanned">Touchez Scanner pour trouver des satellites sur votre réseau</string>

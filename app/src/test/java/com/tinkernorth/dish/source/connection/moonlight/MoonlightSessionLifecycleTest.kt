@@ -5,10 +5,14 @@ package com.tinkernorth.dish.source.connection.moonlight
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.tinkernorth.dish.core.net.moonlight.CAP_ACCELEROMETER
+import com.tinkernorth.dish.core.net.moonlight.CAP_GYRO
+import com.tinkernorth.dish.core.net.moonlight.CAP_RGB_LED
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
 import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
+import com.tinkernorth.dish.core.net.moonlight.XBOX
 import io.mockk.MockKMatcherScope
 import io.mockk.every
 import io.mockk.mockk
@@ -47,7 +51,7 @@ class MoonlightSessionLifecycleTest {
 
     private val remembered =
         RememberedMoonlight(
-            id = "moonlight:uid:abc",
+            id = "moonlight:10.0.0.5",
             name = "PC",
             address = "10.0.0.5",
             uniqueId = "abc",
@@ -72,10 +76,16 @@ class MoonlightSessionLifecycleTest {
     private fun pad(slotId: String) =
         MoonlightPadRequest(
             slotId = slotId,
-            emulatedType = MoonlightEmulatedType.XBOX,
+            emulatedType = XBOX,
             capabilities = 0x03,
             supportedButtons = 0xFFFF,
         )
+
+    private fun padAs(
+        slotId: String,
+        type: Int,
+        capabilities: Int,
+    ) = pad(slotId).copy(emulatedType = type, capabilities = capabilities)
 
     @Before
     fun setUp() {
@@ -169,8 +179,9 @@ class MoonlightSessionLifecycleTest {
             assertEquals(1, connection().padCount)
             assertNotNull(connection().padFor("a"))
             assertNull(connection().padFor("b"))
-            // Bit 1 cleared, bit 0 still set: the pad that stayed is still plugged in.
-            verify { session.sendControllerState(0, 0b01, 0, 0, 0, 0, 0, 0, 0) }
+            // The unplug names pad 1, the one that left, with its bit cleared (Wolf drops a pad
+            // only on a packet naming its own number); bit 0 still set keeps pad 0 plugged in.
+            verify { session.sendControllerState(1, 0b01, 0, 0, 0, 0, 0, 0, 0) }
         }
 
     // B8. A later binding on a live host is a controller arrival and nothing else. An
@@ -189,7 +200,39 @@ class MoonlightSessionLifecycleTest {
             verify(exactly = 0) { cancels() }
             assertEquals(2, connection().padCount)
             assertEquals(1, connection().padFor("b")?.number)
-            verify { session.sendControllerArrival(1, MoonlightEmulatedType.XBOX, 0x03, 0xFFFF) }
+            verify { session.sendControllerArrival(1, XBOX, 0x03, 0xFFFF) }
+        }
+
+    // An explicit PlayStation pick acquired before the pad's gyro enumerated went out without the
+    // motion bits, and the host asks for motion only for a pad that arrived with them: the pad is
+    // plugged in again under its number with the bits, so the host asks.
+    @Test
+    fun `a held pad whose motion bits arrive late is replugged with them on a live session`() =
+        runTest(dispatcher) {
+            manager.applyDesired(mapOf(remembered.id to listOf(padAs("a", PLAYSTATION, NO_MOTION_CAPS))))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            manager.applyDesired(mapOf(remembered.id to listOf(padAs("a", PLAYSTATION, MOTION_CAPS))))
+            val session = goLive()
+            dispatcher.scheduler.advanceUntilIdle()
+
+            verify(exactly = 1) { session.sendControllerReplug(0, 0, PLAYSTATION, MOTION_CAPS, 0xFFFF) }
+            assertEquals(MOTION_CAPS, connection().padFor("a")?.capabilities)
+        }
+
+    // Wolf builds the same pad whatever the other bits say, and a replug unplugs it in the game.
+    @Test
+    fun `a held pad asked for with only bits the host never reads changed is not replugged`() =
+        runTest(dispatcher) {
+            manager.applyDesired(mapOf(remembered.id to listOf(padAs("a", PLAYSTATION, NO_MOTION_CAPS))))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            manager.applyDesired(mapOf(remembered.id to listOf(padAs("a", PLAYSTATION, NO_MOTION_CAPS or CAP_RGB_LED))))
+            val session = goLive()
+            dispatcher.scheduler.advanceUntilIdle()
+
+            verify(exactly = 0) { session.sendControllerReplug(any(), any(), any(), any(), any()) }
+            assertEquals(NO_MOTION_CAPS, connection().padFor("a")?.capabilities)
         }
 
     // B18. A control stream that stops without the host saying so is as likely to be a
@@ -248,9 +291,15 @@ class MoonlightSessionLifecycleTest {
             bind("a")
 
             verify(exactly = 1) { gateway.getHttps(match { it.contains("/resume") }, any()) }
-            verify(exactly = 0) { gateway.getHttp(match { it.contains("/pair") }, any()) }
+            verify(exactly = 0) { gateway.getHttpOn(any(), match { it.contains("/pair") }, any()) }
+            assertTrue(seen.none { it is MoonlightConnectionEvent.PairingPinReady })
             assertTrue(seen.none { it is MoonlightConnectionEvent.AppAlreadyRunning })
             assertTrue(seen.none { it is MoonlightConnectionEvent.RejoinRefused })
             collector.cancel()
         }
+
+    private companion object {
+        const val NO_MOTION_CAPS = 0x0B
+        const val MOTION_CAPS = NO_MOTION_CAPS or CAP_ACCELEROMETER or CAP_GYRO
+    }
 }

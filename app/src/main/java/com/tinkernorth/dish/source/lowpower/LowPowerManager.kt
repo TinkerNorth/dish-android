@@ -15,6 +15,20 @@ import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
 import java.util.Calendar
 import java.util.Locale
 
+// The pre-dim countdown; countdownSecondsShown says what each tick reads.
+private class DimCountdown(
+    seconds: Int,
+    private val label: android.widget.TextView,
+    private val onFinished: () -> Unit,
+) : CountDownTimer(seconds * MS_PER_SECOND, MS_PER_SECOND) {
+    override fun onTick(millisUntilFinished: Long) {
+        val secondsRemaining = countdownSecondsShown(millisUntilFinished)
+        label.text = String.format(Locale.getDefault(), "%d", secondsRemaining)
+    }
+
+    override fun onFinish() = onFinished()
+}
+
 class LowPowerManager(
     private val window: Window,
 ) : AbstractStateSource<LowPowerManager.State>(State.IDLE) {
@@ -58,7 +72,6 @@ class LowPowerManager(
 
     fun onUserInteraction() {
         when (state.value) {
-            // Re-arm explicitly: shouldKeepScreenOn StateFlow won't re-emit true so onLockStateChanged is silent.
             State.ACTIVE -> {
                 exit()
                 resetInactivityTimer()
@@ -96,17 +109,7 @@ class LowPowerManager(
         applyStreamingHintVisibility()
         v.tvCountdownSeconds.text = String.format(Locale.getDefault(), "%d", COUNTDOWN_SECONDS)
         countdownTimer?.cancel()
-        countdownTimer =
-            object : CountDownTimer(COUNTDOWN_SECONDS * 1000L, 1000L) {
-                override fun onTick(millisUntilFinished: Long) {
-                    val secondsRemaining = (millisUntilFinished / 1000) + 1
-                    v.tvCountdownSeconds.text = String.format(Locale.getDefault(), "%d", secondsRemaining)
-                }
-
-                override fun onFinish() {
-                    enter()
-                }
-            }.start()
+        countdownTimer = DimCountdown(COUNTDOWN_SECONDS, v.tvCountdownSeconds, ::enter).start()
     }
 
     private fun enter() {
@@ -162,22 +165,23 @@ class LowPowerManager(
             }
     }
 
-    private val clockRunnable =
-        object : Runnable {
-            override fun run() {
-                if (state.value != State.ACTIVE) return
-                val now = Calendar.getInstance()
-                views?.tvLowPowerTime?.text =
-                    String.format(
-                        Locale.ROOT,
-                        "%02d:%02d",
-                        now.get(Calendar.HOUR_OF_DAY),
-                        now.get(Calendar.MINUTE),
-                    )
-                updateStatus()
-                clockHandler.postDelayed(this, 15_000L)
-            }
+    private inner class ClockTick : Runnable {
+        override fun run() {
+            if (state.value != State.ACTIVE) return
+            val now = Calendar.getInstance()
+            views?.tvLowPowerTime?.text =
+                String.format(
+                    Locale.ROOT,
+                    "%02d:%02d",
+                    now.get(Calendar.HOUR_OF_DAY),
+                    now.get(Calendar.MINUTE),
+                )
+            updateStatus()
+            clockHandler.postDelayed(this, CLOCK_TICK_MS)
         }
+    }
+
+    private val clockRunnable = ClockTick()
 
     private fun startClock() {
         clockRunnable.run()
@@ -193,3 +197,15 @@ class LowPowerManager(
         private const val MIN_BRIGHTNESS = 0.01f
     }
 }
+
+private const val MS_PER_SECOND = 1000L
+
+// Counts the second in progress: a tick lands just after its whole second (4999 ms left reads
+// "5", 999 ms reads "1"), and one landing exactly on it (3000 ms) already reads the next up, "4".
+internal fun countdownSecondsShown(millisUntilFinished: Long): Long {
+    val wholeSecondsLeft = millisUntilFinished / MS_PER_SECOND
+    return wholeSecondsLeft + 1
+}
+
+// The dim overlay's clock only shows hours and minutes, so a quarter-minute tick keeps it honest.
+private const val CLOCK_TICK_MS = 15_000L

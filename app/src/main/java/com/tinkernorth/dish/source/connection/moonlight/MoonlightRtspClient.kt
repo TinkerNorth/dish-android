@@ -4,7 +4,16 @@
 package com.tinkernorth.dish.source.connection.moonlight
 
 import android.util.Log
-import com.tinkernorth.dish.core.net.moonlight.MoonlightRtsp
+import com.tinkernorth.dish.core.net.moonlight.CRLF
+import com.tinkernorth.dish.core.net.moonlight.Request
+import com.tinkernorth.dish.core.net.moonlight.Response
+import com.tinkernorth.dish.core.net.moonlight.announce
+import com.tinkernorth.dish.core.net.moonlight.announceSdp
+import com.tinkernorth.dish.core.net.moonlight.describe
+import com.tinkernorth.dish.core.net.moonlight.options
+import com.tinkernorth.dish.core.net.moonlight.parseResponse
+import com.tinkernorth.dish.core.net.moonlight.play
+import com.tinkernorth.dish.core.net.moonlight.setup
 import java.io.BufferedReader
 import java.io.IOException
 import java.net.InetSocketAddress
@@ -71,7 +80,7 @@ class MoonlightRtspClient(
         val target = "rtsp://$address:$rtspPort"
         if (!openSession(target)) return null
         val streams = setupStreams() ?: return null
-        if (!startStreams(target, MoonlightRtsp.announceSdp(width, height, fps))) return null
+        if (!startStreams(target, announceSdp(width, height, fps))) return null
 
         val connectData = streams.control.response.enetConnectData() ?: 0
         val ping =
@@ -90,7 +99,7 @@ class MoonlightRtspClient(
     // One SETUP answer the host bound a port for.
     private class StreamSetup(
         val port: Int,
-        val response: MoonlightRtsp.Response,
+        val response: Response,
     )
 
     private class NegotiatedStreams(
@@ -101,8 +110,8 @@ class MoonlightRtspClient(
 
     // OPTIONS then DESCRIBE: the host is speaking RTSP to us at all.
     private fun openSession(target: String): Boolean =
-        send(MoonlightRtsp.options(target, nextCseq())) != null &&
-            send(MoonlightRtsp.describe(target, nextCseq())) != null
+        send(options(target, nextCseq())) != null &&
+            send(describe(target, nextCseq())) != null
 
     // The three SETUPs in the order Moonlight hosts expect them; each must name a port.
     private fun setupStreams(): NegotiatedStreams? {
@@ -117,11 +126,11 @@ class MoonlightRtspClient(
         target: String,
         sdp: String,
     ): Boolean =
-        send(MoonlightRtsp.announce(target, nextCseq(), sdp)) != null &&
-            send(MoonlightRtsp.play(target, nextCseq())) != null
+        send(announce(target, nextCseq(), sdp)) != null &&
+            send(play(target, nextCseq())) != null
 
     private fun setupStream(streamId: String): StreamSetup? {
-        val response = send(MoonlightRtsp.setup(streamId, nextCseq())) ?: return null
+        val response = send(setup(streamId, nextCseq())) ?: return null
         val port = response.serverPort()
         if (port == null) {
             Log.w(TAG, "SETUP $streamId carried no server_port, options ${response.options}")
@@ -135,7 +144,7 @@ class MoonlightRtspClient(
      * the way out how it went, so a handshake that dies somewhere in the middle
      * names the step it died on.
      */
-    private fun send(request: MoonlightRtsp.Request): MoonlightRtsp.Response? {
+    private fun send(request: Request): Response? {
         stage = "${request.command} (CSeq ${request.cseq})"
         return try {
             Socket().use { socket ->
@@ -154,7 +163,7 @@ class MoonlightRtspClient(
         }
     }
 
-    private fun accept(response: MoonlightRtsp.Response?): MoonlightRtsp.Response? {
+    private fun accept(response: Response?): Response? {
         if (response == null) return null
         if (!response.ok) {
             Log.w(TAG, "<- $stage refused: ${response.statusCode} ${response.statusMessage}")
@@ -170,29 +179,40 @@ class MoonlightRtspClient(
      * on DESCRIBE, and since it closes the connection once it has answered, the
      * rest of the stream is the body.
      */
-    private fun readResponse(reader: BufferedReader): MoonlightRtsp.Response? {
-        val header = StringBuilder()
+    private fun readResponse(reader: BufferedReader): Response? {
+        val header = readHeaderBlock(reader) ?: return null
+        val declared = declaredContentLength(header)
+        val body = if (declared != null) readExactly(reader, declared) else reader.readText()
+        val raw = header + body
+        return parseResponse(raw).also {
+            if (it == null) Log.w(TAG, "unparsable reply to $stage: ${escape(raw)}")
+        }
+    }
+
+    // Null means the host hung up before answering at all, which is a different failure from an
+    // answer this client could not parse.
+    private fun readHeaderBlock(reader: BufferedReader): String? {
         var line = reader.readLine()
         if (line == null) {
             Log.w(TAG, "host closed the connection during $stage, before answering")
             return null
         }
+        val header = StringBuilder()
         while (line != null && line.isNotEmpty()) {
-            header.append(line).append(MoonlightRtsp.CRLF)
+            header.append(line).append(CRLF)
             line = reader.readLine()
         }
-        header.append(MoonlightRtsp.CRLF)
-        val declared =
-            Regex("(?i)content-length:\\s*(\\d+)")
-                .find(header)
-                ?.groupValues
-                ?.get(1)
-                ?.toIntOrNull()
-        val raw = header.toString() + if (declared != null) readExactly(reader, declared) else reader.readText()
-        return MoonlightRtsp.parseResponse(raw).also {
-            if (it == null) Log.w(TAG, "unparsable reply to $stage: ${escape(raw)}")
-        }
+        header.append(CRLF)
+        return header.toString()
     }
+
+    // Absent means read to end of stream instead: some hosts answer without a length at all.
+    private fun declaredContentLength(header: String): Int? =
+        CONTENT_LENGTH
+            .find(header)
+            ?.groupValues
+            ?.get(1)
+            ?.toIntOrNull()
 
     /** Hands back what arrived even when the host stops short of its own count. */
     private fun readExactly(
@@ -224,5 +244,8 @@ class MoonlightRtspClient(
         const val READ_TIMEOUT_MS = 5_000
         const val RAW_LOG_CHARS = 512
         const val MAX_BODY_CHARS = 256 * 1024
+
+        // Compiled once: readResponse runs on every RTSP exchange of a session setup.
+        val CONTENT_LENGTH = Regex("""(?i)content-length:\s*(\d+)""")
     }
 }

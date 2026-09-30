@@ -2,19 +2,23 @@
 
 package com.tinkernorth.dish.ui.setup
 
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
-import com.tinkernorth.dish.core.input.BluetoothGamepad
+import com.tinkernorth.dish.core.input.GamepadProfile
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
+import com.tinkernorth.dish.source.bluetooth.bluetoothConnectionIdFor
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
 import com.tinkernorth.dish.source.system.BluetoothPermissionState
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import io.mockk.every
+import io.mockk.justRun
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -95,7 +99,7 @@ class SetupBluetoothHostViewModelTest {
             perm.value = BluetoothPermissionState(required = true, connectGranted = false, scanGranted = false)
             dispatcher.scheduler.runCurrent()
             vm.onHostSelected(
-                SetupBluetoothHostViewModel.HostRow("bt:X", "PC", "AA", BluetoothGamepad.GamepadProfile.XBOX),
+                SetupBluetoothHostViewModel.HostRow("bt:X", "PC", "AA", GamepadProfile.XBOX),
             )
             assertEquals(SetupBluetoothHostViewModel.Stage.PERMISSION, vm.state.value.stage)
             verify(exactly = 0) { registry.start(any(), any(), any()) }
@@ -114,11 +118,11 @@ class SetupBluetoothHostViewModelTest {
         runTest(dispatcher) {
             dispatcher.scheduler.runCurrent()
             val events = collectEvents()
-            vm.onTypeChosen(BluetoothGamepad.GamepadProfile.PLAYSTATION)
+            vm.onTypeChosen(GamepadProfile.PLAYSTATION)
             dispatcher.scheduler.runCurrent()
 
             assertEquals(SetupBluetoothHostViewModel.Stage.ADVERTISING, vm.state.value.stage)
-            verify { registry.start(any(), BluetoothGamepad.GamepadProfile.PLAYSTATION, null) }
+            verify { registry.start(any(), GamepadProfile.PLAYSTATION, null) }
             assertTrue(events.contains(SetupBluetoothHostViewModel.Event.RequestDiscoverable))
         }
 
@@ -133,7 +137,7 @@ class SetupBluetoothHostViewModelTest {
             vm.onPairNewDevice()
             val events = collectEvents()
 
-            vm.onTypeChosen(BluetoothGamepad.GamepadProfile.XBOX)
+            vm.onTypeChosen(GamepadProfile.XBOX)
             dispatcher.scheduler.runCurrent()
             assertFalse(events.any { it is SetupBluetoothHostViewModel.Event.Done })
 
@@ -152,7 +156,7 @@ class SetupBluetoothHostViewModelTest {
         runTest(dispatcher) {
             dispatcher.scheduler.runCurrent()
             vm.onPairNewDevice()
-            vm.onTypeChosen(BluetoothGamepad.GamepadProfile.XBOX)
+            vm.onTypeChosen(GamepadProfile.XBOX)
             dispatcher.scheduler.runCurrent()
             assertEquals(SetupBluetoothHostViewModel.Stage.ADVERTISING, vm.state.value.stage)
 
@@ -161,6 +165,167 @@ class SetupBluetoothHostViewModelTest {
             assertTrue(vm.back())
             assertEquals(SetupBluetoothHostViewModel.Stage.PICK_PC, vm.state.value.stage)
             assertFalse(vm.back())
+        }
+
+    @Test
+    fun `a bond that lands after the controller left finishes unbound`() =
+        runTest(dispatcher) {
+            every { hub.bind(any(), any(), any()) } returns false
+            dispatcher.scheduler.runCurrent()
+            vm.bindArgs("42")
+            val events = collectEvents()
+            vm.onTypeChosen(GamepadProfile.XBOX)
+            dispatcher.scheduler.runCurrent()
+
+            states.value = mapOf("bt:NEW" to slot(isConnected = true))
+            dispatcher.scheduler.runCurrent()
+
+            val done = events.filterIsInstance<SetupBluetoothHostViewModel.Event.Done>().single()
+            assertFalse(done.bound)
+        }
+
+    @Test
+    fun `a second connected emission does not finish twice`() =
+        runTest(dispatcher) {
+            dispatcher.scheduler.runCurrent()
+            vm.bindArgs("42")
+            val events = collectEvents()
+            vm.onTypeChosen(GamepadProfile.XBOX)
+            dispatcher.scheduler.runCurrent()
+
+            states.value = mapOf("bt:NEW" to slot(isConnected = true))
+            dispatcher.scheduler.runCurrent()
+            states.value = mapOf("bt:NEW" to slot(isConnected = true), "bt:OTHER" to slot(isConnected = true))
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(1, events.count { it is SetupBluetoothHostViewModel.Event.Done })
+            verify(exactly = 1) { hub.bind(any(), any(), any()) }
+        }
+
+    @Test
+    fun `a connected emission under our own transient key finishes with that key`() =
+        runTest(dispatcher) {
+            val startedId = slot<String>()
+            justRun { registry.start(capture(startedId), any(), any()) }
+            dispatcher.scheduler.runCurrent()
+            vm.bindArgs("42")
+            val events = collectEvents()
+            vm.onTypeChosen(GamepadProfile.XBOX)
+            dispatcher.scheduler.runCurrent()
+            val transientId = startedId.captured
+
+            states.value = mapOf(transientId to slot(isConnected = true))
+            dispatcher.scheduler.runCurrent()
+
+            verify { hub.bind("42", transientId, CONTROLLER_TYPE_XBOX) }
+            assertTrue(events.any { it is SetupBluetoothHostViewModel.Event.Done })
+        }
+
+    @Test
+    fun `a remembered host already registered when we start finishes once its own key connects`() =
+        runTest(dispatcher) {
+            val hostId = bluetoothConnectionIdFor(REMEMBERED_MAC)
+            states.value = mapOf(hostId to slot(isConnected = false, isRegistered = true))
+            dispatcher.scheduler.runCurrent()
+            vm.bindArgs("42")
+            val events = collectEvents()
+            vm.onHostSelected(SetupBluetoothHostViewModel.HostRow(hostId, "Old PC", REMEMBERED_MAC, GamepadProfile.XBOX))
+            dispatcher.scheduler.runCurrent()
+
+            states.value = mapOf(hostId to slot(isConnected = true, isRegistered = true))
+            dispatcher.scheduler.runCurrent()
+
+            verify { hub.bind("42", hostId, CONTROLLER_TYPE_XBOX) }
+            assertTrue(events.any { it is SetupBluetoothHostViewModel.Event.Done })
+        }
+
+    @Test
+    fun `a registered but not yet connected session does not finish`() =
+        runTest(dispatcher) {
+            dispatcher.scheduler.runCurrent()
+            vm.bindArgs("42")
+            val events = collectEvents()
+            vm.onTypeChosen(GamepadProfile.XBOX)
+            dispatcher.scheduler.runCurrent()
+
+            states.value = mapOf("bt:NEW" to slot(isConnected = false, isRegistered = true))
+            dispatcher.scheduler.runCurrent()
+
+            assertFalse(events.any { it is SetupBluetoothHostViewModel.Event.Done })
+            verify(exactly = 0) { hub.bind(any(), any(), any()) }
+        }
+
+    @Test
+    fun `a PlayStation bond binds as the PlayStation type`() =
+        runTest(dispatcher) {
+            dispatcher.scheduler.runCurrent()
+            vm.bindArgs("42")
+            vm.onTypeChosen(GamepadProfile.PLAYSTATION)
+            dispatcher.scheduler.runCurrent()
+
+            states.value = mapOf("bt:NEW" to slot(isConnected = true))
+            dispatcher.scheduler.runCurrent()
+
+            verify { hub.bind("42", "bt:NEW", CONTROLLER_TYPE_PLAYSTATION) }
+        }
+
+    @Test
+    fun `a grant on the permission step advances to the type picker`() =
+        runTest(dispatcher) {
+            perm.value = BluetoothPermissionState(required = true, connectGranted = false, scanGranted = false)
+            dispatcher.scheduler.runCurrent()
+            vm.onPairNewDevice()
+            assertEquals(SetupBluetoothHostViewModel.Stage.PERMISSION, vm.state.value.stage)
+
+            perm.value = BluetoothPermissionState.SATISFIED
+            dispatcher.scheduler.runCurrent()
+            vm.onPermissionResult()
+
+            assertEquals(SetupBluetoothHostViewModel.Stage.PICK_TYPE, vm.state.value.stage)
+        }
+
+    @Test
+    fun `a grant that is still missing keeps the permission step`() =
+        runTest(dispatcher) {
+            perm.value = BluetoothPermissionState(required = true, connectGranted = false, scanGranted = false)
+            dispatcher.scheduler.runCurrent()
+            vm.onPairNewDevice()
+            vm.onPermissionResult()
+            assertEquals(SetupBluetoothHostViewModel.Stage.PERMISSION, vm.state.value.stage)
+        }
+
+    @Test
+    fun `a grant landing while not on the permission step leaves the stage alone`() =
+        runTest(dispatcher) {
+            dispatcher.scheduler.runCurrent()
+            vm.onPermissionResult()
+            assertEquals(SetupBluetoothHostViewModel.Stage.PICK_PC, vm.state.value.stage)
+        }
+
+    @Test
+    fun `the discoverable flag mirrors the prompt result`() =
+        runTest(dispatcher) {
+            dispatcher.scheduler.runCurrent()
+            vm.onDiscoverableResult(true)
+            assertTrue(vm.state.value.discoverable)
+            vm.onDiscoverableResult(false)
+            assertFalse(vm.state.value.discoverable)
+        }
+
+    @Test
+    fun `a remembered host with a legacy enum-name profile resolves its profile`() =
+        runTest(dispatcher) {
+            remembered.value =
+                listOf(
+                    rememberedBt("bt:A", "Legacy PC", "AA:A", "PLAYSTATION"),
+                    rememberedBt("bt:B", "Named PC", "AA:B", "PlayStation"),
+                    rememberedBt("bt:C", "Odd PC", "AA:C", "unknown"),
+                )
+            dispatcher.scheduler.runCurrent()
+            val profiles =
+                vm.state.value.hosts
+                    .map { it.profile }
+            assertEquals(listOf(GamepadProfile.PLAYSTATION, GamepadProfile.PLAYSTATION, GamepadProfile.XBOX), profiles)
         }
 
     private fun rememberedBt(
@@ -180,5 +345,9 @@ class SetupBluetoothHostViewModelTest {
         backgroundScope.launch { vm.events.collect { out.add(it) } }
         dispatcher.scheduler.runCurrent()
         return out
+    }
+
+    private companion object {
+        const val REMEMBERED_MAC = "AA:BB:CC:DD:EE:FF"
     }
 }

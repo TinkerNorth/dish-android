@@ -1,158 +1,32 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
+// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.connection
 
-import android.content.Context
-import android.content.SharedPreferences
-import com.tinkernorth.dish.composer.CapabilityComposer
-import com.tinkernorth.dish.core.jni.ControllerRepository
-import com.tinkernorth.dish.core.model.DiscoveredServer
-import com.tinkernorth.dish.core.net.DiscoveryGateway
-import com.tinkernorth.dish.core.net.DishProtocol
-import com.tinkernorth.dish.core.net.HttpReply
-import com.tinkernorth.dish.repository.ConnectionStore
+import com.tinkernorth.dish.core.net.DISH_PROTOCOL_CURRENT
+import com.tinkernorth.dish.core.net.deriveSessionKey
+import com.tinkernorth.dish.core.net.hmacProof
 import com.tinkernorth.dish.repository.RememberedSatellite
-import com.tinkernorth.dish.source.store.SatelliteHostFacts
-import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
-import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
-import com.tinkernorth.dish.source.system.LocalNetworkAccess
+import com.tinkernorth.dish.source.system.isGranted
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkObject
-import io.mockk.unmockkObject
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class SatelliteConnectionManagerTest {
-    private lateinit var context: Context
-    private lateinit var discoveryRepo: DiscoveryGateway
-    private lateinit var controllerRepo: ControllerRepository
-    private lateinit var store: ConnectionStore
-    private lateinit var prefs: SharedPreferences
-    private lateinit var prefsEditor: SharedPreferences.Editor
-
-    private val scope = TestScope(UnconfinedTestDispatcher())
-    private val ioDispatcher = UnconfinedTestDispatcher(scope.testScheduler)
-    private val json = Json { ignoreUnknownKeys = true }
-
-    private val server =
-        DiscoveredServer(
-            name = "Pc",
-            ip = "10.0.0.5",
-            udpPort = 9876,
-            pairPort = 9878,
-            httpPort = 9877,
-        )
-    private val serverId = SatelliteConnection.idFor(server)
-
-    private fun reply(
-        status: Int,
-        body: String,
-    ) = HttpReply(status, body, null)
-
-    private fun ok(body: String) = reply(200, body)
-
-    private fun unreachable() = reply(0, """{"error":"request failed: connect timed out"}""")
-
-    private fun identityMismatch() = HttpReply(0, """{"error":"request failed: hostname not verified"}""", null, pinMismatch = true)
-
-    @Before
-    fun setUp() {
-        context = mockk(relaxed = true)
-        discoveryRepo = mockk(relaxed = true)
-        controllerRepo = mockk(relaxed = true)
-        store = mockk(relaxed = true)
-        prefs = mockk(relaxed = true)
-        prefsEditor = mockk(relaxed = true)
-        every { context.getSharedPreferences(any(), any()) } returns prefs
-        every { prefs.getString("deviceId", null) } returns "test-device-id"
-        every { prefs.edit() } returns prefsEditor
-        every { prefsEditor.putString(any(), any()) } returns prefsEditor
-        every { prefsEditor.remove(any()) } returns prefsEditor
-        every { store.remembered() } returns emptyList()
-        every { store.satelliteSharedKey(any()) } returns null
-        // -1 = dead socket: the RX-drain loop exits after one call. Anything
-        // else would spin it forever on the unconfined test dispatcher (mocks
-        // return instantly, the loop never suspends).
-        every { controllerRepo.receiveAck(any()) } returns -1
-        every { controllerRepo.getServerEpoch(any()) } returns -1
-        every { controllerRepo.getActiveBitmap(any()) } returns -1
-        every { controllerRepo.getSessionCloseReason(any()) } returns -1
-        every { controllerRepo.isConnectionAlive(any()) } returns true
-    }
-
-    // One shared instance: the manager pulls wire projections through the provider on every
-    // descriptor build, so per-get() mocks would be unstubbable from a test body.
-    private val capabilityComposer: CapabilityComposer =
-        mockk(relaxed = true) {
-            every { state } returns
-                kotlinx.coroutines.flow.MutableStateFlow(
-                    emptyMap<String, com.tinkernorth.dish.core.model.SlotCapabilities>(),
-                )
-            every { wireCapsFor(any()) } returns BASE_WIRE_CAPS
-            every { touchpadWireMode(any()) } returns "off"
-            every { wireProjection } returns kotlinx.coroutines.flow.MutableStateFlow(emptyMap())
-        }
-
-    private val capabilityProvider = javax.inject.Provider<CapabilityComposer> { capabilityComposer }
-
-    private val motionBackendStatusStore = SatelliteMotionBackendStatusStore()
-
-    private val hostFeaturesStore = SatelliteHostFeaturesStore()
-
-    private fun manager(): SatelliteConnectionManager =
-        SatelliteConnectionManager(
-            context = context,
-            scope = scope,
-            discoveryRepo = discoveryRepo,
-            controllerRepo = controllerRepo,
-            store = store,
-            json = json,
-            ioDispatcher = ioDispatcher,
-            capabilityProvider = capabilityProvider,
-            hostFacts =
-                SatelliteHostFacts(
-                    features = hostFeaturesStore,
-                    runtime = mockk(),
-                    motionBackend = motionBackendStatusStore,
-                    catalog = mockk(),
-                    capabilities = mockk(),
-                ),
-        )
-
-    private fun runMgrTest(block: suspend (SatelliteConnectionManager, MutableList<ConnectionEvent>) -> Unit) =
-        runTest(scope.testScheduler) {
-            val mgr = manager()
-            val events = mutableListOf<ConnectionEvent>()
-            val collector = scope.launch { mgr.events.collect { events += it } }
-            try {
-                block(mgr, events)
-            } finally {
-                // A live session's heartbeat poll reschedules itself forever, so
-                // the scheduler can never go idle while one exists. Tear all
-                // sessions down before the final drain — on assertion failure
-                // too, or the drain spins virtual time into OOM.
-                mgr.connections.value.keys
-                    .forEach(mgr::disconnect)
-                scope.testScheduler.advanceUntilIdle()
-                collector.cancel()
-            }
-        }
-
+class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
     @Test
     fun `pair returning empty string surfaces server-unreachable error not PairingRequired`() =
         runMgrTest { mgr, events ->
@@ -163,7 +37,7 @@ class SatelliteConnectionManagerTest {
 
             assertTrue(
                 "expected unreachable Error, got: $events",
-                events.any { it is ConnectionEvent.Error && it.message.contains("unreachable", ignoreCase = true) },
+                events.any { it is ConnectionEvent.Error && it.error == ConnectionError.ServerUnreachable },
             )
             assertTrue(events.none { it is ConnectionEvent.PairingRequired })
             assertEquals(SatelliteSessionState.Idle, mgr.get(serverId)?.state?.value)
@@ -178,7 +52,7 @@ class SatelliteConnectionManagerTest {
             mgr.connect(server)
             scope.testScheduler.advanceUntilIdle()
 
-            assertTrue(events.any { it is ConnectionEvent.Error && it.message.contains("unreachable", ignoreCase = true) })
+            assertTrue(events.any { it is ConnectionEvent.Error && it.error == ConnectionError.ServerUnreachable })
         }
 
     @Test
@@ -201,7 +75,7 @@ class SatelliteConnectionManagerTest {
             mgr.pairWithPin(server, "1234")
             scope.testScheduler.advanceUntilIdle()
 
-            assertTrue(events.any { it is ConnectionEvent.Error && it.message.contains("unreachable", ignoreCase = true) })
+            assertTrue(events.any { it is ConnectionEvent.Error && it.error == ConnectionError.ServerUnreachable })
         }
 
     @Test
@@ -213,7 +87,30 @@ class SatelliteConnectionManagerTest {
             mgr.pairWithPin(server, "0000")
             scope.testScheduler.advanceUntilIdle()
 
-            assertTrue(events.any { it is ConnectionEvent.Error && it.message.contains("Invalid PIN") })
+            assertTrue(events.any { it is ConnectionEvent.Error && it.error == ConnectionError.PairingRefused("Invalid PIN") })
+        }
+
+    @Test
+    fun `pairWithPin returning ok=false without a reason reads as a plain pairing failure`() =
+        runMgrTest { mgr, events ->
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), "0000") } returns ok("""{"ok":false}""")
+
+            mgr.pairWithPin(server, "0000")
+            scope.testScheduler.advanceUntilIdle()
+
+            assertEquals(listOf(ConnectionEvent.Error(ConnectionError.PairingFailed)), events)
+        }
+
+    @Test
+    fun `pair 409 from an older satellite tells the user to update Satellite`() =
+        runMgrTest { mgr, events ->
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any()) } returns
+                reply(409, """{"error":"protocol version unsupported"}""")
+
+            mgr.connect(server, ConnectIntent.USER_INITIATED)
+            scope.testScheduler.advanceUntilIdle()
+
+            assertEquals(listOf(ConnectionEvent.Error(ConnectionError.SatelliteUpdateRequired)), events)
         }
 
     @Test
@@ -250,7 +147,7 @@ class SatelliteConnectionManagerTest {
             scope.testScheduler.advanceUntilIdle()
 
             val expectedProof =
-                com.tinkernorth.dish.core.net.SessionCrypto.hmacProof(
+                com.tinkernorth.dish.core.net.hmacProof(
                     com.tinkernorth.dish.core.net
                         .hexToBytes(keyHex),
                     "test-device-id",
@@ -286,7 +183,7 @@ class SatelliteConnectionManagerTest {
                 com.tinkernorth.dish.core.net
                     .hexToBytes(keyHex)
             val expected =
-                com.tinkernorth.dish.core.net.SessionCrypto.deriveSessionKey(
+                com.tinkernorth.dish.core.net.deriveSessionKey(
                     pairingKey,
                     com.tinkernorth.dish.core.net
                         .hexToBytes("0102030405060708"),
@@ -335,12 +232,6 @@ class SatelliteConnectionManagerTest {
             coVerify(atLeast = 2) {
                 discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             }
-
-            // Terminate the retry chain (a coded 401 is terminal) so the
-            // trailing advanceUntilIdle can drain instead of chasing backoffs.
-            coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
-            } returns reply(401, """{"error":"unauthorized","code":"NOT_PAIRED"}""")
         }
 
     @Test
@@ -449,8 +340,8 @@ class SatelliteConnectionManagerTest {
     @Test
     fun `AUTO_RECONNECT is refused before any handshake when local network access is missing`() =
         runMgrTest { mgr, _ ->
-            mockkObject(LocalNetworkAccess)
-            every { LocalNetworkAccess.isGranted(any(), any()) } returns false
+            mockkStatic("com.tinkernorth.dish.source.system.LocalNetworkAccessKt")
+            every { isGranted(any(), any()) } returns false
             try {
                 mgr.connect(server, ConnectIntent.AUTO_RECONNECT)
                 scope.testScheduler.advanceUntilIdle()
@@ -459,7 +350,7 @@ class SatelliteConnectionManagerTest {
                 verify(exactly = 0) { controllerRepo.openSocket(any(), any()) }
                 assertNull(mgr.get(serverId))
             } finally {
-                unmockkObject(LocalNetworkAccess)
+                unmockkStatic("com.tinkernorth.dish.source.system.LocalNetworkAccessKt")
             }
         }
 
@@ -536,6 +427,31 @@ class SatelliteConnectionManagerTest {
             coVerify { discoveryRepo.unpair(any(), any(), "test-device-id", any(), any()) }
             verify { store.forgetSatellite(serverId) }
             assertNull(mgr.connections.value[serverId])
+        }
+
+    @Test
+    fun `forget drops the pin again once the unpair is answered, so a forgotten satellite keeps none`() =
+        runMgrTest { mgr, _ ->
+            every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
+            coEvery {
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
+            } returns ok("")
+            // The unpair's own handshake pins the satellite again once the synchronous forget has
+            // dropped the pin, so the drop that counts is the one after the answer.
+            var pinDrops = 0
+            var dropsBeforeTheAnswer = -1
+            every { store.satellitePins.forget(server.ip) } answers { pinDrops++ }
+            coEvery { discoveryRepo.unpair(any(), any(), any(), any(), any()) } answers {
+                dropsBeforeTheAnswer = pinDrops
+                ok("""{"ok":true}""")
+            }
+            mgr.connect(server)
+            scope.testScheduler.advanceUntilIdle()
+
+            mgr.forget(serverId)
+            scope.testScheduler.advanceUntilIdle()
+
+            assertEquals("one drop, after the unpair was answered", dropsBeforeTheAnswer + 1, pinDrops)
         }
 
     @Test
@@ -647,7 +563,7 @@ class SatelliteConnectionManagerTest {
     fun `connect to a public ip is refused before any socket is opened`() =
         runMgrTest { mgr, _ ->
             val publicServer = server.copy(ip = "8.8.8.8")
-            val publicId = SatelliteConnection.idFor(publicServer)
+            val publicId = satelliteConnectionIdFor(publicServer)
             // Stored key routes both straight to openSession (the IP choke point).
             every { store.satelliteSharedKey(publicId) } returns "aa".repeat(32)
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
@@ -857,7 +773,7 @@ class SatelliteConnectionManagerTest {
             assertTrue(
                 "expected unreachable Error, got: $events",
                 events.any {
-                    it is ConnectionEvent.Error && it.message.contains("unreachable", ignoreCase = true)
+                    it is ConnectionEvent.Error && it.error == ConnectionError.ServerUnreachable
                 },
             )
         }
@@ -888,7 +804,7 @@ class SatelliteConnectionManagerTest {
 
             assertTrue(events.none { it is ConnectionEvent.PairingRequired })
             assertTrue(
-                events.any { it is ConnectionEvent.Error && it.message.contains("Update Dish") },
+                events.any { it is ConnectionEvent.Error && it.error == ConnectionError.AppUpdateRequired },
             )
             assertTrue(serverId !in mgr.staleSatelliteIds.value)
         }
@@ -897,7 +813,7 @@ class SatelliteConnectionManagerTest {
     fun `pair 409 with a speakable version retries once at that version`() =
         runMgrTest { mgr, events ->
             coEvery {
-                discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.CURRENT))
+                discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), eq(DISH_PROTOCOL_CURRENT))
             } returns reply(409, """{"error":"protocol version unsupported","supported":1}""")
             coEvery {
                 discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), eq(1))
@@ -927,7 +843,7 @@ class SatelliteConnectionManagerTest {
             scope.testScheduler.advanceUntilIdle()
 
             assertTrue(
-                events.any { it is ConnectionEvent.Error && it.message.contains("Update Dish") },
+                events.any { it is ConnectionEvent.Error && it.error == ConnectionError.AppUpdateRequired },
             )
         }
 
@@ -936,7 +852,7 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, _ ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.CURRENT))
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DISH_PROTOCOL_CURRENT))
             } returns reply(409, """{"error":"protocol version unsupported","supported":1}""")
             coEvery {
                 discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(1))
@@ -962,7 +878,7 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, _ ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.CURRENT))
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DISH_PROTOCOL_CURRENT))
             } returns reply(409, """{"error":"protocol version unsupported","supported":1}""")
             coEvery {
                 discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(1))
@@ -982,7 +898,7 @@ class SatelliteConnectionManagerTest {
             scope.testScheduler.runCurrent()
 
             coVerify(exactly = 1) {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.CURRENT))
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DISH_PROTOCOL_CURRENT))
             }
             coVerify(exactly = 2) {
                 discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(1))
@@ -1009,7 +925,7 @@ class SatelliteConnectionManagerTest {
 
             assertEquals(SatelliteSessionState.Live, mgr.get(serverId)?.state?.value)
             coVerify(exactly = 0) {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.CURRENT))
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DISH_PROTOCOL_CURRENT))
             }
         }
 
@@ -1044,7 +960,7 @@ class SatelliteConnectionManagerTest {
 
             assertTrue(
                 "expected identity-changed Error, got: $events",
-                events.any { it is ConnectionEvent.Error && it.message.contains("identity", ignoreCase = true) },
+                events.any { it is ConnectionEvent.Error && it.error == ConnectionError.IdentityChanged },
             )
             verify(exactly = 0) { store.forgetSatelliteSharedKey(any()) }
             assertTrue(serverId !in mgr.staleSatelliteIds.value)
@@ -1076,7 +992,7 @@ class SatelliteConnectionManagerTest {
             scope.testScheduler.advanceUntilIdle()
 
             assertTrue(
-                events.any { it is ConnectionEvent.Error && it.message.contains("identity", ignoreCase = true) },
+                events.any { it is ConnectionEvent.Error && it.error == ConnectionError.IdentityChanged },
             )
         }
 
@@ -1097,7 +1013,7 @@ class SatelliteConnectionManagerTest {
     fun `a scan re-points an idle connection at the discovered address`() =
         runMgrTest { mgr, _ ->
             val midServer = server.copy(machineId = "m1")
-            val midId = SatelliteConnection.idFor(midServer)
+            val midId = satelliteConnectionIdFor(midServer)
             coEvery { discoveryRepo.pair(any(), any(), any(), any(), any()) } returns unreachable()
             mgr.connect(midServer, ConnectIntent.AUTO_RECONNECT)
             scope.testScheduler.advanceUntilIdle()
@@ -1129,7 +1045,7 @@ class SatelliteConnectionManagerTest {
     fun `a scan leaves a live session's address alone`() =
         runMgrTest { mgr, _ ->
             val midServer = server.copy(machineId = "m1")
-            val midId = SatelliteConnection.idFor(midServer)
+            val midId = satelliteConnectionIdFor(midServer)
             every { store.satelliteSharedKey(midId) } returns "aa".repeat(32)
             coEvery {
                 discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
@@ -1163,7 +1079,7 @@ class SatelliteConnectionManagerTest {
     fun `a silent retry dials the address remembered at fire time`() =
         runMgrTest { mgr, _ ->
             val midServer = server.copy(machineId = "m1")
-            val midId = SatelliteConnection.idFor(midServer)
+            val midId = satelliteConnectionIdFor(midServer)
             every { store.satelliteSharedKey(midId) } returns "aa".repeat(32)
             coEvery {
                 discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
@@ -1189,10 +1105,6 @@ class SatelliteConnectionManagerTest {
             scope.testScheduler.runCurrent()
 
             coVerify { discoveryRepo.putSession("10.0.0.99", any(), any(), any(), any(), any(), any()) }
-
-            coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
-            } returns reply(401, """{"error":"unauthorized","code":"NOT_PAIRED"}""")
         }
 
     @Test
@@ -1348,7 +1260,7 @@ class SatelliteConnectionManagerTest {
 
             assertTrue(
                 events.any {
-                    it is ConnectionEvent.Error && it.message.contains("unreachable", ignoreCase = true)
+                    it is ConnectionEvent.Error && it.error == ConnectionError.ServerUnreachable
                 },
             )
         }
@@ -1377,16 +1289,9 @@ class SatelliteConnectionManagerTest {
 
             assertTrue(
                 events.none {
-                    it is ConnectionEvent.Error && it.message.contains("declined", ignoreCase = true)
+                    it is ConnectionEvent.Error && it.error == ConnectionError.ApprovalDeclined
                 },
             )
             verify { store.setSatelliteSharedKey(serverId, "cc".repeat(32)) }
         }
-
-    private companion object {
-        // What CapabilityResolver.wireCaps resolves for a pad with nothing else on.
-        val BASE_WIRE_CAPS =
-            com.tinkernorth.dish.core.net.ControllerDescriptor.CAP_ANALOG_TRIGGERS or
-                com.tinkernorth.dish.core.net.ControllerDescriptor.CAP_RUMBLE
-    }
 }

@@ -23,7 +23,7 @@ class MoonlightRowsTest {
 
     @Test
     fun `known moonlight hosts come first, then discovered hosts not already known`() {
-        val known = summary("moonlight:uid:a")
+        val known = summary("moonlight:10.0.0.1")
         val bt = summary("bt:x", ConnectionKind.BLUETOOTH)
         val discoveredKnown = MoonlightHost(name = "A", address = "10.0.0.1", uniqueId = "a")
         val discoveredNew = MoonlightHost(name = "B", address = "10.0.0.2", uniqueId = "b")
@@ -32,9 +32,9 @@ class MoonlightRowsTest {
 
         assertEquals(2, rows.size)
         assertTrue(rows[0] is MoonlightRow.Known)
-        assertEquals("moonlight:uid:a", (rows[0] as MoonlightRow.Known).summary.id)
+        assertEquals("moonlight:10.0.0.1", (rows[0] as MoonlightRow.Known).summary.id)
         assertTrue(rows[1] is MoonlightRow.Discovered)
-        assertEquals("moonlight:uid:b", (rows[1] as MoonlightRow.Discovered).host.id)
+        assertEquals("moonlight:10.0.0.2", (rows[1] as MoonlightRow.Discovered).host.id)
     }
 
     @Test

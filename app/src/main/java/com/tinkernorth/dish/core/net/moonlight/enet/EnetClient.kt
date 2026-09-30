@@ -6,6 +6,13 @@ package com.tinkernorth.dish.core.net.moonlight.enet
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+/** What one link did, for the session log. */
+data class EnetLinkStats(
+    val acksSent: Int,
+    val retransmits: Int,
+    val unknownCommands: Int,
+)
+
 /**
  * A minimal ENet client: the connect handshake, reliable send/receive on
  * channel 0, acknowledgements, ping and disconnect. Ported to pure Kotlin from
@@ -41,22 +48,19 @@ class EnetClient(
     /** Reliable payloads delivered by the host (the encrypted control events). */
     val received: ArrayDeque<ByteArray> = ArrayDeque()
 
-    /** Counters the session logs, so a live run says what the link actually did. */
-    var acksSent: Int = 0
-        private set
+    private var acksSent = 0
+    private var retransmits = 0
+    private var unknownCommands = 0
 
-    var retransmits: Int = 0
-        private set
-
-    var unknownCommands: Int = 0
-        private set
+    /** The counters the session logs, so a live run says what the link actually did. */
+    val stats: EnetLinkStats get() = EnetLinkStats(acksSent, retransmits, unknownCommands)
 
     // Our peer identity. incomingPeerId is our slot (0); outgoingPeerId is the
     // host's id for us, learned from VERIFY_CONNECT.
     private val incomingPeerId = 0
     private var outgoingPeerId = EnetProtocol.MAXIMUM_PEER_ID
-    private var incomingSessionId = 0xFF
-    private var outgoingSessionId = 0xFF
+    private var incomingSessionId = EnetProtocol.SESSION_ID_UNSET
+    private var outgoingSessionId = EnetProtocol.SESSION_ID_UNSET
     private var connectId = 0
     private var mtu = EnetProtocol.DEFAULT_MTU
     private var windowSize = EnetProtocol.MAXIMUM_WINDOW_SIZE
@@ -129,10 +133,9 @@ class EnetClient(
         state = State.DISCONNECTED
         disconnectReason = disconnectReason ?: "local teardown"
         val command =
-            EnetProtocol
-                .Writer(EnetProtocol.DISCONNECT_LEN)
+            EnetWriter(EnetProtocol.DISCONNECT_LEN)
                 .also {
-                    EnetProtocol.commandHeader(
+                    commandHeader(
                         it,
                         EnetProtocol.COMMAND_DISCONNECT or EnetProtocol.FLAG_UNSEQUENCED,
                         EnetProtocol.SYSTEM_CHANNEL,
@@ -141,6 +144,24 @@ class EnetClient(
                     it.u32(0) // disconnect data
                 }.toByteArray()
         return wrapRaw(command, nowMs())
+    }
+
+    private class DatagramHeader(
+        val sentTime: Int,
+        val hasSentTime: Boolean,
+    )
+
+    // Null means this client cannot read the datagram: it announces compression, which this
+    // client never negotiates, or it is truncated where the sent-time field should be. The buffer
+    // is left positioned on the first command either way.
+    private fun readDatagramHeader(buf: ByteBuffer): DatagramHeader? {
+        val peerField = buf.short.toInt() and EnetProtocol.U16_MASK
+        val compressed = peerField and EnetProtocol.HEADER_FLAG_COMPRESSED != 0
+        if (compressed) return null
+        val hasSentTime = peerField and EnetProtocol.HEADER_FLAG_SENT_TIME != 0
+        if (!hasSentTime) return DatagramHeader(0, false)
+        if (buf.remaining() < Short.SIZE_BYTES) return null
+        return DatagramHeader(buf.short.toInt() and EnetProtocol.U16_MASK, true)
     }
 
     /**
@@ -164,24 +185,26 @@ class EnetClient(
     fun onDatagram(datagram: ByteArray): List<ByteArray> {
         if (datagram.size < EnetProtocol.NO_SENT_TIME_HEADER_LEN) return emptyList()
         val buf = ByteBuffer.wrap(datagram).order(ByteOrder.BIG_ENDIAN)
-        val peerField = buf.short.toInt() and 0xFFFF
-        val hasSentTime = peerField and EnetProtocol.HEADER_FLAG_SENT_TIME != 0
-        val compressed = peerField and EnetProtocol.HEADER_FLAG_COMPRESSED != 0
-        if (compressed) return emptyList() // this client never negotiates compression
-        var sentTime = 0
-        if (hasSentTime) {
-            if (buf.remaining() < 2) return emptyList()
-            sentTime = buf.short.toInt() and 0xFFFF
-        }
+        val datagramHeader = readDatagramHeader(buf) ?: return emptyList()
+
         val now = nowMs()
         lastReceiveMs = now
         val acks = mutableListOf<ByteArray>()
         while (buf.remaining() >= EnetProtocol.COMMAND_HEADER_LEN) {
-            val command = buf.get().toInt() and 0xFF
-            val channelId = buf.get().toInt() and 0xFF
-            val reliableSeq = buf.short.toInt() and 0xFFFF
+            val command = buf.get().toInt() and EnetProtocol.U8_MASK
+            val channelId = buf.get().toInt() and EnetProtocol.U8_MASK
+            val reliableSeq = buf.short.toInt() and EnetProtocol.U16_MASK
             val header = EnetProtocol.CommandHeader(command, channelId, reliableSeq)
-            if (!handleCommand(header, buf, sentTime, hasSentTime, acks, now)) break
+            val keepGoing =
+                handleCommand(
+                    header,
+                    buf,
+                    datagramHeader.sentTime,
+                    datagramHeader.hasSentTime,
+                    acks,
+                    now,
+                )
+            if (!keepGoing) break
         }
         return acks
     }
@@ -194,32 +217,51 @@ class EnetClient(
         val now = nowMs()
         val out = mutableListOf<ByteArray>()
         for (cmd in sentReliable.values) {
-            if (now - cmd.sentAtMs < cmd.roundTripTimeout) continue
+            val dueForRetry = now - cmd.sentAtMs >= cmd.roundTripTimeout
+            if (!dueForRetry) continue
             if (earliestTimeoutMs == 0L || cmd.sentAtMs < earliestTimeoutMs) earliestTimeoutMs = cmd.sentAtMs
             if (hasTimedOut(cmd, now)) {
-                state = State.DISCONNECTED
-                disconnectReason =
-                    "peer stopped acknowledging: channel ${cmd.channelId} seq ${cmd.reliableSeq} " +
-                    "unacked for ${now - earliestTimeoutMs} ms over ${cmd.sendAttempts} sends"
+                giveUpOn(cmd, now)
                 return out
             }
-            cmd.sendAttempts += 1
-            cmd.roundTripTimeout = retryTimeoutFor(cmd.sendAttempts)
-            cmd.sentAtMs = now
-            retransmits += 1
-            // Re-wrap rather than replay: the header's sent time is what the peer
-            // echoes back to measure the round trip, so a stale one poisons its RTT.
-            out += wrapRaw(cmd.command, now)
+            out += retransmit(cmd, now)
         }
-        if (state == State.CONNECTED &&
-            now - lastReceiveMs >= EnetProtocol.PING_INTERVAL_MS &&
-            now - lastPingMs >= EnetProtocol.PING_INTERVAL_MS
-        ) {
+        if (pingIsDue(now)) {
             lastPingMs = now
             out += buildPing(now)
         }
         return out
     }
+
+    private fun giveUpOn(
+        cmd: Outgoing,
+        now: Long,
+    ) {
+        state = State.DISCONNECTED
+        disconnectReason =
+            "peer stopped acknowledging: channel ${cmd.channelId} seq ${cmd.reliableSeq} " +
+            "unacked for ${now - earliestTimeoutMs} ms over ${cmd.sendAttempts} sends"
+    }
+
+    // Re-wrapped rather than replayed: the header's sent time is what the peer echoes back to
+    // measure the round trip, so a stale one poisons its RTT.
+    private fun retransmit(
+        cmd: Outgoing,
+        now: Long,
+    ): ByteArray {
+        cmd.sendAttempts += 1
+        cmd.roundTripTimeout = retryTimeoutFor(cmd.sendAttempts)
+        cmd.sentAtMs = now
+        retransmits += 1
+        return wrapRaw(cmd.command, now)
+    }
+
+    // Only while connected, and only once the link has been quiet in both directions: a peer that
+    // is still talking needs no keepalive.
+    private fun pingIsDue(now: Long): Boolean =
+        state == State.CONNECTED &&
+            now - lastReceiveMs >= EnetProtocol.PING_INTERVAL_MS &&
+            now - lastPingMs >= EnetProtocol.PING_INTERVAL_MS
 
     /**
      * protocol.c enet_protocol_check_timeouts: give up either after
@@ -244,7 +286,7 @@ class EnetClient(
     }
 
     private fun peerRoundTripTimeout(): Long {
-        val variance = 4 * maxOf(1L, roundTripTimeVarianceMs)
+        val variance = RTT_VARIANCE_WEIGHT * maxOf(1L, roundTripTimeVarianceMs)
         val timeout = roundTripTimeMs + minOf(roundTripTimeMs, variance)
         return timeout.coerceIn(1L, (EnetProtocol.TIMEOUT_MAXIMUM_MS / RTO_CAP_DIVISOR).toLong())
     }
@@ -260,7 +302,7 @@ class EnetClient(
         now: Long,
     ): Boolean {
         val number = header.commandNumber
-        val fixed = EnetProtocol.sizeForCommand(number)
+        val fixed = sizeForCommand(number)
         if (fixed == 0) {
             unknownCommands += 1
             return false
@@ -305,20 +347,22 @@ class EnetClient(
         body: ByteArray,
         buf: ByteBuffer,
     ): ByteArray? {
-        val offset = EnetProtocol.dataLengthOffset(commandNumber)
+        val offset = dataLengthOffset(commandNumber)
         if (offset < 0) return EMPTY
         val at = offset - EnetProtocol.COMMAND_HEADER_LEN
-        if (at + 2 > body.size) return null
-        val dataLength = ((body[at].toInt() and 0xFF) shl 8) or (body[at + 1].toInt() and 0xFF)
+        if (at + Short.SIZE_BYTES > body.size) return null
+        val highByte = body[at].toInt() and EnetProtocol.U8_MASK
+        val lowByte = body[at + 1].toInt() and EnetProtocol.U8_MASK
+        val dataLength = (highByte shl Byte.SIZE_BITS) or lowByte
         if (buf.remaining() < dataLength) return null
         return ByteArray(dataLength).also { if (dataLength > 0) buf.get(it) }
     }
 
     private fun consumeVerifyConnect(body: ByteArray) {
         val buf = ByteBuffer.wrap(body).order(ByteOrder.BIG_ENDIAN)
-        outgoingPeerId = buf.short.toInt() and 0xFFFF
-        incomingSessionId = buf.get().toInt() and 0xFF
-        outgoingSessionId = buf.get().toInt() and 0xFF
+        outgoingPeerId = buf.short.toInt() and EnetProtocol.U16_MASK
+        incomingSessionId = buf.get().toInt() and EnetProtocol.U8_MASK
+        outgoingSessionId = buf.get().toInt() and EnetProtocol.U8_MASK
         val theirMtu = buf.int
         val theirWindow = buf.int
         if (theirMtu in EnetProtocol.PROTOCOL_MINIMUM_MTU..EnetProtocol.PROTOCOL_MAXIMUM_MTU && theirMtu < mtu) {
@@ -339,33 +383,38 @@ class EnetClient(
         now: Long,
     ) {
         val buf = ByteBuffer.wrap(body).order(ByteOrder.BIG_ENDIAN)
-        val recvReliableSeq = buf.short.toInt() and 0xFFFF
-        val recvSentTime = buf.short.toInt() and 0xFFFF
+        val recvReliableSeq = buf.short.toInt() and EnetProtocol.U16_MASK
+        val recvSentTime = buf.short.toInt() and EnetProtocol.U16_MASK
         val acked = sentReliable.remove(key(header.channelId, recvReliableSeq))
         // An acknowledgement is the only thing that proves the peer is still
         // there, so it clears the give-up clock outright (protocol.c does the same).
         earliestTimeoutMs = 0
-        sampleRoundTrip(acked?.let { now - it.sentAtMs } ?: ((now.toInt() - recvSentTime) and 0xFFFF).toLong())
+        val echoedSample = ((now.toInt() - recvSentTime) and EnetProtocol.U16_MASK).toLong()
+        sampleRoundTrip(acked?.let { now - it.sentAtMs } ?: echoedSample)
     }
 
-    /** enet_protocol_handle_acknowledge's smoothed round-trip estimate. */
+    /**
+     * enet_protocol_handle_acknowledge's smoothed round-trip estimate, rounded the way
+     * cgutman/enet rounds it: every step rounds UP (`(diff + 7) / 8`, `(diff + 3) / 4`).
+     * Upstream lsalzman/enet truncates instead; the host runs the fork.
+     */
     private fun sampleRoundTrip(rawSample: Long) {
         val sample = rawSample.coerceIn(1L, EnetProtocol.TIMEOUT_MAXIMUM_MS.toLong())
         if (!sampledRtt) {
             roundTripTimeMs = sample
-            roundTripTimeVarianceMs = (sample + 1) / 2
+            roundTripTimeVarianceMs = ceilDiv(sample, INITIAL_VARIANCE_DIV)
             sampledRtt = true
             return
         }
-        roundTripTimeVarianceMs -= (roundTripTimeVarianceMs + 3) / 4
+        roundTripTimeVarianceMs -= ceilDiv(roundTripTimeVarianceMs, VARIANCE_DIV)
         if (sample >= roundTripTimeMs) {
             val diff = sample - roundTripTimeMs
-            roundTripTimeVarianceMs += (diff + 3) / 4
-            roundTripTimeMs += (diff + 7) / 8
+            roundTripTimeVarianceMs += ceilDiv(diff, VARIANCE_DIV)
+            roundTripTimeMs += ceilDiv(diff, RTT_DIV)
         } else {
             val diff = roundTripTimeMs - sample
-            roundTripTimeVarianceMs += (diff + 3) / 4
-            roundTripTimeMs -= (diff + 7) / 8
+            roundTripTimeVarianceMs += ceilDiv(diff, VARIANCE_DIV)
+            roundTripTimeMs -= ceilDiv(diff, RTT_DIV)
         }
     }
 
@@ -376,23 +425,24 @@ class EnetClient(
         // In-order gate on the 16-bit sequence space: a retransmitted command
         // (seq already delivered) is acked again by the caller but not
         // re-delivered. The signed difference keeps that true across the wrap.
-        val ahead = ((reliableSeq - incomingReliableSeq) and 0xFFFF).let { if (it > 0x7FFF) it - 0x10000 else it }
+        val distance = (reliableSeq - incomingReliableSeq) and EnetProtocol.U16_MASK
+        val ahead = if (distance > EnetProtocol.SEQ_HALF_RANGE) distance - EnetProtocol.SEQ_RANGE else distance
         if (ahead <= 0) return
         incomingReliableSeq = reliableSeq
         received.addLast(payload)
     }
 
     private fun buildConnect(): ByteArray {
-        val w = EnetProtocol.Writer(EnetProtocol.CONNECT_LEN)
-        EnetProtocol.commandHeader(
+        val w = EnetWriter(EnetProtocol.CONNECT_LEN)
+        commandHeader(
             w,
             EnetProtocol.COMMAND_CONNECT or EnetProtocol.FLAG_ACKNOWLEDGE,
             EnetProtocol.SYSTEM_CHANNEL,
             systemReliableSeq,
         )
         w.u16(incomingPeerId)
-        w.u8(0xFF) // incomingSessionId (unset)
-        w.u8(0xFF) // outgoingSessionId (unset)
+        w.u8(EnetProtocol.SESSION_ID_UNSET) // incomingSessionId
+        w.u8(EnetProtocol.SESSION_ID_UNSET) // outgoingSessionId
         w.u32(mtu)
         w.u32(windowSize)
         w.u32(CHANNEL_COUNT)
@@ -410,8 +460,8 @@ class EnetClient(
         seq: Int,
         payload: ByteArray,
     ): ByteArray {
-        val w = EnetProtocol.Writer(EnetProtocol.SEND_RELIABLE_HEADER_LEN + payload.size)
-        EnetProtocol.commandHeader(w, EnetProtocol.COMMAND_SEND_RELIABLE or EnetProtocol.FLAG_ACKNOWLEDGE, DATA_CHANNEL, seq)
+        val w = EnetWriter(EnetProtocol.SEND_RELIABLE_HEADER_LEN + payload.size)
+        commandHeader(w, EnetProtocol.COMMAND_SEND_RELIABLE or EnetProtocol.FLAG_ACKNOWLEDGE, DATA_CHANNEL, seq)
         w.u16(payload.size)
         w.bytes(payload)
         return w.toByteArray()
@@ -421,8 +471,8 @@ class EnetClient(
         header: EnetProtocol.CommandHeader,
         sentTime: Int,
     ): ByteArray {
-        val w = EnetProtocol.Writer(EnetProtocol.ACKNOWLEDGE_LEN)
-        EnetProtocol.commandHeader(w, EnetProtocol.COMMAND_ACKNOWLEDGE, header.channelId, header.reliableSequenceNumber)
+        val w = EnetWriter(EnetProtocol.ACKNOWLEDGE_LEN)
+        commandHeader(w, EnetProtocol.COMMAND_ACKNOWLEDGE, header.channelId, header.reliableSequenceNumber)
         w.u16(header.reliableSequenceNumber)
         w.u16(sentTime)
         return wrapRaw(w.toByteArray(), nowMs())
@@ -430,8 +480,8 @@ class EnetClient(
 
     private fun buildPing(now: Long): ByteArray {
         systemReliableSeq += 1
-        val w = EnetProtocol.Writer(EnetProtocol.PING_LEN)
-        EnetProtocol.commandHeader(
+        val w = EnetWriter(EnetProtocol.PING_LEN)
+        commandHeader(
             w,
             EnetProtocol.COMMAND_PING or EnetProtocol.FLAG_ACKNOWLEDGE,
             EnetProtocol.SYSTEM_CHANNEL,
@@ -445,8 +495,9 @@ class EnetClient(
         command: ByteArray,
         now: Long,
     ): ByteArray {
-        val w = EnetProtocol.Writer(EnetProtocol.FULL_HEADER_LEN + command.size)
-        EnetProtocol.writeHeader(w, outgoingPeerId, outgoingSessionId, sentTime = (now and 0xFFFF).toInt())
+        val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + command.size)
+        val sentTime = now.toInt() and EnetProtocol.U16_MASK
+        writeHeader(w, outgoingPeerId, outgoingSessionId, sentTime)
         w.bytes(command)
         return w.toByteArray()
     }
@@ -465,12 +516,18 @@ class EnetClient(
     private fun key(
         channelId: Int,
         reliableSeq: Int,
-    ): Long = (channelId.toLong() shl 32) or (reliableSeq.toLong() and 0xFFFFFFFFL)
+    ): Long = (channelId.toLong() shl Int.SIZE_BITS) or (reliableSeq.toLong() and U32_MASK)
+
+    private fun ceilDiv(
+        value: Long,
+        divisor: Int,
+    ): Long = (value + divisor - 1) / divisor
 
     companion object {
         const val DATA_CHANNEL = 0
         private const val CHANNEL_COUNT = 1
         private val EMPTY = ByteArray(0)
+        private const val U32_MASK = 0xFFFFFFFFL
 
         // protocol.c caps a command's retransmission timeout at a fifth of the
         // peer's maximum timeout.
@@ -479,5 +536,14 @@ class EnetClient(
         // Keeps the attempt-window shift inside a Long once a command has been
         // resent absurdly often; by then it has long since passed timeoutLimit.
         private const val MAX_ATTEMPT_SHIFT = 30
+
+        // ENet's fixed-point RTT estimator (cgutman/enet enet_protocol_handle_acknowledge):
+        // the retransmit timeout weights the variance by four, the first sample seeds the
+        // variance at half itself, and every later sample moves the variance a quarter
+        // and the estimate an eighth of the way toward itself, each rounded up.
+        private const val RTT_VARIANCE_WEIGHT = 4
+        private const val INITIAL_VARIANCE_DIV = 2
+        private const val VARIANCE_DIV = 4
+        private const val RTT_DIV = 8
     }
 }

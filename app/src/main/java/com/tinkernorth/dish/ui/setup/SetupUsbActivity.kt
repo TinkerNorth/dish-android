@@ -6,10 +6,6 @@ import android.os.Bundle
 import android.view.View
 import androidx.activity.addCallback
 import androidx.activity.viewModels
-import androidx.annotation.StringRes
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivitySetupUsbBinding
 import com.tinkernorth.dish.databinding.SetupChoiceRowBinding
@@ -17,9 +13,9 @@ import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.source.usb.DirectClaimFailure
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -34,7 +30,7 @@ class SetupUsbActivity : BaseGamepadHostActivity() {
         super.onCreate(savedInstanceState)
         binding = setScaffoldContent(ActivitySetupUsbBinding::inflate)
         setupDishToolbar(binding.toolbar)
-        wireSetupSkip(binding.toolbar, onboarding)
+        wireSetupSkip(binding.toolbar, onboarding, nav)
         binding.toolbar.setNavigationOnClickListener { handleBack() }
         binding.breadcrumb.applyStep(SETUP_STEP_INPUT)
 
@@ -49,21 +45,14 @@ class SetupUsbActivity : BaseGamepadHostActivity() {
     }
 
     private fun observe() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.state.collect { render(it) }
-            }
-        }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.events.collect { event ->
-                    when (event) {
-                        is SetupUsbViewModel.Event.Proceed ->
-                            nav.toSetupConnection(SetupFlow.INPUT_USB, event.slotId)
-                        is SetupUsbViewModel.Event.Recover -> showRecovery(event.reason)
-                    }
-                }
-            }
+        observeWhileStarted(viewModel.state) { render(it) }
+        observeWhileStarted(viewModel.events) { onEvent(it) }
+    }
+
+    private fun onEvent(event: SetupUsbViewModel.Event) {
+        when (event) {
+            is SetupUsbViewModel.Event.Proceed -> nav.toSetupConnection(INPUT_USB, event.slotId)
+            is SetupUsbViewModel.Event.Recover -> showRecovery(event.reason)
         }
     }
 
@@ -126,23 +115,16 @@ class SetupUsbActivity : BaseGamepadHostActivity() {
     // Retry re-runs whichever mode the user is on (Direct from the grant step, Standard otherwise);
     // start over / exit are handled by the dialog.
     private fun showRecovery(reason: DirectClaimFailure?) {
-        val message = reason?.let { getString(reasonText(it)) }
-        SetupErrorDialog.show(this, message) {
-            when (viewModel.state.value.stage) {
-                SetupUsbViewModel.Stage.GRANTING -> viewModel.showPrompt()
-                else -> viewModel.chooseStandard()
-            }
-        }
+        val message = reason?.let { getString(directFailureReasonRes(it)) }
+        showSetupError(this, nav, message) { retryAfterRecovery() }
     }
 
-    @StringRes
-    private fun reasonText(reason: DirectClaimFailure): Int =
-        when (reason) {
-            DirectClaimFailure.Busy -> R.string.path_reason_busy
-            DirectClaimFailure.InitFailed -> R.string.path_reason_init_failed
-            DirectClaimFailure.PermissionDenied -> R.string.path_reason_permission_denied
-            DirectClaimFailure.Dropped -> R.string.path_needs_replug
+    private fun retryAfterRecovery() {
+        when (viewModel.state.value.stage) {
+            SetupUsbViewModel.Stage.GRANTING -> viewModel.showPrompt()
+            else -> viewModel.chooseStandard()
         }
+    }
 
     private fun visibleIf(condition: Boolean): Int = if (condition) View.VISIBLE else View.GONE
 }

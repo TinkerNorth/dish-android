@@ -10,24 +10,23 @@
 #ifdef __ANDROID__
 #include <android/log.h>
 #include <linux/usbdevice_fs.h>
+#include <stdarg.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <errno.h>
-
-#define TAG "SatelliteUsbParse"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 #endif
 
 namespace usbparsers {
 
 using gamepad::DeviceState;
+using gamepad::hatDirectionBits;
 using gamepad::WBUTTON_MIC_MUTE;
 using gamepad::XUSB_A;
 using gamepad::XUSB_B;
 using gamepad::XUSB_BACK;
 using gamepad::XUSB_DPAD_DOWN;
 using gamepad::XUSB_DPAD_LEFT;
+using gamepad::XUSB_DPAD_MASK;
 using gamepad::XUSB_DPAD_RIGHT;
 using gamepad::XUSB_DPAD_UP;
 using gamepad::XUSB_GUIDE;
@@ -39,11 +38,15 @@ using gamepad::XUSB_THUMB_R;
 using gamepad::XUSB_X;
 using gamepad::XUSB_Y;
 
-// DualShock 4 / DualSense calibrated-IMU resolution (Linux hid-playstation).
-static constexpr int32_t kPsGyroResPerDegS = 1024;
-static constexpr int32_t kPsAccelResPerG = 8192;
+namespace {
 
-static const KnownDevice kKnown[] = {
+// DualShock 4 / DualSense calibrated-IMU resolution (Linux hid-playstation).
+constexpr int32_t kPsGyroResPerDegS = 1024;
+constexpr int32_t kPsAccelResPerG = 8192;
+
+} // namespace
+
+constexpr KnownDevice kKnown[] = {
     {0x045E, 0x028E, "Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x045E, 0x028F, "Xbox 360 Wireless Receiver (wired)", Parser::XINPUT_360, InitKind::NONE},
     {0x045E, 0x02A1, "Xbox 360 Wireless Controller (PC)", Parser::XINPUT_360_WIRELESS,
@@ -183,7 +186,7 @@ static const KnownDevice kKnown[] = {
 // probeDecodable still guards the byte layout, but isVerifiedFastLane returns false for them so
 // auto-claim never silently moves an untested model onto Direct. Bluetooth-only PIDs, USB-differs
 // entries, dongles that re-enumerate, and non-gamepads (wheels/guitars) from SDL are omitted.
-static const KnownDevice kImported[] = {
+constexpr KnownDevice kImported[] = {
     {0x0079, 0x18D4, "GPD Win 2 Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x044F, 0xB326, "Thrustmaster Gamepad GP XID", Parser::XINPUT_360, InitKind::NONE},
     {0x046D, 0xC242, "Logitech ChillStream", Parser::XINPUT_360, InitKind::NONE},
@@ -396,30 +399,55 @@ static const KnownDevice kImported[] = {
      InitKind::STEAM_QUIET},
 };
 
+namespace {
+
 template <size_t N>
-static const KnownDevice* findIn(const KnownDevice (&arr)[N], uint16_t vid, uint16_t pid) {
-    for (const auto& d : arr) {
-        if (d.vid == vid && d.pid == pid) return &d;
+const KnownDevice* findIn(const KnownDevice (&arr)[N], const uint16_t vid, const uint16_t pid) {
+    for (const KnownDevice& d : arr) {
+        const bool isTheModel = d.vid == vid && d.pid == pid;
+        if (isTheModel) return &d;
     }
     return nullptr;
 }
 
-const KnownDevice* lookupKnown(uint16_t vid, uint16_t pid) {
-    if (const KnownDevice* k = findIn(kKnown, vid, pid)) return k;
+constexpr uint8_t kIfClassVendor = 0xFF;
+constexpr uint8_t kXInputSubclass = 0x5D;
+constexpr uint8_t kXInputProtocol = 0x01;
+constexpr uint8_t kGipSubclass = 0x47;
+constexpr uint8_t kGipProtocol = 0xD0;
+
+bool isWiredXInputInterface(const uint8_t ifClass, const uint8_t ifSubclass,
+                            const uint8_t ifProtocol) {
+    const bool isVendorClass = ifClass == kIfClassVendor;
+    const bool isXInput = ifSubclass == kXInputSubclass && ifProtocol == kXInputProtocol;
+    return isVendorClass && isXInput;
+}
+
+bool isGipInterface(const uint8_t ifClass, const uint8_t ifSubclass, const uint8_t ifProtocol) {
+    const bool isVendorClass = ifClass == kIfClassVendor;
+    const bool isGip = ifSubclass == kGipSubclass && ifProtocol == kGipProtocol;
+    return isVendorClass && isGip;
+}
+
+} // namespace
+
+const KnownDevice* lookupKnown(const uint16_t vid, const uint16_t pid) {
+    const KnownDevice* verified = findIn(kKnown, vid, pid);
+    if (verified != nullptr) return verified;
     return findIn(kImported, vid, pid);
 }
 
-bool isVerifiedFastLane(uint16_t vid, uint16_t pid) {
+bool isVerifiedFastLane(const uint16_t vid, const uint16_t pid) {
     const KnownDevice* k = findIn(kKnown, vid, pid);
     return k != nullptr && k->parser != Parser::NONE;
 }
 
-bool modelExpectsFrameworkGamepad(uint16_t vid, uint16_t pid) {
+bool modelExpectsFrameworkGamepad(const uint16_t vid, const uint16_t pid) {
     const KnownDevice* k = lookupKnown(vid, pid);
     return k == nullptr || k->parser != Parser::STEAM_CONTROLLER;
 }
 
-bool probePermitsClaim(ProbeOutcome outcome, bool verifiedFastLane) {
+bool probePermitsClaim(const ProbeOutcome outcome, const bool verifiedFastLane) {
     switch (outcome) {
     case ProbeOutcome::DECODED:
         return true;
@@ -431,28 +459,21 @@ bool probePermitsClaim(ProbeOutcome outcome, bool verifiedFastLane) {
     return false;
 }
 
-constexpr uint8_t kIfClassVendor = 0xFF;
-constexpr uint8_t kXInputSubclass = 0x5D;
-constexpr uint8_t kXInputProtocol = 0x01;
-constexpr uint8_t kGipSubclass = 0x47;
-constexpr uint8_t kGipProtocol = 0xD0;
-
-Classification classifyDevice(uint16_t vid, uint16_t pid, uint8_t ifClass, uint8_t ifSubclass,
-                              uint8_t ifProtocol) {
+Classification classifyDevice(const uint16_t vid, const uint16_t pid, const uint8_t ifClass,
+                              const uint8_t ifSubclass, const uint8_t ifProtocol) {
     const KnownDevice* known = lookupKnown(vid, pid);
-    if (known != nullptr) { return {known->parser, known->init, known->name, known->order}; }
+    if (known != nullptr) return {known->parser, known->init, known->name, known->order};
     // Wired XInput streams unsolicited; GIP needs the power-on packet first.
-    if (ifClass == kIfClassVendor && ifSubclass == kXInputSubclass &&
-        ifProtocol == kXInputProtocol) {
+    if (isWiredXInputInterface(ifClass, ifSubclass, ifProtocol)) {
         return {Parser::XINPUT_360, InitKind::NONE, nullptr};
     }
-    if (ifClass == kIfClassVendor && ifSubclass == kGipSubclass && ifProtocol == kGipProtocol) {
+    if (isGipInterface(ifClass, ifSubclass, ifProtocol)) {
         return {Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON, nullptr};
     }
     return {Parser::GENERIC_HID_GAMEPAD, InitKind::NONE, nullptr};
 }
 
-const char* parserName(Parser p) {
+const char* parserName(const Parser p) {
     switch (p) {
     case Parser::XINPUT_360:
         return "Xbox 360 protocol";
@@ -478,12 +499,25 @@ const char* parserName(Parser p) {
     return "Unknown";
 }
 
-bool parserHasImu(Parser p) {
-    return p == Parser::SWITCH_PRO_USB || p == Parser::DUALSHOCK4 || p == Parser::DUALSENSE ||
-           p == Parser::STEAM_CONTROLLER;
+bool parserHasImu(const Parser p) {
+    switch (p) {
+    case Parser::SWITCH_PRO_USB:
+    case Parser::DUALSHOCK4:
+    case Parser::DUALSENSE:
+    case Parser::STEAM_CONTROLLER:
+        return true;
+    case Parser::XINPUT_360:
+    case Parser::XINPUT_360_WIRELESS:
+    case Parser::XBOX_ONE_GIP:
+    case Parser::STADIA:
+    case Parser::GENERIC_HID_GAMEPAD:
+    case Parser::NONE:
+        return false;
+    }
+    return false;
 }
 
-bool parserHasRumble(Parser p) {
+bool parserHasRumble(const Parser p) {
     switch (p) {
     case Parser::XINPUT_360:
     case Parser::XINPUT_360_WIRELESS:
@@ -503,28 +537,40 @@ bool parserHasRumble(Parser p) {
     return false;
 }
 
-// Symptom-named (not just `== SWITCH_PRO_USB`) so the list can grow if another proprietary family
-// exposes the same phantom framework vibrator.
-bool parserFrameworkRumbleUnreliable(Parser p) { return p == Parser::SWITCH_PRO_USB; }
+bool parserFrameworkRumbleUnreliable(const Parser p) { return p == Parser::SWITCH_PRO_USB; }
 
-// Parser-level like parserHasImu: every device speaking the DS4/DualSense report format carries
-// the touch bytes, even the licensed sticks whose "pad" is only a click button. Those simply
-// never report a contact, so nothing streams.
-bool parserHasTouchpad(Parser p) { return p == Parser::DUALSHOCK4 || p == Parser::DUALSENSE; }
+bool parserHasTouchpad(const Parser p) { return p == Parser::DUALSHOCK4 || p == Parser::DUALSENSE; }
 
 namespace {
 
 #ifdef __ANDROID__
-bool bulkWrite(int fd, uint8_t epOut, const uint8_t* data, size_t len, unsigned timeoutMs) {
+constexpr const char* kLogTag = "SatelliteUsbParse";
+
+__attribute__((format(printf, 1, 2))) void logInfo(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    __android_log_vprint(ANDROID_LOG_INFO, kLogTag, fmt, args);
+    va_end(args);
+}
+
+__attribute__((format(printf, 1, 2))) void logError(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    __android_log_vprint(ANDROID_LOG_ERROR, kLogTag, fmt, args);
+    va_end(args);
+}
+
+bool bulkWrite(const int fd, const uint8_t epOut, const uint8_t* data, const size_t len,
+               const unsigned timeoutMs) {
     if (epOut == 0) return false;
     struct usbdevfs_bulktransfer xfer = {};
     xfer.ep = epOut;
     xfer.len = (unsigned int)len;
     xfer.timeout = timeoutMs;
     xfer.data = (void*)data;
-    int n = ioctl(fd, USBDEVFS_BULK, &xfer);
+    const int n = ioctl(fd, USBDEVFS_BULK, &xfer);
     if (n < 0) {
-        LOGE("USBDEVFS_BULK out to 0x%02X failed: %s", epOut, strerror(errno));
+        logError("USBDEVFS_BULK out to 0x%02X failed: %s", epOut, strerror(errno));
         return false;
     }
     return (size_t)n == len;
@@ -533,71 +579,106 @@ bool bulkWrite(int fd, uint8_t epOut, const uint8_t* data, size_t len, unsigned 
 constexpr size_t kFeatureReportBytes = 64;
 constexpr int kFeatureReportAttempts = 25;
 constexpr unsigned kFeatureReportRetryUs = 20000;
+constexpr uint8_t kSteamFeatureReportId = 0;
 
 // SET_REPORT(Feature, report id 0), always a full 64-byte buffer. EPIPE here is the wireless
 // dongle under load, not a real failure; SDL and hid-steam both retry it rather than give up.
 // hid-steam allows 50 tries; the cap is lower here so that even a wholly unresponsive device
 // finishes init and teardown well inside the Kotlin side's 4s path-transition timeout.
-bool sendFeatureReport(int fd, int interfaceNumber, const uint8_t* data, size_t len) {
+bool sendFeatureReport(const int fd, const int interfaceNumber, const uint8_t* data,
+                       const size_t len) {
     if (interfaceNumber < 0 || len > kFeatureReportBytes) return false;
     uint8_t buf[kFeatureReportBytes] = {};
     memcpy(buf, data, len);
     for (int attempt = 0; attempt < kFeatureReportAttempts; attempt++) {
         struct usbdevfs_ctrltransfer ct = {};
-        ct.bRequestType = 0x21;            // OUT | Class | Interface
-        ct.bRequest = 0x09;                // SET_REPORT
-        ct.wValue = (uint16_t)(0x03 << 8); // Feature report, id 0
+        ct.bRequestType = USB_REQUEST_TYPE_OUT_CLASS_INTERFACE;
+        ct.bRequest = USB_REQUEST_SET_REPORT;
+        ct.wValue = (uint16_t)((HID_REPORT_TYPE_FEATURE << 8) | kSteamFeatureReportId);
         ct.wIndex = (uint16_t)interfaceNumber;
         ct.wLength = (uint16_t)sizeof(buf);
-        ct.timeout = 250;
+        ct.timeout = USB_CONTROL_TIMEOUT_MS;
         ct.data = buf;
         if (ioctl(fd, USBDEVFS_CONTROL, &ct) >= 0) return true;
         if (errno != EPIPE) break;
         usleep(kFeatureReportRetryUs);
     }
-    LOGE("SET_REPORT 0x%02X to iface %d failed: %s", data[0], interfaceNumber, strerror(errno));
+    logError("SET_REPORT 0x%02X to iface %d failed: %s", data[0], interfaceNumber, strerror(errno));
     return false;
 }
 #endif
 
-int16_t scaleU8Centered(uint8_t v, bool invert) {
-    int32_t s = invert ? (128 - (int32_t)v) : ((int32_t)v - 128);
-    int32_t scaled = s * 257;
-    if (scaled > 32767) scaled = 32767;
-    if (scaled < -32768) scaled = -32768;
-    return (int16_t)scaled;
+constexpr int64_t kAxisMax = 32767;
+constexpr int64_t kAxisMin = -32768;
+constexpr uint8_t kTriggerMax = 255;
+constexpr int32_t kU8AxisCenter = 128;
+// 255 * 257 = 65535: an 8-bit axis stretched over the whole 16-bit range.
+constexpr int32_t kU8ToI16 = 257;
+constexpr int32_t kWireAxisSpan = 65535;
+constexpr int kHighByteShift = 8;
+constexpr int kNibbleShift = 4;
+constexpr uint8_t kLowNibbleMask = 0x0F;
+
+int16_t clampI16(const int64_t v) { return (int16_t)std::clamp(v, kAxisMin, kAxisMax); }
+
+uint8_t highByte(const uint16_t v) { return (uint8_t)(v >> kHighByteShift); }
+
+int16_t rdLe16(const uint8_t* b, const int off) {
+    return (int16_t)((uint16_t)b[off] | ((uint16_t)b[off + 1] << kHighByteShift));
 }
 
-// Maps a 12-bit Switch stick value (centered near 2048) to a full-range XUSB axis. The push and
-// pull sides of each axis are auto-ranged independently because a Pro Controller's throw is usually
-// asymmetric: scaling both sides by one shared reach leaves the smaller side short of the rail.
-// Each side stretches its own learned reach to the full extent, so every direction can hit the
-// edge. Center stays at the nominal 2048.
-// Inner deadzone in the raw 12-bit domain. The Switch Pro's stick center wanders per unit (a
-// resting stick can sit a few hundred counts off 2048) and we read no factory calibration, so
-// without this the auto-range amplifies that offset into large resting drift. Counts within the
-// deadzone read as center; the throw beyond it is auto-ranged to full scale.
-static constexpr int32_t kSwitchStickRawDeadzone = 320;
-
-int16_t scaleSwitchStickAuto(uint16_t raw12, AxisAutoRange& axis) {
-    int32_t centered = (int32_t)raw12 - 2048;
-    int32_t mag = centered >= 0 ? centered : -centered;
-    if (mag <= kSwitchStickRawDeadzone) return 0;
-    int32_t adj = mag - kSwitchStickRawDeadzone;
-    if (centered >= 0) {
-        if (adj > axis.posReach) axis.posReach = adj;
-        int32_t scaled = (adj * 32767) / axis.posReach;
-        if (scaled > 32767) scaled = 32767;
-        return (int16_t)scaled;
-    }
-    if (adj > axis.negReach) axis.negReach = adj;
-    int32_t scaled = (adj * 32768) / axis.negReach;
-    if (scaled > 32768) scaled = 32768;
-    return (int16_t)(-scaled);
+uint32_t rdLe24(const uint8_t* b) {
+    return (uint32_t)b[0] | ((uint32_t)b[1] << kHighByteShift) |
+           ((uint32_t)b[2] << (2 * kHighByteShift));
 }
 
-int16_t rdLe16(const uint8_t* b, int off) {
-    return (int16_t)((uint16_t)b[off] | ((uint16_t)b[off + 1] << 8));
+// Two 12-bit values packed little-endian into three bytes: the first is [0] plus the low nibble of
+// [1], the second the high nibble of [1] plus [2].
+void unpackTwo12Bit(const uint8_t* p, uint16_t& first, uint16_t& second) {
+    first = (uint16_t)((uint16_t)p[0] | (((uint16_t)p[1] & kLowNibbleMask) << kHighByteShift));
+    second = (uint16_t)(((uint16_t)p[1] >> kNibbleShift) | ((uint16_t)p[2] << kNibbleShift));
+}
+
+int16_t scaleU8Centered(const uint8_t v, const bool invert) {
+    const int32_t centered = (int32_t)v - kU8AxisCenter;
+    const int32_t oriented = invert ? -centered : centered;
+    return clampI16((int64_t)oriented * kU8ToI16);
+}
+
+// Four uint8 stick bytes with 128 = center, in the order LX LY RX RY; the Y axes are down-positive
+// and so inverted to XUSB's up-positive convention.
+void decodeU8Sticks(const uint8_t* sticks, DeviceState& s) {
+    s.sLX = scaleU8Centered(sticks[0], false);
+    s.sLY = scaleU8Centered(sticks[1], true);
+    s.sRX = scaleU8Centered(sticks[2], false);
+    s.sRY = scaleU8Centered(sticks[3], true);
+}
+
+// A 12-bit Switch stick value centred near 2048. The push and pull sides of each axis are
+// auto-ranged independently because a Pro Controller's throw is usually asymmetric, and the raw
+// deadzone absorbs the per-unit resting offset (no factory calibration is read) that the auto-range
+// would otherwise amplify into drift.
+constexpr int32_t kSwitchStickRawCenter = 2048;
+constexpr int32_t kSwitchStickRawDeadzone = 320;
+constexpr int32_t kSwitchStickPositiveRail = 32767;
+constexpr int32_t kSwitchStickNegativeRail = 32768;
+
+// Stretches a deflection past the deadzone to the rail against the largest deflection this side has
+// seen, learning a longer throw on the way.
+int32_t stretchToRail(const int32_t adj, int32_t& reach, const int32_t rail) {
+    if (adj > reach) reach = adj;
+    return (adj * rail) / reach;
+}
+
+int16_t scaleSwitchStickAuto(const uint16_t raw12, AxisAutoRange& axis) {
+    const int32_t centered = (int32_t)raw12 - kSwitchStickRawCenter;
+    const int32_t mag = centered >= 0 ? centered : -centered;
+    const bool isAtRest = mag <= kSwitchStickRawDeadzone;
+    if (isAtRest) return 0;
+    const int32_t adj = mag - kSwitchStickRawDeadzone;
+    const bool isPushed = centered >= 0;
+    if (isPushed) return (int16_t)stretchToRail(adj, axis.posReach, kSwitchStickPositiveRail);
+    return (int16_t)(-stretchToRail(adj, axis.negReach, kSwitchStickNegativeRail));
 }
 
 // Inclusive logical maxima of the touch surfaces (hid-sony / hid-playstation): the DS4 pad is
@@ -609,487 +690,577 @@ constexpr uint16_t kDualSenseTouchMaxY = 1079;
 
 // Touchpad surfaces differ per model but the wire is resolution-agnostic: full-range int16,
 // same normalization the on-screen overlay applies to its view space.
-int16_t touchAxisToWire(uint16_t raw, uint16_t maxRaw) {
-    if (raw > maxRaw) raw = maxRaw;
-    int32_t scaled = ((int32_t)raw * 65535) / maxRaw - 32768;
-    if (scaled > 32767) scaled = 32767;
-    if (scaled < -32768) scaled = -32768;
-    return (int16_t)scaled;
+int16_t touchAxisToWire(const uint16_t raw, const uint16_t maxRaw) {
+    const uint16_t onSurface = std::min(raw, maxRaw);
+    const int32_t scaled = ((int32_t)onSurface * kWireAxisSpan) / maxRaw + (int32_t)kAxisMin;
+    return clampI16(scaled);
 }
 
 // One DS4/DualSense touch point: [0] bit7 = inactive, bits 0-6 = contact id; 12-bit x/y packed
 // into [1..3]. Coordinates zero on lift to match the overlay's lift frames.
-void decodePsTouchPoint(const uint8_t* p, uint16_t maxX, uint16_t maxY, bool& active, uint8_t& id,
-                        int16_t& x, int16_t& y) {
-    active = (p[0] & 0x80) == 0;
-    id = (uint8_t)(p[0] & 0x7F);
+constexpr uint8_t kPsTouchInactiveBit = 0x80;
+constexpr uint8_t kPsTouchIdMask = 0x7F;
+constexpr size_t kPsTouchPointBytes = 4;
+
+void decodePsTouchPoint(const uint8_t* p, const uint16_t maxX, const uint16_t maxY, bool& active,
+                        uint8_t& id, int16_t& x, int16_t& y) {
+    active = (p[0] & kPsTouchInactiveBit) == 0;
+    id = (uint8_t)(p[0] & kPsTouchIdMask);
     if (!active) {
         x = 0;
         y = 0;
         return;
     }
-    uint16_t rawX = (uint16_t)p[1] | (((uint16_t)p[2] & 0x0F) << 8);
-    uint16_t rawY = ((uint16_t)p[2] >> 4) | ((uint16_t)p[3] << 4);
+    uint16_t rawX = 0;
+    uint16_t rawY = 0;
+    unpackTwo12Bit(p + 1, rawX, rawY);
     x = touchAxisToWire(rawX, maxX);
     y = touchAxisToWire(rawY, maxY);
 }
 
+// The wire's full scales: gyro +-2000 deg/s and accel +-4 g map onto +-32767.
+constexpr int64_t kWireGyroFullScaleDegS = 2000;
+constexpr int64_t kWireAccelFullScaleG = 4;
+
 // Switch Pro IMU default scaling (no factory calibration yet). SDL uses gyro = raw / 14.2842 deg/s
-// and accel = raw / 4096 g; the wire format wants deg/s / 2000 * 32767 and g / 4 * 32767, so the
-// combined integer factors are 32767/28568 (gyro) and 32767/16384 (accel).
-int16_t switchGyroToWire(int16_t raw) {
-    int64_t wire = (int64_t)raw * 32767 / 28568;
-    if (wire > 32767) wire = 32767;
-    if (wire < -32768) wire = -32768;
-    return (int16_t)wire;
+// and accel = raw / 4096 g; against the wire's full scales the combined integer factors are
+// 32767/28568 (gyro) and 32767/16384 (accel).
+constexpr int64_t kSwitchGyroDivisor = 28568;
+constexpr int64_t kSwitchAccelDivisor = 16384;
+
+int16_t switchGyroToWire(const int16_t raw) {
+    return clampI16((int64_t)raw * kAxisMax / kSwitchGyroDivisor);
 }
 
-int16_t switchAccelToWire(int16_t raw) {
-    int64_t wire = (int64_t)raw * 32767 / 16384;
-    if (wire > 32767) wire = 32767;
-    if (wire < -32768) wire = -32768;
-    return (int16_t)wire;
+int16_t switchAccelToWire(const int16_t raw) {
+    return clampI16((int64_t)raw * kAxisMax / kSwitchAccelDivisor);
 }
 
-// DS4/DualSense raw -> calibrated (1024/deg-s) -> wire (deg-s / 2000 * 32767).
-int16_t ds4GyroAxisToWire(int32_t raw, const PsImuCalib& c, int axis) {
-    int64_t calibrated = (int64_t)c.gyroNumer[axis] * raw / c.gyroDenom[axis];
-    int64_t wire = calibrated * 32767 / (kPsGyroResPerDegS * 2000);
-    if (wire > 32767) wire = 32767;
-    if (wire < -32768) wire = -32768;
-    return (int16_t)wire;
+// DS4/DualSense raw -> calibrated (1024/deg-s) -> wire.
+int16_t ds4GyroAxisToWire(const int32_t raw, const PsImuCalib& c, const int axis) {
+    const int64_t calibrated = (int64_t)c.gyroNumer[axis] * raw / c.gyroDenom[axis];
+    return clampI16(calibrated * kAxisMax / (kPsGyroResPerDegS * kWireGyroFullScaleDegS));
 }
 
-// DS4/DualSense raw -> calibrated (8192/g) -> wire (g / 4 * 32767).
-int16_t ds4AccelAxisToWire(int32_t raw, const PsImuCalib& c, int axis) {
-    int64_t calibrated =
+// DS4/DualSense raw -> calibrated (8192/g) -> wire.
+int16_t ds4AccelAxisToWire(const int32_t raw, const PsImuCalib& c, const int axis) {
+    const int64_t calibrated =
         (int64_t)c.accelNumer[axis] * (raw - c.accelBias[axis]) / c.accelDenom[axis];
-    int64_t wire = calibrated * 32767 / (kPsAccelResPerG * 4);
-    if (wire > 32767) wire = 32767;
-    if (wire < -32768) wire = -32768;
-    return (int16_t)wire;
+    return clampI16(calibrated * kAxisMax / (kPsAccelResPerG * kWireAccelFullScaleG));
 }
 
-uint16_t setDpadFromHat(uint16_t buttons, uint8_t hat) {
-    buttons =
-        (uint16_t)(buttons & ~(XUSB_DPAD_UP | XUSB_DPAD_DOWN | XUSB_DPAD_LEFT | XUSB_DPAD_RIGHT));
-    switch (hat & 0x0F) {
-    case 0:
-        buttons |= XUSB_DPAD_UP;
-        break;
-    case 1:
-        buttons |= (uint16_t)(XUSB_DPAD_UP | XUSB_DPAD_RIGHT);
-        break;
-    case 2:
-        buttons |= XUSB_DPAD_RIGHT;
-        break;
-    case 3:
-        buttons |= (uint16_t)(XUSB_DPAD_DOWN | XUSB_DPAD_RIGHT);
-        break;
-    case 4:
-        buttons |= XUSB_DPAD_DOWN;
-        break;
-    case 5:
-        buttons |= (uint16_t)(XUSB_DPAD_DOWN | XUSB_DPAD_LEFT);
-        break;
-    case 6:
-        buttons |= XUSB_DPAD_LEFT;
-        break;
-    case 7:
-        buttons |= (uint16_t)(XUSB_DPAD_UP | XUSB_DPAD_LEFT);
-        break;
-    default:
-        break;
+uint16_t setDpadFromHat(const uint16_t buttons, const uint8_t hat) {
+    const uint16_t withoutDpad = (uint16_t)(buttons & ~XUSB_DPAD_MASK);
+    const int direction = (int)(hat & kLowNibbleMask);
+    return (uint16_t)(withoutDpad | hatDirectionBits(direction));
+}
+
+// One bit of a report's button byte and the XUSB bit it drives.
+struct ButtonBit {
+    uint8_t mask;
+    uint16_t xusb;
+};
+
+template <size_t N> uint16_t buttonsFromByte(const uint8_t byte, const ButtonBit (&bits)[N]) {
+    uint16_t buttons = 0;
+    for (const ButtonBit& bit : bits) {
+        const bool isDown = (byte & bit.mask) != 0;
+        if (isDown) buttons |= bit.xusb;
     }
     return buttons;
 }
 
-// Xbox 360 wired interrupt-IN report. Fixed 20 bytes; byte 0 is report type (0x00 for input),
-// byte 1 is the length. Stick axes are little-endian int16, triggers are 8-bit unsigned.
-bool decodeXInput360(const uint8_t* buf, size_t len, DeviceState& s) {
-    if (len < 14) return false;
-    if (buf[0] != 0x00) return false;
+// Both Xbox reports lay the four stick axes out as little-endian int16 in the order LX LY RX RY;
+// only the base offset moves.
+void readSticksLe16(const uint8_t* buf, const int base, DeviceState& s) {
+    s.sLX = rdLe16(buf, base);
+    s.sLY = rdLe16(buf, base + 2);
+    s.sRX = rdLe16(buf, base + 4);
+    s.sRY = rdLe16(buf, base + 6);
+}
 
-    uint16_t b = 0;
-    if (buf[2] & 0x01) b |= XUSB_DPAD_UP;
-    if (buf[2] & 0x02) b |= XUSB_DPAD_DOWN;
-    if (buf[2] & 0x04) b |= XUSB_DPAD_LEFT;
-    if (buf[2] & 0x08) b |= XUSB_DPAD_RIGHT;
-    if (buf[2] & 0x10) b |= XUSB_START;
-    if (buf[2] & 0x20) b |= XUSB_BACK;
-    if (buf[2] & 0x40) b |= XUSB_THUMB_L;
-    if (buf[2] & 0x80) b |= XUSB_THUMB_R;
-    if (buf[3] & 0x01) b |= XUSB_LB;
-    if (buf[3] & 0x02) b |= XUSB_RB;
-    if (buf[3] & 0x04) b |= XUSB_GUIDE;
-    if (buf[3] & 0x10) b |= XUSB_A;
-    if (buf[3] & 0x20) b |= XUSB_B;
-    if (buf[3] & 0x40) b |= XUSB_X;
-    if (buf[3] & 0x80) b |= XUSB_Y;
-    s.wButtons = b;
+// Xbox 360 wired interrupt-IN report: type byte (0x00 for input), length byte, dpad/menu byte,
+// face byte, the two 8-bit triggers, then the sticks.
+constexpr size_t kX360ReportMinLen = 14;
+constexpr uint8_t kX360InputReportType = 0x00;
+constexpr size_t kX360DpadByte = 2;
+constexpr size_t kX360FaceByte = 3;
+constexpr size_t kX360LeftTriggerByte = 4;
+constexpr size_t kX360RightTriggerByte = 5;
+constexpr int kX360SticksOffset = 6;
+constexpr ButtonBit kX360DpadByteBits[] = {
+    {0x01, XUSB_DPAD_UP}, {0x02, XUSB_DPAD_DOWN}, {0x04, XUSB_DPAD_LEFT}, {0x08, XUSB_DPAD_RIGHT},
+    {0x10, XUSB_START},   {0x20, XUSB_BACK},      {0x40, XUSB_THUMB_L},   {0x80, XUSB_THUMB_R},
+};
+constexpr ButtonBit kX360FaceByteBits[] = {
+    {0x01, XUSB_LB}, {0x02, XUSB_RB}, {0x04, XUSB_GUIDE}, {0x10, XUSB_A},
+    {0x20, XUSB_B},  {0x40, XUSB_X},  {0x80, XUSB_Y},
+};
 
-    s.bLT = buf[4];
-    s.bRT = buf[5];
+bool decodeXInput360(const uint8_t* buf, const size_t len, DeviceState& s) {
+    if (len < kX360ReportMinLen) return false;
+    if (buf[0] != kX360InputReportType) return false;
 
-    s.sLX = (int16_t)((uint16_t)buf[6] | ((uint16_t)buf[7] << 8));
-    s.sLY = (int16_t)((uint16_t)buf[8] | ((uint16_t)buf[9] << 8));
-    s.sRX = (int16_t)((uint16_t)buf[10] | ((uint16_t)buf[11] << 8));
-    s.sRY = (int16_t)((uint16_t)buf[12] | ((uint16_t)buf[13] << 8));
+    const uint16_t dpadAndMenus = buttonsFromByte(buf[kX360DpadByte], kX360DpadByteBits);
+    const uint16_t faceAndBumpers = buttonsFromByte(buf[kX360FaceByte], kX360FaceByteBits);
+    s.wButtons = (uint16_t)(dpadAndMenus | faceAndBumpers);
+    s.bLT = buf[kX360LeftTriggerByte];
+    s.bRT = buf[kX360RightTriggerByte];
+    readSticksLe16(buf, kX360SticksOffset, s);
     return true;
 }
 
-// Xbox One GIP input report 0x20. Triggers are 10-bit little-endian (0..1023); scaled to XUSB's
-// 0..255 below. Sticks are little-endian int16, same convention as XInput. The Guide button arrives
-// in a separate virtual-key report (0x07, state in byte 4); it is sticky and merged into the main
-// report via ParserState so a guide press survives the interleaved 0x20 frames.
-bool decodeXboxOneGip(const uint8_t* buf, size_t len, DeviceState& s, ParserState& st) {
-    if (len >= 5 && buf[0] == 0x07) {
-        st.xboxGuideHeld = (buf[4] & 0x03) != 0;
-        s = st.xboxLastMain;
-        if (st.xboxGuideHeld) {
-            s.wButtons |= XUSB_GUIDE;
-        } else {
-            s.wButtons = (uint16_t)(s.wButtons & ~XUSB_GUIDE);
-        }
-        return true;
+// Xbox One GIP: the main input report 0x20 (face byte, dpad byte, two 10-bit LE triggers, then the
+// sticks) and the virtual-key report 0x07 that carries the Guide button in byte 4.
+constexpr uint8_t kGipVirtualKeyReport = 0x07;
+constexpr size_t kGipVirtualKeyMinLen = 5;
+constexpr size_t kGipVirtualKeyStateByte = 4;
+constexpr uint8_t kGipVirtualKeyPressedMask = 0x03;
+constexpr uint8_t kGipInputReport = 0x20;
+constexpr size_t kGipInputMinLen = 18;
+constexpr size_t kGipFaceByte = 4;
+constexpr size_t kGipDpadByte = 5;
+constexpr size_t kGipLeftTriggerOffset = 6;
+constexpr size_t kGipRightTriggerOffset = 8;
+constexpr int kGipSticksOffset = 10;
+constexpr uint16_t kGipTriggerMax = 1023;
+constexpr ButtonBit kGipFaceByteBits[] = {
+    {0x04, XUSB_START}, {0x08, XUSB_BACK}, {0x10, XUSB_A},
+    {0x20, XUSB_B},     {0x40, XUSB_X},    {0x80, XUSB_Y},
+};
+constexpr ButtonBit kGipDpadByteBits[] = {
+    {0x01, XUSB_DPAD_UP}, {0x02, XUSB_DPAD_DOWN}, {0x04, XUSB_DPAD_LEFT}, {0x08, XUSB_DPAD_RIGHT},
+    {0x10, XUSB_LB},      {0x20, XUSB_RB},        {0x40, XUSB_THUMB_L},   {0x80, XUSB_THUMB_R},
+};
+
+uint8_t gipTriggerToXusb(const uint8_t lo, const uint8_t hi) {
+    const uint16_t raw = (uint16_t)((uint16_t)lo | ((uint16_t)hi << kHighByteShift));
+    const uint16_t clamped = std::min(raw, kGipTriggerMax);
+    return (uint8_t)((clamped * kTriggerMax) / kGipTriggerMax);
+}
+
+// The Guide button is sticky, so it is held in ParserState and replayed over the last main report,
+// which is all this frame can publish.
+bool applyXboxVirtualKey(const uint8_t* buf, DeviceState& s, ParserState& st) {
+    st.xboxGuideHeld = (buf[kGipVirtualKeyStateByte] & kGipVirtualKeyPressedMask) != 0;
+    s = st.xboxLastMain;
+    if (st.xboxGuideHeld) {
+        s.wButtons |= XUSB_GUIDE;
+    } else {
+        s.wButtons = (uint16_t)(s.wButtons & ~XUSB_GUIDE);
     }
-    if (len < 18) return false;
-    if (buf[0] != 0x20) return false;
+    return true;
+}
 
-    uint16_t b = 0;
-    if (buf[4] & 0x04) b |= XUSB_START;
-    if (buf[4] & 0x08) b |= XUSB_BACK;
-    if (buf[4] & 0x10) b |= XUSB_A;
-    if (buf[4] & 0x20) b |= XUSB_B;
-    if (buf[4] & 0x40) b |= XUSB_X;
-    if (buf[4] & 0x80) b |= XUSB_Y;
-    if (buf[5] & 0x01) b |= XUSB_DPAD_UP;
-    if (buf[5] & 0x02) b |= XUSB_DPAD_DOWN;
-    if (buf[5] & 0x04) b |= XUSB_DPAD_LEFT;
-    if (buf[5] & 0x08) b |= XUSB_DPAD_RIGHT;
-    if (buf[5] & 0x10) b |= XUSB_LB;
-    if (buf[5] & 0x20) b |= XUSB_RB;
-    if (buf[5] & 0x40) b |= XUSB_THUMB_L;
-    if (buf[5] & 0x80) b |= XUSB_THUMB_R;
-    s.wButtons = b;
+bool decodeXboxOneGip(const uint8_t* buf, const size_t len, DeviceState& s, ParserState& st) {
+    const bool isVirtualKey = len >= kGipVirtualKeyMinLen && buf[0] == kGipVirtualKeyReport;
+    if (isVirtualKey) return applyXboxVirtualKey(buf, s, st);
+    if (len < kGipInputMinLen) return false;
+    if (buf[0] != kGipInputReport) return false;
 
-    uint16_t lt = (uint16_t)buf[6] | ((uint16_t)buf[7] << 8);
-    uint16_t rt = (uint16_t)buf[8] | ((uint16_t)buf[9] << 8);
-    if (lt > 1023) lt = 1023;
-    if (rt > 1023) rt = 1023;
-    s.bLT = (uint8_t)((lt * 255) / 1023);
-    s.bRT = (uint8_t)((rt * 255) / 1023);
-
-    s.sLX = (int16_t)((uint16_t)buf[10] | ((uint16_t)buf[11] << 8));
-    s.sLY = (int16_t)((uint16_t)buf[12] | ((uint16_t)buf[13] << 8));
-    s.sRX = (int16_t)((uint16_t)buf[14] | ((uint16_t)buf[15] << 8));
-    s.sRY = (int16_t)((uint16_t)buf[16] | ((uint16_t)buf[17] << 8));
+    const uint16_t faceAndMenus = buttonsFromByte(buf[kGipFaceByte], kGipFaceByteBits);
+    const uint16_t dpadBumpersAndSticks = buttonsFromByte(buf[kGipDpadByte], kGipDpadByteBits);
+    s.wButtons = (uint16_t)(faceAndMenus | dpadBumpersAndSticks);
+    s.bLT = gipTriggerToXusb(buf[kGipLeftTriggerOffset], buf[kGipLeftTriggerOffset + 1]);
+    s.bRT = gipTriggerToXusb(buf[kGipRightTriggerOffset], buf[kGipRightTriggerOffset + 1]);
+    readSticksLe16(buf, kGipSticksOffset, s);
 
     st.xboxLastMain = s;
     if (st.xboxGuideHeld) s.wButtons |= XUSB_GUIDE;
     return true;
 }
 
-// DualShock 4 USB report 0x01. Sticks are uint8 with 128 = center. Y axes are down-positive so
-// they're inverted to match XUSB's up-positive convention. Face buttons are remapped to the
-// XInput "muscle memory" positions: Cross is A, Circle is B, Square is X, Triangle is Y.
+// DualShock 4 and DualSense USB report 0x01. The face buttons map to the XInput "muscle memory"
+// positions (Cross is A, Circle is B, Square is X, Triangle is Y) and the two pads share the button
+// bits; only the byte offsets move.
+constexpr uint8_t kPsInputReport = 0x01;
+constexpr size_t kPsSticksOffset = 1;
+constexpr uint8_t kPsTouchClickBit = 0x02;
+constexpr ButtonBit kPsFaceByteBits[] = {
+    {0x10, XUSB_X},
+    {0x20, XUSB_A},
+    {0x40, XUSB_B},
+    {0x80, XUSB_Y},
+};
+constexpr ButtonBit kPsShoulderByteBits[] = {
+    {0x01, XUSB_LB},    {0x02, XUSB_RB},      {0x10, XUSB_BACK},
+    {0x20, XUSB_START}, {0x40, XUSB_THUMB_L}, {0x80, XUSB_THUMB_R},
+};
+
+constexpr size_t kDs4MinLen = 10;
+constexpr size_t kDs4FaceByte = 5;
+constexpr size_t kDs4ShoulderByte = 6;
+constexpr size_t kDs4TouchClickByte = 7;
+constexpr size_t kDs4LeftTriggerByte = 8;
+constexpr size_t kDs4RightTriggerByte = 9;
+// gyro pitch/yaw/roll then accel x/y/z as int16 LE. Axis signs are an unflipped straight map,
+// still unverified on hardware like the Switch IMU.
+constexpr int kDs4GyroOffset = 13;
+constexpr int kDs4AccelOffset = 19;
+constexpr size_t kDs4MotionMinLen = 25;
+constexpr size_t kDs4BatteryByte = 30;
+constexpr size_t kDs4BatteryMinLen = 31;
+// Bundled 9-byte touch frames (a timestamp byte plus two points): the count at [33], the frames
+// from [34].
+constexpr size_t kDs4TouchFrameCountByte = 33;
+constexpr size_t kDs4TouchFramesOffset = 34;
+constexpr size_t kDs4TouchFrameBytes = 9;
+constexpr size_t kDs4TouchFrameTimestampBytes = 1;
+constexpr size_t kDs4MaxTouchFrames = 3;
+constexpr size_t kDs4TouchMinLen = kDs4TouchFramesOffset + kDs4TouchFrameBytes;
+
+constexpr size_t kDs5MinLen = 11;
+constexpr size_t kDs5LeftTriggerByte = 5;
+constexpr size_t kDs5RightTriggerByte = 6;
+constexpr size_t kDs5FaceByte = 8;
+constexpr size_t kDs5ShoulderByte = 9;
+// Byte 10 carries the touchpad click and, beside it, the mic-mute button.
+constexpr size_t kDs5MiscByte = 10;
+constexpr uint8_t kDs5MicMuteButtonBit = 0x04;
+constexpr int kDs5GyroOffset = 16;
+constexpr int kDs5AccelOffset = 22;
+constexpr size_t kDs5MotionMinLen = 28;
+// Two 4-byte points in every report (no DS4-style frame bundling).
+constexpr size_t kDs5Touch0Offset = 33;
+constexpr size_t kDs5Touch1Offset = 37;
+constexpr size_t kDs5TouchMinLen = 41;
+constexpr size_t kDs5BatteryByte = 53;
+constexpr size_t kDs5BatteryMinLen = 54;
+
 // The Sony pads report charge in tenths (0 = 0..9 %, 1 = 10..19 %, ...), and the platforms show
 // the midpoint of each band, capped at 100.
-static uint8_t sonyTenthsToPercent(uint8_t tenths) {
-    const unsigned pct = (unsigned)tenths * 10u + 5u;
-    return (uint8_t)(pct > 100u ? 100u : pct);
+constexpr unsigned kPercentPerTenth = 10;
+constexpr unsigned kTenthMidpointPercent = 5;
+constexpr unsigned kPercentFull = 100;
+constexpr uint8_t kSonyTenthsMask = 0x0F;
+constexpr uint8_t kDs4CableBit = 0x10;
+constexpr uint8_t kSonyTenthsStillCharging = 10;
+constexpr uint8_t kSonyTenthsFull = 11;
+constexpr int kDs5BatteryStateShift = 4;
+constexpr uint8_t kDs5BatteryDischarging = 0x0;
+constexpr uint8_t kDs5BatteryCharging = 0x1;
+constexpr uint8_t kDs5BatteryFull = 0x2;
+
+uint8_t sonyTenthsToPercent(const uint8_t tenths) {
+    const unsigned pct = (unsigned)tenths * kPercentPerTenth + kTenthMidpointPercent;
+    return (uint8_t)std::min(pct, kPercentFull);
 }
 
-bool decodeDualShock4(const uint8_t* buf, size_t len, DeviceState& s, const PsImuCalib* calib) {
-    if (len < 10) return false;
-    if (buf[0] != 0x01) return false;
+uint16_t decodePsButtons(const uint8_t faceByte, const uint8_t shoulderByte) {
+    const uint16_t face = buttonsFromByte(faceByte, kPsFaceByteBits);
+    const uint16_t shoulders = buttonsFromByte(shoulderByte, kPsShoulderByteBits);
+    return setDpadFromHat((uint16_t)(face | shoulders), (uint8_t)(faceByte & kLowNibbleMask));
+}
 
-    s.sLX = scaleU8Centered(buf[1], false);
-    s.sLY = scaleU8Centered(buf[2], true);
-    s.sRX = scaleU8Centered(buf[3], false);
-    s.sRY = scaleU8Centered(buf[4], true);
+// Both pads lay the IMU out as six int16 LE words, gyro then accel; only the base offsets move.
+void decodePsMotion(const uint8_t* buf, const int gyroBase, const int accelBase,
+                    const PsImuCalib& calib, DeviceState& s) {
+    s.gyroX = ds4GyroAxisToWire(rdLe16(buf, gyroBase), calib, 0);
+    s.gyroY = ds4GyroAxisToWire(rdLe16(buf, gyroBase + 2), calib, 1);
+    s.gyroZ = ds4GyroAxisToWire(rdLe16(buf, gyroBase + 4), calib, 2);
+    s.accelX = ds4AccelAxisToWire(rdLe16(buf, accelBase), calib, 0);
+    s.accelY = ds4AccelAxisToWire(rdLe16(buf, accelBase + 2), calib, 1);
+    s.accelZ = ds4AccelAxisToWire(rdLe16(buf, accelBase + 4), calib, 2);
+    s.motionValid = true;
+}
 
-    uint16_t b = 0;
-    if (buf[5] & 0x10) b |= XUSB_X;
-    if (buf[5] & 0x20) b |= XUSB_A;
-    if (buf[5] & 0x40) b |= XUSB_B;
-    if (buf[5] & 0x80) b |= XUSB_Y;
-    if (buf[6] & 0x01) b |= XUSB_LB;
-    if (buf[6] & 0x02) b |= XUSB_RB;
-    if (buf[6] & 0x10) b |= XUSB_BACK;
-    if (buf[6] & 0x20) b |= XUSB_START;
-    if (buf[6] & 0x40) b |= XUSB_THUMB_L;
-    if (buf[6] & 0x80) b |= XUSB_THUMB_R;
-    b = setDpadFromHat(b, buf[5] & 0x0F);
-    s.wButtons = b;
+void setBattery(DeviceState& s, const uint8_t level, const uint8_t status) {
+    s.batteryLevel = level;
+    s.batteryStatus = status;
+}
 
-    s.bLT = buf[8];
-    s.bRT = buf[9];
+void setBatteryUnknown(DeviceState& s) {
+    setBattery(s, PAD_BATTERY_LEVEL_UNKNOWN, PAD_BATTERY_STATUS_UNKNOWN);
+}
 
-    // gyro pitch/yaw/roll at 13/15/17, accel x/y/z at 19/21/23 (int16 LE). Axis signs are an
-    // unflipped straight map, still unverified on hardware like the Switch IMU.
-    if (calib != nullptr && calib->valid && len >= 25) {
-        s.gyroX = ds4GyroAxisToWire(rdLe16(buf, 13), *calib, 0);
-        s.gyroY = ds4GyroAxisToWire(rdLe16(buf, 15), *calib, 1);
-        s.gyroZ = ds4GyroAxisToWire(rdLe16(buf, 17), *calib, 2);
-        s.accelX = ds4AccelAxisToWire(rdLe16(buf, 19), *calib, 0);
-        s.accelY = ds4AccelAxisToWire(rdLe16(buf, 21), *calib, 1);
-        s.accelZ = ds4AccelAxisToWire(rdLe16(buf, 23), *calib, 2);
-        s.motionValid = true;
+// hid-playstation's status[0]: low nibble the charge in tenths, 0x10 the cable. With the cable in,
+// 10 is still charging, 11 is full, and 12..15 are the firmware's error states.
+void decodeDs4Battery(const uint8_t status, DeviceState& s) {
+    const uint8_t tenths = (uint8_t)(status & kSonyTenthsMask);
+    const bool cableIn = (status & kDs4CableBit) != 0;
+    s.batteryValid = true;
+    if (!cableIn) return setBattery(s, sonyTenthsToPercent(tenths), PAD_BATTERY_STATUS_DISCHARGING);
+
+    const bool stillCharging = tenths <= kSonyTenthsStillCharging;
+    if (stillCharging)
+        return setBattery(s, sonyTenthsToPercent(tenths), PAD_BATTERY_STATUS_CHARGING);
+
+    const bool full = tenths == kSonyTenthsFull;
+    if (full) return setBattery(s, (uint8_t)kPercentFull, PAD_BATTERY_STATUS_FULL);
+    setBatteryUnknown(s);
+}
+
+// hid-playstation's status: low nibble the charge in tenths, high nibble the state. 0xA/0xB are a
+// temperature or voltage fault and 0xF a charging fault; a fault has no charge worth showing.
+void decodeDualSenseBattery(const uint8_t status, DeviceState& s) {
+    const uint8_t tenths = (uint8_t)(status & kSonyTenthsMask);
+    const uint8_t state = (uint8_t)(status >> kDs5BatteryStateShift);
+    s.batteryValid = true;
+    switch (state) {
+    case kDs5BatteryDischarging:
+        return setBattery(s, sonyTenthsToPercent(tenths), PAD_BATTERY_STATUS_DISCHARGING);
+    case kDs5BatteryCharging:
+        return setBattery(s, sonyTenthsToPercent(tenths), PAD_BATTERY_STATUS_CHARGING);
+    case kDs5BatteryFull:
+        return setBattery(s, (uint8_t)kPercentFull, PAD_BATTERY_STATUS_FULL);
+    default:
+        return setBatteryUnknown(s);
     }
+}
 
-    // Touch: [33] = bundled 9-byte frame count (timestamp + two points); only the newest frame
-    // matters since the wire stream supersedes per send. Zero frames means "no touch update",
-    // not "all lifted", so touchValid stays false and the last sent state persists.
-    if (len >= 43 && buf[33] > 0) {
-        uint8_t frames = buf[33] > 3 ? 3 : buf[33];
-        size_t base = 34 + 9u * (size_t)(frames - 1);
-        if (len >= base + 9) {
-            decodePsTouchPoint(buf + base + 1, kDs4TouchMaxX, kDs4TouchMaxY, s.touch0Active,
-                               s.touch0Id, s.touch0X, s.touch0Y);
-            decodePsTouchPoint(buf + base + 5, kDs4TouchMaxX, kDs4TouchMaxY, s.touch1Active,
-                               s.touch1Id, s.touch1X, s.touch1Y);
-            s.touchClick = (buf[7] & 0x02) != 0;
-            s.touchValid = true;
-        }
-    }
+// The press is an edge, the wire bit is a state: the latch flips on the way down.
+void applyMicMuteLatch(const uint8_t buttonByte, ParserState& sticks, uint16_t& buttons) {
+    const bool muteDown = (buttonByte & kDs5MicMuteButtonBit) != 0;
+    const bool isAFreshPress = muteDown && !sticks.micMuteHeld;
+    if (isAFreshPress) sticks.micMuted = !sticks.micMuted;
+    sticks.micMuteHeld = muteDown;
+    if (sticks.micMuted) buttons |= WBUTTON_MIC_MUTE;
+}
 
-    // Battery at buf[30] (hid-playstation's status[0]): the low nibble is the charge in tenths,
-    // bit 0x10 the cable. With the cable in, 10 is still charging, 11 is full, and 12..15 are the
-    // firmware's error states.
-    if (len >= 31) {
-        const uint8_t tenths = (uint8_t)(buf[30] & 0x0F);
-        const bool cable = (buf[30] & 0x10) != 0;
-        s.batteryValid = true;
-        if (!cable) {
-            s.batteryLevel = sonyTenthsToPercent(tenths);
-            s.batteryStatus = PAD_BATTERY_STATUS_DISCHARGING;
-        } else if (tenths <= 10) {
-            s.batteryLevel = sonyTenthsToPercent(tenths);
-            s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
-        } else if (tenths == 11) {
-            s.batteryLevel = 100;
-            s.batteryStatus = PAD_BATTERY_STATUS_FULL;
-        } else {
-            s.batteryLevel = PAD_BATTERY_LEVEL_UNKNOWN;
-            s.batteryStatus = PAD_BATTERY_STATUS_UNKNOWN;
-        }
-    }
+// [33] is the bundled frame count; only the newest frame matters, since the wire stream
+// supersedes per send.
+void decodeDs4Touch(const uint8_t* buf, const size_t len, DeviceState& s) {
+    if (len < kDs4TouchMinLen) return;
+    const uint8_t bundled = buf[kDs4TouchFrameCountByte];
+    if (bundled == 0) return;
+    const size_t frames = std::min<size_t>(bundled, kDs4MaxTouchFrames);
+    const size_t newest = kDs4TouchFramesOffset + kDs4TouchFrameBytes * (frames - 1);
+    if (len < newest + kDs4TouchFrameBytes) return;
+    const uint8_t* points = buf + newest + kDs4TouchFrameTimestampBytes;
+    decodePsTouchPoint(points, kDs4TouchMaxX, kDs4TouchMaxY, s.touch0Active, s.touch0Id, s.touch0X,
+                       s.touch0Y);
+    decodePsTouchPoint(points + kPsTouchPointBytes, kDs4TouchMaxX, kDs4TouchMaxY, s.touch1Active,
+                       s.touch1Id, s.touch1X, s.touch1Y);
+    s.touchClick = (buf[kDs4TouchClickByte] & kPsTouchClickBit) != 0;
+    s.touchValid = true;
+}
+
+bool decodeDualShock4(const uint8_t* buf, const size_t len, DeviceState& s,
+                      const PsImuCalib* calib) {
+    if (len < kDs4MinLen) return false;
+    if (buf[0] != kPsInputReport) return false;
+
+    decodeU8Sticks(buf + kPsSticksOffset, s);
+    s.wButtons = decodePsButtons(buf[kDs4FaceByte], buf[kDs4ShoulderByte]);
+    s.bLT = buf[kDs4LeftTriggerByte];
+    s.bRT = buf[kDs4RightTriggerByte];
+
+    const bool hasMotion = calib != nullptr && calib->valid && len >= kDs4MotionMinLen;
+    if (hasMotion) decodePsMotion(buf, kDs4GyroOffset, kDs4AccelOffset, *calib, s);
+
+    decodeDs4Touch(buf, len, s);
+    if (len >= kDs4BatteryMinLen) decodeDs4Battery(buf[kDs4BatteryByte], s);
     return true;
 }
 
-// DualSense USB report 0x01. Same axis conventions as DS4 but the byte layout shifts: triggers
-// move to bytes 5/6 and the button bytes are at 8/9/10.
-//
+void decodeDualSenseTouch(const uint8_t* buf, const size_t len, DeviceState& s) {
+    if (len < kDs5TouchMinLen) return;
+    decodePsTouchPoint(buf + kDs5Touch0Offset, kDualSenseTouchMaxX, kDualSenseTouchMaxY,
+                       s.touch0Active, s.touch0Id, s.touch0X, s.touch0Y);
+    decodePsTouchPoint(buf + kDs5Touch1Offset, kDualSenseTouchMaxX, kDualSenseTouchMaxY,
+                       s.touch1Active, s.touch1Id, s.touch1X, s.touch1Y);
+    s.touchClick = (buf[kDs5MiscByte] & kPsTouchClickBit) != 0;
+    s.touchValid = true;
+}
+
 // Takes the whole ParserState rather than just the IMU calibration because the mic-mute button
 // needs a latch across reports; a null one decodes everything except the mute state, which is the
 // honest answer for a caller that kept no per-device memory.
-bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s, ParserState* sticks) {
-    if (len < 11) return false;
-    if (buf[0] != 0x01) return false;
+bool decodeDualSense(const uint8_t* buf, const size_t len, DeviceState& s, ParserState* sticks) {
+    if (len < kDs5MinLen) return false;
+    if (buf[0] != kPsInputReport) return false;
     const PsImuCalib* calib = sticks != nullptr ? &sticks->psImu : nullptr;
 
-    s.sLX = scaleU8Centered(buf[1], false);
-    s.sLY = scaleU8Centered(buf[2], true);
-    s.sRX = scaleU8Centered(buf[3], false);
-    s.sRY = scaleU8Centered(buf[4], true);
+    decodeU8Sticks(buf + kPsSticksOffset, s);
+    s.bLT = buf[kDs5LeftTriggerByte];
+    s.bRT = buf[kDs5RightTriggerByte];
 
-    s.bLT = buf[5];
-    s.bRT = buf[6];
+    uint16_t buttons = decodePsButtons(buf[kDs5FaceByte], buf[kDs5ShoulderByte]);
+    if (sticks != nullptr) applyMicMuteLatch(buf[kDs5MiscByte], *sticks, buttons);
+    s.wButtons = buttons;
 
-    uint16_t b = 0;
-    if (buf[8] & 0x10) b |= XUSB_X;
-    if (buf[8] & 0x20) b |= XUSB_A;
-    if (buf[8] & 0x40) b |= XUSB_B;
-    if (buf[8] & 0x80) b |= XUSB_Y;
-    if (buf[9] & 0x01) b |= XUSB_LB;
-    if (buf[9] & 0x02) b |= XUSB_RB;
-    if (buf[9] & 0x10) b |= XUSB_BACK;
-    if (buf[9] & 0x20) b |= XUSB_START;
-    if (buf[9] & 0x40) b |= XUSB_THUMB_L;
-    if (buf[9] & 0x80) b |= XUSB_THUMB_R;
-    b = setDpadFromHat(b, buf[8] & 0x0F);
-    // Mic-mute lives beside the touchpad click in button byte 10 (0x04 next to 0x02). The press
-    // is an edge, the wire bit is a state: flip the latch on the way down only, so holding the
-    // button does not chatter the mute on and off at report rate.
-    if (sticks != nullptr) {
-        const bool muteDown = (buf[10] & 0x04) != 0;
-        if (muteDown && !sticks->micMuteHeld) sticks->micMuted = !sticks->micMuted;
-        sticks->micMuteHeld = muteDown;
-        if (sticks->micMuted) b |= WBUTTON_MIC_MUTE;
-    }
-    s.wButtons = b;
+    const bool hasMotion = calib != nullptr && calib->valid && len >= kDs5MotionMinLen;
+    if (hasMotion) decodePsMotion(buf, kDs5GyroOffset, kDs5AccelOffset, *calib, s);
 
-    // gyro at 16/18/20, accel at 22/24/26 (int16 LE); same calibration as DS4, signs unverified.
-    if (calib != nullptr && calib->valid && len >= 28) {
-        s.gyroX = ds4GyroAxisToWire(rdLe16(buf, 16), *calib, 0);
-        s.gyroY = ds4GyroAxisToWire(rdLe16(buf, 18), *calib, 1);
-        s.gyroZ = ds4GyroAxisToWire(rdLe16(buf, 20), *calib, 2);
-        s.accelX = ds4AccelAxisToWire(rdLe16(buf, 22), *calib, 0);
-        s.accelY = ds4AccelAxisToWire(rdLe16(buf, 24), *calib, 1);
-        s.accelZ = ds4AccelAxisToWire(rdLe16(buf, 26), *calib, 2);
-        s.motionValid = true;
-    }
-
-    // Touch: two 4-byte points at 33/37 in every report (no DS4-style frame bundling); the
-    // click rides button byte 10 bit 1. Taller surface than the DS4, hence its own Y max.
-    if (len >= 41) {
-        decodePsTouchPoint(buf + 33, kDualSenseTouchMaxX, kDualSenseTouchMaxY, s.touch0Active,
-                           s.touch0Id, s.touch0X, s.touch0Y);
-        decodePsTouchPoint(buf + 37, kDualSenseTouchMaxX, kDualSenseTouchMaxY, s.touch1Active,
-                           s.touch1Id, s.touch1X, s.touch1Y);
-        s.touchClick = (buf[10] & 0x02) != 0;
-        s.touchValid = true;
-    }
-
-    // Battery at buf[53] (hid-playstation's status): the low nibble is the charge in tenths, the
-    // high nibble the state: 0 discharging, 1 charging, 2 full, 0xA/0xB a temperature or voltage
-    // fault, 0xF a charging fault. A fault has no charge worth showing.
-    if (len >= 54) {
-        const uint8_t tenths = (uint8_t)(buf[53] & 0x0F);
-        const uint8_t state = (uint8_t)(buf[53] >> 4);
-        s.batteryValid = true;
-        switch (state) {
-        case 0x0:
-            s.batteryLevel = sonyTenthsToPercent(tenths);
-            s.batteryStatus = PAD_BATTERY_STATUS_DISCHARGING;
-            break;
-        case 0x1:
-            s.batteryLevel = sonyTenthsToPercent(tenths);
-            s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
-            break;
-        case 0x2:
-            s.batteryLevel = 100;
-            s.batteryStatus = PAD_BATTERY_STATUS_FULL;
-            break;
-        default:
-            s.batteryLevel = PAD_BATTERY_LEVEL_UNKNOWN;
-            s.batteryStatus = PAD_BATTERY_STATUS_UNKNOWN;
-            break;
-        }
-    }
+    decodeDualSenseTouch(buf, len, s);
+    if (len >= kDs5BatteryMinLen) decodeDualSenseBattery(buf[kDs5BatteryByte], s);
     return true;
 }
 
-// Switch Pro standard full input report 0x30 over USB. Buttons are split across three bytes
-// (right/shared/left) and sticks are packed 12-bit values. The XUSB mapping matches by physical
-// position rather than label, the same convention used for DualShock 4: Switch A (right face) →
-// XUSB_B (right face), Switch B (bottom) → XUSB_A (bottom), Switch X (top) → XUSB_Y, Switch Y
-// (left) → XUSB_X. This is what PC games and ViGEm expect.
-bool decodeSwitchProUsb(const uint8_t* buf, size_t len, DeviceState& s, ParserState& sticks) {
-    if (len < 12) return false;
-    if (buf[0] != 0x30) return false;
+// Switch Pro standard full input report 0x30 over USB: the battery byte, three button bytes
+// (right/shared/left) with ZL/ZR as digital bits, two packed 12-bit sticks, then up to three IMU
+// frames. The XUSB mapping matches by physical position rather than label, the same convention
+// used for DualShock 4: Switch A (right face) → XUSB_B, Switch B (bottom) → XUSB_A, Switch X (top)
+// → XUSB_Y, Switch Y (left) → XUSB_X. This is what PC games and ViGEm expect.
+constexpr uint8_t kSwitchInputReport = 0x30;
+constexpr size_t kSwitchInputMinLen = 12;
+constexpr size_t kSwitchBatteryByte = 2;
+constexpr size_t kSwitchRightByte = 3;
+constexpr size_t kSwitchSharedByte = 4;
+constexpr size_t kSwitchLeftByte = 5;
+constexpr uint8_t kSwitchZrBit = 0x80;
+constexpr uint8_t kSwitchZlBit = 0x80;
+constexpr size_t kSwitchLeftStickOffset = 6;
+constexpr size_t kSwitchRightStickOffset = 9;
+constexpr ButtonBit kSwitchRightByteBits[] = {
+    {0x01, XUSB_X}, {0x02, XUSB_Y}, {0x04, XUSB_A}, {0x08, XUSB_B}, {0x40, XUSB_RB},
+};
+constexpr ButtonBit kSwitchSharedByteBits[] = {
+    {0x01, XUSB_BACK},
+    {0x02, XUSB_START},
+    {0x04, XUSB_THUMB_R},
+    {0x08, XUSB_THUMB_L},
+};
+constexpr ButtonBit kSwitchLeftByteBits[] = {
+    {0x01, XUSB_DPAD_DOWN}, {0x02, XUSB_DPAD_UP}, {0x04, XUSB_DPAD_RIGHT},
+    {0x08, XUSB_DPAD_LEFT}, {0x40, XUSB_LB},
+};
 
-    const uint8_t br = buf[3];
-    const uint8_t bs = buf[4];
-    const uint8_t bl = buf[5];
+uint16_t decodeSwitchProButtons(const uint8_t right, const uint8_t shared, const uint8_t left) {
+    const uint16_t rightSide = buttonsFromByte(right, kSwitchRightByteBits);
+    const uint16_t middle = buttonsFromByte(shared, kSwitchSharedByteBits);
+    const uint16_t leftSide = buttonsFromByte(left, kSwitchLeftByteBits);
+    return (uint16_t)(rightSide | middle | leftSide);
+}
 
-    uint16_t b = 0;
-    if (br & 0x01) b |= XUSB_X;
-    if (br & 0x02) b |= XUSB_Y;
-    if (br & 0x04) b |= XUSB_A;
-    if (br & 0x08) b |= XUSB_B;
-    if (br & 0x40) b |= XUSB_RB;
-    if (bs & 0x01) b |= XUSB_BACK;
-    if (bs & 0x02) b |= XUSB_START;
-    if (bs & 0x04) b |= XUSB_THUMB_R;
-    if (bs & 0x08) b |= XUSB_THUMB_L;
-    if (bl & 0x01) b |= XUSB_DPAD_DOWN;
-    if (bl & 0x02) b |= XUSB_DPAD_UP;
-    if (bl & 0x04) b |= XUSB_DPAD_RIGHT;
-    if (bl & 0x08) b |= XUSB_DPAD_LEFT;
-    if (bl & 0x40) b |= XUSB_LB;
-    s.wButtons = b;
-
-    // ZL/ZR are digital on the Pro, so triggers are either fully pressed or released.
-    s.bLT = (bl & 0x80) ? 255 : 0;
-    s.bRT = (br & 0x80) ? 255 : 0;
-
-    const uint16_t lx = (uint16_t)buf[6] | (((uint16_t)buf[7] & 0x0F) << 8);
-    const uint16_t ly = ((uint16_t)buf[7] >> 4) | ((uint16_t)buf[8] << 4);
-    const uint16_t rx = (uint16_t)buf[9] | (((uint16_t)buf[10] & 0x0F) << 8);
-    const uint16_t ry = ((uint16_t)buf[10] >> 4) | ((uint16_t)buf[11] << 4);
-
+void decodeSwitchProSticks(const uint8_t* buf, ParserState& sticks, DeviceState& s) {
+    uint16_t lx = 0;
+    uint16_t ly = 0;
+    uint16_t rx = 0;
+    uint16_t ry = 0;
+    unpackTwo12Bit(buf + kSwitchLeftStickOffset, lx, ly);
+    unpackTwo12Bit(buf + kSwitchRightStickOffset, rx, ry);
     s.sLX = scaleSwitchStickAuto(lx, sticks.lx);
     s.sLY = scaleSwitchStickAuto(ly, sticks.ly);
     s.sRX = scaleSwitchStickAuto(rx, sticks.rx);
     s.sRY = scaleSwitchStickAuto(ry, sticks.ry);
+}
 
-    // Battery in buf[2] (hid-nintendo's bat_con): bits 7..5 the charge in five steps (empty,
-    // critical, low, medium, full), bit 4 charging, bit 0 host-powered. The percent is the step's
-    // midpoint, the same coarse number the framework shows for this pad.
-    {
-        static constexpr uint8_t kStepPercent[] = {5, 25, 50, 75, 100};
-        const uint8_t step = (uint8_t)(buf[2] >> 5);
-        const bool charging = (buf[2] & 0x10) != 0;
-        const bool hostPowered = (buf[2] & 0x01) != 0;
-        s.batteryValid = true;
-        s.batteryLevel = step <= 4 ? kStepPercent[step] : PAD_BATTERY_LEVEL_UNKNOWN;
-        if (charging) {
-            s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
-        } else if (hostPowered && step == 4) {
-            s.batteryStatus = PAD_BATTERY_STATUS_FULL;
-        } else {
-            s.batteryStatus = PAD_BATTERY_STATUS_DISCHARGING;
-        }
-    }
+// hid-nintendo's bat_con: bits 7..5 the charge in five steps (empty, critical, low, medium,
+// full), bit 4 charging, bit 0 host-powered. The percent is the step's midpoint, the same coarse
+// number the framework shows for this pad.
+constexpr int kSwitchBatteryStepShift = 5;
+constexpr uint8_t kSwitchChargingBit = 0x10;
+constexpr uint8_t kSwitchHostPoweredBit = 0x01;
+constexpr uint8_t kSwitchBatteryStepPercent[] = {5, 25, 50, 75, 100};
+constexpr uint8_t kSwitchBatteryFullStep = 4;
 
-    // Average the bundled IMU subframes (the pad packs up to three ~5ms samples per report; one
-    // 12-byte frame = accel int16 LE x3 then gyro x3, first at byte 13), then rotate the Switch IMU
-    // frame onto the DS4 wire convention (wire gyro X=pitch, Y=yaw, Z=roll); the pad reports those
-    // on raw gyro Y/Z/X. Pitch and roll are negated to match the DS4 sign convention. Hardware
-    // testing confirmed pitch and yaw; roll's sign and the accel signs are unverified.
-    size_t imuFrames = len >= 13 ? (len - 13) / 12 : 0;
-    if (imuFrames > 3) imuFrames = 3;
-    if (imuFrames > 0) {
-        int32_t ax = 0, ay = 0, az = 0, gx = 0, gy = 0, gz = 0;
-        for (size_t f = 0; f < imuFrames; f++) {
-            int off = 13 + 12 * (int)f;
-            ax += rdLe16(buf, off);
-            ay += rdLe16(buf, off + 2);
-            az += rdLe16(buf, off + 4);
-            gx += rdLe16(buf, off + 6);
-            gy += rdLe16(buf, off + 8);
-            gz += rdLe16(buf, off + 10);
-        }
-        int32_t n = (int32_t)imuFrames;
-        int32_t pitchAvg = -(gy / n);
-        int32_t rollAvg = -(gx / n);
-        if (pitchAvg > 32767) pitchAvg = 32767;
-        if (rollAvg > 32767) rollAvg = 32767;
-        s.gyroX = switchGyroToWire((int16_t)pitchAvg);
-        s.gyroY = switchGyroToWire((int16_t)(gz / n));
-        s.gyroZ = switchGyroToWire((int16_t)rollAvg);
-        s.accelX = switchAccelToWire((int16_t)(ay / n));
-        s.accelY = switchAccelToWire((int16_t)(az / n));
-        s.accelZ = switchAccelToWire((int16_t)(ax / n));
-        s.motionValid = true;
+void decodeSwitchProBattery(const uint8_t batCon, DeviceState& s) {
+    const uint8_t step = (uint8_t)(batCon >> kSwitchBatteryStepShift);
+    const bool charging = (batCon & kSwitchChargingBit) != 0;
+    const bool hostPowered = (batCon & kSwitchHostPoweredBit) != 0;
+    const bool stepIsKnown = step <= kSwitchBatteryFullStep;
+    s.batteryValid = true;
+    s.batteryLevel = stepIsKnown ? kSwitchBatteryStepPercent[step] : PAD_BATTERY_LEVEL_UNKNOWN;
+    if (charging) {
+        s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
+        return;
     }
+    const bool toppedOffOnTheCable = hostPowered && step == kSwitchBatteryFullStep;
+    s.batteryStatus =
+        toppedOffOnTheCable ? PAD_BATTERY_STATUS_FULL : PAD_BATTERY_STATUS_DISCHARGING;
+}
+
+struct SwitchImuSum {
+    int32_t ax, ay, az, gx, gy, gz;
+    int32_t frames;
+};
+
+// The pad packs up to three ~5ms samples per report; one 12-byte frame is accel int16 LE x3 then
+// gyro x3, the first at byte 13.
+constexpr size_t kSwitchImuFirstFrame = 13;
+constexpr size_t kSwitchImuFrameBytes = 12;
+constexpr size_t kSwitchImuMaxFrames = 3;
+
+SwitchImuSum sumSwitchImuFrames(const uint8_t* buf, const size_t len) {
+    SwitchImuSum sum = {0, 0, 0, 0, 0, 0, 0};
+    const size_t available =
+        len >= kSwitchImuFirstFrame ? (len - kSwitchImuFirstFrame) / kSwitchImuFrameBytes : 0;
+    const size_t frames = std::min(available, kSwitchImuMaxFrames);
+    for (size_t f = 0; f < frames; f++) {
+        const int off = (int)(kSwitchImuFirstFrame + kSwitchImuFrameBytes * f);
+        sum.ax += rdLe16(buf, off);
+        sum.ay += rdLe16(buf, off + 2);
+        sum.az += rdLe16(buf, off + 4);
+        sum.gx += rdLe16(buf, off + 6);
+        sum.gy += rdLe16(buf, off + 8);
+        sum.gz += rdLe16(buf, off + 10);
+    }
+    sum.frames = (int32_t)frames;
+    return sum;
+}
+
+// Rotate the Switch IMU frame onto the DS4 wire convention (wire gyro X=pitch, Y=yaw, Z=roll); the
+// pad reports those on raw gyro Y/Z/X. Pitch and roll are negated to match the DS4 sign
+// convention. Hardware testing confirmed pitch and yaw; roll's sign and the accel signs are
+// unverified.
+void applySwitchProMotion(const SwitchImuSum& sum, DeviceState& s) {
+    const int32_t n = sum.frames;
+    s.gyroX = switchGyroToWire(clampI16(-(sum.gy / n)));
+    s.gyroY = switchGyroToWire(clampI16(sum.gz / n));
+    s.gyroZ = switchGyroToWire(clampI16(-(sum.gx / n)));
+    s.accelX = switchAccelToWire(clampI16(sum.ay / n));
+    s.accelY = switchAccelToWire(clampI16(sum.az / n));
+    s.accelZ = switchAccelToWire(clampI16(sum.ax / n));
+    s.motionValid = true;
+}
+
+bool decodeSwitchProUsb(const uint8_t* buf, const size_t len, DeviceState& s, ParserState& sticks) {
+    if (len < kSwitchInputMinLen) return false;
+    if (buf[0] != kSwitchInputReport) return false;
+
+    const uint8_t rightByte = buf[kSwitchRightByte];
+    const uint8_t sharedByte = buf[kSwitchSharedByte];
+    const uint8_t leftByte = buf[kSwitchLeftByte];
+
+    s.wButtons = decodeSwitchProButtons(rightByte, sharedByte, leftByte);
+    s.bLT = (leftByte & kSwitchZlBit) ? kTriggerMax : 0;
+    s.bRT = (rightByte & kSwitchZrBit) ? kTriggerMax : 0;
+
+    decodeSwitchProSticks(buf, sticks, s);
+    decodeSwitchProBattery(buf[kSwitchBatteryByte], s);
+
+    const SwitchImuSum imu = sumSwitchImuFrames(buf, len);
+    const bool hasMotion = imu.frames > 0;
+    if (hasMotion) applySwitchProMotion(imu, s);
     return true;
 }
 
-bool decodeStadia(const uint8_t* buf, size_t len, DeviceState& s) {
-    if (len < 11) return false;
-    if (buf[0] != 0x03) return false;
-    s.sLX = scaleU8Centered(buf[1], false);
-    s.sLY = scaleU8Centered(buf[2], true);
-    s.sRX = scaleU8Centered(buf[3], false);
-    s.sRY = scaleU8Centered(buf[4], true);
-    s.bLT = buf[5];
-    s.bRT = buf[6];
-    uint16_t b = 0;
-    if (buf[8] & 0x40) b |= XUSB_A;
-    if (buf[8] & 0x20) b |= XUSB_B;
-    if (buf[8] & 0x10) b |= XUSB_X;
-    if (buf[8] & 0x08) b |= XUSB_Y;
-    if (buf[8] & 0x04) b |= XUSB_LB;
-    if (buf[8] & 0x02) b |= XUSB_RB;
-    if (buf[9] & 0x80) b |= XUSB_START;
-    if (buf[9] & 0x40) b |= XUSB_BACK;
-    if (buf[9] & 0x20) b |= XUSB_THUMB_L;
-    if (buf[9] & 0x10) b |= XUSB_THUMB_R;
-    b = setDpadFromHat(b, buf[7] & 0x0F);
-    s.wButtons = b;
+// Stadia report 0x03: four centred uint8 sticks, two 8-bit triggers, a hat byte, then the face and
+// system button bytes.
+constexpr uint8_t kStadiaInputReport = 0x03;
+constexpr size_t kStadiaMinLen = 11;
+constexpr size_t kStadiaSticksOffset = 1;
+constexpr size_t kStadiaLeftTriggerByte = 5;
+constexpr size_t kStadiaRightTriggerByte = 6;
+constexpr size_t kStadiaHatByte = 7;
+constexpr size_t kStadiaFaceByte = 8;
+constexpr size_t kStadiaSystemByte = 9;
+constexpr ButtonBit kStadiaFaceByteBits[] = {
+    {0x40, XUSB_A}, {0x20, XUSB_B},  {0x10, XUSB_X},
+    {0x08, XUSB_Y}, {0x04, XUSB_LB}, {0x02, XUSB_RB},
+};
+constexpr ButtonBit kStadiaSystemByteBits[] = {
+    {0x80, XUSB_START},
+    {0x40, XUSB_BACK},
+    {0x20, XUSB_THUMB_L},
+    {0x10, XUSB_THUMB_R},
+};
+
+uint16_t decodeStadiaButtons(const uint8_t faceByte, const uint8_t systemByte, const uint8_t hat) {
+    const uint16_t face = buttonsFromByte(faceByte, kStadiaFaceByteBits);
+    const uint16_t system = buttonsFromByte(systemByte, kStadiaSystemByteBits);
+    return setDpadFromHat((uint16_t)(face | system), (uint8_t)(hat & kLowNibbleMask));
+}
+
+bool decodeStadia(const uint8_t* buf, const size_t len, DeviceState& s) {
+    if (len < kStadiaMinLen) return false;
+    if (buf[0] != kStadiaInputReport) return false;
+    decodeU8Sticks(buf + kStadiaSticksOffset, s);
+    s.bLT = buf[kStadiaLeftTriggerByte];
+    s.bRT = buf[kStadiaRightTriggerByte];
+    s.wButtons =
+        decodeStadiaButtons(buf[kStadiaFaceByte], buf[kStadiaSystemByte], buf[kStadiaHatByte]);
     return true;
 }
 
@@ -1116,108 +1287,172 @@ constexpr uint32_t kSteamRightPadFinger = 0x100000;
 constexpr uint32_t kSteamStickButton = 0x400000;
 constexpr uint32_t kSteamLeftPadAndStick = 0x800000;
 
+// Packet framing per the Linux hid-steam driver: {version u16 LE, type, payload length, payload}.
 constexpr size_t kSteamStateLen = 48;
+constexpr uint8_t kSteamVersionLo = 0x01;
+constexpr uint8_t kSteamVersionHi = 0x00;
 constexpr uint8_t kSteamStateType = 0x01;
 constexpr uint8_t kSteamWirelessType = 0x03;
+constexpr size_t kSteamWirelessEventLen = 5;
+constexpr uint8_t kSteamWirelessPayloadLen = 0x01;
 constexpr uint8_t kSteamWirelessDisconnect = 0x01;
 constexpr uint8_t kSteamWirelessConnect = 0x02;
+constexpr size_t kSteamButtonsOffset = 8;
+constexpr size_t kSteamLeftTriggerByte = 11;
+constexpr size_t kSteamRightTriggerByte = 12;
+constexpr int kSteamLeftAxesOffset = 16;
+constexpr int kSteamRightPadOffset = 20;
+constexpr int kSteamAccelOffset = 28;
+constexpr int kSteamGyroOffset = 34;
 constexpr int32_t kSteamTriggerMaxAnalog = 26000;
+// The 8-bit trigger byte replicated into the 15-bit scale SDL reads the pad at.
+constexpr int kSteamTriggerWidenShift = 7;
+constexpr int64_t kQ16One = 65536;
 // 15 degrees in Q16; the pads sit rotated on the shell and SDL applies the same correction.
-constexpr int32_t kSteamPadCos = 63303;
-constexpr int32_t kSteamPadSin = 16962;
+constexpr int64_t kSteamPadCos = 63303;
+constexpr int64_t kSteamPadSin = 16962;
+// Steam reports gyro over +-2000 deg/s and accel over +-2g against the wire's +-2000 deg/s and
+// +-4 g, so gyro passes through at 32767/32768 and accel halves.
+constexpr int64_t kSteamGyroDivisor = 32768;
+constexpr int64_t kSteamAccelDivisor = 65536;
 
-int16_t steamClampI16(int64_t v) {
-    if (v > 32767) return 32767;
-    if (v < -32768) return -32768;
-    return (int16_t)v;
+bool isSteamPacket(const uint8_t* buf, const uint8_t type) {
+    const bool isTheVersion = buf[0] == kSteamVersionLo && buf[1] == kSteamVersionHi;
+    return isTheVersion && buf[2] == type;
 }
 
-uint8_t steamTriggerToWire(uint8_t raw) {
-    int32_t v = ((int32_t)raw << 7) | raw;
-    if (v > kSteamTriggerMaxAnalog) v = kSteamTriggerMaxAnalog;
-    return (uint8_t)((v * 255) / kSteamTriggerMaxAnalog);
+uint8_t steamTriggerToWire(const uint8_t raw) {
+    const int32_t widened = ((int32_t)raw << kSteamTriggerWidenShift) | raw;
+    const int32_t clamped = std::min(widened, kSteamTriggerMaxAnalog);
+    return (uint8_t)((clamped * kTriggerMax) / kSteamTriggerMaxAnalog);
 }
 
 // SDL adds a further +1000 to each axis while a finger is down. That is harmless for a touch
 // surface but would park a stick off centre, so it is deliberately not carried over.
-void steamRotatePad(int32_t x, int32_t y, int16_t& outX, int16_t& outY) {
-    outX = steamClampI16(((int64_t)kSteamPadCos * x - (int64_t)kSteamPadSin * y) / 65536);
-    outY = steamClampI16(((int64_t)kSteamPadSin * x + (int64_t)kSteamPadCos * y) / 65536);
+void steamRotatePad(const int32_t x, const int32_t y, int16_t& outX, int16_t& outY) {
+    outX = clampI16((kSteamPadCos * x - kSteamPadSin * y) / kQ16One);
+    outY = clampI16((kSteamPadSin * x + kSteamPadCos * y) / kQ16One);
 }
 
-// Steam reports gyro over +-2000 deg/s and accel over +-2g; the wire wants deg/s / 2000 and g / 4.
-int16_t steamGyroToWire(int32_t raw) { return steamClampI16((int64_t)raw * 32767 / 32768); }
+int16_t steamGyroToWire(const int32_t raw) {
+    return clampI16((int64_t)raw * kAxisMax / kSteamGyroDivisor);
+}
 
-int16_t steamAccelToWire(int32_t raw) { return steamClampI16((int64_t)raw * 32767 / 65536); }
+int16_t steamAccelToWire(const int32_t raw) {
+    return clampI16((int64_t)raw * kAxisMax / kSteamAccelDivisor);
+}
 
-bool decodeSteamController(const uint8_t* buf, size_t len, DeviceState& s, ParserState& st) {
-    if (len < kSteamStateLen) return false;
-    if (buf[0] != 0x01 || buf[1] != 0x00) return false;
-    if (buf[2] != kSteamStateType) return false;
+uint16_t decodeSteamButtons(const uint32_t btn) {
+    uint16_t buttons = 0;
+    if (btn & kSteamSouth) buttons |= XUSB_A;
+    if (btn & kSteamEast) buttons |= XUSB_B;
+    if (btn & kSteamWest) buttons |= XUSB_X;
+    if (btn & kSteamNorth) buttons |= XUSB_Y;
+    if (btn & kSteamLeftBumper) buttons |= XUSB_LB;
+    if (btn & kSteamRightBumper) buttons |= XUSB_RB;
+    if (btn & kSteamMenu) buttons |= XUSB_BACK;
+    if (btn & kSteamEscape) buttons |= XUSB_START;
+    if (btn & kSteamGuide) buttons |= XUSB_GUIDE;
+    if (btn & kSteamDpadUp) buttons |= XUSB_DPAD_UP;
+    if (btn & kSteamDpadDown) buttons |= XUSB_DPAD_DOWN;
+    if (btn & kSteamDpadLeft) buttons |= XUSB_DPAD_LEFT;
+    if (btn & kSteamDpadRight) buttons |= XUSB_DPAD_RIGHT;
+    if (btn & kSteamRightPadClicked) buttons |= XUSB_THUMB_R;
+    return buttons;
+}
 
-    const uint32_t btn = (uint32_t)buf[8] | ((uint32_t)buf[9] << 8) | ((uint32_t)buf[10] << 16);
-
-    uint16_t b = 0;
-    if (btn & kSteamSouth) b |= XUSB_A;
-    if (btn & kSteamEast) b |= XUSB_B;
-    if (btn & kSteamWest) b |= XUSB_X;
-    if (btn & kSteamNorth) b |= XUSB_Y;
-    if (btn & kSteamLeftBumper) b |= XUSB_LB;
-    if (btn & kSteamRightBumper) b |= XUSB_RB;
-    if (btn & kSteamMenu) b |= XUSB_BACK;
-    if (btn & kSteamEscape) b |= XUSB_START;
-    if (btn & kSteamGuide) b |= XUSB_GUIDE;
-    if (btn & kSteamDpadUp) b |= XUSB_DPAD_UP;
-    if (btn & kSteamDpadDown) b |= XUSB_DPAD_DOWN;
-    if (btn & kSteamDpadLeft) b |= XUSB_DPAD_LEFT;
-    if (btn & kSteamDpadRight) b |= XUSB_DPAD_RIGHT;
-    if (btn & kSteamRightPadClicked) b |= XUSB_THUMB_R;
-
-    s.bLT = steamTriggerToWire(buf[11]);
-    s.bRT = steamTriggerToWire(buf[12]);
-
-    // One pair of axes carries either the stick or the left pad. The finger-down bit says which;
-    // the interleave bit means pad frames alternate with stick frames worth holding on to.
+// One pair of axes carries either the stick or the left pad. The finger-down bit says which; the
+// interleave bit means pad frames alternate with stick frames worth holding on to.
+void trackSteamLeftStick(const uint8_t* buf, const uint32_t btn, ParserState& st,
+                         uint16_t& buttons) {
     const bool padOnLeft = (btn & kSteamLeftPadFinger) != 0;
     const bool interleaved = (btn & kSteamLeftPadAndStick) != 0;
     if (!padOnLeft) {
-        st.steamStickX = rdLe16(buf, 16);
-        st.steamStickY = rdLe16(buf, 18);
-        // With no live pad the firmware reports a stick click as a left-pad click.
-        if (!interleaved && (btn & kSteamLeftPadClicked)) b |= XUSB_THUMB_L;
+        st.steamStickX = rdLe16(buf, kSteamLeftAxesOffset);
+        st.steamStickY = rdLe16(buf, kSteamLeftAxesOffset + 2);
+        const bool clickIsTheStick = !interleaved && (btn & kSteamLeftPadClicked) != 0;
+        if (clickIsTheStick) buttons |= XUSB_THUMB_L;
     } else if (!interleaved) {
         st.steamStickX = 0;
         st.steamStickY = 0;
     }
-    if (btn & kSteamStickButton) b |= XUSB_THUMB_L;
-    s.wButtons = b;
+    if (btn & kSteamStickButton) buttons |= XUSB_THUMB_L;
+}
+
+void decodeSteamRightPad(const uint8_t* buf, const uint32_t btn, DeviceState& s) {
+    const bool fingerDown = (btn & kSteamRightPadFinger) != 0;
+    if (!fingerDown) {
+        s.sRX = 0;
+        s.sRY = 0;
+        return;
+    }
+    steamRotatePad(rdLe16(buf, kSteamRightPadOffset), rdLe16(buf, kSteamRightPadOffset + 2), s.sRX,
+                   s.sRY);
+}
+
+void decodeSteamMotion(const uint8_t* buf, DeviceState& s) {
+    const int16_t ax = rdLe16(buf, kSteamAccelOffset);
+    const int16_t ay = rdLe16(buf, kSteamAccelOffset + 2);
+    const int16_t az = rdLe16(buf, kSteamAccelOffset + 4);
+    const int16_t gx = rdLe16(buf, kSteamGyroOffset);
+    const int16_t gy = rdLe16(buf, kSteamGyroOffset + 2);
+    const int16_t gz = rdLe16(buf, kSteamGyroOffset + 4);
+    const bool imuIsAlive = (ax | ay | az | gx | gy | gz) != 0;
+    if (!imuIsAlive) return;
+
+    s.gyroX = steamGyroToWire(gx);
+    s.gyroY = steamGyroToWire(gz);
+    s.gyroZ = steamGyroToWire(gy);
+    s.accelX = steamAccelToWire(ax);
+    s.accelY = steamAccelToWire(az);
+    s.accelZ = steamAccelToWire(-(int32_t)ay);
+    s.motionValid = true;
+}
+
+bool decodeSteamController(const uint8_t* buf, const size_t len, DeviceState& s, ParserState& st) {
+    if (len < kSteamStateLen) return false;
+    if (!isSteamPacket(buf, kSteamStateType)) return false;
+
+    const uint32_t btn = rdLe24(buf + kSteamButtonsOffset);
+
+    uint16_t buttons = decodeSteamButtons(btn);
+    s.bLT = steamTriggerToWire(buf[kSteamLeftTriggerByte]);
+    s.bRT = steamTriggerToWire(buf[kSteamRightTriggerByte]);
+
+    trackSteamLeftStick(buf, btn, st, buttons);
+    s.wButtons = buttons;
     s.sLX = st.steamStickX;
     s.sLY = st.steamStickY;
 
-    if (btn & kSteamRightPadFinger) {
-        steamRotatePad(rdLe16(buf, 20), rdLe16(buf, 22), s.sRX, s.sRY);
-    } else {
-        s.sRX = 0;
-        s.sRY = 0;
-    }
-
-    const int16_t ax = rdLe16(buf, 28);
-    const int16_t ay = rdLe16(buf, 30);
-    const int16_t az = rdLe16(buf, 32);
-    const int16_t gx = rdLe16(buf, 34);
-    const int16_t gy = rdLe16(buf, 36);
-    const int16_t gz = rdLe16(buf, 38);
-    // An all-zero block means the IMU setting never took; publishing it would stream a dead sensor.
-    if ((ax | ay | az | gx | gy | gz) != 0) {
-        s.gyroX = steamGyroToWire(gx);
-        s.gyroY = steamGyroToWire(gz);
-        s.gyroZ = steamGyroToWire(gy);
-        s.accelX = steamAccelToWire(ax);
-        s.accelY = steamAccelToWire(az);
-        s.accelZ = steamAccelToWire(-(int32_t)ay);
-        s.motionValid = true;
-    }
+    decodeSteamRightPad(buf, btn, s);
+    decodeSteamMotion(buf, s);
     return true;
+}
+
+// The fixed-offset guess for a HID gamepad whose descriptor did not parse: four centred uint8
+// sticks, a byte of hat nibble plus face buttons, and a byte of the rest with the triggers as its
+// top two bits. Anything shorter is not gamepad-shaped and is dropped rather than published as
+// noise.
+constexpr size_t kGenericHidMinReportLen = 7;
+constexpr size_t kHidButtonsLoByte = 4;
+constexpr size_t kHidButtonsHiByte = 5;
+constexpr uint8_t kHidLeftTriggerBit = 0x40;
+constexpr uint8_t kHidRightTriggerBit = 0x80;
+constexpr ButtonBit kHidButtonsLoBits[] = {
+    {0x10, XUSB_A},
+    {0x20, XUSB_B},
+    {0x40, XUSB_X},
+    {0x80, XUSB_Y},
+};
+constexpr ButtonBit kHidButtonsHiBits[] = {
+    {0x01, XUSB_LB},    {0x02, XUSB_RB},      {0x04, XUSB_BACK},
+    {0x08, XUSB_START}, {0x10, XUSB_THUMB_L}, {0x20, XUSB_THUMB_R},
+};
+
+uint16_t decodeGenericHidButtons(const uint8_t btnLo, const uint8_t btnHi) {
+    const uint16_t face = buttonsFromByte(btnLo, kHidButtonsLoBits);
+    const uint16_t rest = buttonsFromByte(btnHi, kHidButtonsHiBits);
+    return setDpadFromHat((uint16_t)(face | rest), (uint8_t)(btnLo & kLowNibbleMask));
 }
 
 // Switch Pro HD-rumble amplitude codes from the Linux hid-nintendo table; frequency held at the
@@ -1228,15 +1463,21 @@ struct SwitchAmpCode {
     uint16_t amp;
 };
 
-const SwitchAmpCode kSwitchAmpCodes[] = {
+constexpr SwitchAmpCode kSwitchAmpCodes[] = {
     {0x00, 0x0040, 0},   {0x02, 0x8040, 10},  {0x08, 0x0042, 17},  {0x10, 0x0044, 33},
     {0x40, 0x0050, 230}, {0x70, 0x005c, 387}, {0xa0, 0x0068, 650}, {0xc8, 0x0072, 1003},
 };
 
-void switchEncodeMotor(uint8_t* out, uint16_t magnitude) {
-    uint32_t amp = (uint32_t)magnitude * 1003u / 65535u;
+constexpr uint32_t kWireMotorMax = 65535;
+constexpr uint32_t kSwitchAmpMax = 1003;
+constexpr uint8_t kSwitchMotorHighBase = 0x01;
+constexpr uint8_t kSwitchMotorLowBase = 0x40;
+
+// The largest table code at or below the wire level, as four HD-rumble bytes.
+void switchEncodeMotor(uint8_t* out, const uint16_t magnitude) {
+    const uint32_t amp = (uint32_t)magnitude * kSwitchAmpMax / kWireMotorMax;
     const SwitchAmpCode* code = &kSwitchAmpCodes[0];
-    for (const auto& e : kSwitchAmpCodes) {
+    for (const SwitchAmpCode& e : kSwitchAmpCodes) {
         if (e.amp <= amp) {
             code = &e;
         } else {
@@ -1244,42 +1485,58 @@ void switchEncodeMotor(uint8_t* out, uint16_t magnitude) {
         }
     }
     out[0] = 0x00;
-    out[1] = (uint8_t)(0x01 + code->high);
-    out[2] = (uint8_t)(0x40 + ((code->low >> 8) & 0xFF));
-    out[3] = (uint8_t)(code->low & 0xFF);
+    out[1] = (uint8_t)(kSwitchMotorHighBase + code->high);
+    out[2] = (uint8_t)(kSwitchMotorLowBase + highByte(code->low));
+    out[3] = (uint8_t)code->low;
 }
 
-} // namespace
-
-bool parsePsCalibration(const uint8_t* buf, size_t len, PsImuCalib& out) {
-    out = PsImuCalib{};
-    if (len < 35) return false; // gyro/accel calibration occupies bytes 1..34
-    int32_t gyroBias[3] = {rdLe16(buf, 1), rdLe16(buf, 3), rdLe16(buf, 5)};
-    int32_t gyroPlus[3] = {rdLe16(buf, 7), rdLe16(buf, 11), rdLe16(buf, 15)};
-    int32_t gyroMinus[3] = {rdLe16(buf, 9), rdLe16(buf, 13), rdLe16(buf, 17)};
-    int32_t speed2x = rdLe16(buf, 19) + rdLe16(buf, 21);
+// Gyro calibration occupies bytes 1..21: a per-axis bias, the readings at the two rotation
+// extremes, and the two speed words whose sum is the scale. A zero span means the pad never
+// answered with usable calibration.
+bool parsePsGyroCalibration(const uint8_t* buf, PsImuCalib& out) {
+    const int32_t gyroBias[3] = {rdLe16(buf, 1), rdLe16(buf, 3), rdLe16(buf, 5)};
+    const int32_t gyroPlus[3] = {rdLe16(buf, 7), rdLe16(buf, 11), rdLe16(buf, 15)};
+    const int32_t gyroMinus[3] = {rdLe16(buf, 9), rdLe16(buf, 13), rdLe16(buf, 17)};
+    const int32_t speed2x = rdLe16(buf, 19) + rdLe16(buf, 21);
     for (int i = 0; i < 3; i++) {
-        int32_t a = gyroPlus[i] - gyroBias[i];
-        int32_t b = gyroMinus[i] - gyroBias[i];
-        int32_t denom = (a < 0 ? -a : a) + (b < 0 ? -b : b);
+        const int32_t a = gyroPlus[i] - gyroBias[i];
+        const int32_t b = gyroMinus[i] - gyroBias[i];
+        const int32_t denom = (a < 0 ? -a : a) + (b < 0 ? -b : b);
         if (denom == 0) return false;
         out.gyroNumer[i] = speed2x * kPsGyroResPerDegS;
         out.gyroDenom[i] = denom;
     }
-    int32_t accPlus[3] = {rdLe16(buf, 23), rdLe16(buf, 27), rdLe16(buf, 31)};
-    int32_t accMinus[3] = {rdLe16(buf, 25), rdLe16(buf, 29), rdLe16(buf, 33)};
+    return true;
+}
+
+// Accel calibration occupies bytes 23..34: the +1g and -1g reading per axis, whose midpoint is
+// the bias and whose span is the full 2g range.
+bool parsePsAccelCalibration(const uint8_t* buf, PsImuCalib& out) {
+    const int32_t accPlus[3] = {rdLe16(buf, 23), rdLe16(buf, 27), rdLe16(buf, 31)};
+    const int32_t accMinus[3] = {rdLe16(buf, 25), rdLe16(buf, 29), rdLe16(buf, 33)};
     for (int i = 0; i < 3; i++) {
-        int32_t range2g = accPlus[i] - accMinus[i];
+        const int32_t range2g = accPlus[i] - accMinus[i];
         if (range2g == 0) return false;
         out.accelBias[i] = accPlus[i] - range2g / 2;
         out.accelNumer[i] = 2 * kPsAccelResPerG;
         out.accelDenom[i] = range2g;
     }
+    return true;
+}
+
+} // namespace
+
+bool parsePsCalibration(const uint8_t* buf, const size_t len, PsImuCalib& out) {
+    out = PsImuCalib{};
+    if (len < PS_CALIBRATION_REPORT_BYTES) return false;
+    if (!parsePsGyroCalibration(buf, out)) return false;
+    if (!parsePsAccelCalibration(buf, out)) return false;
     out.valid = true;
     return true;
 }
 
-bool decodeReport(Parser p, const uint8_t* buf, size_t len, DeviceState& s, ParserState* sticks) {
+bool decodeReport(const Parser p, const uint8_t* buf, const size_t len, DeviceState& s,
+                  ParserState* sticks) {
     switch (p) {
     case Parser::XINPUT_360:
     case Parser::XINPUT_360_WIRELESS:
@@ -1296,10 +1553,11 @@ bool decodeReport(Parser p, const uint8_t* buf, size_t len, DeviceState& s, Pars
         return decodeStadia(buf, len, s);
     case Parser::STEAM_CONTROLLER:
         return sticks != nullptr && decodeSteamController(buf, len, s, *sticks);
-    case Parser::GENERIC_HID_GAMEPAD:
-        return sticks != nullptr && sticks->hidLayout.valid
-                   ? usbhid::decodeFromLayout(buf, len, s, sticks->hidLayout)
-                   : decodeGenericHidGamepad(buf, len, s);
+    case Parser::GENERIC_HID_GAMEPAD: {
+        const bool hasALayout = sticks != nullptr && sticks->hidLayout.valid;
+        if (hasALayout) return usbhid::decodeFromLayout(buf, len, s, sticks->hidLayout);
+        return decodeGenericHidGamepad(buf, len, s);
+    }
     case Parser::NONE:
         return false;
     }
@@ -1308,11 +1566,11 @@ bool decodeReport(Parser p, const uint8_t* buf, size_t len, DeviceState& s, Pars
 
 // Event framing and the one-byte payload values follow the Linux hid-steam driver
 // (steam_raw_event, ID_CONTROLLER_WIRELESS).
-WirelessEvent checkWirelessEvent(Parser p, const uint8_t* buf, size_t len) {
+WirelessEvent checkWirelessEvent(const Parser p, const uint8_t* buf, const size_t len) {
     if (p != Parser::STEAM_CONTROLLER) return WirelessEvent::NONE;
-    if (len < 5) return WirelessEvent::NONE;
-    if (buf[0] != 0x01 || buf[1] != 0x00) return WirelessEvent::NONE;
-    if (buf[2] != kSteamWirelessType || buf[3] != 0x01) return WirelessEvent::NONE;
+    if (len < kSteamWirelessEventLen) return WirelessEvent::NONE;
+    if (!isSteamPacket(buf, kSteamWirelessType)) return WirelessEvent::NONE;
+    if (buf[3] != kSteamWirelessPayloadLen) return WirelessEvent::NONE;
     switch (buf[4]) {
     case kSteamWirelessDisconnect:
         return WirelessEvent::DISCONNECT;
@@ -1323,182 +1581,370 @@ WirelessEvent checkWirelessEvent(Parser p, const uint8_t* buf, size_t len) {
     }
 }
 
-bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, DeviceState& s) {
-    // Conservative shape check: most generic HID gamepads produce reports >= 7 bytes (4 axes,
-    // hat+buttons low/high). Anything shorter probably isn't gamepad-shaped; bail rather than
-    // publish noise.
-    if (len < 7) return false;
-    s.sLX = scaleU8Centered(buf[0], false);
-    s.sLY = scaleU8Centered(buf[1], true);
-    s.sRX = scaleU8Centered(buf[2], false);
-    s.sRY = scaleU8Centered(buf[3], true);
-    uint16_t b = 0;
-    uint8_t hat = buf[4] & 0x0F;
-    b = setDpadFromHat(b, hat);
-    uint8_t btnLo = buf[4];
-    uint8_t btnHi = len > 5 ? buf[5] : 0;
-    if (btnLo & 0x10) b |= XUSB_A;
-    if (btnLo & 0x20) b |= XUSB_B;
-    if (btnLo & 0x40) b |= XUSB_X;
-    if (btnLo & 0x80) b |= XUSB_Y;
-    if (btnHi & 0x01) b |= XUSB_LB;
-    if (btnHi & 0x02) b |= XUSB_RB;
-    if (btnHi & 0x04) b |= XUSB_BACK;
-    if (btnHi & 0x08) b |= XUSB_START;
-    if (btnHi & 0x10) b |= XUSB_THUMB_L;
-    if (btnHi & 0x20) b |= XUSB_THUMB_R;
-    s.wButtons = b;
-    s.bLT = (btnHi & 0x40) ? 255 : 0;
-    s.bRT = (btnHi & 0x80) ? 255 : 0;
+bool decodeGenericHidGamepad(const uint8_t* buf, const size_t len, DeviceState& s) {
+    if (len < kGenericHidMinReportLen) return false;
+    decodeU8Sticks(buf, s);
+    const uint8_t btnLo = buf[kHidButtonsLoByte];
+    const uint8_t btnHi = buf[kHidButtonsHiByte];
+    s.wButtons = decodeGenericHidButtons(btnLo, btnHi);
+    s.bLT = (btnHi & kHidLeftTriggerBit) ? kTriggerMax : 0;
+    s.bRT = (btnHi & kHidRightTriggerBit) ? kTriggerMax : 0;
     return true;
 }
 
-size_t buildGipInitPacket(InitKind init, int index, uint8_t seq, uint8_t* out, size_t outCap) {
-    // GIP init packets from Linux xpad. power-on/LED/auth-done are universal; the S-init is the
-    // extra set-mode packet the Xbox One S / Elite Series 2 need. Byte 2 carries the sequence.
-    static const uint8_t kPowerOn[] = {0x05, 0x20, 0x00, 0x01, 0x00};
-    static const uint8_t kSInit[] = {0x05, 0x20, 0x00, 0x0F, 0x06};
-    static const uint8_t kLedOn[] = {0x0A, 0x20, 0x00, 0x03, 0x00, 0x01, 0x14};
-    static const uint8_t kAuthDone[] = {0x06, 0x20, 0x00, 0x02, 0x01, 0x00};
+namespace {
 
-    struct Pkt {
-        const uint8_t* data;
-        size_t len;
-    };
-    static const Pkt kPowerOnSeq[] = {
-        {kPowerOn, sizeof(kPowerOn)}, {kLedOn, sizeof(kLedOn)}, {kAuthDone, sizeof(kAuthDone)}};
-    static const Pkt kSSeq[] = {{kPowerOn, sizeof(kPowerOn)},
-                                {kSInit, sizeof(kSInit)},
-                                {kLedOn, sizeof(kLedOn)},
-                                {kAuthDone, sizeof(kAuthDone)}};
+struct InitPacket {
+    const uint8_t* data;
+    size_t len;
+};
 
-    const Pkt* seqArr = nullptr;
-    int count = 0;
-    if (init == InitKind::XBOX_ONE_POWERON) {
-        seqArr = kPowerOnSeq;
-        count = 3;
-    } else if (init == InitKind::XBOX_ONE_S) {
-        seqArr = kSSeq;
-        count = 4;
-    } else {
-        return 0;
-    }
-    if (index < 0 || index >= count) return 0;
-    size_t len = seqArr[index].len;
+// A device's init packets in the order they must be sent. An empty one means the device has no
+// sequence for that stage.
+struct InitSequence {
+    const InitPacket* packets;
+    int count;
+};
+
+template <size_t N> constexpr int countOf(const InitPacket (&)[N]) { return (int)N; }
+
+// Copies the index-th packet of a sequence into out. Zero means there is no such packet, or it
+// does not fit, which is how both callers learn the sequence has ended.
+size_t copyInitPacket(const InitSequence& sequence, const int index, uint8_t* out,
+                      const size_t outCap) {
+    if (index < 0 || index >= sequence.count) return 0;
+    const size_t len = sequence.packets[index].len;
     if (len > outCap) return 0;
-    memcpy(out, seqArr[index].data, len);
+    memcpy(out, sequence.packets[index].data, len);
+    return len;
+}
+
+// GIP init packets from Linux xpad. Power-on, LED and auth-done are universal; the S-init is the
+// extra set-mode packet the Xbox One S / Elite Series 2 need. Byte 2 carries the sequence number,
+// which buildGipInitPacket stamps in.
+constexpr uint8_t kGipPowerOn[] = {0x05, 0x20, 0x00, 0x01, 0x00};
+constexpr uint8_t kGipSInit[] = {0x05, 0x20, 0x00, 0x0F, 0x06};
+constexpr uint8_t kGipLedOn[] = {0x0A, 0x20, 0x00, 0x03, 0x00, 0x01, 0x14};
+constexpr uint8_t kGipAuthDone[] = {0x06, 0x20, 0x00, 0x02, 0x01, 0x00};
+
+constexpr InitPacket kGipPowerOnSeq[] = {
+    {kGipPowerOn, sizeof(kGipPowerOn)},
+    {kGipLedOn, sizeof(kGipLedOn)},
+    {kGipAuthDone, sizeof(kGipAuthDone)},
+};
+
+constexpr InitPacket kGipSSeq[] = {
+    {kGipPowerOn, sizeof(kGipPowerOn)},
+    {kGipSInit, sizeof(kGipSInit)},
+    {kGipLedOn, sizeof(kGipLedOn)},
+    {kGipAuthDone, sizeof(kGipAuthDone)},
+};
+
+InitSequence gipSequenceFor(const InitKind init) {
+    if (init == InitKind::XBOX_ONE_POWERON) return {kGipPowerOnSeq, countOf(kGipPowerOnSeq)};
+    if (init == InitKind::XBOX_ONE_S) return {kGipSSeq, countOf(kGipSSeq)};
+    return {nullptr, 0};
+}
+
+} // namespace
+
+size_t buildGipInitPacket(const InitKind init, const int index, const uint8_t seq, uint8_t* out,
+                          const size_t outCap) {
+    const size_t len = copyInitPacket(gipSequenceFor(init), index, out, outCap);
+    if (len == 0) return 0;
     out[2] = seq;
     return len;
 }
 
-size_t buildSteamConfigPacket(SteamConfig stage, int index, uint8_t* out, size_t outCap) {
-    // Framing is {message id, payload length, payload}. Message ids and the choice of the shortest
-    // working sequence follow the Linux hid-steam driver.
-    static const uint8_t kClearMappings[] = {0x81, 0x00};
-    // Left and right trackpad mode = none (kills mouse emulation), IMU mode = raw accel | raw gyro.
-    static const uint8_t kQuietSettings[] = {0x87, 0x09, 0x07, 0x07, 0x00, 0x08,
-                                             0x07, 0x00, 0x30, 0x18, 0x00};
-    static const uint8_t kDefaultMappings[] = {0x85, 0x00};
-    static const uint8_t kDefaultSettings[] = {0x8E, 0x00};
-    // Loading the defaults does not by itself hand the right pad back as a mouse: SDL follows it
-    // with an explicit right trackpad mode = absolute mouse, and leaving that out is the one way
-    // this teardown could still return a pad its owner cannot use.
-    static const uint8_t kRestoreMouse[] = {0x87, 0x03, 0x08, 0x00, 0x00};
+namespace {
 
-    struct Pkt {
-        const uint8_t* data;
-        size_t len;
-    };
-    static const Pkt kQuietSeq[] = {{kClearMappings, sizeof(kClearMappings)},
-                                    {kQuietSettings, sizeof(kQuietSettings)}};
-    static const Pkt kRestoreSeq[] = {{kDefaultMappings, sizeof(kDefaultMappings)},
-                                      {kDefaultSettings, sizeof(kDefaultSettings)},
-                                      {kRestoreMouse, sizeof(kRestoreMouse)}};
+// Steam Controller framing is {message id, payload length, payload}. The message ids and the
+// choice of the shortest working sequence follow the Linux hid-steam driver.
+constexpr uint8_t kSteamClearMappings[] = {0x81, 0x00};
 
+// Left and right trackpad mode = none (which kills mouse emulation), IMU mode = raw accel | raw
+// gyro.
+constexpr uint8_t kSteamQuietSettings[] = {0x87, 0x09, 0x07, 0x07, 0x00, 0x08,
+                                           0x07, 0x00, 0x30, 0x18, 0x00};
+
+constexpr uint8_t kSteamDefaultMappings[] = {0x85, 0x00};
+constexpr uint8_t kSteamDefaultSettings[] = {0x8E, 0x00};
+
+// Loading the defaults does not by itself hand the right pad back as a mouse: SDL follows it with
+// an explicit right trackpad mode = absolute mouse, and leaving that out is the one way this
+// teardown could still return a pad its owner cannot use.
+constexpr uint8_t kSteamRestoreMouse[] = {0x87, 0x03, 0x08, 0x00, 0x00};
+
+constexpr InitPacket kSteamQuietSeq[] = {
+    {kSteamClearMappings, sizeof(kSteamClearMappings)},
+    {kSteamQuietSettings, sizeof(kSteamQuietSettings)},
+};
+
+constexpr InitPacket kSteamRestoreSeq[] = {
+    {kSteamDefaultMappings, sizeof(kSteamDefaultMappings)},
+    {kSteamDefaultSettings, sizeof(kSteamDefaultSettings)},
+    {kSteamRestoreMouse, sizeof(kSteamRestoreMouse)},
+};
+
+InitSequence steamSequenceFor(const SteamConfig stage) {
     const bool quiet = stage == SteamConfig::QUIET;
-    const Pkt* seqArr = quiet ? kQuietSeq : kRestoreSeq;
-    const int seqLen = quiet ? (int)(sizeof(kQuietSeq) / sizeof(kQuietSeq[0]))
-                             : (int)(sizeof(kRestoreSeq) / sizeof(kRestoreSeq[0]));
-    if (index < 0 || index >= seqLen) return 0;
-    size_t len = seqArr[index].len;
-    if (len > outCap) return 0;
-    memcpy(out, seqArr[index].data, len);
-    return len;
+    if (quiet) return {kSteamQuietSeq, countOf(kSteamQuietSeq)};
+    return {kSteamRestoreSeq, countOf(kSteamRestoreSeq)};
 }
+
+} // namespace
+
+size_t buildSteamConfigPacket(const SteamConfig stage, const int index, uint8_t* out,
+                              const size_t outCap) {
+    return copyInitPacket(steamSequenceFor(stage), index, out, outCap);
+}
+
+namespace {
 
 // Per-device rumble output reports. Motor convention: strong = large/low-frequency (left), weak =
 // small/high-frequency (right), both wire-scale 0..65535. Report layouts and sources (Linux xpad,
 // hid-playstation, hid-nintendo) are documented in docs/rumble.md.
-size_t buildRumbleReport(Parser p, uint16_t strong, uint16_t weak, uint8_t seq, uint8_t* out,
-                         size_t outCap) {
+
+// Xbox 360 wired: {type, length 0x08, 0, strong, weak, 0, 0, 0}.
+constexpr uint8_t kX360RumbleTemplate[] = {0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+constexpr size_t kX360RumbleStrongByte = 3;
+constexpr size_t kX360RumbleWeakByte = 4;
+
+// Xbox 360 wireless receiver: the motor levels wrapped in the xpad360w frame.
+constexpr uint8_t kX360WirelessRumbleTemplate[] = {0x00, 0x01, 0x0F, 0xC0, 0x00, 0x00,
+                                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+constexpr size_t kX360WirelessRumbleStrongByte = 5;
+constexpr size_t kX360WirelessRumbleWeakByte = 6;
+
+// GIP rumble command: the sequence at [2], the motor mask 0x0F at [5] addressing all four motors,
+// then the left trigger, right trigger, strong and weak levels, one byte each.
+constexpr uint8_t kGipRumbleTemplate[] = {0x09, 0x00, 0x00, 0x09, 0x00, 0x0F, 0x00,
+                                          0x00, 0x00, 0x00, 0xFF, 0x00, 0xFF};
+constexpr size_t kGipRumbleSeqByte = 2;
+constexpr size_t kGipRumbleLeftTriggerByte = 6;
+constexpr size_t kGipRumbleRightTriggerByte = 7;
+constexpr size_t kGipRumbleStrongByte = 8;
+constexpr size_t kGipRumbleWeakByte = 9;
+constexpr uint16_t kGipMotorDivisor = 512;
+
+// DualShock 4 output report 0x05: the valid flags at [1], weak then strong at [4]/[5], RGB from
+// [6]. A colour write claims only the lightbar, so it never stomps a live rumble.
+constexpr uint8_t kDs4OutputReportId = 0x05;
+constexpr size_t kDs4OutputReportLen = 32;
+constexpr size_t kDs4ValidFlagsByte = 1;
+constexpr uint8_t kDs4ValidFlagMotors = 0x01;
+constexpr uint8_t kDs4ValidFlagLightbar = 0x02;
+constexpr size_t kDs4WeakMotorByte = 4;
+constexpr size_t kDs4StrongMotorByte = 5;
+constexpr size_t kDs4LightbarByte = 6;
+
+// DualSense output report 0x02 field offsets and flag bits, in this file's convention: the report
+// id lives at out[0], so these are hid-playstation's RID-stripped offsets plus one.
+constexpr uint8_t kDs5OutputReportId = 0x02;
+constexpr size_t kDs5OutputReportLen = 63;
+constexpr size_t kDs5ValidFlag0Byte = 1;
+constexpr uint8_t kDs5ValidFlag0Motors = 0x01;
+constexpr uint8_t kDs5ValidFlag0TriggerRight = 0x04;
+constexpr uint8_t kDs5ValidFlag0TriggerLeft = 0x08;
+constexpr size_t kDs5ValidFlag1Byte = 2;
+constexpr uint8_t kDs5ValidFlag1MicMuteLed = 0x01;
+constexpr uint8_t kDs5ValidFlag1PowerSave = 0x02;
+constexpr uint8_t kDs5ValidFlag1Lightbar = 0x04;
+constexpr uint8_t kDs5ValidFlag1PlayerLeds = 0x10;
+constexpr size_t kDs5WeakMotorByte = 3;
+constexpr size_t kDs5StrongMotorByte = 4;
+constexpr size_t kDs5MicMuteLedByte = 9;
+constexpr size_t kDs5PowerSaveByte = 10;
+constexpr uint8_t kDs5PowerSaveMicMute = 0x10;
+constexpr size_t kDs5TriggerRightOffset = 11;
+constexpr size_t kDs5TriggerLeftOffset = 22;
+constexpr size_t kDs5ValidFlag2Byte = 39;
+constexpr uint8_t kDs5ValidFlag2LightbarSetup = 0x02;
+constexpr size_t kDs5LightbarSetupByte = 42;
+// LIGHTBAR_SETUP light-out stops the firmware's own blue glow so the host colour shows; a one-time
+// handoff, as hid-playstation does at probe.
+constexpr uint8_t kDs5LightbarSetupLightOut = 0x02;
+constexpr size_t kDs5PlayerLedByte = 44;
+constexpr uint8_t kDs5PlayerLedMask = 0x1F;
+constexpr size_t kDs5LightbarByte = 45;
+
+// Switch Pro: the rumble-only report 0x10 and the rumble + subcommand report 0x01 both carry the
+// 4-bit packet counter at [1] and the two 4-byte HD-rumble blocks from [2] and [6].
+constexpr uint8_t kSwitchRumbleReport = 0x10;
+constexpr size_t kSwitchRumbleReportLen = 10;
+constexpr uint8_t kSwitchSubcommandReport = 0x01;
+constexpr size_t kSwitchSubcommandReportLen = 12;
+constexpr size_t kSwitchCounterByte = 1;
+constexpr uint8_t kSwitchPacketCounterMask = 0x0F;
+constexpr size_t kSwitchLeftMotorOffset = 2;
+constexpr size_t kSwitchRightMotorOffset = 6;
+constexpr size_t kSwitchSubcommandByte = 10;
+constexpr size_t kSwitchSubcommandArgByte = 11;
+constexpr uint8_t kSwitchSubcmdPlayerLights = 0x30;
+constexpr uint8_t kSwitchPlayerLedMask = 0x0F;
+
+uint8_t gipMotorLevel(const uint16_t wireLevel) { return (uint8_t)(wireLevel / kGipMotorDivisor); }
+
+// Copies a fixed report template into out; 0 when it does not fit.
+template <size_t N>
+size_t startFromTemplate(const uint8_t (&tmpl)[N], uint8_t* out, const size_t outCap) {
+    if (outCap < N) return 0;
+    memcpy(out, tmpl, N);
+    return N;
+}
+
+// Zeroes a report of `len` bytes and stamps its id; 0 when it does not fit.
+size_t startZeroedReport(const uint8_t reportId, const size_t len, uint8_t* out,
+                         const size_t outCap) {
+    if (outCap < len) return 0;
+    memset(out, 0, len);
+    out[0] = reportId;
+    return len;
+}
+
+size_t buildX360Rumble(const uint16_t strong, const uint16_t weak, uint8_t* out,
+                       const size_t outCap) {
+    const size_t n = startFromTemplate(kX360RumbleTemplate, out, outCap);
+    if (n == 0) return 0;
+    out[kX360RumbleStrongByte] = highByte(strong);
+    out[kX360RumbleWeakByte] = highByte(weak);
+    return n;
+}
+
+size_t buildX360WirelessRumble(const uint16_t strong, const uint16_t weak, uint8_t* out,
+                               const size_t outCap) {
+    const size_t n = startFromTemplate(kX360WirelessRumbleTemplate, out, outCap);
+    if (n == 0) return 0;
+    out[kX360WirelessRumbleStrongByte] = highByte(strong);
+    out[kX360WirelessRumbleWeakByte] = highByte(weak);
+    return n;
+}
+
+// One report drives all four GIP motors, so every write carries all four levels.
+size_t buildGipRumble(const uint8_t seq, const uint16_t leftTrigger, const uint16_t rightTrigger,
+                      const uint16_t strong, const uint16_t weak, uint8_t* out,
+                      const size_t outCap) {
+    const size_t n = startFromTemplate(kGipRumbleTemplate, out, outCap);
+    if (n == 0) return 0;
+    out[kGipRumbleSeqByte] = seq;
+    out[kGipRumbleLeftTriggerByte] = gipMotorLevel(leftTrigger);
+    out[kGipRumbleRightTriggerByte] = gipMotorLevel(rightTrigger);
+    out[kGipRumbleStrongByte] = gipMotorLevel(strong);
+    out[kGipRumbleWeakByte] = gipMotorLevel(weak);
+    return n;
+}
+
+size_t buildDs4Rumble(const uint16_t strong, const uint16_t weak, uint8_t* out,
+                      const size_t outCap) {
+    const size_t n = startZeroedReport(kDs4OutputReportId, kDs4OutputReportLen, out, outCap);
+    if (n == 0) return 0;
+    out[kDs4ValidFlagsByte] = kDs4ValidFlagMotors;
+    out[kDs4WeakMotorByte] = highByte(weak);
+    out[kDs4StrongMotorByte] = highByte(strong);
+    return n;
+}
+
+size_t buildDs5Rumble(const uint16_t strong, const uint16_t weak, uint8_t* out,
+                      const size_t outCap) {
+    const size_t n = startZeroedReport(kDs5OutputReportId, kDs5OutputReportLen, out, outCap);
+    if (n == 0) return 0;
+    out[kDs5ValidFlag0Byte] = kDs5ValidFlag0Motors;
+    out[kDs5WeakMotorByte] = highByte(weak);
+    out[kDs5StrongMotorByte] = highByte(strong);
+    return n;
+}
+
+size_t buildSwitchRumble(const uint16_t strong, const uint16_t weak, const uint8_t seq,
+                         uint8_t* out, const size_t outCap) {
+    const size_t n = startZeroedReport(kSwitchRumbleReport, kSwitchRumbleReportLen, out, outCap);
+    if (n == 0) return 0;
+    out[kSwitchCounterByte] = (uint8_t)(seq & kSwitchPacketCounterMask);
+    switchEncodeMotor(&out[kSwitchLeftMotorOffset], strong);
+    switchEncodeMotor(&out[kSwitchRightMotorOffset], weak);
+    return n;
+}
+
+// Stamps the shadowed lamp onto a DualSense 0x02 report built for something else; the firmware
+// applies whatever the valid flags claim, and every builder here starts from a zeroed report. The
+// power-save bit rides along because the lamp and the microphone amplifier are one thing on this
+// pad, and pulse counts as lit.
+void reassertDs5MicMuteLed(const FeedbackState& st, uint8_t* out) {
+    if (!st.ds5MicMuteLedSet) return;
+    out[kDs5ValidFlag1Byte] |= kDs5ValidFlag1MicMuteLed | kDs5ValidFlag1PowerSave;
+    out[kDs5MicMuteLedByte] = st.ds5MicMuteLed;
+    const bool lampIsLit = st.ds5MicMuteLed != MIC_MUTE_LED_OFF;
+    out[kDs5PowerSaveByte] = lampIsLit ? kDs5PowerSaveMicMute : 0x00;
+}
+
+size_t buildDs4Lightbar(const uint8_t r, const uint8_t g, const uint8_t b, uint8_t* out,
+                        const size_t outCap) {
+    const size_t n = startZeroedReport(kDs4OutputReportId, kDs4OutputReportLen, out, outCap);
+    if (n == 0) return 0;
+    out[kDs4ValidFlagsByte] = kDs4ValidFlagLightbar;
+    out[kDs4LightbarByte] = r;
+    out[kDs4LightbarByte + 1] = g;
+    out[kDs4LightbarByte + 2] = b;
+    return n;
+}
+
+size_t buildDs5Lightbar(FeedbackState& st, const uint8_t r, const uint8_t g, const uint8_t b,
+                        uint8_t* out, const size_t outCap) {
+    const size_t n = startZeroedReport(kDs5OutputReportId, kDs5OutputReportLen, out, outCap);
+    if (n == 0) return 0;
+    out[kDs5ValidFlag1Byte] = kDs5ValidFlag1Lightbar;
+    if (!st.ds5LightbarSetupSent) {
+        out[kDs5ValidFlag2Byte] = kDs5ValidFlag2LightbarSetup;
+        out[kDs5LightbarSetupByte] = kDs5LightbarSetupLightOut;
+        st.ds5LightbarSetupSent = true;
+    }
+    out[kDs5LightbarByte] = r;
+    out[kDs5LightbarByte + 1] = g;
+    out[kDs5LightbarByte + 2] = b;
+    reassertDs5MicMuteLed(st, out);
+    return n;
+}
+
+size_t buildDs5PlayerLeds(const FeedbackState& st, const uint8_t ledMask, uint8_t* out,
+                          const size_t outCap) {
+    const size_t n = startZeroedReport(kDs5OutputReportId, kDs5OutputReportLen, out, outCap);
+    if (n == 0) return 0;
+    out[kDs5ValidFlag1Byte] = kDs5ValidFlag1PlayerLeds;
+    out[kDs5PlayerLedByte] = (uint8_t)(ledMask & kDs5PlayerLedMask);
+    reassertDs5MicMuteLed(st, out);
+    return n;
+}
+
+// The player-lights subcommand rides the rumble+subcommand report; neutral HD-rumble blocks keep
+// the motors untouched.
+size_t buildSwitchPlayerLeds(const uint8_t ledMask, const uint8_t seq, uint8_t* out,
+                             const size_t outCap) {
+    if (outCap < kSwitchSubcommandReportLen) return 0;
+    out[0] = kSwitchSubcommandReport;
+    out[kSwitchCounterByte] = (uint8_t)(seq & kSwitchPacketCounterMask);
+    switchEncodeMotor(&out[kSwitchLeftMotorOffset], 0);
+    switchEncodeMotor(&out[kSwitchRightMotorOffset], 0);
+    out[kSwitchSubcommandByte] = kSwitchSubcmdPlayerLights;
+    out[kSwitchSubcommandArgByte] = (uint8_t)(ledMask & kSwitchPlayerLedMask);
+    return kSwitchSubcommandReportLen;
+}
+
+} // namespace
+
+size_t buildRumbleReport(const Parser p, const uint16_t strong, const uint16_t weak,
+                         const uint8_t seq, uint8_t* out, const size_t outCap) {
     switch (p) {
     case Parser::XINPUT_360:
-        if (outCap < 8) return 0;
-        out[0] = 0x00;
-        out[1] = 0x08;
-        out[2] = 0x00;
-        out[3] = (uint8_t)(strong >> 8);
-        out[4] = (uint8_t)(weak >> 8);
-        out[5] = 0x00;
-        out[6] = 0x00;
-        out[7] = 0x00;
-        return 8;
+        return buildX360Rumble(strong, weak, out, outCap);
     case Parser::XINPUT_360_WIRELESS:
-        // Wireless receivers wrap the motor levels in a 12-byte frame (Linux xpad xpad360w).
-        if (outCap < 12) return 0;
-        out[0] = 0x00;
-        out[1] = 0x01;
-        out[2] = 0x0F;
-        out[3] = 0xC0;
-        out[4] = 0x00;
-        out[5] = (uint8_t)(strong >> 8);
-        out[6] = (uint8_t)(weak >> 8);
-        out[7] = 0x00;
-        out[8] = 0x00;
-        out[9] = 0x00;
-        out[10] = 0x00;
-        out[11] = 0x00;
-        return 12;
+        return buildX360WirelessRumble(strong, weak, out, outCap);
     case Parser::XBOX_ONE_GIP:
-        if (outCap < 13) return 0;
-        out[0] = 0x09;
-        out[1] = 0x00;
-        out[2] = seq;
-        out[3] = 0x09;
-        out[4] = 0x00;
-        out[5] = 0x0F;
-        out[6] = 0x00;
-        out[7] = 0x00;
-        out[8] = (uint8_t)(strong / 512);
-        out[9] = (uint8_t)(weak / 512);
-        out[10] = 0xFF;
-        out[11] = 0x00;
-        out[12] = 0xFF;
-        return 13;
+        return buildGipRumble(seq, 0, 0, strong, weak, out, outCap);
     case Parser::DUALSHOCK4:
-        if (outCap < 32) return 0;
-        memset(out, 0, 32);
-        out[0] = 0x05;
-        out[1] = 0x01;
-        out[4] = (uint8_t)(weak >> 8);
-        out[5] = (uint8_t)(strong >> 8);
-        return 32;
+        return buildDs4Rumble(strong, weak, out, outCap);
     case Parser::DUALSENSE:
-        if (outCap < 63) return 0;
-        memset(out, 0, 63);
-        out[0] = 0x02;
-        out[1] = 0x01;
-        out[3] = (uint8_t)(weak >> 8);
-        out[4] = (uint8_t)(strong >> 8);
-        return 63;
+        return buildDs5Rumble(strong, weak, out, outCap);
     case Parser::SWITCH_PRO_USB:
-        if (outCap < 10) return 0;
-        memset(out, 0, 10);
-        out[0] = 0x10;
-        out[1] = (uint8_t)(seq & 0x0F);
-        switchEncodeMotor(&out[2], strong);
-        switchEncodeMotor(&out[6], weak);
-        return 10;
+        return buildSwitchRumble(strong, weak, seq, out, outCap);
     case Parser::STEAM_CONTROLLER:
     case Parser::STADIA:
     case Parser::GENERIC_HID_GAMEPAD:
@@ -1508,312 +1954,285 @@ size_t buildRumbleReport(Parser p, uint16_t strong, uint16_t weak, uint8_t seq, 
     return 0;
 }
 
-bool parserHasLightbar(Parser p) { return p == Parser::DUALSHOCK4 || p == Parser::DUALSENSE; }
+bool parserHasLightbar(const Parser p) { return p == Parser::DUALSHOCK4 || p == Parser::DUALSENSE; }
 
-bool parserHasPlayerLeds(Parser p) { return p == Parser::DUALSENSE || p == Parser::SWITCH_PRO_USB; }
-
-bool parserHasTriggerEffects(Parser p) { return p == Parser::DUALSENSE; }
-
-bool parserHasHapticLanes(Parser p) { return p == Parser::DUALSENSE; }
-
-bool parserHasTriggerRumble(Parser p) { return p == Parser::XBOX_ONE_GIP; }
-
-bool parserHasMicMuteLed(Parser p) { return p == Parser::DUALSENSE; }
-
-// DualSense output report 0x02 field offsets and flag bits, in this file's convention: the report
-// id lives at out[0], so these are hid-playstation's RID-stripped 8 and 9 plus one, the same shift
-// the player-LED byte carries (out[44] against stripped 43).
-static constexpr size_t kDs5MicMuteLedByte = 9;
-static constexpr size_t kDs5PowerSaveByte = 10;
-static constexpr uint8_t kDs5ValidFlag1MicMuteLed = 0x01;
-static constexpr uint8_t kDs5ValidFlag1PowerSave = 0x02;
-static constexpr uint8_t kDs5PowerSaveMicMute = 0x10;
-
-// Stamp the shadowed lamp onto a DualSense 0x02 report that was built for something else. Every
-// builder here memsets a fresh report, and the firmware applies whatever the valid flags claim, so
-// without this a colour or player-LED write would be a lamp write too: flags set, field zero.
-// A pad whose lamp the host never drove is left alone, so nothing changes for hosts that do not
-// use it.
-//
-// The power-save bit rides along because the lamp and the microphone amplifier are one thing on
-// this pad: a lit mute lamp over a live microphone is the one failure this whole feature exists to
-// prevent. Pulse counts as lit for the same reason; it is the rarer state and the honest reading of
-// a lamp the user can see.
-static void reassertDs5MicMuteLed(const FeedbackState& st, uint8_t* out) {
-    if (!st.ds5MicMuteLedSet) return;
-    out[2] |= kDs5ValidFlag1MicMuteLed | kDs5ValidFlag1PowerSave;
-    out[kDs5MicMuteLedByte] = st.ds5MicMuteLed;
-    out[kDs5PowerSaveByte] = st.ds5MicMuteLed == MIC_MUTE_LED_OFF ? 0x00 : kDs5PowerSaveMicMute;
+bool parserHasPlayerLeds(const Parser p) {
+    return p == Parser::DUALSENSE || p == Parser::SWITCH_PRO_USB;
 }
 
-size_t buildMergedRumbleReport(Parser p, FeedbackState& st, uint8_t seq, uint8_t* out,
-                               size_t outCap) {
-    if (p != Parser::XBOX_ONE_GIP) {
-        size_t n = buildRumbleReport(p, st.strong, st.weak, seq, out, outCap);
-        if (n != 0 && p == Parser::DUALSENSE) reassertDs5MicMuteLed(st, out);
+bool parserHasTriggerEffects(const Parser p) { return p == Parser::DUALSENSE; }
+
+bool parserHasHapticLanes(const Parser p) { return p == Parser::DUALSENSE; }
+
+bool parserHasTriggerRumble(const Parser p) { return p == Parser::XBOX_ONE_GIP; }
+
+bool parserHasMicMuteLed(const Parser p) { return p == Parser::DUALSENSE; }
+
+size_t buildMergedRumbleReport(const Parser p, FeedbackState& st, const uint8_t seq, uint8_t* out,
+                               const size_t outCap) {
+    switch (p) {
+    case Parser::XBOX_ONE_GIP:
+        return buildGipRumble(seq, st.leftTrigger, st.rightTrigger, st.strong, st.weak, out,
+                              outCap);
+    case Parser::DUALSENSE: {
+        const size_t n = buildDs5Rumble(st.strong, st.weak, out, outCap);
+        if (n != 0) reassertDs5MicMuteLed(st, out);
         return n;
     }
-    // GIP: one report drives all four motors (mask 0x0F), so the merged state rides every write;
-    // a trigger-only change must not zero the main motors and vice versa.
-    if (outCap < 13) return 0;
-    out[0] = 0x09;
-    out[1] = 0x00;
-    out[2] = seq;
-    out[3] = 0x09;
-    out[4] = 0x00;
-    out[5] = 0x0F;
-    out[6] = (uint8_t)(st.leftTrigger / 512);
-    out[7] = (uint8_t)(st.rightTrigger / 512);
-    out[8] = (uint8_t)(st.strong / 512);
-    out[9] = (uint8_t)(st.weak / 512);
-    out[10] = 0xFF;
-    out[11] = 0x00;
-    out[12] = 0xFF;
-    return 13;
+    case Parser::XINPUT_360:
+    case Parser::XINPUT_360_WIRELESS:
+    case Parser::DUALSHOCK4:
+    case Parser::SWITCH_PRO_USB:
+    case Parser::STEAM_CONTROLLER:
+    case Parser::STADIA:
+    case Parser::GENERIC_HID_GAMEPAD:
+    case Parser::NONE:
+        return buildRumbleReport(p, st.strong, st.weak, seq, out, outCap);
+    }
+    return 0;
 }
 
-size_t buildLightbarReport(Parser p, FeedbackState& st, uint8_t r, uint8_t g, uint8_t b,
-                           uint8_t* out, size_t outCap) {
+size_t buildLightbarReport(const Parser p, FeedbackState& st, const uint8_t r, const uint8_t g,
+                           const uint8_t b, uint8_t* out, const size_t outCap) {
     switch (p) {
     case Parser::DUALSHOCK4:
-        // Flag 0x02 alone: the motor fields are marked invalid, so a colour write never stomps a
-        // live rumble.
-        if (outCap < 32) return 0;
-        memset(out, 0, 32);
-        out[0] = 0x05;
-        out[1] = 0x02;
-        out[6] = r;
-        out[7] = g;
-        out[8] = b;
-        return 32;
+        return buildDs4Lightbar(r, g, b, out, outCap);
     case Parser::DUALSENSE:
-        if (outCap < 63) return 0;
-        memset(out, 0, 63);
-        out[0] = 0x02;
-        out[2] = 0x04; // valid_flag1 LIGHTBAR_CONTROL_ENABLE
-        if (!st.ds5LightbarSetupSent) {
-            // One-time handoff (hid-playstation does the same at probe): LIGHTBAR_SETUP light-out
-            // stops the firmware's own blue glow so the host colour actually shows.
-            out[39] = 0x02; // valid_flag2 LIGHTBAR_SETUP_CONTROL_ENABLE
-            out[42] = 0x02; // lightbar_setup = LIGHT_OUT
-            st.ds5LightbarSetupSent = true;
-        }
-        out[45] = r;
-        out[46] = g;
-        out[47] = b;
-        reassertDs5MicMuteLed(st, out);
-        return 63;
+        return buildDs5Lightbar(st, r, g, b, out, outCap);
     default:
         return 0;
     }
 }
 
-size_t buildPlayerLedsReport(Parser p, const FeedbackState& st, uint8_t ledMask, uint8_t seq,
-                             uint8_t* out, size_t outCap) {
+size_t buildPlayerLedsReport(const Parser p, const FeedbackState& st, const uint8_t ledMask,
+                             const uint8_t seq, uint8_t* out, const size_t outCap) {
     switch (p) {
     case Parser::DUALSENSE:
-        if (outCap < 63) return 0;
-        memset(out, 0, 63);
-        out[0] = 0x02;
-        out[2] = 0x10; // valid_flag1 PLAYER_INDICATOR_CONTROL_ENABLE
-        out[44] = (uint8_t)(ledMask & 0x1F);
-        reassertDs5MicMuteLed(st, out);
-        return 63;
+        return buildDs5PlayerLeds(st, ledMask, out, outCap);
     case Parser::SWITCH_PRO_USB:
-        // Subcommand 0x30 rides the 0x01 rumble+subcommand report; neutral HD-rumble blocks keep
-        // the motors untouched.
-        if (outCap < 12) return 0;
-        out[0] = 0x01;
-        out[1] = (uint8_t)(seq & 0x0F);
-        switchEncodeMotor(&out[2], 0);
-        switchEncodeMotor(&out[6], 0);
-        out[10] = 0x30;
-        out[11] = (uint8_t)(ledMask & 0x0F);
-        return 12;
+        return buildSwitchPlayerLeds(ledMask, seq, out, outCap);
     default:
         return 0;
     }
 }
 
-size_t buildTriggerEffectsReport(Parser p, const FeedbackState& st,
+size_t buildTriggerEffectsReport(const Parser p, const FeedbackState& st,
                                  const uint8_t left[TRIGGER_EFFECT_BLOCK_LEN],
                                  const uint8_t right[TRIGGER_EFFECT_BLOCK_LEN], uint8_t* out,
-                                 size_t outCap) {
+                                 const size_t outCap) {
     if (p != Parser::DUALSENSE) return 0;
-    if (outCap < 63) return 0;
-    memset(out, 0, 63);
-    out[0] = 0x02;
-    out[1] = 0x04 | 0x08; // valid_flag0: right + left trigger-effect blocks
-    memcpy(out + 11, right, TRIGGER_EFFECT_BLOCK_LEN);
-    memcpy(out + 22, left, TRIGGER_EFFECT_BLOCK_LEN);
+    const size_t n = startZeroedReport(kDs5OutputReportId, kDs5OutputReportLen, out, outCap);
+    if (n == 0) return 0;
+    out[kDs5ValidFlag0Byte] = kDs5ValidFlag0TriggerRight | kDs5ValidFlag0TriggerLeft;
+    memcpy(out + kDs5TriggerRightOffset, right, TRIGGER_EFFECT_BLOCK_LEN);
+    memcpy(out + kDs5TriggerLeftOffset, left, TRIGGER_EFFECT_BLOCK_LEN);
     reassertDs5MicMuteLed(st, out);
-    return 63;
+    return n;
 }
 
-size_t buildMicMuteLedReport(Parser p, FeedbackState& st, uint8_t state, uint8_t* out,
-                             size_t outCap) {
+size_t buildMicMuteLedReport(const Parser p, FeedbackState& st, const uint8_t state, uint8_t* out,
+                             const size_t outCap) {
     if (p != Parser::DUALSENSE) return 0;
-    // A state past pulse can only come from a host speaking something newer than this client, and
-    // the JNI receive arm already dropped it; refusing again here keeps the builder honest for any
-    // other caller rather than inventing a lamp the pad would show.
     if (state > MIC_MUTE_LED_PULSE) return 0;
-    if (outCap < 63) return 0;
+    if (outCap < kDs5OutputReportLen) return 0;
     st.ds5MicMuteLed = state;
     st.ds5MicMuteLedSet = true;
-    memset(out, 0, 63);
-    out[0] = 0x02;
-    // The whole report body is the re-assert: one code path writes the lamp, whichever builder
-    // asked for it.
+    startZeroedReport(kDs5OutputReportId, kDs5OutputReportLen, out, outCap);
     reassertDs5MicMuteLed(st, out);
-    return 63;
+    return kDs5OutputReportLen;
 }
 
 #ifdef __ANDROID__
-bool runInit(int fd, int interfaceNumber, uint8_t epOut, InitKind init) {
+namespace {
+
+constexpr size_t kInitPacketMaxBytes = 16;
+constexpr size_t kOutReportMaxBytes = 64;
+constexpr unsigned kGipWriteTimeoutMs = 200;
+constexpr unsigned kOutWriteTimeoutMs = 100;
+constexpr unsigned kGipInterPacketUs = 10000;
+constexpr unsigned kSwitchStatusTimeoutMs = 100;
+constexpr unsigned kSwitchModeTimeoutMs = 200;
+
+bool runSteamQuietInit(const int fd, const int interfaceNumber) {
+    uint8_t buf[kInitPacketMaxBytes];
+    for (int i = 0;; i++) {
+        const size_t n = buildSteamConfigPacket(SteamConfig::QUIET, i, buf, sizeof(buf));
+        if (n == 0) break;
+        if (!sendFeatureReport(fd, interfaceNumber, buf, n)) {
+            logError("Steam Controller: quiet-mode packet %d failed", i);
+            return false;
+        }
+    }
+    logInfo("Steam Controller quiet-mode sequence sent");
+    return true;
+}
+
+// GIP init: power-on tells the pad to start sending input reports; the rest of the sequence (LED,
+// auth-done, and the S set-mode) starts the models the lone power-on left silent.
+bool runGipInit(const int fd, const uint8_t epOut, const InitKind init) {
+    uint8_t buf[kInitPacketMaxBytes];
+    for (int i = 0;; i++) {
+        const size_t n = buildGipInitPacket(init, i, (uint8_t)i, buf, sizeof(buf));
+        if (n == 0) break;
+        const bool ok = bulkWrite(fd, epOut, buf, n, kGipWriteTimeoutMs);
+        const bool powerOnFailed = i == 0 && !ok;
+        if (powerOnFailed) {
+            logError("Xbox One power-on write failed");
+            return false;
+        }
+        usleep(kGipInterPacketUs);
+    }
+    return true;
+}
+
+// Status request. The Pro answers with controller info on its IN endpoint; the reply is never
+// read. Sending the request is what moves the device out of whatever residual state the kernel
+// driver left it in when the interface was stolen.
+constexpr uint8_t kSwitchStatus[] = {0x80, 0x02};
+
+// Without this the controller sleeps after a few seconds of idle and stops emitting reports.
+constexpr uint8_t kSwitchDisableTimeout[] = {0x80, 0x04};
+
+// Input report mode 0x30 (standard full report: buttons + sticks + IMU), carried as one rumble +
+// subcommand HID output report: report id 0x01, packet counter, 8-byte neutral rumble pattern,
+// subcommand id 0x03, argument 0x30.
+constexpr uint8_t kSwitchSetReportMode[] = {
+    0x01, 0x00, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x03, 0x30,
+};
+
+// Subcommand 0x48 arg 0x01, so later rumble-only (0x10) reports take effect.
+constexpr uint8_t kSwitchEnableVibration[] = {
+    0x01, 0x01, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x48, 0x01,
+};
+
+constexpr unsigned kSwitchInitSettleUs = 40000;
+
+struct SwitchInitStep {
+    const uint8_t* packet;
+    size_t length;
+    unsigned timeoutMs;
+    unsigned settleUs;
+    bool isFatal;
+    const char* what;
+};
+
+// A fatal step failing leaves the pad unusable, so the sequence stops; the other two only cost a
+// feature and the pad still streams without them.
+constexpr SwitchInitStep kSwitchInitSequence[] = {
+    {kSwitchStatus, sizeof(kSwitchStatus), kSwitchStatusTimeoutMs, kSwitchInitSettleUs, true,
+     "status request"},
+    {kSwitchDisableTimeout, sizeof(kSwitchDisableTimeout), kSwitchStatusTimeoutMs,
+     kSwitchInitSettleUs, false, "disable-timeout write"},
+    {kSwitchSetReportMode, sizeof(kSwitchSetReportMode), kSwitchModeTimeoutMs, kSwitchInitSettleUs,
+     true, "set-report-mode write"},
+    {kSwitchEnableVibration, sizeof(kSwitchEnableVibration), kSwitchModeTimeoutMs, 0, false,
+     "enable-vibration write"},
+};
+
+bool runSwitchInitStep(const int fd, const uint8_t epOut, const SwitchInitStep& step) {
+    const bool sent = bulkWrite(fd, epOut, step.packet, step.length, step.timeoutMs);
+    if (!sent && step.isFatal) {
+        logError("Switch Pro: %s failed", step.what);
+        return false;
+    }
+    if (!sent) logInfo("Switch Pro: %s failed (non-fatal)", step.what);
+    if (step.settleUs != 0) usleep(step.settleUs);
+    return true;
+}
+
+bool runSwitchProHandshake(const int fd, const uint8_t epOut) {
+    if (epOut == 0) {
+        logError("Switch Pro: no OUT endpoint, cannot init");
+        return false;
+    }
+    for (const SwitchInitStep& step : kSwitchInitSequence) {
+        if (!runSwitchInitStep(fd, epOut, step)) return false;
+    }
+    logInfo("Switch Pro USB init sequence sent");
+    return true;
+}
+
+// One OUT report, as built by the feedback builders: nothing to write is a refusal, not a no-op.
+bool writeOutReport(const int fd, const uint8_t epOut, const uint8_t* buf, const size_t n) {
+    if (n == 0) return false;
+    return bulkWrite(fd, epOut, buf, n, kOutWriteTimeoutMs);
+}
+
+} // namespace
+
+bool runInit(const int fd, const int interfaceNumber, const uint8_t epOut, const InitKind init) {
     switch (init) {
     case InitKind::NONE:
         return true;
-    case InitKind::STEAM_QUIET: {
-        uint8_t buf[16];
-        for (int i = 0;; i++) {
-            size_t n = buildSteamConfigPacket(SteamConfig::QUIET, i, buf, sizeof(buf));
-            if (n == 0) break;
-            if (!sendFeatureReport(fd, interfaceNumber, buf, n)) {
-                LOGE("Steam Controller: quiet-mode packet %d failed", i);
-                return false;
-            }
-        }
-        LOGI("Steam Controller quiet-mode sequence sent");
-        return true;
-    }
+    case InitKind::STEAM_QUIET:
+        return runSteamQuietInit(fd, interfaceNumber);
     case InitKind::XBOX_ONE_POWERON:
-    case InitKind::XBOX_ONE_S: {
-        // GIP init: power-on tells the pad to start sending input reports; the rest of the sequence
-        // (LED, auth-done, and the S set-mode) starts the models the lone power-on left silent.
-        uint8_t buf[16];
-        for (int i = 0;; i++) {
-            size_t n = buildGipInitPacket(init, i, (uint8_t)i, buf, sizeof(buf));
-            if (n == 0) break;
-            bool ok = bulkWrite(fd, epOut, buf, n, 200);
-            if (i == 0 && !ok) {
-                LOGE("Xbox One power-on write failed");
-                return false;
-            }
-            usleep(10000);
-        }
-        return true;
-    }
-    case InitKind::SWITCH_PRO_HANDSHAKE: {
-        if (epOut == 0) {
-            LOGE("Switch Pro: no OUT endpoint, cannot init");
-            return false;
-        }
-        // Status request. The Pro responds with controller info on its IN endpoint; we don't
-        // need to read the reply, only send the request so the device transitions out of any
-        // residual state the kernel driver left it in when we stole the interface.
-        static const uint8_t kStatus[] = {0x80, 0x02};
-        if (!bulkWrite(fd, epOut, kStatus, sizeof(kStatus), 100)) {
-            LOGE("Switch Pro: status request failed");
-            return false;
-        }
-        usleep(40000);
-
-        // Disable USB timeout. Without this the controller sleeps after a few seconds of idle
-        // and stops emitting input reports.
-        static const uint8_t kDisableTimeout[] = {0x80, 0x04};
-        if (!bulkWrite(fd, epOut, kDisableTimeout, sizeof(kDisableTimeout), 100)) {
-            LOGI("Switch Pro: disable-timeout write failed (non-fatal)");
-        }
-        usleep(40000);
-
-        // Set input report mode 0x30 (standard full report: buttons + sticks + IMU). The format
-        // is one rumble + subcommand HID output report: report id 0x01, packet counter, 8-byte
-        // neutral rumble pattern, subcommand id 0x03, argument 0x30.
-        uint8_t setReportMode[] = {
-            0x01, 0x00, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x03, 0x30,
-        };
-        if (!bulkWrite(fd, epOut, setReportMode, sizeof(setReportMode), 200)) {
-            LOGE("Switch Pro: set-report-mode write failed");
-            return false;
-        }
-        usleep(40000);
-
-        // Enable vibration (subcommand 0x48, arg 0x01) so later rumble-only (0x10) reports take
-        // effect.
-        uint8_t enableVibration[] = {
-            0x01, 0x01, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x48, 0x01,
-        };
-        if (!bulkWrite(fd, epOut, enableVibration, sizeof(enableVibration), 200)) {
-            LOGI("Switch Pro: enable-vibration write failed (non-fatal)");
-        }
-        LOGI("Switch Pro USB init sequence sent");
-        return true;
-    }
+    case InitKind::XBOX_ONE_S:
+        return runGipInit(fd, epOut, init);
+    case InitKind::SWITCH_PRO_HANDSHAKE:
+        return runSwitchProHandshake(fd, epOut);
     }
     return false;
 }
 
-void runTeardown(int fd, int interfaceNumber, Parser p) {
+void runTeardown(const int fd, const int interfaceNumber, const Parser p) {
     if (p != Parser::STEAM_CONTROLLER) return;
-    uint8_t buf[16];
+    uint8_t buf[kInitPacketMaxBytes];
     for (int i = 0;; i++) {
-        size_t n = buildSteamConfigPacket(SteamConfig::RESTORE, i, buf, sizeof(buf));
+        const size_t n = buildSteamConfigPacket(SteamConfig::RESTORE, i, buf, sizeof(buf));
         if (n == 0) break;
         sendFeatureReport(fd, interfaceNumber, buf, n);
     }
-    LOGI("Steam Controller restored to stand-alone mode");
+    logInfo("Steam Controller restored to stand-alone mode");
 }
 
-bool runRumble(int fd, uint8_t epOut, Parser p, uint16_t strong, uint16_t weak, uint8_t seq) {
+bool runRumble(const int fd, const uint8_t epOut, const Parser p, const uint16_t strong,
+               const uint16_t weak, const uint8_t seq) {
     if (epOut == 0) return false;
-    uint8_t buf[64];
-    size_t n = buildRumbleReport(p, strong, weak, seq, buf, sizeof(buf));
-    if (n == 0) return false;
-    return bulkWrite(fd, epOut, buf, n, 100);
+    uint8_t buf[kOutReportMaxBytes];
+    const size_t n = buildRumbleReport(p, strong, weak, seq, buf, sizeof(buf));
+    return writeOutReport(fd, epOut, buf, n);
 }
 
-bool runMergedRumble(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t seq) {
+bool runMergedRumble(const int fd, const uint8_t epOut, const Parser p, FeedbackState& st,
+                     const uint8_t seq) {
     if (epOut == 0) return false;
-    uint8_t buf[64];
-    size_t n = buildMergedRumbleReport(p, st, seq, buf, sizeof(buf));
-    if (n == 0) return false;
-    return bulkWrite(fd, epOut, buf, n, 100);
+    uint8_t buf[kOutReportMaxBytes];
+    const size_t n = buildMergedRumbleReport(p, st, seq, buf, sizeof(buf));
+    return writeOutReport(fd, epOut, buf, n);
 }
 
-bool runLightbar(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t r, uint8_t g,
-                 uint8_t b) {
+bool runLightbar(const int fd, const uint8_t epOut, const Parser p, FeedbackState& st,
+                 const uint8_t r, const uint8_t g, const uint8_t b) {
     if (epOut == 0) return false;
-    uint8_t buf[64];
-    size_t n = buildLightbarReport(p, st, r, g, b, buf, sizeof(buf));
-    if (n == 0) return false;
-    return bulkWrite(fd, epOut, buf, n, 100);
+    uint8_t buf[kOutReportMaxBytes];
+    const size_t n = buildLightbarReport(p, st, r, g, b, buf, sizeof(buf));
+    return writeOutReport(fd, epOut, buf, n);
 }
 
-bool runPlayerLeds(int fd, uint8_t epOut, Parser p, const FeedbackState& st, uint8_t ledMask,
-                   uint8_t seq) {
+bool runPlayerLeds(const int fd, const uint8_t epOut, const Parser p, const FeedbackState& st,
+                   const uint8_t ledMask, const uint8_t seq) {
     if (epOut == 0) return false;
-    uint8_t buf[64];
-    size_t n = buildPlayerLedsReport(p, st, ledMask, seq, buf, sizeof(buf));
-    if (n == 0) return false;
-    return bulkWrite(fd, epOut, buf, n, 100);
+    uint8_t buf[kOutReportMaxBytes];
+    const size_t n = buildPlayerLedsReport(p, st, ledMask, seq, buf, sizeof(buf));
+    return writeOutReport(fd, epOut, buf, n);
 }
 
-bool runTriggerEffects(int fd, uint8_t epOut, Parser p, const FeedbackState& st,
+bool runTriggerEffects(const int fd, const uint8_t epOut, const Parser p, const FeedbackState& st,
                        const uint8_t left[TRIGGER_EFFECT_BLOCK_LEN],
                        const uint8_t right[TRIGGER_EFFECT_BLOCK_LEN]) {
     if (epOut == 0) return false;
-    uint8_t buf[64];
-    size_t n = buildTriggerEffectsReport(p, st, left, right, buf, sizeof(buf));
-    if (n == 0) return false;
-    return bulkWrite(fd, epOut, buf, n, 100);
+    uint8_t buf[kOutReportMaxBytes];
+    const size_t n = buildTriggerEffectsReport(p, st, left, right, buf, sizeof(buf));
+    return writeOutReport(fd, epOut, buf, n);
 }
 
-bool runMicMuteLed(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t state) {
+bool runMicMuteLed(const int fd, const uint8_t epOut, const Parser p, FeedbackState& st,
+                   const uint8_t state) {
     if (epOut == 0) return false;
-    uint8_t buf[64];
-    size_t n = buildMicMuteLedReport(p, st, state, buf, sizeof(buf));
-    if (n == 0) return false;
-    return bulkWrite(fd, epOut, buf, n, 100);
+    uint8_t buf[kOutReportMaxBytes];
+    const size_t n = buildMicMuteLedReport(p, st, state, buf, sizeof(buf));
+    return writeOutReport(fd, epOut, buf, n);
 }
 #endif
 

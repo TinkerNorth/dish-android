@@ -22,6 +22,7 @@ import com.tinkernorth.dish.source.store.MicMuteStore
 import com.tinkernorth.dish.source.store.MoonlightHostFactsStore
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import com.tinkernorth.dish.source.store.StickTestHistoryStore
+import com.tinkernorth.dish.source.store.StickTestRecord
 import com.tinkernorth.dish.source.system.BluetoothAdapterStateObserver
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import com.tinkernorth.dish.source.system.NetworkStateObserver
@@ -77,31 +78,60 @@ class PadSources
     ) {
         private val linkTypes = ConcurrentHashMap<Int, BluetoothLinkType>()
 
+        private data class DirectPadFacts(
+            val latency: Map<Int, DeviceLatency>,
+            val info: Map<Int, DirectDeviceInfo>,
+            val urbErrors: Map<Int, Long>,
+            val reportCounts: Map<Int, Long>,
+        )
+
+        private data class FrameworkPadFacts(
+            val timing: Map<Int, FrameworkTimingSummary>,
+            val eventCounts: Map<Int, Long>,
+            val linkTypes: Map<Int, BluetoothLinkType>,
+        )
+
         internal fun flow(ticks: Flow<Unit>): Flow<PadWorld> =
-            combine(ticks, registry.devices, stickHistory.state) { _, devices, history ->
-                val latency = HashMap<Int, DeviceLatency>()
-                val info = HashMap<Int, DirectDeviceInfo>()
-                val errors = HashMap<Int, Long>()
-                val counts = HashMap<Int, Long>()
-                val framework = HashMap<Int, FrameworkTimingSummary>()
-                val links = HashMap<Int, BluetoothLinkType>()
-                for ((id, device) in devices) {
-                    if (device.isUsbSynthetic) {
-                        parseDeviceLatency(json, native.deviceLatencyJson(id))?.let { latency[id] = it }
-                        parseDeviceInfo(json, native.deviceInfoJson(id))?.let { info[id] = it }
-                        errors[id] = native.getDeviceUrbErrorCount(id)
-                        counts[id] = native.getDeviceUrbCount(id)
-                    } else {
-                        timing.summary(id)?.let { framework[id] = it }
-                        counts[id] = native.getDeviceInputEventCount(id)
-                        if (device.transport == Transport.Bluetooth) {
-                            links[id] = linkTypes.computeIfAbsent(id) { bluetoothLink.linkType(device.name) }
-                        }
-                    }
-                }
-                linkTypes.keys.retainAll(devices.keys)
-                PadWorld(latency, info, errors, counts, framework, links, history)
-            }
+            combine(ticks, registry.devices, stickHistory.state) { _, devices, history -> padWorldFor(devices, history) }
+
+        private fun padWorldFor(
+            devices: Map<Int, PhysicalGamepadRegistry.Device>,
+            history: Map<String, StickTestRecord>,
+        ): PadWorld {
+            val direct = directPadFacts(devices.filterValues { it.isUsbSynthetic }.keys)
+            val framework = frameworkPadFacts(devices.filterValues { !it.isUsbSynthetic })
+            linkTypes.keys.retainAll(devices.keys)
+            return PadWorld(
+                deviceLatency = direct.latency,
+                deviceInfo = direct.info,
+                urbErrors = direct.urbErrors,
+                reportCounts = direct.reportCounts + framework.eventCounts,
+                frameworkTiming = framework.timing,
+                btLinkTypes = framework.linkTypes,
+                stickHistory = history,
+            )
+        }
+
+        // A Direct pad is read straight from the native poller: its latency and URB counters.
+        private fun directPadFacts(ids: Set<Int>): DirectPadFacts =
+            DirectPadFacts(
+                latency = ids.mapNotNull { id -> parseDeviceLatency(json, native.deviceLatencyJson(id))?.let { id to it } }.toMap(),
+                info = ids.mapNotNull { id -> parseDeviceInfo(json, native.deviceInfoJson(id))?.let { id to it } }.toMap(),
+                urbErrors = ids.associateWith { native.getDeviceUrbErrorCount(it) },
+                reportCounts = ids.associateWith { native.getDeviceUrbCount(it) },
+            )
+
+        // A framework pad is read from the event timing store, and a Bluetooth one also carries
+        // its link type, looked up once per device and forgotten with it.
+        private fun frameworkPadFacts(devices: Map<Int, PhysicalGamepadRegistry.Device>): FrameworkPadFacts =
+            FrameworkPadFacts(
+                timing = devices.keys.mapNotNull { id -> timing.summary(id)?.let { id to it } }.toMap(),
+                eventCounts = devices.keys.associateWith { native.getDeviceInputEventCount(it) },
+                linkTypes =
+                    devices
+                        .filterValues { it.transport == Transport.Bluetooth }
+                        .mapValues { (id, device) -> linkTypes.computeIfAbsent(id) { bluetoothLink.linkType(device.name) } },
+            )
     }
 
 class LinkSources

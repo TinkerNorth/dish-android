@@ -102,4 +102,46 @@ class CrashReportingControllerTest {
         controller().recordNonFatal(IllegalStateException("refused"))
         verify(exactly = 1) { FirebaseCrashlytics.getInstance() }
     }
+
+    @Test
+    fun `apply forwards an opt-in to Crashlytics when Firebase is up`() {
+        every { FirebaseApp.getApps(any()) } returns listOf(mockk())
+        val crashlytics = mockk<FirebaseCrashlytics>(relaxed = true)
+        every { FirebaseCrashlytics.getInstance() } returns crashlytics
+        enabledFlow.value = true
+
+        controller().probe().start()
+        scope.testScheduler.runCurrent()
+
+        verify(exactly = 1) { crashlytics.isCrashlyticsCollectionEnabled = true }
+    }
+
+    @Test
+    fun `apply forwards an opt-out to Crashlytics when Firebase is up`() {
+        every { FirebaseApp.getApps(any()) } returns listOf(mockk())
+        val crashlytics = mockk<FirebaseCrashlytics>(relaxed = true)
+        every { FirebaseCrashlytics.getInstance() } returns crashlytics
+        enabledFlow.value = true
+        controller().probe().start()
+        scope.testScheduler.runCurrent()
+
+        enabledFlow.value = false
+        scope.testScheduler.runCurrent()
+
+        verify(exactly = 1) { crashlytics.isCrashlyticsCollectionEnabled = false }
+    }
+
+    @Test
+    fun `a Crashlytics failure in apply is swallowed and the collector survives`() {
+        every { FirebaseApp.getApps(any()) } returns listOf(mockk())
+        every { FirebaseCrashlytics.getInstance() } throws IllegalStateException("not ready")
+        controller().probe().start()
+        scope.testScheduler.runCurrent()
+        verify(exactly = 1) { FirebaseCrashlytics.getInstance() }
+
+        enabledFlow.value = true
+        scope.testScheduler.runCurrent()
+
+        verify(exactly = 2) { FirebaseCrashlytics.getInstance() }
+    }
 }

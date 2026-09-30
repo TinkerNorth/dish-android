@@ -31,14 +31,14 @@ class DiagnosticsLogRecorder
             scope.launch {
                 var prev: List<ConnectionSummary> = emptyList()
                 hub.connections.collect { next ->
-                    DiagnosticsLogDiff.connectionEvents(prev, next).forEach { log.log(TAG_LINK, it) }
+                    connectionEvents(prev, next).forEach { log.log(TAG_LINK, it) }
                     prev = next
                 }
             }
             scope.launch {
                 var prev: Map<Int, PhysicalGamepadRegistry.Device> = emptyMap()
                 registry.devices.collect { next ->
-                    DiagnosticsLogDiff.deviceEvents(prev, next).forEach { log.log(TAG_PAD, it) }
+                    deviceEvents(prev, next).forEach { log.log(TAG_PAD, it) }
                     prev = next
                 }
             }

@@ -90,7 +90,7 @@ class AudioJitterWindow {
     };
 
     // Offer one packet. `data` must outlive the caller's use of the result.
-    Result push(uint16_t seq, const uint8_t* data, size_t len) {
+    Result push(const uint16_t seq, const uint8_t* data, const size_t len) {
         Result r;
         if (data == nullptr || len == 0 ||
             len > static_cast<size_t>(AUDIO_JITTER_MAX_PACKET_BYTES)) {
@@ -98,8 +98,6 @@ class AudioJitterWindow {
             return r;
         }
 
-        // The first packet defines where the stream starts; there is no such
-        // thing as a late or missing frame before it.
         if (!primed_) {
             primed_ = true;
             next_ = seq;
@@ -112,10 +110,8 @@ class AudioJitterWindow {
             return r;
         }
 
-        // The common case by far: the frame we were waiting for, with nothing
-        // held behind it. Emitted straight from the caller's buffer, so a clean
-        // stream never copies a packet or touches the heap.
-        if (delta == 0 && usedSlots() == 0) {
+        const bool isTheFrameWeAreWaitingFor = delta == 0 && usedSlots() == 0;
+        if (isTheFrameWeAreWaitingFor) {
             emitPacket(r, seq, data, len);
             next_ = static_cast<uint16_t>(next_ + 1);
             consecutiveGaps_ = 0;
@@ -175,10 +171,8 @@ class AudioJitterWindow {
     // arriving packet, so the cap only means anything if it is remembered.
     int consecutiveGaps_ = 0;
 
-    // Wrapping distance from next_, signed. The int16_t cast is the whole wrap
-    // story: 0x0000 is one after 0xFFFF, and a frame from before the wrap comes
-    // out negative rather than 65535 frames ahead.
-    int deltaFromNext(uint16_t seq) const {
+    // Wrapping distance from next_, signed.
+    int deltaFromNext(const uint16_t seq) const {
         return static_cast<int>(static_cast<int16_t>(seq - next_));
     }
 
@@ -190,7 +184,7 @@ class AudioJitterWindow {
         return n;
     }
 
-    Slot* find(uint16_t seq) {
+    Slot* find(const uint16_t seq) {
         for (Slot& s : slots_) {
             if (s.used && s.seq == seq) return &s;
         }
@@ -209,7 +203,7 @@ class AudioJitterWindow {
         int best = -1;
         for (const Slot& s : slots_) {
             if (!s.used) continue;
-            const int d = static_cast<int>(static_cast<int16_t>(s.seq - next_));
+            const int d = deltaFromNext(s.seq);
             if (d > best) best = d;
         }
         return best;
@@ -222,7 +216,7 @@ class AudioJitterWindow {
         int bestDelta = 0;
         for (const Slot& s : slots_) {
             if (!s.used) continue;
-            const int d = static_cast<int>(static_cast<int16_t>(s.seq - next_));
+            const int d = deltaFromNext(s.seq);
             if (best == nullptr || d < bestDelta) {
                 best = &s;
                 bestDelta = d;
@@ -231,7 +225,7 @@ class AudioJitterWindow {
         return best;
     }
 
-    static void emitPacket(Result& r, uint16_t seq, const uint8_t* data, size_t len) {
+    static void emitPacket(Result& r, const uint16_t seq, const uint8_t* data, const size_t len) {
         Event& e = r.events[r.count++];
         e.kind = Event::Kind::Packet;
         e.seq = seq;
@@ -243,8 +237,6 @@ class AudioJitterWindow {
         while (r.count < AUDIO_JITTER_MAX_EVENTS_PER_PUSH) {
             Slot* due = find(next_);
             if (due != nullptr) {
-                // Released, not cleared: the event points into these bytes and
-                // the slot cannot be reused before the next push().
                 emitPacket(r, due->seq, due->bytes.data(), due->bytes.size());
                 due->used = false;
                 next_ = static_cast<uint16_t>(next_ + 1);
@@ -253,9 +245,8 @@ class AudioJitterWindow {
             }
 
             const int ahead = maxAhead();
-            // Nothing held, or nothing far enough ahead to prove a loss: the
-            // frame may still be one hop behind. Wait for the next packet.
-            if (ahead < AUDIO_JITTER_WINDOW_FRAMES) break;
+            const bool provesALoss = ahead >= AUDIO_JITTER_WINDOW_FRAMES;
+            if (!provesALoss) break;
 
             if (consecutiveGaps_ >= AUDIO_JITTER_MAX_CONCEAL_FRAMES) {
                 const Slot* resume = oldestHeld();

@@ -64,7 +64,7 @@ class DiscoveryGateway
             pin: String,
             clientPin: String = "",
             satelliteId: String = "",
-            protocolVersion: Int = DishProtocol.CURRENT,
+            protocolVersion: Int = DISH_PROTOCOL_CURRENT,
         ): HttpReply =
             withContext(ioDispatcher) {
                 http.pair(
@@ -97,7 +97,7 @@ class DiscoveryGateway
             hmacProof: String,
             descriptorsJson: String,
             requestMouseControl: Boolean,
-            protocolVersion: Int = DishProtocol.CURRENT,
+            protocolVersion: Int = DISH_PROTOCOL_CURRENT,
             satelliteId: String = "",
         ): HttpReply =
             withContext(ioDispatcher) {
@@ -213,33 +213,32 @@ class DiscoveryGateway
                 http.getServerCapabilities(ip, port, pinId(satelliteId, ip))
             }
 
-        companion object {
-            private const val TAG = "DiscoveryGateway"
-
-            // Empty satelliteId means "caller didn't override": key the pin on the host.
-            internal fun pinId(
-                satelliteId: String,
-                ip: String,
-            ): String = satelliteId.ifEmpty { ip }
-
-            internal fun mergeDiscovered(
-                broadcast: List<DiscoveredServer>,
-                mdns: List<DiscoveredServer>,
-            ): List<DiscoveredServer> {
-                val byKey = LinkedHashMap<String, DiscoveredServer>()
-                for (server in broadcast) {
-                    byKey[server.stableKey] =
-                        server.copy(source = DiscoverySource.BROADCAST)
-                }
-                for (server in mdns) {
-                    // Same physical satellite heard on both paths collapses to
-                    // one BOTH-tagged row when their stable ids match.
-                    val key = server.stableKey
-                    val source =
-                        if (byKey.containsKey(key)) DiscoverySource.BOTH else DiscoverySource.MDNS
-                    byKey[key] = server.copy(source = source)
-                }
-                return byKey.values.sortedBy { it.name }
-            }
+        private companion object {
+            const val TAG = "DiscoveryGateway"
         }
     }
+
+internal fun pinId(
+    satelliteId: String,
+    ip: String,
+): String = satelliteId.ifEmpty { ip }
+
+internal fun mergeDiscovered(
+    broadcast: List<DiscoveredServer>,
+    mdns: List<DiscoveredServer>,
+): List<DiscoveredServer> {
+    val byKey = LinkedHashMap<String, DiscoveredServer>()
+    for (server in broadcast) {
+        byKey[server.stableKey] = server.copy(source = DiscoverySource.BROADCAST)
+    }
+    // Snapshotted before any mDNS row lands, so a second mDNS row for the same key is not
+    // mistaken for the broadcast path having heard it.
+    val heardByBroadcast = byKey.keys.toSet()
+    for (server in mdns) {
+        val key = server.stableKey
+        val heardOnBothPaths = key in heardByBroadcast
+        val source = if (heardOnBothPaths) DiscoverySource.BOTH else DiscoverySource.MDNS
+        byKey[key] = server.copy(source = source)
+    }
+    return byKey.values.sortedBy { it.name }
+}

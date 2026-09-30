@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.annotation.ChecksSdkIntAtLeast
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -47,12 +48,13 @@ class PadAudioRouteResolver
 
         @Volatile private var installed = false
 
-        private val callback =
-            object : AudioDeviceCallback() {
-                override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = resolve()
+        private inner class AudioDeviceWatcher : AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = resolve()
 
-                override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = resolve()
-            }
+            override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = resolve()
+        }
+
+        private val callback = AudioDeviceWatcher()
 
         /**
          * Process-scoped, like the USB manager's own install: the capability model is composed
@@ -72,7 +74,7 @@ class PadAudioRouteResolver
 
         /** Re-read both lists and republish. Cheap, and the only writer of the table. */
         fun resolve() {
-            routes.publishRoutes(PadAudioMatcher.resolve(attachedPads(), usbEndpoints()))
+            routes.publishRoutes(resolvePadAudioRoutes(attachedPads(), usbEndpoints()))
         }
 
         private fun attachedPads(): List<UsbAudioPad> {
@@ -103,7 +105,7 @@ class PadAudioRouteResolver
             val ports =
                 manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).toList() +
                     manager.getDevices(AudioManager.GET_DEVICES_INPUTS).toList()
-            return ports.filter { isPluggedUsb(it.type) }.map {
+            return ports.filter { isPluggedUsbType(it.type, Build.VERSION.SDK_INT) }.map {
                 UsbAudioEndpoint(
                     deviceId = it.id,
                     productName = it.productName?.toString(),
@@ -114,13 +116,26 @@ class PadAudioRouteResolver
             }
         }
 
-        // TYPE_USB_ACCESSORY is this phone in accessory mode (a host driving US), not a pad we can
-        // route to, so it is deliberately absent. TYPE_USB_HEADSET is a 26+ classification.
-        private fun isPluggedUsb(type: Int): Boolean =
-            type == AudioDeviceInfo.TYPE_USB_DEVICE ||
-                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && type == AudioDeviceInfo.TYPE_USB_HEADSET)
-
         private companion object {
             const val TAG = "PadAudioRoutes"
         }
     }
+
+// TYPE_USB_ACCESSORY is this phone in accessory mode (a host driving US), not a pad we can route
+// to, so it is deliberately absent. TYPE_USB_HEADSET is a 26+ classification.
+internal fun isPluggedUsbType(
+    type: Int,
+    sdkInt: Int,
+): Boolean {
+    if (type == AudioDeviceInfo.TYPE_USB_DEVICE) return true
+    if (atLeast(Build.VERSION_CODES.O, sdkInt)) return type == AudioDeviceInfo.TYPE_USB_HEADSET
+    return false
+}
+
+// The annotation is what lets lint read a caller-supplied API level as the gate the 26+ constant
+// above needs; a bare `sdkInt >= api` comparison it cannot see through.
+@ChecksSdkIntAtLeast(parameter = 0)
+private fun atLeast(
+    api: Int,
+    sdkInt: Int,
+): Boolean = sdkInt >= api

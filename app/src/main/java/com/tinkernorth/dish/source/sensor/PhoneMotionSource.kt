@@ -59,20 +59,21 @@ class PhoneMotionSource(
 
     private val loggedUnknownRotations = HashSet<Int>()
 
-    private val listener =
-        object : SensorEventListener {
-            override fun onSensorChanged(event: SensorEvent) {
-                when (event.sensor.type) {
-                    Sensor.TYPE_ACCELEROMETER -> onAccel(event.values)
-                    Sensor.TYPE_GYROSCOPE -> onGyro(event.values)
-                }
+    private inner class PhoneSensorListener : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent) {
+            when (event.sensor.type) {
+                Sensor.TYPE_ACCELEROMETER -> onAccel(event.values)
+                Sensor.TYPE_GYROSCOPE -> onGyro(event.values)
             }
-
-            override fun onAccuracyChanged(
-                sensor: Sensor?,
-                accuracy: Int,
-            ) = Unit
         }
+
+        override fun onAccuracyChanged(
+            sensor: Sensor?,
+            accuracy: Int,
+        ) = Unit
+    }
+
+    private val listener = PhoneSensorListener()
 
     fun start(emit: Emit) {
         if (started || gyro == null) return
@@ -93,7 +94,6 @@ class PhoneMotionSource(
     fun stop() {
         if (!started) return
         started = false
-        // Cancel tick BEFORE releasing the handler thread it posts to.
         stallTickRunnable?.let { stallTickHandler?.removeCallbacks(it) }
         stallTickRunnable = null
         stallTickHandler = null
@@ -113,11 +113,11 @@ class PhoneMotionSource(
         if (values.size < 3) return
         // Re-read rotation per sample: activity configChanges swallow landscape flips.
         val rotation = rotationSupplier()
-        val result = MotionScaling.remapLandscape(values[0], values[1], values[2], rotation, remapScratch)
-        if (result is MotionScaling.RemapResult.Fallback) onUnknownRotation(result.unknownRotation)
-        accelX = MotionScaling.accelMssToWire(remapScratch[0])
-        accelY = MotionScaling.accelMssToWire(remapScratch[1])
-        accelZ = MotionScaling.accelMssToWire(remapScratch[2])
+        val result = remapLandscape(values[0], values[1], values[2], rotation, remapScratch)
+        if (result is RemapResult.Fallback) onUnknownRotation(result.unknownRotation)
+        accelX = accelMssToWire(remapScratch[0])
+        accelY = accelMssToWire(remapScratch[1])
+        accelZ = accelMssToWire(remapScratch[2])
         accelSeen = true
     }
 
@@ -129,21 +129,24 @@ class PhoneMotionSource(
             setState(MotionStreamState.Streaming)
         }
         val cb = emit ?: return
+        val sample = sampleFrom(values)
+        rateLimiter.publish(SINGLE_VIRTUAL_CONTROLLER, sample) { s, deltaUs -> cb.emit(s, deltaUs) }
+    }
+
+    // The sensor reports in device axes; landscape play rotates them, and X comes back negated
+    // because the wire convention is the opposite hand.
+    private fun sampleFrom(values: FloatArray): MotionRateLimiter.MotionSample {
         val rotation = rotationSupplier()
-        val result = MotionScaling.remapLandscape(values[0], values[1], values[2], rotation, remapScratch)
-        if (result is MotionScaling.RemapResult.Fallback) onUnknownRotation(result.unknownRotation)
-        val sample =
-            MotionRateLimiter.MotionSample(
-                gyroX = MotionScaling.gyroRadToWire(-remapScratch[0]),
-                gyroY = MotionScaling.gyroRadToWire(remapScratch[1]),
-                gyroZ = MotionScaling.gyroRadToWire(remapScratch[2]),
-                accelX = accelX,
-                accelY = accelY,
-                accelZ = accelZ,
-            )
-        rateLimiter.publish(SINGLE_VIRTUAL_CONTROLLER, sample) { s, deltaUs ->
-            cb.emit(s, deltaUs)
-        }
+        val result = remapLandscape(values[0], values[1], values[2], rotation, remapScratch)
+        if (result is RemapResult.Fallback) onUnknownRotation(result.unknownRotation)
+        return MotionRateLimiter.MotionSample(
+            gyroX = gyroRadToWire(-remapScratch[0]),
+            gyroY = gyroRadToWire(remapScratch[1]),
+            gyroZ = gyroRadToWire(remapScratch[2]),
+            accelX = accelX,
+            accelY = accelY,
+            accelZ = accelZ,
+        )
     }
 
     private fun onUnknownRotation(rotation: Int) {
@@ -156,21 +159,18 @@ class PhoneMotionSource(
     }
 
     private fun scheduleStallTick(handler: android.os.Handler) {
-        val tick =
-            Runnable {
-                if (!started) return@Runnable
-                val gap = nowMs() - lastGyroMonoMs
-                val next =
-                    if (lastGyroMonoMs == 0L || gap > STALL_WINDOW_MS) {
-                        MotionStreamState.Stalled
-                    } else {
-                        MotionStreamState.Streaming
-                    }
-                if (state.value != next) setState(next)
-                scheduleStallTick(handler)
-            }
+        val tick = Runnable { stallTick(handler) }
         stallTickRunnable = tick
         handler.postDelayed(tick, STALL_TICK_MS)
+    }
+
+    // One stall check: a gyro that has gone quiet reads Stalled until it reports again, and a
+    // tick that outlived stop() neither publishes nor re-arms.
+    internal fun stallTick(handler: android.os.Handler) {
+        if (!started) return
+        val next = deriveMotionStreamState(gyro != null, started, lastGyroMonoMs, nowMs())
+        if (state.value != next) setState(next)
+        scheduleStallTick(handler)
     }
 
     companion object {
@@ -182,21 +182,21 @@ class PhoneMotionSource(
         const val STALL_WINDOW_MS = 1500L
 
         const val STALL_TICK_MS = 500L
-
-        internal fun deriveState(
-            gyroPresent: Boolean,
-            started: Boolean,
-            lastGyroMonoMs: Long,
-            nowMonoMs: Long,
-        ): MotionStreamState =
-            when {
-                !gyroPresent -> MotionStreamState.Disabled
-                !started -> MotionStreamState.Stopped
-                lastGyroMonoMs == 0L -> MotionStreamState.Stalled
-                nowMonoMs - lastGyroMonoMs > STALL_WINDOW_MS -> MotionStreamState.Stalled
-                else -> MotionStreamState.Streaming
-            }
     }
 }
+
+internal fun deriveMotionStreamState(
+    gyroPresent: Boolean,
+    started: Boolean,
+    lastGyroMonoMs: Long,
+    nowMonoMs: Long,
+): MotionStreamState =
+    when {
+        !gyroPresent -> MotionStreamState.Disabled
+        !started -> MotionStreamState.Stopped
+        lastGyroMonoMs == 0L -> MotionStreamState.Stalled
+        nowMonoMs - lastGyroMonoMs > PhoneMotionSource.STALL_WINDOW_MS -> MotionStreamState.Stalled
+        else -> MotionStreamState.Streaming
+    }
 
 enum class MotionStreamState { Disabled, Stopped, Streaming, Stalled }

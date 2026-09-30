@@ -58,11 +58,7 @@ internal class ThreadMicCaptureLoop(
     private var thread: Thread? = null
 
     override fun start(body: () -> Unit) {
-        thread =
-            Thread({
-                Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
-                body()
-            }, name).also { it.start() }
+        thread = Thread({ runAtAudioPriority(body) }, name).also { it.start() }
     }
 
     override fun join() {
@@ -70,16 +66,21 @@ internal class ThreadMicCaptureLoop(
         thread = null
     }
 
-    companion object {
-        /** Named for the endpoint it captures from, so a stuck route is obvious in a thread dump. */
-        fun nameFor(preferredDeviceId: Int): String =
-            if (preferredDeviceId == NO_AUDIO_DEVICE) "dish-mic" else "dish-mic-$preferredDeviceId"
+    private fun runAtAudioPriority(body: () -> Unit) {
+        Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
+        body()
+    }
 
+    private companion object {
         // Generous next to one blocking 20 ms read; it exists so a wedged recorder cannot pin
         // whichever thread is starting the next capture.
-        private const val JOIN_TIMEOUT_MS = 500L
+        const val JOIN_TIMEOUT_MS = 500L
     }
 }
+
+/** Named for the endpoint it captures from, so a stuck route is obvious in a thread dump. */
+internal fun micCaptureThreadName(preferredDeviceId: Int): String =
+    if (preferredDeviceId == NO_AUDIO_DEVICE) "dish-mic" else "dish-mic-$preferredDeviceId"
 
 /**
  * The microphone capture pipeline: AudioRecord in, one 20 ms window at a time, out as
@@ -128,7 +129,7 @@ class MicEngine
             plans,
             satellite,
             source,
-            MicCaptureLoopFactory { ThreadMicCaptureLoop(ThreadMicCaptureLoop.nameFor(it)) },
+            MicCaptureLoopFactory { ThreadMicCaptureLoop(micCaptureThreadName(it)) },
             routing,
             scope,
         )
@@ -300,20 +301,24 @@ class MicEngine
                 if (!session.voiceProcessed) {
                     Log.i(TAG, "capturing without platform echo cancellation (fallback source)")
                 }
-                var clean = false
+                if (!captureUntilStopped(session)) markBroken()
+            }
+
+            // Answers whether the loop ended because capture was stopped, rather than because the
+            // recorder died under it.
+            private fun captureUntilStopped(session: MicCaptureSession): Boolean {
                 try {
                     val window = ShortArray(FRAME_SAMPLES)
                     while (running) {
-                        // A short read is a dead recorder, not a short packet: never send a partial
-                        // window, the far end cannot place one in its timeline.
+                        // A short read is a dead recorder, not a short packet: never send a
+                        // partial window, the far end cannot place one in its timeline.
                         if (session.read(window) != window.size) break
                         deliver(window)
                     }
-                    clean = !running
+                    return !running
                 } finally {
                     session.close()
                 }
-                if (!clean) markBroken()
             }
 
             private fun deliver(window: ShortArray) {

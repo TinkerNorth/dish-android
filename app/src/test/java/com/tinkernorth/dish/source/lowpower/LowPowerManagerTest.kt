@@ -308,4 +308,69 @@ class LowPowerManagerTest {
         lpm.onLockStateChanged(active = true, streaming = true)
         verify { dimBody.visibility = View.VISIBLE }
     }
+
+    @Test
+    fun `a lock while already counting down does not restart the timer`() {
+        val inactivityHandler = mockk<Handler>(relaxed = true)
+        setPrivateField("inactivityHandler", inactivityHandler)
+        setStateDirect(LowPowerManager.State.COUNTDOWN)
+
+        lpm.onLockStateChanged(active = true)
+
+        verify(exactly = 0) { inactivityHandler.postDelayed(any(), any()) }
+        assertEquals(LowPowerManager.State.COUNTDOWN, lpm.state.value)
+    }
+
+    @Test
+    fun `a lock while already dimmed does not re-arm or reset`() {
+        val inactivityHandler = mockk<Handler>(relaxed = true)
+        setPrivateField("inactivityHandler", inactivityHandler)
+        setStateDirect(LowPowerManager.State.ACTIVE)
+
+        lpm.onLockStateChanged(active = true)
+
+        verify(exactly = 0) { inactivityHandler.postDelayed(any(), any()) }
+        assertEquals(LowPowerManager.State.ACTIVE, lpm.state.value)
+    }
+
+    @Test
+    fun `losing the lock cancels from any state`() {
+        val inactivityHandler = mockk<Handler>(relaxed = true)
+        val clockHandler = mockk<Handler>(relaxed = true)
+        setPrivateField("inactivityHandler", inactivityHandler)
+        setPrivateField("clockHandler", clockHandler)
+        for (state in LowPowerManager.State.entries) {
+            setStateDirect(state)
+
+            lpm.onLockStateChanged(active = false)
+
+            assertEquals("from $state", LowPowerManager.State.IDLE, lpm.state.value)
+        }
+        verify(atLeast = 3) { inactivityHandler.removeCallbacks(any()) }
+    }
+
+    // ── the countdown tick: it counts the second in progress, floor(ms / 1000) + 1 ──
+
+    @Test
+    fun `the last moment of the countdown reads one`() {
+        assertEquals(1L, countdownSecondsShown(millisUntilFinished = 0L))
+        assertEquals(1L, countdownSecondsShown(millisUntilFinished = 999L))
+    }
+
+    @Test
+    fun `a tick just short of a whole second reads that second`() {
+        assertEquals(3L, countdownSecondsShown(millisUntilFinished = 2_999L))
+        assertEquals(5L, countdownSecondsShown(millisUntilFinished = 4_999L))
+    }
+
+    @Test
+    fun `a tick on an exact whole second reads the next one up`() {
+        assertEquals(2L, countdownSecondsShown(millisUntilFinished = 1_000L))
+        assertEquals(4L, countdownSecondsShown(millisUntilFinished = 3_000L))
+    }
+
+    @Test
+    fun `a tick between whole seconds reads the second in progress`() {
+        assertEquals(4L, countdownSecondsShown(millisUntilFinished = 3_500L))
+    }
 }

@@ -13,24 +13,24 @@ import kotlin.math.sin
 class StickHealthTest {
     @Test
     fun `drift of an empty capture is zero`() {
-        assertEquals(0f, StickHealth.drift(emptyList()), 1e-6f)
+        assertEquals(0f, drift(emptyList()), 1e-6f)
     }
 
     @Test
     fun `drift averages resting offset magnitudes`() {
         val samples = List(10) { StickSample(0.06f, 0.08f) } // magnitude 0.1
-        assertEquals(0.1f, StickHealth.drift(samples), 1e-4f)
+        assertEquals(0.1f, drift(samples), 1e-4f)
     }
 
     @Test
     fun `suggested deadzone gives headroom over the drift and rounds to 2 decimals`() {
-        assertEquals(0.15f, StickHealth.suggestedDeadzone(0.10f), 1e-6f)
+        assertEquals(0.15f, suggestedDeadzone(0.10f), 1e-6f)
     }
 
     @Test
     fun `suggested deadzone is floored at sensor noise and capped for faulty sticks`() {
-        assertEquals(0.04f, StickHealth.suggestedDeadzone(0f), 1e-6f)
-        assertEquals(0.30f, StickHealth.suggestedDeadzone(0.9f), 1e-6f)
+        assertEquals(0.04f, suggestedDeadzone(0f), 1e-6f)
+        assertEquals(0.30f, suggestedDeadzone(0.9f), 1e-6f)
     }
 
     @Test
@@ -42,7 +42,7 @@ class StickHealthTest {
                 StickSample(0.0f, -0.85f),
                 StickSample(0.1f, 0.92f),
             )
-        val e = StickHealth.envelope(samples)
+        val e = envelope(samples)
         assertEquals(-0.9f, e.minX, 1e-6f)
         assertEquals(0.95f, e.maxX, 1e-6f)
         assertEquals(-0.85f, e.minY, 1e-6f)
@@ -52,7 +52,7 @@ class StickHealthTest {
     @Test
     fun `a full clean circle has near-zero circularity error`() {
         val samples = List(360) { i -> circle(i.toDouble(), radius = 0.98f) }
-        val error = StickHealth.envelope(samples).circularityError
+        val error = envelope(samples).circularityError
         assertNotNull(error)
         assertTrue("expected ~0, got $error", error!! < 0.01f)
     }
@@ -65,7 +65,7 @@ class StickHealthTest {
                 val radius = if (i < 45 || i > 315) 0.7f else 1.0f
                 circle(i.toDouble(), radius)
             }
-        val error = StickHealth.envelope(samples).circularityError
+        val error = envelope(samples).circularityError
         assertNotNull(error)
         assertTrue("expected a real error, got $error", error!! > 0.15f)
     }
@@ -74,14 +74,49 @@ class StickHealthTest {
     fun `an incomplete sweep refuses a circularity verdict`() {
         // Only the top-right arc: most buckets never visited.
         val samples = List(60) { i -> circle(i.toDouble(), radius = 1f) }
-        assertNull(StickHealth.envelope(samples).circularityError)
+        assertNull(envelope(samples).circularityError)
     }
 
     @Test
     fun `inner travel does not count toward the rim`() {
         // A full circle at 30% magnitude is user wiggle, not the stick's rim.
         val samples = List(360) { i -> circle(i.toDouble(), radius = 0.3f) }
-        assertNull(StickHealth.envelope(samples).circularityError)
+        assertNull(envelope(samples).circularityError)
+    }
+
+    @Test
+    fun `a rim of zero magnitude gives no verdict`() {
+        val seen = BooleanArray(16) { true }
+        assertNull(circularityError(FloatArray(16), seen))
+    }
+
+    @Test
+    fun `the worst rail is the one the stick struggles to reach`() {
+        val e = Envelope(minX = -0.9f, maxX = 0.95f, minY = -0.7f, maxY = 0.92f, circularityError = null)
+        assertEquals(0.7f, worstReach(e), 1e-6f)
+    }
+
+    @Test
+    fun `a rail never reached in its own direction floors the reach at zero`() {
+        val e = Envelope(minX = 0.1f, maxX = 0.95f, minY = -0.7f, maxY = 0.92f, circularityError = null)
+        assertEquals(0f, worstReach(e), 1e-6f)
+    }
+
+    @Test
+    fun `a running capture counts one above its whole seconds left`() {
+        assertEquals(CaptureTick.Counting(3), captureTick(CaptureKind.DRIFT, leftMs = 2500L))
+        assertEquals(CaptureTick.Counting(1), captureTick(CaptureKind.RANGE, leftMs = 1L))
+    }
+
+    @Test
+    fun `a running capture at an exact second still counts one above it`() {
+        assertEquals(CaptureTick.Counting(3), captureTick(CaptureKind.DRIFT, leftMs = 2000L))
+    }
+
+    @Test
+    fun `a capture that ran out finishes as the kind it was`() {
+        assertEquals(CaptureTick.Finished(CaptureKind.DRIFT), captureTick(CaptureKind.DRIFT, leftMs = 0L))
+        assertEquals(CaptureTick.Finished(CaptureKind.RANGE), captureTick(CaptureKind.RANGE, leftMs = -40L))
     }
 
     private fun circle(

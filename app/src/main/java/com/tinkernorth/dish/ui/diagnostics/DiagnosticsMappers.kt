@@ -4,14 +4,15 @@ package com.tinkernorth.dish.ui.diagnostics
 
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.input.resolveGamepadQuirk
+import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.bluetooth.BluetoothLinkType
-import com.tinkernorth.dish.source.store.StickTestHistoryStore
-import com.tinkernorth.dish.source.usb.UsbDescriptorStore
+import com.tinkernorth.dish.source.store.stickHistoryKeyFor
 import com.tinkernorth.dish.ui.main.BatteryUi
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
+import com.tinkernorth.dish.ui.main.batteryUiFromWire
 import com.tinkernorth.dish.ui.main.routedTwinIdsHiddenBySynthetics
 
 private val FUNCTION_FEATURES =
@@ -123,7 +124,7 @@ internal fun padFacts(
     world: DiagnosticsWorld,
 ): PadFacts {
     val pads = world.pads
-    val endpointKey = UsbDescriptorStore.key(device.vendorId, device.productId)
+    val endpointKey = vidPidKey(device.vendorId, device.productId)
     return PadFacts(
         vendorId = device.vendorId,
         productId = device.productId,
@@ -136,7 +137,7 @@ internal fun padFacts(
         lastInputAtMs = world.rates[device.id.toString()]?.lastInputAtMs ?: 0L,
         directTiming = pads.deviceLatency[device.id],
         frameworkTiming = pads.frameworkTiming[device.id],
-        stickHistory = pads.stickHistory[StickTestHistoryStore.keyFor(device.vendorId, device.productId, device.name)],
+        stickHistory = pads.stickHistory[stickHistoryKeyFor(device.vendorId, device.productId, device.name)],
     )
 }
 
@@ -151,7 +152,7 @@ private fun stateOf(device: PhysicalGamepadRegistry.Device): ControllerDiagState
 private fun batteryUi(
     world: DiagnosticsWorld,
     slotId: String,
-): BatteryUi? = world.batteries[slotId]?.let { BatteryUi.fromWire(it.level, it.status) }
+): BatteryUi? = world.batteries[slotId]?.let { batteryUiFromWire(it.level, it.status) }
 
 internal fun functionsOf(caps: SlotCapabilities?): List<Feature> {
     caps ?: return emptyList()

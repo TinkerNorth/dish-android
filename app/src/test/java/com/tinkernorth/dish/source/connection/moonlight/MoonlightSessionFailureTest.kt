@@ -5,9 +5,9 @@ package com.tinkernorth.dish.source.connection.moonlight
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
 import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
+import com.tinkernorth.dish.core.net.moonlight.XBOX
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -41,7 +41,7 @@ class MoonlightSessionFailureTest {
 
     private val remembered =
         RememberedMoonlight(
-            id = "moonlight:uid:abc",
+            id = "moonlight:10.0.0.5",
             name = "PC",
             address = "10.0.0.5",
             uniqueId = "abc",
@@ -56,12 +56,16 @@ class MoonlightSessionFailureTest {
     private val appList =
         """<root status_code="200"><App><AppTitle>Desktop</AppTitle><ID>1</ID></App></root>"""
 
+    private val twoApps =
+        """<root status_code="200"><App><AppTitle>Desktop</AppTitle><ID>1</ID></App>
+           <App><AppTitle>Steam</AppTitle><ID>2</ID></App></root>"""
+
     private fun reply(body: String) = MoonlightHttpGateway.Reply(status = 200, body = body)
 
     private fun pad(slotId: String) =
         MoonlightPadRequest(
             slotId = slotId,
-            emulatedType = MoonlightEmulatedType.XBOX,
+            emulatedType = XBOX,
             capabilities = 0x03,
             supportedButtons = 0xFFFF,
         )
@@ -240,7 +244,7 @@ class MoonlightSessionFailureTest {
             dispatcher.scheduler.advanceUntilIdle()
 
             assertEquals(0, manager.get(remembered.id)?.padCount)
-            assertTrue(seen.any { it is MoonlightConnectionEvent.Notice })
+            assertTrue(MoonlightConnectionEvent.AppCloseRequested(remembered.toHost()) in seen)
             verify(exactly = 1) { gateway.getHttps(match { it.contains("/cancel") }, any()) }
             collector.cancel()
         }
@@ -272,4 +276,110 @@ class MoonlightSessionFailureTest {
             assertEquals(1, manager.get(remembered.id)?.padCount)
             verify(exactly = 0) { gateway.getHttps(match { it.contains("/launch") }, any()) }
         }
+
+    // H3. Wolf refuses an app it does not know in the status line, HTTP 400 with no wording of its
+    // own, where Sunshine refuses inside a 200 body. Both are the host saying no.
+    @Test
+    fun `a launch refused in the status line is a refusal, not a stream`() =
+        runTest(dispatcher) {
+            every { gateway.getHttps(match { it.contains("/launch") }, any()) } returns
+                MoonlightHttpGateway.Reply(status = HTTP_BAD_REQUEST, body = """<root status_code="400"/>""")
+            val seen = mutableListOf<MoonlightConnectionEvent>()
+            val collector = collectEvents(seen)
+
+            bindOnePad()
+
+            assertEquals(1, seen.filterIsInstance<MoonlightConnectionEvent.LaunchRefused>().size)
+            assertTrue(seen.none { it is MoonlightConnectionEvent.SetupFailed })
+            verify(exactly = 0) { gateway.getHttps(match { it.contains("/cancel") }, any()) }
+            assertEquals(MoonlightSessionState.Idle, manager.get(remembered.id)?.state?.value)
+            collector.cancel()
+        }
+
+    // H3, B9. Wolf answers a launch from a device that already holds a session there as a resume
+    // of it, in a 200 carrying <resume>1 and the stream to rejoin: nothing to ask the user, and
+    // no second call to make.
+    @Test
+    fun `a launch the host answers as a resume of this device's session goes on to the stream without asking`() =
+        runTest(dispatcher) {
+            every { gateway.getHttps(match { it.contains("/launch") }, any()) } returns
+                reply("""<root status_code="200"><sessionUrl0>rtsp://10.0.0.5:48010</sessionUrl0><resume>1</resume></root>""")
+            val seen = mutableListOf<MoonlightConnectionEvent>()
+            val collector = collectEvents(seen)
+
+            bindOnePad()
+
+            verify(exactly = 0) { gateway.getHttps(match { it.contains("/resume") }, any()) }
+            assertTrue(seen.none { it is MoonlightConnectionEvent.AppAlreadyRunning })
+            assertTrue(seen.none { it is MoonlightConnectionEvent.RejoinRefused })
+            assertTrue(seen.none { it is MoonlightConnectionEvent.LaunchRefused })
+            // No stream answers in a unit test, so the one it went on to set up is the one that failed.
+            assertEquals(1, seen.filterIsInstance<MoonlightConnectionEvent.SetupFailed>().size)
+            collector.cancel()
+        }
+
+    // B7, B22. The first binding settles the app and every later session on the host starts it.
+    @Test
+    fun `a session starts the app picked for the host`() =
+        runTest(dispatcher) {
+            every { store.get(remembered.id) } returns remembered.copy(lastAppId = "2", lastAppName = "Steam")
+            every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply(twoApps)
+
+            bindOnePad()
+
+            verify(exactly = 1) { gateway.getHttps(match { it.contains("/launch") && it.contains("appid=2") }, any()) }
+        }
+
+    // A pick the host has since removed was launched, refused, and launched again on every retry,
+    // behind a refusal that hid the picker it could be changed in.
+    @Test
+    fun `a session on a host that no longer lists the picked app starts the first app the host lists`() =
+        runTest(dispatcher) {
+            rememberAs(remembered.copy(lastAppId = "9", lastAppName = "Removed"))
+            every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply(twoApps)
+
+            bindOnePad()
+
+            verify(exactly = 0) { gateway.getHttps(match { it.contains("/launch") && it.contains("appid=9") }, any()) }
+            verify(exactly = 1) { gateway.getHttps(match { it.contains("/launch") && it.contains("appid=1") }, any()) }
+        }
+
+    // The record as a store holds it, so what the probe writes is what the launch after it reads.
+    private fun rememberAs(record: RememberedMoonlight) {
+        var held = record
+        every { store.get(remembered.id) } answers { held }
+        every { store.put(any<RememberedMoonlight>()) } answers { held = firstArg() }
+    }
+
+    @Test
+    fun `a session on a host with no app picked starts the first app the host lists`() =
+        runTest(dispatcher) {
+            every { store.get(remembered.id) } returns remembered.copy(lastAppId = "", lastAppName = "")
+            every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply(twoApps)
+
+            bindOnePad()
+
+            verify(exactly = 1) { gateway.getHttps(match { it.contains("/launch") && it.contains("appid=1") }, any()) }
+        }
+
+    @Test
+    fun `a paired host with no apps reports it instead of launching`() =
+        runTest(dispatcher) {
+            every { store.get(remembered.id) } returns remembered.copy(lastAppId = "", lastAppName = "")
+            every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply("""<root status_code="200"></root>""")
+            val seen = mutableListOf<MoonlightConnectionEvent>()
+            val collector = collectEvents(seen)
+
+            bindOnePad()
+
+            val error = seen.filterIsInstance<MoonlightConnectionEvent.Error>().single()
+            assertEquals(MoonlightError.NoAppsAvailable("PC"), error.error)
+            verify(exactly = 0) { gateway.getHttps(match { it.contains("/launch") }, any()) }
+            assertEquals(MoonlightSessionState.Idle, manager.get(remembered.id)?.state?.value)
+            collector.cancel()
+        }
+
+    private companion object {
+        const val HTTP_BAD_REQUEST = 400
+    }
 }

@@ -2,28 +2,6 @@
 
 package com.tinkernorth.dish.core.input
 
-object BluetoothGamepad {
-    enum class GamepadProfile(
-        val profileName: String,
-        val sdpName: String,
-        val sdpDescription: String,
-        val sdpProvider: String,
-    ) {
-        XBOX(
-            profileName = "Xbox",
-            sdpName = "Dish Xbox Controller",
-            sdpDescription = "Wireless Xbox Controller",
-            sdpProvider = "TinkerNorth",
-        ),
-        PLAYSTATION(
-            profileName = "PlayStation",
-            sdpName = "Dish PS Controller",
-            sdpDescription = "Wireless PlayStation Controller",
-            sdpProvider = "TinkerNorth",
-        ),
-    }
-}
-
 // The HID report descriptor, one item per line as the HID 1.11 spec writes them: a tag byte
 // followed by its data bytes. Kept as text so the structure reads the way a descriptor tool
 // prints it; hidItems turns it into the bytes the SDP record carries.
@@ -91,6 +69,24 @@ private const val HEX_RADIX = 16
 internal const val REPORT_ID = 1
 internal const val REPORT_SIZE = 14
 
+// Byte offsets of the input report the descriptor above declares: report id, buttons u16, hat u8,
+// four int16 axes, two u8 triggers; every multi-byte field little-endian.
+private const val REPORT_OFF_ID = 0
+private const val REPORT_OFF_BUTTONS_LO = 1
+private const val REPORT_OFF_BUTTONS_HI = 2
+private const val REPORT_OFF_HAT = 3
+private const val REPORT_OFF_LX_LO = 4
+private const val REPORT_OFF_LX_HI = 5
+private const val REPORT_OFF_LY_LO = 6
+private const val REPORT_OFF_LY_HI = 7
+private const val REPORT_OFF_RX_LO = 8
+private const val REPORT_OFF_RX_HI = 9
+private const val REPORT_OFF_RY_LO = 10
+private const val REPORT_OFF_RY_HI = 11
+private const val REPORT_OFF_LT = 12
+private const val REPORT_OFF_RT = 13
+private const val BYTE_MASK = 0xFF
+
 // Caller passes XInput axes (stick-up = +Y); HID Generic Desktop Y is the opposite sign, so Y is negated here.
 internal fun buildHidReport(
     buttons: Int,
@@ -102,22 +98,26 @@ internal fun buildHidReport(
     leftTrigger: Int,
     rightTrigger: Int,
 ): ByteArray {
-    val hidLeftY = (-leftY.toInt()).coerceAtMost(0x7FFF)
-    val hidRightY = (-rightY.toInt()).coerceAtMost(0x7FFF)
+    val hidLeftY = (-leftY.toInt()).coerceAtMost(Short.MAX_VALUE.toInt())
+    val hidRightY = (-rightY.toInt()).coerceAtMost(Short.MAX_VALUE.toInt())
     val report = ByteArray(REPORT_SIZE)
-    report[0] = REPORT_ID.toByte()
-    report[1] = (buttons and 0xFF).toByte()
-    report[2] = ((buttons shr 8) and 0xFF).toByte()
-    report[3] = (hatSwitch and 0xFF).toByte()
-    report[4] = (leftX.toInt() and 0xFF).toByte()
-    report[5] = ((leftX.toInt() shr 8) and 0xFF).toByte()
-    report[6] = (hidLeftY and 0xFF).toByte()
-    report[7] = ((hidLeftY shr 8) and 0xFF).toByte()
-    report[8] = (rightX.toInt() and 0xFF).toByte()
-    report[9] = ((rightX.toInt() shr 8) and 0xFF).toByte()
-    report[10] = (hidRightY and 0xFF).toByte()
-    report[11] = ((hidRightY shr 8) and 0xFF).toByte()
-    report[12] = (leftTrigger and 0xFF).toByte()
-    report[13] = (rightTrigger and 0xFF).toByte()
+    report[REPORT_OFF_ID] = REPORT_ID.toByte()
+    report[REPORT_OFF_BUTTONS_LO] = lowByte(buttons)
+    report[REPORT_OFF_BUTTONS_HI] = highByte(buttons)
+    report[REPORT_OFF_HAT] = lowByte(hatSwitch)
+    report[REPORT_OFF_LX_LO] = lowByte(leftX.toInt())
+    report[REPORT_OFF_LX_HI] = highByte(leftX.toInt())
+    report[REPORT_OFF_LY_LO] = lowByte(hidLeftY)
+    report[REPORT_OFF_LY_HI] = highByte(hidLeftY)
+    report[REPORT_OFF_RX_LO] = lowByte(rightX.toInt())
+    report[REPORT_OFF_RX_HI] = highByte(rightX.toInt())
+    report[REPORT_OFF_RY_LO] = lowByte(hidRightY)
+    report[REPORT_OFF_RY_HI] = highByte(hidRightY)
+    report[REPORT_OFF_LT] = lowByte(leftTrigger)
+    report[REPORT_OFF_RT] = lowByte(rightTrigger)
     return report
 }
+
+private fun lowByte(value: Int): Byte = (value and BYTE_MASK).toByte()
+
+private fun highByte(value: Int): Byte = ((value shr Byte.SIZE_BITS) and BYTE_MASK).toByte()

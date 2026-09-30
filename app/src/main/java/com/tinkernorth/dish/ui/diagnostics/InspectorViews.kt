@@ -18,6 +18,13 @@ internal fun stickPlotFractionX(v: Float): Float = (v + 1f) / 2f
 
 internal fun stickPlotFractionY(v: Float): Float = (1f - v) / 2f
 
+private const val TOUCH_HALF_RANGE = 32768f
+private const val TOUCH_FULL_RANGE = 65535f
+
+// MSG_TOUCHPAD carries full-range int16 in both axes, +Y down like the screen, so the wire
+// minimum is the left or top edge and the maximum the right or bottom one.
+internal fun touchPlotFraction(wire: Int): Float = (wire + TOUCH_HALF_RANGE) / TOUCH_FULL_RANGE
+
 /**
  * Live stick plot: bounding box, crosshair, current position dot, and (during a range
  * capture) the sweep trail so the reach envelope is visible as it is learned. Inputs are
@@ -168,10 +175,8 @@ class TouchPlotView
                 trail.reset()
                 return null
             }
-            val nx = (wireX + HALF_RANGE) / FULL_RANGE
-            val ny = (wireY + HALF_RANGE) / FULL_RANGE
-            val px = nx * width
-            val py = ny * height
+            val px = touchPlotFraction(wireX) * width
+            val py = touchPlotFraction(wireY) * height
             if (trail.isEmpty) trail.moveTo(px, py) else trail.lineTo(px, py)
             return px to py
         }
@@ -187,8 +192,6 @@ class TouchPlotView
         }
 
         private companion object {
-            const val HALF_RANGE = 32768f
-            const val FULL_RANGE = 65535f
             const val DOT_RADIUS = 9f
         }
     }

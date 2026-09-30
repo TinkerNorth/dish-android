@@ -9,7 +9,7 @@ import androidx.annotation.StringRes
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.LinkTier
-import com.tinkernorth.dish.composer.LinkTiers
+import com.tinkernorth.dish.composer.linkTierFor
 import com.tinkernorth.dish.ui.main.PillSpec
 import com.tinkernorth.dish.ui.main.PillTone
 
@@ -38,7 +38,7 @@ internal fun tierTone(tier: LinkTier): PillTone =
 
 internal fun Context.tierPillSpec(tier: LinkTier): PillSpec = PillSpec(getString(tierLabelRes(tier)), tierIconRes(tier), tierTone(tier))
 
-internal fun Context.tierPillSpec(kind: ConnectionKind): PillSpec = tierPillSpec(LinkTiers.forKind(kind))
+internal fun Context.tierPillSpec(kind: ConnectionKind): PillSpec = tierPillSpec(linkTierFor(kind))
 
 internal fun TextView.paintTierBadge(tier: LinkTier) {
     val tone = tierTone(tier)

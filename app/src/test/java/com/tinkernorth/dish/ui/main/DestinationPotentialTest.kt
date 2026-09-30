@@ -5,6 +5,7 @@ package com.tinkernorth.dish.ui.main
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -29,9 +30,9 @@ class DestinationPotentialTest {
 
     @Test
     fun `unions the flows across candidate types, so one type's gap hides nothing`() {
-        val xboxLike = candidate(type = CapabilitySet.of(Feature.GAMEPAD, Feature.RUMBLE))
+        val xboxLike = candidate(type = capabilitySetOf(Feature.GAMEPAD, Feature.RUMBLE))
         val psLike =
-            candidate(type = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION, Feature.TOUCHPAD, Feature.RUMBLE))
+            candidate(type = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION, Feature.TOUCHPAD, Feature.RUMBLE))
 
         val potential = destinationPotential(listOf(xboxLike, psLike))
         assertTrue(Feature.MOTION in potential)
@@ -43,8 +44,8 @@ class DestinationPotentialTest {
     fun `the input's controller layer never gates the destination card`() {
         val gyrolessPad =
             candidate(
-                controller = CapabilitySet.of(Feature.GAMEPAD),
-                type = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
+                controller = capabilitySetOf(Feature.GAMEPAD),
+                type = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION),
             )
         assertTrue(Feature.MOTION in destinationPotential(listOf(gyrolessPad)))
     }
@@ -53,8 +54,8 @@ class DestinationPotentialTest {
     fun `transport and host still gate what the destination can actually carry`() {
         val btLike =
             candidate(
-                transport = CapabilitySet.of(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS),
-                type = CapabilitySet.of(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE, Feature.MOTION),
+                transport = capabilitySetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS),
+                type = capabilitySetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE, Feature.MOTION),
             )
         val potential = destinationPotential(listOf(btLike))
         assertFalse(Feature.RUMBLE in potential)
@@ -62,8 +63,8 @@ class DestinationPotentialTest {
 
         val rumblelessHost =
             candidate(
-                type = CapabilitySet.of(Feature.GAMEPAD, Feature.RUMBLE),
-                host = CapabilitySet.of(Feature.GAMEPAD),
+                type = capabilitySetOf(Feature.GAMEPAD, Feature.RUMBLE),
+                host = capabilitySetOf(Feature.GAMEPAD),
             )
         assertFalse(Feature.RUMBLE in destinationPotential(listOf(rumblelessHost)))
     }

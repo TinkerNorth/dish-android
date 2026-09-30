@@ -6,11 +6,6 @@ import android.os.Bundle
 import android.view.View
 import androidx.activity.addCallback
 import androidx.activity.viewModels
-import androidx.annotation.DrawableRes
-import androidx.annotation.StringRes
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
@@ -19,8 +14,11 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.core.model.Feature
-import com.tinkernorth.dish.core.net.DishProtocol
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.DishProtocolCompat
+import com.tinkernorth.dish.core.net.moonlight.AUTO
+import com.tinkernorth.dish.core.net.moonlight.NINTENDO
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
+import com.tinkernorth.dish.core.net.moonlight.XBOX
 import com.tinkernorth.dish.databinding.ActivitySetupConfigureBinding
 import com.tinkernorth.dish.databinding.SetupReviewCardBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
@@ -30,19 +28,20 @@ import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.bundledControllerTypeGlyphRes
 import com.tinkernorth.dish.ui.common.moonlightTypeGlyphRes
 import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.main.ApplyState
 import com.tinkernorth.dish.ui.main.BindingLink
 import com.tinkernorth.dish.ui.main.BindingSnapshot
 import com.tinkernorth.dish.ui.main.ConfigUiState
 import com.tinkernorth.dish.ui.main.ConfigureBindingsViewModel
+import com.tinkernorth.dish.ui.main.ContextStringLookup
 import com.tinkernorth.dish.ui.main.MoonlightAction
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import com.tinkernorth.dish.ui.main.bindCompat
 import com.tinkernorth.dish.ui.main.bindMoonlightSession
 import com.tinkernorth.dish.ui.main.iconRes
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 // Stage 4 of the guided flow: type + capability table (4A), feel (4B), review &
@@ -56,6 +55,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     private lateinit var binding: ActivitySetupConfigureBinding
     private val nav by lazy { DishNavigator(this) }
     private val viewModel: ConfigureBindingsViewModel by viewModels()
+    private val strings = ContextStringLookup(this)
 
     private var step = Step.TYPE
     private var current = ConfigUiState()
@@ -76,11 +76,11 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         super.onCreate(savedInstanceState)
         binding = setScaffoldContent(ActivitySetupConfigureBinding::inflate)
         setupDishToolbar(binding.toolbar)
-        wireSetupSkip(binding.toolbar, onboarding)
+        wireSetupSkip(binding.toolbar, onboarding, nav)
         binding.breadcrumb.applyStep(SETUP_STEP_BINDING)
 
-        val slotId = intent.getStringExtra(SetupFlow.EXTRA_SLOT_ID)
-        val connectionId = intent.getStringExtra(SetupFlow.EXTRA_CONNECTION_ID)
+        val slotId = intent.getStringExtra(EXTRA_SLOT_ID)
+        val connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID)
         if (slotId == null || connectionId == null) {
             finish()
             return
@@ -104,26 +104,20 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         binding.cardTypeDualsense.typeCard.setOnClickListener { pickType(CONTROLLER_TYPE_DUALSENSE) }
         binding.cardTypeSwitchpro.typeCard.setOnClickListener { pickType(CONTROLLER_TYPE_SWITCHPRO) }
 
-        binding.cardMlAuto.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.AUTO) }
-        binding.cardMlXbox.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.XBOX) }
-        binding.cardMlPlaystation.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.PLAYSTATION) }
-        binding.cardMlNintendo.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.NINTENDO) }
+        binding.cardMlAuto.typeCard.setOnClickListener { pickType(AUTO) }
+        binding.cardMlXbox.typeCard.setOnClickListener { pickType(XBOX) }
+        binding.cardMlPlaystation.typeCard.setOnClickListener { pickType(PLAYSTATION) }
+        binding.cardMlNintendo.typeCard.setOnClickListener { pickType(NINTENDO) }
     }
 
     private fun observe() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.ui.collect { state ->
-                    current = state
-                    if (state.loaded) render(state)
-                }
-            }
-        }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.applyState.collect { renderApplyState(it) }
-            }
-        }
+        observeWhileStarted(viewModel.ui) { onUiState(it) }
+        observeWhileStarted(viewModel.applyState) { renderApplyState(it) }
+    }
+
+    private fun onUiState(state: ConfigUiState) {
+        current = state
+        if (state.loaded) render(state)
     }
 
     private fun render(state: ConfigUiState) {
@@ -145,38 +139,50 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     // pick. A Bluetooth host has its type fixed upstream, so only the chosen one
     // shows and the cards stop being tappable.
     private fun renderType(state: ConfigUiState) {
+        renderTypeHeadings(state)
+        renderPadTypeCards(state)
+        renderMoonlightTypeCards(state)
+    }
+
+    private fun renderTypeHeadings(state: ConfigUiState) {
         val moonlight = state.isMoonlightHost
         binding.tvTitle.setText(if (moonlight) R.string.ml_type_title else R.string.setup_cfg_type_title)
-        binding.tvSubtitle.text =
-            when {
-                moonlight -> getString(R.string.ml_type_caption, state.selectedHost?.label.orEmpty())
-                state.isBluetoothHost -> getString(R.string.setup_cfg_type_locked_subtitle)
-                else -> getString(R.string.setup_cfg_type_subtitle)
-            }
+        binding.tvSubtitle.text = typeSubtitleFor(state)
         binding.btnContinue.setText(R.string.setup_cfg_continue)
-        // Tapping a type commits and advances; only the locked Bluetooth-host case,
-        // where the cards aren't tappable, needs the Next button.
+        // Tapping a type commits and advances; only the locked Bluetooth-host case, where the
+        // cards aren't tappable, needs the Next button.
         binding.btnContinue.visibility = visibleIf(state.isBluetoothHost)
+    }
 
-        val selectedType = state.draft?.type ?: CONTROLLER_TYPE_XBOX
+    private fun typeSubtitleFor(state: ConfigUiState): String =
+        getString(typeSubtitleRes(state.selectedHost?.kind), state.selectedHost?.label.orEmpty())
+
+    private fun padTypeCards() =
+        listOf(
+            binding.cardTypeXbox to CONTROLLER_TYPE_XBOX,
+            binding.cardTypePlaystation to CONTROLLER_TYPE_PLAYSTATION,
+            binding.cardTypeDualsense to CONTROLLER_TYPE_DUALSENSE,
+            binding.cardTypeSwitchpro to CONTROLLER_TYPE_SWITCHPRO,
+        )
+
+    // A Bluetooth host locks to one type, so its other cards never show, and a Moonlight host
+    // uses the separate set below instead of these.
+    private fun renderPadTypeCards(state: ConfigUiState) {
+        val moonlight = state.isMoonlightHost
         val locked = state.isBluetoothHost
-        bindTypeCard(binding.cardTypeXbox, state, CONTROLLER_TYPE_XBOX, locked)
-        bindTypeCard(binding.cardTypePlaystation, state, CONTROLLER_TYPE_PLAYSTATION, locked)
-        bindTypeCard(binding.cardTypeDualsense, state, CONTROLLER_TYPE_DUALSENSE, locked)
-        bindTypeCard(binding.cardTypeSwitchpro, state, CONTROLLER_TYPE_SWITCHPRO, locked)
-        // A Bluetooth host locks to Xbox/PlayStation, so its other cards never show.
-        binding.cardTypeXbox.typeCard.visibility = visibleIf(!moonlight && (!locked || selectedType == CONTROLLER_TYPE_XBOX))
-        binding.cardTypePlaystation.typeCard.visibility =
-            visibleIf(!moonlight && (!locked || selectedType == CONTROLLER_TYPE_PLAYSTATION))
-        binding.cardTypeDualsense.typeCard.visibility =
-            visibleIf(!moonlight && (!locked || selectedType == CONTROLLER_TYPE_DUALSENSE))
-        binding.cardTypeSwitchpro.typeCard.visibility =
-            visibleIf(!moonlight && (!locked || selectedType == CONTROLLER_TYPE_SWITCHPRO))
+        val selectedType = state.draft?.type ?: CONTROLLER_TYPE_XBOX
+        for ((card, type) in padTypeCards()) {
+            bindTypeCard(card, state, type, locked)
+            card.typeCard.visibility = visibleIf(!moonlight && (!locked || selectedType == type))
+        }
+    }
 
-        bindMoonlightTypeCard(binding.cardMlAuto, state, MoonlightEmulatedType.AUTO, moonlight)
-        bindMoonlightTypeCard(binding.cardMlXbox, state, MoonlightEmulatedType.XBOX, moonlight)
-        bindMoonlightTypeCard(binding.cardMlPlaystation, state, MoonlightEmulatedType.PLAYSTATION, moonlight)
-        bindMoonlightTypeCard(binding.cardMlNintendo, state, MoonlightEmulatedType.NINTENDO, moonlight)
+    private fun renderMoonlightTypeCards(state: ConfigUiState) {
+        val moonlight = state.isMoonlightHost
+        bindMoonlightTypeCard(binding.cardMlAuto, state, AUTO, moonlight)
+        bindMoonlightTypeCard(binding.cardMlXbox, state, XBOX, moonlight)
+        bindMoonlightTypeCard(binding.cardMlPlaystation, state, PLAYSTATION, moonlight)
+        bindMoonlightTypeCard(binding.cardMlNintendo, state, NINTENDO, moonlight)
     }
 
     private fun bindTypeCard(
@@ -227,7 +233,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         card.typeChevron.visibility = View.GONE
         card.typeCard.isClickable = true
         card.typeCard.isChecked = state.draft?.type == candidateType
-        val auto = candidateType == MoonlightEmulatedType.AUTO
+        val auto = candidateType == AUTO
         card.typeBadge.visibility = visibleIf(auto)
         card.typeCaption.visibility = visibleIf(auto)
         if (auto) {
@@ -276,25 +282,39 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         binding.btnContinue.visibility = View.VISIBLE
 
         val motionVisible = state.motionAvailable
-        binding.motionRow.visibility = visibleIf(motionVisible)
-        if (motionVisible) {
-            binding.swMotion.setOnCheckedChangeListener(null)
-            binding.swMotion.isChecked = state.draft?.motionOn == true
-            binding.swMotion.setOnCheckedChangeListener { _, isChecked -> viewModel.setMotion(isChecked) }
-        }
-
         // Rumble shows when the path can carry it: a Satellite host returns it, the phone
         // vibrates as a fallback for the on-screen pad, and a physical pad needs its own motor.
         val rumbleVisible = state.capabilities.isAvailable(Feature.RUMBLE)
-        binding.rumbleDivider.visibility = visibleIf(rumbleVisible && motionVisible)
-        binding.rumbleRow.visibility = visibleIf(rumbleVisible)
-        if (rumbleVisible) {
-            binding.swRumble.setOnCheckedChangeListener(null)
-            binding.swRumble.isChecked = state.draft?.rumbleOn == true
-            binding.swRumble.setOnCheckedChangeListener { _, isChecked -> viewModel.setRumble(isChecked) }
-        }
-
+        renderMotionRow(state, motionVisible)
+        renderRumbleRow(state, rumbleVisible, motionVisible)
         binding.tvFeelEmpty.visibility = visibleIf(!motionVisible && !rumbleVisible)
+    }
+
+    // The listener is cleared before the checked state is set: setChecked fires it, and a render
+    // must not read as the user having flipped the switch.
+    private fun renderMotionRow(
+        state: ConfigUiState,
+        visible: Boolean,
+    ) {
+        binding.motionRow.visibility = visibleIf(visible)
+        if (!visible) return
+        binding.swMotion.setOnCheckedChangeListener(null)
+        binding.swMotion.isChecked = state.draft?.motionOn == true
+        binding.swMotion.setOnCheckedChangeListener { _, isChecked -> viewModel.setMotion(isChecked) }
+    }
+
+    // The divider only earns its space between two visible rows.
+    private fun renderRumbleRow(
+        state: ConfigUiState,
+        visible: Boolean,
+        motionVisible: Boolean,
+    ) {
+        binding.rumbleDivider.visibility = visibleIf(visible && motionVisible)
+        binding.rumbleRow.visibility = visibleIf(visible)
+        if (!visible) return
+        binding.swRumble.setOnCheckedChangeListener(null)
+        binding.swRumble.isChecked = state.draft?.rumbleOn == true
+        binding.swRumble.setOnCheckedChangeListener { _, isChecked -> viewModel.setRumble(isChecked) }
     }
 
     // 4C: one card per source and destination, each showing what it sends (up)
@@ -310,7 +330,8 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
 
         val container = binding.reviewContainer
         container.removeAllViews()
-        reviewNodes(state, snapshot).forEach { node ->
+        val nodes = reviewGraph(reviewInputFor(state, snapshot), reviewModelFor(state), strings)
+        nodes.forEach { node ->
             val card = SetupReviewCardBinding.inflate(layoutInflater, container, false)
             card.reviewIcon.setImageResource(node.icon)
             card.reviewKind.setText(node.kind)
@@ -323,230 +344,40 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         }
     }
 
-    private fun reviewNodes(
+    private fun reviewModelFor(state: ConfigUiState): ReviewModel =
+        reviewModelFor(
+            caps = state.capabilities,
+            motionOn = state.draft?.motionOn == true,
+            rumbleOn = state.draft?.rumbleOn == true,
+            micOn = state.draft?.micOn == true,
+            speakerOn = state.draft?.speakerOn == true,
+        )
+
+    private fun reviewInputFor(
         state: ConfigUiState,
         snapshot: BindingSnapshot,
-    ): List<ReviewNode> {
-        val caps = state.capabilities
-        // Routing is derived, not picked, and the two surfaces coexist: the emulated pad's
-        // touchpad streams by default and the mouse surface flips the slot over while open,
-        // so the summary shows every pointer flow the path can carry.
-        val padMode = caps.isAvailable(Feature.TOUCHPAD)
-        val mouseMode = caps.isAvailable(Feature.MOUSE)
-        val model =
-            ReviewModel(
-                motionOn = caps.isAvailable(Feature.MOTION) && state.draft?.motionOn == true,
-                touchpadOn = padMode || mouseMode,
-                mouseMode = mouseMode,
-                padMode = padMode,
-                // Rumble flows back only where the path carries it (no Bluetooth return channel,
-                // no phone fallback for a motorless physical pad); the user's toggle gates it,
-                // and trigger rumble follows it.
-                rumbleOn = caps.isAvailable(Feature.RUMBLE) && state.draft?.rumbleOn == true,
-                batteryOn = caps.isAvailable(Feature.BATTERY),
-                triggerRumbleOn = caps.isAvailable(Feature.TRIGGER_RUMBLE) && state.draft?.rumbleOn == true,
-                lightbar = caps.isAvailable(Feature.LIGHTBAR),
-                triggerEffects = caps.isAvailable(Feature.TRIGGER_EFFECTS),
-                playerLeds = caps.isAvailable(Feature.PLAYER_LEDS),
-                // The pad's own endpoints: the microphone rides up with the input's other
-                // sources, its speaker comes back with the rest of the feedback. Both
-                // follow their toggles, which is why they read the draft like rumble does.
-                micOn = caps.isAvailable(Feature.MIC) && state.draft?.micOn == true,
-                speakerOn = caps.isAvailable(Feature.SPEAKER) && state.draft?.speakerOn == true,
-            )
-        return inputNodes(state, snapshot, model) + destinationNodes(state, model)
-    }
-
-    // The phone is always one "virtual controller": when it IS the input, the
-    // on-screen pad and its touch surface (mouse/touchpad) merge into a single
-    // node; when a connected controller is the input, the phone's touch surface is
-    // still shown as its own whole virtual-controller input.
-    // Everything the host can push back at this pad, in a fixed order; the
-    // input's gets and the emulated pad's sends are the same list by definition.
-    private fun feedbackFlows(model: ReviewModel): List<ReviewFlow> =
-        buildList {
-            if (model.rumbleOn) add(ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble))
-            if (model.triggerRumbleOn) add(ReviewFlow(R.drawable.ic_trigger_rumble, R.string.setup_cap_trigger_rumble))
-            if (model.lightbar) add(ReviewFlow(R.drawable.ic_lightbar, R.string.setup_cap_lightbar))
-            if (model.triggerEffects) add(ReviewFlow(R.drawable.ic_trigger_effects, R.string.setup_cap_trigger_effects))
-            if (model.playerLeds) add(ReviewFlow(R.drawable.ic_player_leds, R.string.setup_cap_player_leds))
-            if (model.speakerOn) add(ReviewFlow(R.drawable.ic_speaker, R.string.setup_cap_speaker))
-        }
-
-    private fun inputNodes(
-        state: ConfigUiState,
-        snapshot: BindingSnapshot,
-        model: ReviewModel,
-    ): List<ReviewNode> {
-        val gamepad = ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller)
-        val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
-        val battery = ReviewFlow(R.drawable.ic_battery, R.string.setup_cap_battery)
-        val mic = ReviewFlow(R.drawable.ic_mic, R.string.setup_cap_mic)
-        val pointerFlows =
-            buildList {
-                if (model.padMode) add(ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad))
-                if (model.mouseMode) add(ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse))
-            }
-        val gets = feedbackFlows(model)
-        val virtual =
-            ReviewNode(
-                kind = R.string.binding_label_input,
-                icon = R.drawable.ic_gamepad_virtual,
-                name = getString(R.string.default_virtual_controller_name),
-                sublabel = getString(R.string.binding_link_onscreen),
-                sends = pointerFlows,
-                gets = emptyList(),
-            )
-
-        if (snapshot.link == BindingLink.ONSCREEN) {
-            return listOf(
-                virtual.copy(
-                    sends =
-                        buildList {
-                            add(gamepad)
-                            if (model.motionOn) add(motion)
-                            addAll(pointerFlows)
-                            if (model.batteryOn) add(battery)
-                            if (model.micOn) add(mic)
-                        },
-                    gets = gets,
-                ),
-            )
-        }
-        val controller =
-            ReviewNode(
-                kind = R.string.binding_label_input,
-                icon = snapshot.link.iconRes(),
-                name = snapshot.name,
-                sublabel = inputLink(state, snapshot).first,
-                sends =
-                    buildList {
-                        add(gamepad)
-                        if (model.motionOn) add(motion)
-                        if (model.batteryOn) add(battery)
-                        if (model.micOn) add(mic)
-                        if (state.inputUnknown) add(ReviewFlow(R.drawable.ic_help, R.string.setup_cap_unknown))
-                    },
-                gets = gets,
-            )
-        return if (model.touchpadOn) listOf(controller, virtual) else listOf(controller)
-    }
-
-    private fun destinationNodes(
-        state: ConfigUiState,
-        model: ReviewModel,
-    ): List<ReviewNode> {
-        val gamepad = ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller)
-        val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
-        val rumble = ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble)
-        val rumbleBack = if (model.rumbleOn) listOf(rumble) else emptyList()
-        if (state.isBluetoothHost) {
-            return listOf(
-                ReviewNode(
-                    kind = R.string.binding_label_destination,
-                    icon = R.drawable.ic_bluetooth,
-                    name = state.selectedHost?.label.orEmpty(),
-                    sublabel = getString(R.string.setup_cfg_dest_bluetooth),
-                    sends = rumbleBack,
-                    gets = listOf(gamepad),
-                ),
-            )
-        }
-        if (state.isMoonlightHost) return moonlightDestinationNodes(state, model)
-        // Satellite injects the mouse itself; the virtual pad it creates carries the
-        // gamepad, motion, DS4 touchpad, and the rumble it sends back.
-        val mouse = ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse)
-        val touchpad = ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad)
-        return listOf(
-            ReviewNode(
-                kind = R.string.binding_label_destination,
-                icon = R.drawable.ic_satellite,
-                name = state.selectedHost?.label.orEmpty(),
-                sublabel = getString(R.string.setup_cfg_dest_satellite),
-                sends = emptyList(),
-                gets = if (model.mouseMode) listOf(mouse) else emptyList(),
-                compat = state.draft?.hostId?.let { state.hostCompat[it] } ?: DishProtocol.Compat.UNKNOWN,
-            ),
-            ReviewNode(
-                kind = R.string.binding_label_destination,
-                icon = R.drawable.ic_gamepad,
-                name = viewModel.typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX),
-                sublabel = getString(R.string.setup_cfg_virtual_sublabel),
-                sends = feedbackFlows(model),
-                gets =
-                    buildList {
-                        add(gamepad)
-                        if (model.motionOn) add(motion)
-                        if (model.padMode) add(touchpad)
-                        if (model.batteryOn) add(ReviewFlow(R.drawable.ic_battery, R.string.setup_cap_battery))
-                        if (model.micOn) add(ReviewFlow(R.drawable.ic_mic, R.string.setup_cap_mic))
-                    },
-            ),
+    ): ReviewInput =
+        ReviewInput(
+            onScreenInput = snapshot.link == BindingLink.ONSCREEN,
+            inputName = snapshot.name,
+            inputIcon = snapshot.link.iconRes(),
+            inputLinkLabel = inputLinkLabel(state, snapshot),
+            inputUnknown = state.inputUnknown,
+            hostKind = state.selectedHost?.kind ?: ConnectionKind.SATELLITE,
+            hostLabel = state.selectedHost?.label.orEmpty(),
+            hostCompat = state.draft?.hostId?.let { state.hostCompat[it] } ?: DishProtocolCompat.UNKNOWN,
+            padTypeLabel = padTypeLabelFor(state),
+            moonlightAddress = viewModel.moonlightAddress(state.draft?.hostId.orEmpty()),
         )
-    }
 
-    // The host runs an emulated pad of its own, so it reads like the satellite pair: the
-    // PC itself (which also takes the mouse, straight over the control stream), then the
-    // controller it plugs in for us and the feedback that comes back.
-    private fun moonlightDestinationNodes(
-        state: ConfigUiState,
-        model: ReviewModel,
-    ): List<ReviewNode> {
-        val gamepad = ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller)
-        val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
-        val touchpad = ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad)
-        val mouse = ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse)
-        val stored = state.draft?.type ?: MoonlightEmulatedType.AUTO
-        return listOf(
-            ReviewNode(
-                kind = R.string.binding_label_destination,
-                icon = R.drawable.ic_pc_monitor,
-                name = state.selectedHost?.label.orEmpty(),
-                sublabel = getString(R.string.ml_dest_sublabel, viewModel.moonlightAddress(state.draft?.hostId.orEmpty())),
-                sends = emptyList(),
-                gets = if (model.mouseMode) listOf(mouse) else emptyList(),
-            ),
-            ReviewNode(
-                kind = R.string.binding_label_destination,
-                icon = R.drawable.ic_gamepad,
-                name = getString(moonlightTypeLabelRes(viewModel.moonlightResolvedType(stored))),
-                sublabel = getString(R.string.setup_cfg_virtual_sublabel),
-                sends = feedbackFlows(model),
-                gets =
-                    buildList {
-                        add(gamepad)
-                        if (model.motionOn) add(motion)
-                        if (model.padMode) add(touchpad)
-                        if (model.batteryOn) add(ReviewFlow(R.drawable.ic_battery, R.string.setup_cap_battery))
-                    },
-            ),
-        )
-    }
-
-    private data class ReviewModel(
-        val motionOn: Boolean,
-        val touchpadOn: Boolean,
-        val mouseMode: Boolean,
-        val padMode: Boolean,
-        val rumbleOn: Boolean,
-        val batteryOn: Boolean,
-        val triggerRumbleOn: Boolean,
-        val lightbar: Boolean,
-        val triggerEffects: Boolean,
-        val playerLeds: Boolean,
-        val micOn: Boolean,
-        val speakerOn: Boolean,
-    )
-
-    private data class ReviewNode(
-        @StringRes val kind: Int,
-        @DrawableRes val icon: Int,
-        val name: String,
-        val sublabel: String,
-        val sends: List<ReviewFlow>,
-        val gets: List<ReviewFlow>,
-        val compat: DishProtocol.Compat = DishProtocol.Compat.UNKNOWN,
-    )
+    // The Moonlight type table is the host emulator's, resolved here so Auto names the type it
+    // will really send; every other host reads the satellite catalog's label.
+    private fun padTypeLabelFor(state: ConfigUiState): String =
+        if (state.isMoonlightHost) {
+            getString(moonlightTypeLabelRes(viewModel.moonlightResolvedType(state.draft?.type ?: AUTO)))
+        } else {
+            viewModel.typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX)
+        }
 
     private fun renderApplyState(state: ApplyState) {
         when (state) {
@@ -555,7 +386,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
             is ApplyState.Finished -> {
                 setBindBusy(false)
                 if (state.errorMessage != null) {
-                    SetupErrorDialog.show(this, state.errorMessage) { viewModel.apply() }
+                    showSetupError(this, nav, state.errorMessage) { viewModel.apply() }
                 } else {
                     finishToDashboard(state)
                 }
@@ -628,19 +459,19 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         if (current.loaded) render(current)
     }
 
-    private fun inputLink(
+    private fun inputLinkLabel(
         state: ConfigUiState,
         snapshot: BindingSnapshot,
-    ): Pair<String, Int> =
+    ): String =
         when (snapshot.link) {
             BindingLink.USB ->
                 if (state.draft?.directOn == true) {
-                    getString(R.string.setup_cfg_link_usb_direct) to R.drawable.ic_bolt
+                    getString(R.string.setup_cfg_link_usb_direct)
                 } else {
-                    getString(R.string.setup_cfg_link_usb_standard) to R.drawable.ic_usb
+                    getString(R.string.setup_cfg_link_usb_standard)
                 }
-            BindingLink.BLUETOOTH -> getString(R.string.binding_link_bluetooth) to R.drawable.ic_bluetooth
-            BindingLink.ONSCREEN -> getString(R.string.binding_link_onscreen) to R.drawable.ic_gamepad_virtual
+            BindingLink.BLUETOOTH -> getString(R.string.binding_link_bluetooth)
+            BindingLink.ONSCREEN -> getString(R.string.binding_link_onscreen)
         }
 
     // A Direct claim swaps the framework id for a synthetic one, so the slot id

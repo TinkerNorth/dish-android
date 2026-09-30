@@ -27,12 +27,7 @@ class BluetoothPadLinkReader
                 (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter ?: return BluetoothLinkType.UNKNOWN
             return try {
                 val matches = adapter.bondedDevices.orEmpty().filter { it.name == deviceName }
-                when (matches.singleOrNull()?.type) {
-                    BluetoothDevice.DEVICE_TYPE_CLASSIC -> BluetoothLinkType.CLASSIC
-                    BluetoothDevice.DEVICE_TYPE_LE -> BluetoothLinkType.LOW_ENERGY
-                    BluetoothDevice.DEVICE_TYPE_DUAL -> BluetoothLinkType.DUAL
-                    else -> BluetoothLinkType.UNKNOWN
-                }
+                linkTypeOf(matches.map { it.type })
             } catch (e: SecurityException) {
                 // Revoked between the check above and the reads: the link type stays unknown.
                 Log.w(TAG, "BLUETOOTH_CONNECT revoked while reading bonded devices: ${e.message}")
@@ -43,4 +38,13 @@ class BluetoothPadLinkReader
         private companion object {
             const val TAG = "BluetoothPadLinkReader"
         }
+    }
+
+// Exactly one bonded device of the pad's name is the pad; none or several is no answer.
+internal fun linkTypeOf(matchingDeviceTypes: List<Int>): BluetoothLinkType =
+    when (matchingDeviceTypes.singleOrNull()) {
+        BluetoothDevice.DEVICE_TYPE_CLASSIC -> BluetoothLinkType.CLASSIC
+        BluetoothDevice.DEVICE_TYPE_LE -> BluetoothLinkType.LOW_ENERGY
+        BluetoothDevice.DEVICE_TYPE_DUAL -> BluetoothLinkType.DUAL
+        else -> BluetoothLinkType.UNKNOWN
     }

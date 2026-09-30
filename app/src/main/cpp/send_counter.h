@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <mutex>
 
 namespace dish_counter {
 
@@ -12,8 +13,8 @@ namespace dish_counter {
 // sender silent instead of wrapping the 32-bit wire field into nonce reuse.
 inline constexpr uint64_t kCounterMaxWire = 0xFFFFFFFFull;
 
-// Draws the next wire counter; false once the 32-bit space is exhausted (the
-// caller must go silent, never send). A drawn value is never repeated.
+// Draws the next wire counter; false once the 32-bit space is exhausted, which is the caller's
+// cue to go silent (contract §Crypto).
 inline bool acquireSendCounter(std::atomic<uint64_t>& counter, uint32_t* out) {
     const uint64_t seq = counter.fetch_add(1, std::memory_order_relaxed);
     if (seq > kCounterMaxWire) return false;
@@ -21,8 +22,20 @@ inline bool acquireSendCounter(std::atomic<uint64_t>& counter, uint32_t* out) {
     return true;
 }
 
-// Clamped, not truncated, for the Kotlin re-key poll: past exhaustion it must
-// keep reading re-PUT needed, never wrap under the threshold.
+// The satellite drops a datagram whose counter is not above the last one it accepted from the
+// session, whichever slot it carries (satellite net/receiver.cpp), so a session's counters have to
+// reach the wire in the order they were drawn. A sender takes the session's turn, then draws, and
+// keeps the turn until its datagram has left sendto; false, with the turn given back, once the
+// counter space is exhausted.
+inline bool takeTurnAndCounter(std::mutex& turnMtx, std::atomic<uint64_t>& counter,
+                               std::unique_lock<std::mutex>& turn, uint32_t* out) {
+    turn = std::unique_lock<std::mutex>(turnMtx);
+    const bool drawn = acquireSendCounter(counter, out);
+    if (!drawn) turn.unlock();
+    return drawn;
+}
+
+// The counter as the Kotlin re-key poll reads it, clamped at the wire max.
 inline uint32_t sendCounterView(const std::atomic<uint64_t>& counter) {
     const uint64_t v = counter.load(std::memory_order_relaxed);
     return v > kCounterMaxWire ? static_cast<uint32_t>(kCounterMaxWire) : static_cast<uint32_t>(v);

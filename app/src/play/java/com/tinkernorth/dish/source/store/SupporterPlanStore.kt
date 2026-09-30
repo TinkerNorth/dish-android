@@ -12,6 +12,16 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val PREFS_NAME = "user_preferences"
+private const val KEY_TOKEN = "supporter_plan_token"
+private const val KEY_PLAN = "supporter_plan_id"
+private const val KEY_ACTIVE = "supporter_active"
+private const val KEY_EXPECTED_PLAN = "supporter_plan_expected"
+private const val KEY_EXPECTED_FROM = "supporter_plan_expected_from"
+
+internal fun storedSupporterActive(context: Context): Boolean =
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(KEY_ACTIVE, false)
+
 @Singleton
 class SupporterPlanStore
     @Inject
@@ -56,17 +66,5 @@ class SupporterPlanStore
                 remove(KEY_EXPECTED_PLAN)
                 remove(KEY_EXPECTED_FROM)
             }
-        }
-
-        companion object {
-            private const val PREFS_NAME = "user_preferences"
-            private const val KEY_TOKEN = "supporter_plan_token"
-            private const val KEY_PLAN = "supporter_plan_id"
-            private const val KEY_ACTIVE = "supporter_active"
-            private const val KEY_EXPECTED_PLAN = "supporter_plan_expected"
-            private const val KEY_EXPECTED_FROM = "supporter_plan_expected_from"
-
-            fun isSupporter(context: Context): Boolean =
-                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(KEY_ACTIVE, false)
         }
     }

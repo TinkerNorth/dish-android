@@ -2,13 +2,13 @@
 
 package com.tinkernorth.dish.ui.common
 
-import android.graphics.RectF
 import android.view.MotionEvent
 import com.tinkernorth.dish.core.input.hidToXusb
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.slot
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -17,15 +17,16 @@ class GamepadGestureRecognizerTest {
 
     private val layout =
         GamepadLayout(
-            dpadRect = fakeRect(100f, 200f, 200f, 300f),
+            dpadRect = box(100f, 200f, 200f, 300f),
             // ABXY centred at (1000,1000), btnRadius=10 → A(1000,1015) B(1015,1000)
-            // X(985,1000) Y(1000,985); pickup radius 13; midpoint A↔B at (1007.5,1007.5)
-            // → distance 10.6, inside pickup radius.
-            abxyRect = fakeRect(985f, 985f, 1015f, 1015f),
-            lbRect = fakeRect(FAR, FAR, FAR + 1, FAR + 1),
-            rbRect = fakeRect(FAR, FAR, FAR + 1, FAR + 1),
-            ltRect = fakeRect(FAR, FAR, FAR + 1, FAR + 1),
-            rtRect = fakeRect(FAR, FAR, FAR + 1, FAR + 1),
+            // X(985,1000) Y(1000,985); centre zone radius 7.5; midpoint A↔B at (1007.5,1007.5)
+            // → distance 10.6, outside the centre zone. The rect reaches 20 past the centre so
+            // the button centres are inside it (its right and bottom edges are exclusive).
+            abxyRect = box(980f, 980f, 1020f, 1020f),
+            lbRect = box(FAR, FAR, FAR + 1, FAR + 1),
+            rbRect = box(FAR, FAR, FAR + 1, FAR + 1),
+            ltRect = box(FAR, FAR, FAR + 1, FAR + 1),
+            rtRect = box(FAR, FAR, FAR + 1, FAR + 1),
             leftStickCx = FAR,
             leftStickCy = FAR,
             rightStickCx = FAR,
@@ -46,7 +47,7 @@ class GamepadGestureRecognizerTest {
         )
 
     // Trackpad zone spanning x 400..600, y 0..100: centre maps to a (0,0) wire frame.
-    private val trackpadLayout = layout.copy(trackpadRect = fakeRect(400f, 0f, 600f, 100f))
+    private val trackpadLayout = layout.copy(trackpadRect = box(400f, 0f, 600f, 100f))
 
     @Test
     fun `trigger rail value ramps from the bottom and pins full in the top zone`() {
@@ -68,7 +69,7 @@ class GamepadGestureRecognizerTest {
 
     @Test
     fun `a trigger rail gesture slides the value and releases to zero`() {
-        val rail = fakeRect(0f, 100f, 52f, 500f)
+        val rail = box(0f, 100f, 52f, 500f)
         val railLayout = layout.copy(ltRect = rail)
         // Touch at half the ramp: a partial pull, not a full press.
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, 26f, 350f), railLayout)
@@ -85,7 +86,7 @@ class GamepadGestureRecognizerTest {
 
     @Test
     fun `a digital-trigger type presses full from anywhere on the rail`() {
-        val rail = fakeRect(0f, 100f, 52f, 500f)
+        val rail = box(0f, 100f, 52f, 500f)
         val railLayout = layout.copy(ltRect = rail)
         recognizer.analogTriggers = false
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, 26f, 480f), railLayout)
@@ -94,35 +95,12 @@ class GamepadGestureRecognizerTest {
         assertEquals(0, recognizer.state.leftTrigger)
     }
 
-    private fun fakeRect(
+    private fun box(
         left: Float,
         top: Float,
         right: Float,
         bottom: Float,
-    ): RectF {
-        // RectF is stubbed out by AGP unit-test classpath; mock the slice the recognizer touches.
-        val cx = (left + right) / 2f
-        val cy = (top + bottom) / 2f
-        val width = right - left
-        val height = bottom - top
-        return mockk<RectF> {
-            // Real fields on the stub class carry the geometry the analog
-            // trigger rail reads directly.
-            this.left = left
-            this.top = top
-            this.right = right
-            this.bottom = bottom
-            every { centerX() } returns cx
-            every { centerY() } returns cy
-            every { this@mockk.width() } returns width
-            every { this@mockk.height() } returns height
-            val xSlot = slot<Float>()
-            val ySlot = slot<Float>()
-            every { contains(capture(xSlot), capture(ySlot)) } answers {
-                xSlot.captured in left..right && ySlot.captured in top..bottom
-            }
-        }
-    }
+    ): Box = Box(left = left, top = top, right = right, bottom = bottom)
 
     private fun event(
         actionMasked: Int,
@@ -473,13 +451,38 @@ class GamepadGestureRecognizerTest {
         assertEquals(1000L, recognizer.trackpadState.eventTimeMs)
 
         recognizer.onTouchEvent(
-            eventAt(MotionEvent.ACTION_POINTER_DOWN, x = 600f, y = 100f, timeMs = 1010L, pid = POINTER_1),
+            eventAt(MotionEvent.ACTION_POINTER_DOWN, x = 500f, y = 50f, timeMs = 1010L, pid = POINTER_1),
             trackpadLayout,
         )
         assertTrue(recognizer.consumeTrackpadDirty())
         assertTrue(recognizer.trackpadState.finger1Active)
-        assertEquals(Short.MAX_VALUE, recognizer.trackpadState.finger1X)
-        assertEquals(Short.MAX_VALUE, recognizer.trackpadState.finger1Y)
+        assertEquals(0.toShort(), recognizer.trackpadState.finger1X)
+        assertEquals(0.toShort(), recognizer.trackpadState.finger1Y)
+        assertEquals(1010L, recognizer.trackpadState.eventTimeMs)
+    }
+
+    @Test
+    fun `a finger dragged past the trackpad edge pins to the edge`() {
+        recognizer.trackpadMode = GamepadTouchView.TrackpadMode.TOUCH
+        recognizer.onTouchEvent(eventAt(MotionEvent.ACTION_DOWN, x = 500f, y = 50f, timeMs = 1000L), trackpadLayout)
+
+        recognizer.onTouchEvent(eventAt(MotionEvent.ACTION_MOVE, x = 700f, y = 200f, timeMs = 1010L), trackpadLayout)
+        assertEquals(Short.MAX_VALUE, recognizer.trackpadState.finger0X)
+        assertEquals(Short.MAX_VALUE, recognizer.trackpadState.finger0Y)
+
+        recognizer.onTouchEvent(eventAt(MotionEvent.ACTION_MOVE, x = 300f, y = -50f, timeMs = 1020L), trackpadLayout)
+        assertEquals(Short.MIN_VALUE, recognizer.trackpadState.finger0X)
+        assertEquals(Short.MIN_VALUE, recognizer.trackpadState.finger0Y)
+    }
+
+    @Test
+    fun `the trackpad is inert when its mode is NONE`() {
+        recognizer.onTouchEvent(eventAt(MotionEvent.ACTION_DOWN, x = 500f, y = 50f, timeMs = 1000L), trackpadLayout)
+        assertFalse(recognizer.consumeTrackpadDirty())
+        assertFalse(recognizer.trackpadState.anyFingerDown())
+
+        recognizer.onTouchEvent(eventAt(MotionEvent.ACTION_UP, x = 500f, y = 50f, timeMs = 1050L), trackpadLayout)
+        assertNull(recognizer.takePendingTrackpadTap())
     }
 
     @Test
@@ -562,7 +565,7 @@ class GamepadGestureRecognizerTest {
     // ── mic-mute pill (DualSense skin only) ────────────────────────────────
 
     // Pill spanning x 700..800, y 700..730, well clear of every other zone in [layout].
-    private val muteLayout get() = layout.copy(micMuteRect = fakeRect(700f, 700f, 800f, 730f))
+    private val muteLayout get() = layout.copy(micMuteRect = box(700f, 700f, 800f, 730f))
 
     @Test
     fun `the mute pill reports a momentary press and clears on release`() {
@@ -631,10 +634,181 @@ class GamepadGestureRecognizerTest {
         assertEquals(0, hidToXusb(recognizer.state.buttons, recognizer.state.hatSwitch))
     }
 
+    // ── shoulders ─────────────────────────────────────────────────────────
+
+    private val shoulderLayout get() = layout.copy(lbRect = box(0f, 0f, 500f, 56f), rbRect = box(1500f, 0f, 2000f, 56f))
+
+    @Test
+    fun `a shoulder press sets its bit and releases by pointer id even after a drag off`() {
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 100f, y = 28f, pid = POINTER_0), shoulderLayout)
+        assertEquals(GamepadTouchView.BTN_LB, recognizer.state.buttons and SHOULDER_MASK)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_POINTER_DOWN, x = 1700f, y = 28f, pid = POINTER_1), shoulderLayout)
+        assertEquals(SHOULDER_MASK, recognizer.state.buttons and SHOULDER_MASK)
+
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_MOVE, x = 100f, y = 400f, pid = POINTER_0), shoulderLayout)
+        assertEquals(SHOULDER_MASK, recognizer.state.buttons and SHOULDER_MASK)
+
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_POINTER_UP, x = 100f, y = 400f, pid = POINTER_0), shoulderLayout)
+        assertEquals(GamepadTouchView.BTN_RB, recognizer.state.buttons and SHOULDER_MASK)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_UP, x = 1700f, y = 28f, pid = POINTER_1), shoulderLayout)
+        assertEquals(0, recognizer.state.buttons and SHOULDER_MASK)
+    }
+
+    // ── sticks and stick clicks ───────────────────────────────────────────
+
+    // Sticks of radius 50 at (300,600) and (1500,600), their clicks of radius 20 at (600,600)
+    // and (1200,600): each pickup halo clear of every other zone in [layout].
+    private val stickLayout get() =
+        layout.copy(
+            leftStickCx = 300f,
+            leftStickCy = 600f,
+            rightStickCx = 1500f,
+            rightStickCy = 600f,
+            stickRadius = 50f,
+            l3StickCx = 600f,
+            l3StickCy = 600f,
+            r3StickCx = 1200f,
+            r3StickCy = 600f,
+            l3StickRadius = 20f,
+        )
+
+    @Test
+    fun `a stick gesture drives the axes and releases to neutral`() {
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 300f, y = 600f), stickLayout)
+        assertEquals(0, recognizer.state.leftX.toInt())
+
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_MOVE, x = 350f, y = 600f), stickLayout)
+        assertEquals(Short.MAX_VALUE, recognizer.state.leftX)
+        assertEquals(0, recognizer.state.leftY.toInt())
+        assertEquals(1f, recognizer.leftStickDx, AXIS_EPSILON)
+
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_MOVE, x = 300f, y = 550f), stickLayout)
+        assertEquals(Short.MAX_VALUE, recognizer.state.leftY)
+        assertEquals(-1f, recognizer.leftStickDy, AXIS_EPSILON)
+
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_UP, x = 300f, y = 550f), stickLayout)
+        assertEquals(0, recognizer.state.leftX.toInt())
+        assertEquals(0, recognizer.state.leftY.toInt())
+        assertEquals(0f, recognizer.leftStickDx, 0f)
+        assertEquals(0f, recognizer.leftStickDy, 0f)
+    }
+
+    @Test
+    fun `the right stick drives the right axes`() {
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 1500f, y = 600f), stickLayout)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_MOVE, x = 1550f, y = 600f), stickLayout)
+        assertEquals(Short.MAX_VALUE, recognizer.state.rightX)
+        assertEquals(0, recognizer.state.leftX.toInt())
+        assertEquals(1f, recognizer.rightStickDx, AXIS_EPSILON)
+
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_UP, x = 1550f, y = 600f), stickLayout)
+        assertEquals(0, recognizer.state.rightX.toInt())
+        assertEquals(0f, recognizer.rightStickDx, 0f)
+    }
+
+    @Test
+    fun `a move from a pointer that did not claim the stick leaves it alone`() {
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 300f, y = 600f, pid = POINTER_0), stickLayout)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_MOVE, x = 350f, y = 600f, pid = POINTER_1), stickLayout)
+        assertEquals(0, recognizer.state.leftX.toInt())
+        assertEquals(0f, recognizer.leftStickDx, 0f)
+    }
+
+    @Test
+    fun `an L3 press clicks and drives the left stick until release`() {
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 600f, y = 600f), stickLayout)
+        assertEquals(GamepadTouchView.BTN_LS, recognizer.state.buttons and GamepadTouchView.BTN_LS)
+
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_MOVE, x = 620f, y = 600f), stickLayout)
+        assertEquals(Short.MAX_VALUE, recognizer.state.leftX)
+        assertEquals(1f, recognizer.l3StickDx, AXIS_EPSILON)
+
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_UP, x = 620f, y = 600f), stickLayout)
+        assertEquals(0, recognizer.state.buttons and GamepadTouchView.BTN_LS)
+        assertEquals(0, recognizer.state.leftX.toInt())
+        assertEquals(0f, recognizer.l3StickDx, 0f)
+    }
+
+    @Test
+    fun `an R3 press clicks and drives the right stick until release`() {
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 1200f, y = 600f), stickLayout)
+        assertEquals(GamepadTouchView.BTN_RS, recognizer.state.buttons and GamepadTouchView.BTN_RS)
+
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_MOVE, x = 1220f, y = 600f), stickLayout)
+        assertEquals(Short.MAX_VALUE, recognizer.state.rightX)
+        assertEquals(1f, recognizer.r3StickDx, AXIS_EPSILON)
+
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_UP, x = 1220f, y = 600f), stickLayout)
+        assertEquals(0, recognizer.state.buttons and GamepadTouchView.BTN_RS)
+        assertEquals(0, recognizer.state.rightX.toInt())
+        assertEquals(0f, recognizer.r3StickDx, 0f)
+    }
+
+    @Test
+    fun `a finger inside the stick halo is the stick even over a trigger rail`() {
+        val railUnderStick = stickLayout.copy(ltRect = box(250f, 500f, 302f, 900f))
+        // 40 below the stick centre: inside its 65 pickup halo, and inside the rail.
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 300f, y = 640f), railUnderStick)
+        assertEquals(0, recognizer.state.leftTrigger)
+
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_MOVE, x = 350f, y = 640f), railUnderStick)
+        assertTrue(recognizer.state.leftX > 0)
+    }
+
+    // ── the buttons no pointer owns ───────────────────────────────────────
+
+    // Select at (700,50), start at (800,50), home at (750,120), each with a 15px pickup halo.
+    private val centreLayout get() =
+        layout.copy(selectCx = 700f, startCx = 800f, homeCx = 750f, homeCy = 120f, centerBtnCy = 50f, smallBtnRadius = 10f)
+
+    @Test
+    fun `an untracked pointer lift releases every centre button`() {
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 700f, y = 50f, pid = POINTER_0), centreLayout)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_POINTER_DOWN, x = 800f, y = 50f, pid = POINTER_1), centreLayout)
+        assertEquals(CENTRE_PAIR, recognizer.state.buttons and CENTRE_PAIR)
+
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_POINTER_UP, x = 700f, y = 50f, pid = POINTER_0), centreLayout)
+
+        assertEquals(0, recognizer.state.buttons and CENTRE_PAIR)
+    }
+
+    @Test
+    fun `an untracked pointer lift releases home and the mic mute`() {
+        // The mute pill sits at (900..960, 40..60), clear of the three centre circles.
+        val homeAndMute = centreLayout.copy(micMuteRect = box(900f, 40f, 960f, 60f))
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 750f, y = 120f, pid = POINTER_0), homeAndMute)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_POINTER_DOWN, x = 930f, y = 50f, pid = POINTER_1), homeAndMute)
+        assertEquals(HOME_AND_MUTE, recognizer.state.buttons and HOME_AND_MUTE)
+
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_POINTER_UP, x = 750f, y = 120f, pid = POINTER_0), homeAndMute)
+
+        assertEquals(0, recognizer.state.buttons and GamepadTouchView.BTN_HOME)
+        assertEquals(0, recognizer.state.buttons and GamepadTouchView.BTN_MIC_MUTE)
+    }
+
+    @Test
+    fun `a centre button lift leaves both held stick clicks alone`() {
+        val clicksAndCentre = stickLayout.copy(selectCx = 700f, centerBtnCy = 50f, smallBtnRadius = 10f)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 600f, y = 600f, pid = POINTER_0), clicksAndCentre)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_POINTER_DOWN, x = 1200f, y = 600f, pid = POINTER_1), clicksAndCentre)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_POINTER_DOWN, x = 700f, y = 50f, pid = POINTER_2), clicksAndCentre)
+
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_POINTER_UP, x = 700f, y = 50f, pid = POINTER_2), clicksAndCentre)
+
+        assertEquals(0, recognizer.state.buttons and GamepadTouchView.BTN_SELECT)
+        assertEquals(GamepadTouchView.BTN_LS, recognizer.state.buttons and GamepadTouchView.BTN_LS)
+        assertEquals(GamepadTouchView.BTN_RS, recognizer.state.buttons and GamepadTouchView.BTN_RS)
+    }
+
     private companion object {
         const val POINTER_0 = 0
         const val POINTER_1 = 1
+        const val POINTER_2 = 2
         const val FAR = 10_000f
+        const val AXIS_EPSILON = 1e-4f
+        const val SHOULDER_MASK = GamepadTouchView.BTN_LB or GamepadTouchView.BTN_RB
+        const val CENTRE_PAIR = GamepadTouchView.BTN_SELECT or GamepadTouchView.BTN_START
+        const val HOME_AND_MUTE = GamepadTouchView.BTN_HOME or GamepadTouchView.BTN_MIC_MUTE
 
         val ABXY_MASK: Int =
             GamepadTouchView.BTN_A or GamepadTouchView.BTN_B or

@@ -15,8 +15,8 @@ import com.tinkernorth.dish.databinding.ActivityDonateBinding
 import com.tinkernorth.dish.databinding.DonateTierButtonBinding
 import com.tinkernorth.dish.databinding.DonateTierButtonCurrentBinding
 import com.tinkernorth.dish.source.billing.BillingAvailability
+import com.tinkernorth.dish.source.billing.SUBSCRIPTION_PRODUCT_ID
 import com.tinkernorth.dish.source.billing.Tier
-import com.tinkernorth.dish.source.billing.TipCatalog
 import com.tinkernorth.dish.source.billing.TipJarNotice
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.setupDishToolbar
@@ -34,7 +34,7 @@ class DonateActivity : BaseGamepadHostActivity() {
         setupDishToolbar(binding.toolbar)
         bindWhy()
         binding.supporterCard.manageSubscription.setOnClickListener {
-            openExternalUrl(getString(R.string.url_play_subscriptions, TipCatalog.SUBSCRIPTION_PRODUCT_ID, packageName))
+            openExternalUrl(getString(R.string.url_play_subscriptions, SUBSCRIPTION_PRODUCT_ID, packageName))
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {

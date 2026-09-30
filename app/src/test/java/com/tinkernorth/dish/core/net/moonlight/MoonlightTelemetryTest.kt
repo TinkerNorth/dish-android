@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.core.net.moonlight
 
+import com.tinkernorth.dish.architecture.testing.fewestAllocatedBytesDuring
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -11,51 +12,51 @@ import org.junit.Test
 class MoonlightTelemetryTest {
     @Test
     fun `gyro wire scale maps full range to 2000 deg per second`() {
-        assertEquals(2000.0f, MoonlightTelemetry.gyroDegS(32767), 0.001f)
-        assertEquals(-2000.0f, MoonlightTelemetry.gyroDegS(-32767), 0.001f)
-        assertEquals(0.0f, MoonlightTelemetry.gyroDegS(0), 0.0f)
+        assertEquals(2000.0f, gyroDegS(32767), 0.001f)
+        assertEquals(-2000.0f, gyroDegS(-32767), 0.001f)
+        assertEquals(0.0f, gyroDegS(0), 0.0f)
         // 1 deg/s = 32767/2000 wire units.
-        assertEquals(1.0f, MoonlightTelemetry.gyroDegS(16), 0.05f)
+        assertEquals(1.0f, gyroDegS(16), 0.05f)
     }
 
     @Test
     fun `accel wire scale maps full range to 4 g in meters per second squared`() {
-        assertEquals(4 * 9.80665f, MoonlightTelemetry.accelMs2(32767), 0.001f)
-        assertEquals(-4 * 9.80665f, MoonlightTelemetry.accelMs2(-32767), 0.001f)
+        assertEquals(4 * 9.80665f, accelMs2(32767), 0.001f)
+        assertEquals(-4 * 9.80665f, accelMs2(-32767), 0.001f)
         // 1 g = 8191.75 wire units.
-        assertEquals(9.80665f, MoonlightTelemetry.accelMs2(8192), 0.01f)
+        assertEquals(9.80665f, accelMs2(8192), 0.01f)
     }
 
     @Test
     fun `touch coordinates normalize the full int16 range onto 0 to 1`() {
-        assertEquals(0.0f, MoonlightTelemetry.touchNorm(Short.MIN_VALUE), 0.0f)
-        assertEquals(1.0f, MoonlightTelemetry.touchNorm(Short.MAX_VALUE), 0.0001f)
-        assertEquals(0.5f, MoonlightTelemetry.touchNorm(0), 0.0001f)
+        assertEquals(0.0f, touchNorm(Short.MIN_VALUE), 0.0f)
+        assertEquals(1.0f, touchNorm(Short.MAX_VALUE), 0.0001f)
+        assertEquals(0.5f, touchNorm(0), 0.0001f)
     }
 
     @Test
     fun `battery status maps satellite bytes onto Wolf BATTERY_STATE values`() {
-        assertEquals(MoonlightControlProtocol.BATTERY_STATE_UNKNOWN, MoonlightTelemetry.batteryState(0))
-        assertEquals(MoonlightControlProtocol.BATTERY_DISCHARGING, MoonlightTelemetry.batteryState(1))
-        assertEquals(MoonlightControlProtocol.BATTERY_CHARGING, MoonlightTelemetry.batteryState(2))
-        assertEquals(MoonlightControlProtocol.BATTERY_FULL, MoonlightTelemetry.batteryState(3))
-        assertEquals(MoonlightControlProtocol.BATTERY_NOT_PRESENT, MoonlightTelemetry.batteryState(4))
-        assertEquals(MoonlightControlProtocol.BATTERY_STATE_UNKNOWN, MoonlightTelemetry.batteryState(99))
+        assertEquals(BATTERY_STATE_UNKNOWN, batteryState(0))
+        assertEquals(BATTERY_DISCHARGING, batteryState(1))
+        assertEquals(BATTERY_CHARGING, batteryState(2))
+        assertEquals(BATTERY_FULL, batteryState(3))
+        assertEquals(BATTERY_NOT_PRESENT, batteryState(4))
+        assertEquals(BATTERY_STATE_UNKNOWN, batteryState(99))
     }
 
     @Test
     fun `battery percentage passes 0 to 100 and turns everything else unknown`() {
-        assertEquals(0, MoonlightTelemetry.batteryPercentage(0))
-        assertEquals(100, MoonlightTelemetry.batteryPercentage(100))
-        assertEquals(MoonlightControlProtocol.BATTERY_PERCENTAGE_UNKNOWN, MoonlightTelemetry.batteryPercentage(0xFF))
-        assertEquals(MoonlightControlProtocol.BATTERY_PERCENTAGE_UNKNOWN, MoonlightTelemetry.batteryPercentage(101))
-        assertEquals(MoonlightControlProtocol.BATTERY_PERCENTAGE_UNKNOWN, MoonlightTelemetry.batteryPercentage(-1))
+        assertEquals(0, batteryPercentage(0))
+        assertEquals(100, batteryPercentage(100))
+        assertEquals(BATTERY_PERCENTAGE_UNKNOWN, batteryPercentage(0xFF))
+        assertEquals(BATTERY_PERCENTAGE_UNKNOWN, batteryPercentage(101))
+        assertEquals(BATTERY_PERCENTAGE_UNKNOWN, batteryPercentage(-1))
     }
 }
 
 class MoonlightMotionGateTest {
-    private val gyro = MoonlightControlProtocol.MOTION_TYPE_GYRO
-    private val accel = MoonlightControlProtocol.MOTION_TYPE_ACCEL
+    private val gyro = MOTION_TYPE_GYRO
+    private val accel = MOTION_TYPE_ACCEL
 
     @Test
     fun `nothing is wanted before the host asks`() {
@@ -120,26 +121,163 @@ class MoonlightMotionGateTest {
         gate.clearAll()
         assertFalse(gate.wanted(1))
     }
+
+    @Test
+    fun `a stop then start sends the first sample at once`() {
+        val gate = MoonlightMotionGate()
+        gate.onMotionRequest(0, 100, gyro)
+        assertTrue(gate.shouldSend(0, gyro, 0L))
+        gate.onMotionRequest(0, 0, gyro)
+        gate.onMotionRequest(0, 100, gyro)
+        assertTrue(gate.shouldSend(0, gyro, 1L))
+    }
+
+    @Test
+    fun `a rate change keeps the pacing clock`() {
+        val gate = MoonlightMotionGate()
+        gate.onMotionRequest(0, 100, gyro)
+        assertTrue(gate.shouldSend(0, gyro, 0L))
+        gate.onMotionRequest(0, 200, gyro)
+        assertFalse(gate.shouldSend(0, gyro, 1L))
+        assertTrue(gate.shouldSend(0, gyro, 5_000_000L))
+    }
+
+    @Test
+    fun `a sample one nanosecond short of the interval waits`() {
+        val gate = MoonlightMotionGate()
+        gate.onMotionRequest(0, 100, gyro)
+        assertTrue(gate.shouldSend(0, gyro, 0L))
+        assertFalse(gate.shouldSend(0, gyro, 9_999_999L))
+        assertTrue(gate.shouldSend(0, gyro, 10_000_000L))
+    }
+
+    @Test
+    fun `stopping one type leaves the controller's other type streaming`() {
+        val gate = MoonlightMotionGate()
+        gate.onMotionRequest(0, 100, gyro)
+        gate.onMotionRequest(0, 100, accel)
+        gate.onMotionRequest(0, 0, gyro)
+        assertTrue(gate.wanted(0))
+        assertFalse(gate.wanted(0, gyro))
+        assertTrue(gate.wanted(0, accel))
+        assertTrue(gate.shouldSend(0, accel, 0L))
+    }
+
+    @Test
+    fun `a stop for a stream never started changes nothing`() {
+        val gate = MoonlightMotionGate()
+        gate.onMotionRequest(0, 100, accel)
+        gate.onMotionRequest(0, 0, gyro)
+        gate.onMotionRequest(1, -1, gyro)
+        assertTrue(gate.wanted(0, accel))
+        assertFalse(gate.wanted(0, gyro))
+        assertFalse(gate.wanted(1))
+    }
+
+    @Test
+    fun `a controller asking only for accel is wanted`() {
+        val gate = MoonlightMotionGate()
+        gate.onMotionRequest(3, 100, accel)
+        assertTrue(gate.wanted(3))
+        assertFalse(gate.wanted(2))
+    }
+
+    @Test
+    fun `clear drops every type of that controller`() {
+        val gate = MoonlightMotionGate()
+        gate.onMotionRequest(0, 100, gyro)
+        gate.onMotionRequest(0, 100, accel)
+        gate.onMotionRequest(1, 100, accel)
+        gate.clear(0)
+        assertFalse(gate.wanted(0, gyro))
+        assertFalse(gate.wanted(0, accel))
+        assertTrue(gate.wanted(1, accel))
+    }
+
+    @Test
+    fun `a cleared stream asked for again sends its first sample at once`() {
+        val gate = MoonlightMotionGate()
+        gate.onMotionRequest(0, 100, gyro)
+        assertTrue(gate.shouldSend(0, gyro, 0L))
+        gate.clear(0)
+        gate.onMotionRequest(0, 100, gyro)
+        assertTrue(gate.shouldSend(0, gyro, 1L))
+    }
+
+    // Whatever u16 number and byte type a host sends is kept as sent, as the map it replaced did.
+    @Test
+    fun `any number and type a host sends is paced on its own`() {
+        val gate = MoonlightMotionGate()
+        gate.onMotionRequest(LAST_CONTROLLER, 100, UNKNOWN_MOTION_TYPE)
+        assertTrue(gate.wanted(LAST_CONTROLLER))
+        assertTrue(gate.wanted(LAST_CONTROLLER, UNKNOWN_MOTION_TYPE))
+        assertFalse(gate.wanted(LAST_CONTROLLER, gyro))
+        assertTrue(gate.shouldSend(LAST_CONTROLLER, UNKNOWN_MOTION_TYPE, 0L))
+        assertFalse(gate.shouldSend(LAST_CONTROLLER, UNKNOWN_MOTION_TYPE, 1L))
+    }
+
+    private val pacedGate = MoonlightMotionGate()
+    private var sentSamples = 0
+    private var sampleNs = 0L
+
+    // What a pad's sensor thread asks per sample: whether anything is wanted, then each type in
+    // turn, for the last controller a session carries, whose key is past the boxed-integer cache.
+    private fun runSampleCycle() {
+        repeat(MEASURED_SAMPLES) {
+            sampleNs += SAMPLE_INTERVAL_NS
+            if (pacedGate.wanted(LAST_CONTROLLER)) sentSamples++
+            if (pacedGate.wanted(LAST_CONTROLLER, gyro)) sentSamples++
+            if (pacedGate.shouldSend(LAST_CONTROLLER, gyro, sampleNs)) sentSamples++
+            if (pacedGate.shouldSend(LAST_CONTROLLER, accel, sampleNs)) sentSamples++
+        }
+    }
+
+    @Test
+    fun `a sample's checks allocate nothing`() {
+        pacedGate.onMotionRequest(FIRST_CONTROLLER, SAMPLE_RATE_HZ, gyro)
+        pacedGate.onMotionRequest(LAST_CONTROLLER, SAMPLE_RATE_HZ, gyro)
+        pacedGate.onMotionRequest(LAST_CONTROLLER, SAMPLE_RATE_HZ, accel)
+        runSampleCycle()
+        sentSamples = 0
+        val allocated = fewestAllocatedBytesDuring(MEASURED_RUNS, ::runSampleCycle)
+        assertEquals(MEASURED_RUNS * MEASURED_SAMPLES * CHECKS_PASSED_PER_SAMPLE, sentSamples)
+        assertTrue("$allocated bytes over $MEASURED_SAMPLES samples", allocated < MEASURED_SAMPLES * BYTES_PER_SAMPLE_BOUND)
+    }
+
+    private companion object {
+        const val FIRST_CONTROLLER = 0
+
+        // A u16 on the wire: far past the Integer cache, as any number a host sends may be.
+        const val LAST_CONTROLLER = 0xFFFF
+        const val UNKNOWN_MOTION_TYPE = 0xFF
+        const val SAMPLE_RATE_HZ = 100
+        const val SAMPLE_INTERVAL_NS = 10_000_000L
+        const val MEASURED_SAMPLES = 1000
+        const val MEASURED_RUNS = 3
+        const val CHECKS_PASSED_PER_SAMPLE = 4
+
+        // Half the smallest object: a key or an iterator costs 16 bytes or more every sample.
+        const val BYTES_PER_SAMPLE_BOUND = 8
+    }
 }
 
 class MoonlightTouchDifferTest {
-    private val down = MoonlightControlProtocol.TOUCH_EVENT_DOWN
-    private val up = MoonlightControlProtocol.TOUCH_EVENT_UP
-    private val move = MoonlightControlProtocol.TOUCH_EVENT_MOVE
+    private val down = TOUCH_EVENT_DOWN
+    private val up = TOUCH_EVENT_UP
+    private val move = TOUCH_EVENT_MOVE
 
+    private val sent = RecordingTouchSink()
+
+    // One snapshot through [this] differ for [CONTROLLER], and the events it sent.
     private fun MoonlightTouchDiffer.frame(
         f0: Triple<Int, Float, Float>? = null,
         f1: Triple<Int, Float, Float>? = null,
-    ) = diff(
-        finger0Active = f0 != null,
-        finger0Id = f0?.first ?: 0,
-        finger0X = f0?.second ?: 0f,
-        finger0Y = f0?.third ?: 0f,
-        finger1Active = f1 != null,
-        finger1Id = f1?.first ?: 0,
-        finger1X = f1?.second ?: 0f,
-        finger1Y = f1?.third ?: 0f,
-    )
+    ): List<SentTouch> {
+        sent.events.clear()
+        diff(FIRST_FINGER, f0 != null, f0?.first ?: 0, f0?.second ?: 0f, f0?.third ?: 0f, CONTROLLER, sent)
+        diff(SECOND_FINGER, f1 != null, f1?.first ?: 0, f1?.second ?: 0f, f1?.third ?: 0f, CONTROLLER, sent)
+        return sent.events.toList()
+    }
 
     @Test
     fun `contact lifecycle produces down move up`() {
@@ -199,5 +337,194 @@ class MoonlightTouchDifferTest {
         val events = differ.frame(f0 = Triple(1, 0.5f, 0.5f))
         assertEquals(1, events.size)
         assertEquals(down, events[0].eventType)
+    }
+
+    @Test
+    fun `the second finger moves and lifts independently of the first`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame(f0 = Triple(1, 0.1f, 0.1f), f1 = Triple(2, 0.9f, 0.9f))
+
+        val moved = differ.frame(f0 = Triple(1, 0.1f, 0.1f), f1 = Triple(2, 0.8f, 0.8f))
+        assertEquals(1, moved.size)
+        assertEquals(move, moved[0].eventType)
+        assertEquals(2, moved[0].pointerId)
+        assertEquals(0.8f, moved[0].x, 0f)
+
+        val lifted = differ.frame(f0 = Triple(1, 0.1f, 0.1f))
+        assertEquals(1, lifted.size)
+        assertEquals(up, lifted[0].eventType)
+        assertEquals(2, lifted[0].pointerId)
+    }
+
+    @Test
+    fun `a tracking id change on the second finger is a lift plus a fresh contact`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame(f0 = Triple(1, 0.1f, 0.1f), f1 = Triple(2, 0.9f, 0.9f))
+        val events = differ.frame(f0 = Triple(1, 0.1f, 0.1f), f1 = Triple(3, 0.7f, 0.7f))
+        assertEquals(listOf(up, down), events.map { it.eventType })
+        assertEquals(listOf(2, 3), events.map { it.pointerId })
+    }
+
+    @Test
+    fun `every event names the controller the snapshot is for`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame(f0 = Triple(1, 0.1f, 0.1f), f1 = Triple(2, 0.9f, 0.9f))
+        differ.frame(f0 = Triple(1, 0.2f, 0.1f), f1 = Triple(3, 0.9f, 0.9f))
+        val events = differ.frame()
+        assertEquals(listOf(CONTROLLER, CONTROLLER), events.map { it.controllerNumber })
+    }
+
+    @Test
+    fun `a lift names the contact where it was last held`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame(f1 = Triple(4, 0.3f, 0.4f))
+        val lifted = differ.frame().single()
+        assertEquals(SentTouch(CONTROLLER, up, 4, 0.3f, 0.4f, 0.0f), lifted)
+    }
+
+    @Test
+    fun `a re-tracked finger lifts the old contact where it was and lands the new one where it is`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame(f0 = Triple(5, 0.5f, 0.55f))
+        val events = differ.frame(f0 = Triple(6, 0.6f, 0.65f))
+        val expected =
+            listOf(
+                SentTouch(CONTROLLER, up, 5, 0.5f, 0.55f, 0.0f),
+                SentTouch(CONTROLLER, down, 6, 0.6f, 0.65f, 1.0f),
+            )
+        assertEquals(expected, events)
+    }
+
+    @Test
+    fun `a re-tracked finger is held as its new contact`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame(f0 = Triple(5, 0.5f, 0.55f))
+        differ.frame(f0 = Triple(6, 0.6f, 0.65f))
+        assertTrue(differ.frame(f0 = Triple(6, 0.6f, 0.65f)).isEmpty())
+    }
+
+    @Test
+    fun `a move in y alone is a move`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame(f0 = Triple(1, 0.5f, 0.5f))
+        val events = differ.frame(f0 = Triple(1, 0.5f, 0.6f))
+        assertEquals(listOf(SentTouch(CONTROLLER, move, 1, 0.5f, 0.6f, 1.0f)), events)
+    }
+
+    @Test
+    fun `a finger that stays up says nothing`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame()
+        assertTrue(differ.frame().isEmpty())
+    }
+
+    @Test
+    fun `reset forgets both fingers`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame(f0 = Triple(1, 0.1f, 0.1f), f1 = Triple(2, 0.9f, 0.9f))
+        differ.reset()
+        assertTrue(differ.frame().isEmpty())
+    }
+
+    private val pacedDiffer = MoonlightTouchDiffer()
+    private val countingSink = CountingTouchSink()
+
+    private fun diffFrame(
+        finger0Active: Boolean,
+        finger0X: Float,
+        finger1Active: Boolean,
+        finger1Id: Int,
+    ) {
+        pacedDiffer.diff(FIRST_FINGER, finger0Active, FIRST_ID, finger0X, Y, CONTROLLER, countingSink)
+        pacedDiffer.diff(SECOND_FINGER, finger1Active, finger1Id, X, Y, CONTROLLER, countingSink)
+    }
+
+    // Every flow a finger can take in one cycle: both land, the first moves, the second is
+    // re-tracked (a lift and a fresh contact), both lift.
+    private fun runTouchCycle() {
+        repeat(MEASURED_FRAMES) {
+            diffFrame(true, X, true, SECOND_ID)
+            diffFrame(true, MOVED_X, true, SECOND_ID)
+            diffFrame(true, MOVED_X, true, RETRACKED_ID)
+            diffFrame(false, MOVED_X, false, RETRACKED_ID)
+        }
+    }
+
+    @Test
+    fun `a frame's diff allocates nothing`() {
+        runTouchCycle()
+        countingSink.events = 0
+        val allocated = fewestAllocatedBytesDuring(MEASURED_RUNS, ::runTouchCycle)
+        assertEquals(MEASURED_RUNS * MEASURED_FRAMES * EVENTS_PER_CYCLE, countingSink.events)
+        assertTrue("$allocated bytes over $MEASURED_FRAMES cycles", allocated < MEASURED_FRAMES * BYTES_PER_CYCLE_BOUND)
+    }
+
+    @Test
+    fun `lifting the first finger leaves the second one held`() {
+        val differ = MoonlightTouchDiffer()
+        differ.frame(f0 = Triple(1, 0.1f, 0.1f), f1 = Triple(2, 0.9f, 0.9f))
+        val events = differ.frame(f1 = Triple(2, 0.9f, 0.9f))
+        assertEquals(1, events.size)
+        assertEquals(up, events[0].eventType)
+        assertEquals(1, events[0].pointerId)
+    }
+
+    private companion object {
+        const val CONTROLLER = 2
+        const val FIRST_ID = 1
+        const val SECOND_ID = 2
+        const val RETRACKED_ID = 3
+        const val X = 0.25f
+        const val MOVED_X = 0.5f
+        const val Y = 0.75f
+        const val MEASURED_FRAMES = 1000
+        const val MEASURED_RUNS = 3
+
+        // Two downs, one move, an up and a down, two ups.
+        const val EVENTS_PER_CYCLE = 7
+
+        // Half the smallest object: one event, list or finger state costs 16 bytes or more.
+        const val BYTES_PER_CYCLE_BOUND = 8
+    }
+}
+
+// One event as the differ handed it to the sink.
+private data class SentTouch(
+    val controllerNumber: Int,
+    val eventType: Int,
+    val pointerId: Int,
+    val x: Float,
+    val y: Float,
+    val pressure: Float,
+)
+
+private class RecordingTouchSink : MoonlightTouchSink {
+    val events = mutableListOf<SentTouch>()
+
+    override fun sendControllerTouch(
+        controllerNumber: Int,
+        eventType: Int,
+        pointerId: Int,
+        x: Float,
+        y: Float,
+        pressure: Float,
+    ) {
+        events += SentTouch(controllerNumber, eventType, pointerId, x, y, pressure)
+    }
+}
+
+// Counts what it is handed and keeps nothing, so a measured diff allocates only its own.
+private class CountingTouchSink : MoonlightTouchSink {
+    var events = 0
+
+    override fun sendControllerTouch(
+        controllerNumber: Int,
+        eventType: Int,
+        pointerId: Int,
+        x: Float,
+        y: Float,
+        pressure: Float,
+    ) {
+        events++
     }
 }

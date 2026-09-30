@@ -4,6 +4,7 @@ package com.tinkernorth.dish.ui.setup
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.usb.DirectClaimFailure
 import com.tinkernorth.dish.source.usb.PathChoice
@@ -25,6 +26,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
+
+private const val EVENT_BUFFER = 4
+private const val DIRECT_TIMEOUT_MS = 20_000L
+private const val STANDARD_TIMEOUT_MS = 8_000L
 
 // Stage 2 USB. Lists the connected USB gamepads (UsbGamepadManager only ever
 // tracks plugged-in, gamepad-shaped devices, so the list is "connected
@@ -69,7 +74,7 @@ class SetupUsbViewModel
         private val _state = MutableStateFlow(State())
         val state: StateFlow<State> = _state.asStateFlow()
 
-        private val _events = MutableSharedFlow<Event>(extraBufferCapacity = 4)
+        private val _events = MutableSharedFlow<Event>(extraBufferCapacity = EVENT_BUFFER)
         val events: SharedFlow<Event> = _events.asSharedFlow()
 
         private var activeKey: Int? = null
@@ -81,7 +86,14 @@ class SetupUsbViewModel
         }
 
         private fun onControllers(map: Map<Int, UsbController>) {
-            val rows = map.values.map { Controller(vpk(it), it.name, "%04X:%04X".format(it.vendorId, it.productId)) }
+            val rows =
+                map.values.map {
+                    Controller(
+                        vidPidKey(it.vendorId, it.productId),
+                        it.name,
+                        "%04X:%04X".format(it.vendorId, it.productId),
+                    )
+                }
             // The controller we were configuring was unplugged: abandon any in-flight switch and drop to the list.
             if (activeKey != null && map[activeKey] == null) {
                 pathJob?.cancel()
@@ -112,24 +124,30 @@ class SetupUsbViewModel
         private fun runPath(choice: PathChoice) {
             if (pathJob?.isActive == true) return
             val key = activeKey ?: return
-            val c = usb.controllers.value[key] ?: return
+            val controller = usb.controllers.value[key] ?: return
             _state.update { it.copy(working = true) }
-            pathJob =
-                viewModelScope.launch {
-                    try {
-                        usb.setPathChoice(c.vendorId, c.productId, choice)
-                        withTimeoutOrNull(timeoutFor(choice)) {
-                            usb.controllers.first { resolved(it[key]) }
-                        }
-                        // The user backed out or unplugged while we waited: don't navigate behind them.
-                        if (activeKey != key) return@launch
-                        val landed = usb.controllers.value[key]
-                        val slot = proceedSlot(landed)
-                        _events.emit(if (slot != null) Event.Proceed(slot) else Event.Recover(landed?.failure))
-                    } finally {
-                        _state.update { it.copy(working = false) }
-                    }
+            pathJob = viewModelScope.launch { applyPathChoice(key, controller.vendorId, controller.productId, choice) }
+        }
+
+        private suspend fun applyPathChoice(
+            key: Int,
+            vendorId: Int,
+            productId: Int,
+            choice: PathChoice,
+        ) {
+            try {
+                usb.setPathChoice(vendorId, productId, choice)
+                withTimeoutOrNull(timeoutFor(choice)) {
+                    usb.controllers.first { resolved(it[key]) }
                 }
+                // The user backed out or unplugged while we waited: don't navigate behind them.
+                if (activeKey != key) return
+                val landed = usb.controllers.value[key]
+                val slot = proceedSlot(landed)
+                _events.emit(if (slot != null) Event.Proceed(slot) else Event.Recover(landed?.failure))
+            } finally {
+                _state.update { it.copy(working = false) }
+            }
         }
 
         // True for "back was handled in-flow"; the Activity finishes only when false.
@@ -148,32 +166,25 @@ class SetupUsbViewModel
                 Stage.DETECTING -> false
             }
         }
+    }
 
-        private fun vpk(c: UsbController): Int = (c.vendorId shl 16) or (c.productId and 0xFFFF)
+private fun timeoutFor(choice: PathChoice): Long = if (choice == PathChoice.Direct) DIRECT_TIMEOUT_MS else STANDARD_TIMEOUT_MS
 
-        private companion object {
-            const val DIRECT_TIMEOUT_MS = 20_000L
-            const val STANDARD_TIMEOUT_MS = 8_000L
+// Stop waiting once the path has a live id, or has reached a dead end that never will. A Routed
+// controller still pursuing Direct is mid-permission/claim, not settled, so keep waiting.
+private fun resolved(c: UsbController?): Boolean =
+    when (c?.phase) {
+        UsbPhase.Direct -> c.syntheticId != null
+        UsbPhase.Routed -> c.desired != PathChoice.Direct && c.frameworkId != null
+        UsbPhase.RestoreStuck, UsbPhase.NeedsReplug -> true
+        UsbPhase.Claiming, UsbPhase.AwaitingFramework, null -> false
+    }
 
-            fun timeoutFor(choice: PathChoice): Long = if (choice == PathChoice.Direct) DIRECT_TIMEOUT_MS else STANDARD_TIMEOUT_MS
-
-            // Stop waiting once the path has a live id, or has reached a dead end that never will. A Routed
-            // controller still pursuing Direct is mid-permission/claim, not settled, so keep waiting.
-            fun resolved(c: UsbController?): Boolean =
-                when (c?.phase) {
-                    UsbPhase.Direct -> c.syntheticId != null
-                    UsbPhase.Routed -> c.desired != PathChoice.Direct && c.frameworkId != null
-                    UsbPhase.RestoreStuck, UsbPhase.NeedsReplug -> true
-                    UsbPhase.Claiming, UsbPhase.AwaitingFramework, null -> false
-                }
-
-            // The live slot to hand forward. RestoreStuck's synthetic is a detached placeholder and
-            // NeedsReplug has none, so both return null and the caller recovers instead of stranding the user.
-            fun proceedSlot(c: UsbController?): String? =
-                when (c?.phase) {
-                    UsbPhase.Direct -> c.syntheticId?.toString()
-                    UsbPhase.Routed -> if (c.desired != PathChoice.Direct) c.frameworkId?.toString() else null
-                    else -> null
-                }
-        }
+// The live slot to hand forward. RestoreStuck's synthetic is a detached placeholder and
+// NeedsReplug has none, so both return null and the caller recovers instead of stranding the user.
+private fun proceedSlot(c: UsbController?): String? =
+    when (c?.phase) {
+        UsbPhase.Direct -> c.syntheticId?.toString()
+        UsbPhase.Routed -> if (c.desired != PathChoice.Direct) c.frameworkId?.toString() else null
+        else -> null
     }

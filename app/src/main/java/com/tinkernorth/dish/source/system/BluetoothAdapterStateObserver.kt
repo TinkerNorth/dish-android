@@ -29,16 +29,17 @@ class BluetoothAdapterStateObserver
     ) : AbstractStateSource<BluetoothAdapterState>(BluetoothAdapterState.UNSUPPORTED) {
         @Volatile private var registered = false
 
-        private val receiver =
-            object : BroadcastReceiver() {
-                override fun onReceive(
-                    ctx: Context,
-                    intent: Intent,
-                ) {
-                    if (intent.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
-                    refresh()
-                }
+        private inner class AdapterStateReceiver : BroadcastReceiver() {
+            override fun onReceive(
+                ctx: Context,
+                intent: Intent,
+            ) {
+                if (intent.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
+                refresh()
             }
+        }
+
+        private val receiver = AdapterStateReceiver()
 
         init {
             setState(currentState())

@@ -3,13 +3,17 @@
 package com.tinkernorth.dish.composer
 
 import app.cash.turbine.test
+import com.tinkernorth.dish.core.net.moonlight.XBOX
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnection.SlotBinding
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightPad
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -40,12 +44,21 @@ class PhysicalReachabilityTest {
         return conn
     }
 
+    private fun pad() = MoonlightPad(slotId = "9", number = 0, emulatedType = XBOX, capabilities = 3, supportedButtons = 0xFFFF)
+
+    private fun moonlightConnection(pads: StateFlow<Map<String, MoonlightPad>>): MoonlightConnection {
+        val conn = mockk<MoonlightConnection>()
+        every { conn.pads } returns pads
+        every { conn.padFor("9") } answers { pads.value["9"] }
+        return conn
+    }
+
     @Test
-    fun `connectionFor returns the connection for a bound, connected, registered slot`() {
+    fun `satelliteSinkFor returns the connection for a bound, connected, registered slot`() {
         val conn = connection(MutableStateFlow(mapOf("9" to slot(registered = true))))
         assertSame(
             conn,
-            PhysicalReachabilityComposer.connectionFor(
+            satelliteSinkFor(
                 slotId = "9",
                 bindings = mapOf("9" to "c"),
                 summariesById = mapOf("c" to summary("c")),
@@ -55,9 +68,9 @@ class PhysicalReachabilityTest {
     }
 
     @Test
-    fun `connectionFor is null for an unbound pad`() {
+    fun `satelliteSinkFor is null for an unbound pad`() {
         assertNull(
-            PhysicalReachabilityComposer.connectionFor(
+            satelliteSinkFor(
                 slotId = "9",
                 bindings = emptyMap(),
                 summariesById = mapOf("c" to summary("c")),
@@ -67,10 +80,10 @@ class PhysicalReachabilityTest {
     }
 
     @Test
-    fun `connectionFor is null for a Bluetooth-bound pad, no motion or battery channel`() {
+    fun `satelliteSinkFor is null for a Bluetooth-bound pad, no motion or battery channel`() {
         val conn = connection(MutableStateFlow(mapOf("9" to slot(registered = true))))
         assertNull(
-            PhysicalReachabilityComposer.connectionFor(
+            satelliteSinkFor(
                 slotId = "9",
                 bindings = mapOf("9" to "c"),
                 summariesById = mapOf("c" to summary("c", kind = ConnectionKind.BLUETOOTH)),
@@ -80,10 +93,25 @@ class PhysicalReachabilityTest {
     }
 
     @Test
-    fun `connectionFor is null while the satellite is still CONNECTING`() {
+    fun `satelliteSinkFor is null for a moonlight-bound pad`() {
+        // A satellite connection under the same id with the slot registered: only the summary's
+        // kind keeps it from being taken for the Moonlight pad's sink.
+        val sameIdSatellite = connection(MutableStateFlow(mapOf("9" to slot(registered = true))))
+        assertNull(
+            satelliteSinkFor(
+                slotId = "9",
+                bindings = mapOf("9" to "m"),
+                summariesById = mapOf("m" to summary("m", kind = ConnectionKind.MOONLIGHT)),
+                connections = mapOf("m" to sameIdSatellite),
+            ),
+        )
+    }
+
+    @Test
+    fun `satelliteSinkFor is null while the satellite is still CONNECTING`() {
         val conn = connection(MutableStateFlow(mapOf("9" to slot(registered = true))))
         assertNull(
-            PhysicalReachabilityComposer.connectionFor(
+            satelliteSinkFor(
                 slotId = "9",
                 bindings = mapOf("9" to "c"),
                 summariesById = mapOf("c" to summary("c", live = LinkState.Connecting)),
@@ -93,10 +121,10 @@ class PhysicalReachabilityTest {
     }
 
     @Test
-    fun `connectionFor is null until the slot has registered`() {
+    fun `satelliteSinkFor is null until the slot has registered`() {
         val conn = connection(MutableStateFlow(mapOf("9" to slot(registered = false))))
         assertNull(
-            PhysicalReachabilityComposer.connectionFor(
+            satelliteSinkFor(
                 slotId = "9",
                 bindings = mapOf("9" to "c"),
                 summariesById = mapOf("c" to summary("c")),
@@ -106,9 +134,9 @@ class PhysicalReachabilityTest {
     }
 
     @Test
-    fun `connectionFor is null when the connection object is gone`() {
+    fun `satelliteSinkFor is null when the connection object is gone`() {
         assertNull(
-            PhysicalReachabilityComposer.connectionFor(
+            satelliteSinkFor(
                 slotId = "9",
                 bindings = mapOf("9" to "c"),
                 summariesById = mapOf("c" to summary("c")),
@@ -118,10 +146,10 @@ class PhysicalReachabilityTest {
     }
 
     @Test
-    fun `resolve keeps only the reachable pads`() {
+    fun `reachableSinks keeps only the reachable pads`() {
         val reachableConn = connection(MutableStateFlow(mapOf("9" to slot(registered = true))))
         val resolved =
-            PhysicalReachabilityComposer.resolve(
+            reachableSinks(
                 deviceIds = setOf(9, 11),
                 bindings = mapOf("9" to "c"),
                 summaries = listOf(summary("c")),
@@ -140,8 +168,7 @@ class PhysicalReachabilityTest {
             val summaries = MutableStateFlow(listOf(summary("c")))
             val connections = MutableStateFlow(mapOf("c" to conn))
 
-            PhysicalReachabilityComposer
-                .reachableSlots(devices, bindings, summaries, connections)
+            reachableSlots(devices, bindings, summaries, connections)
                 .test {
                     assertEquals(emptyMap<String, SatelliteConnection>(), awaitItem())
 
@@ -162,8 +189,7 @@ class PhysicalReachabilityTest {
             val summaries = MutableStateFlow(listOf(summary("c")))
             val connections = MutableStateFlow(mapOf("c" to conn))
 
-            PhysicalReachabilityComposer
-                .reachableSlots(devices, bindings, summaries, connections)
+            reachableSlots(devices, bindings, summaries, connections)
                 .test {
                     assertEquals(mapOf("9" to conn), awaitItem())
                     summaries.value = listOf(summary("c", live = LinkState.Connecting))
@@ -181,34 +207,40 @@ class PhysicalReachabilityTest {
             val summaries = MutableStateFlow<List<ConnectionSummary>>(emptyList())
             val connections = MutableStateFlow<Map<String, SatelliteConnection>>(emptyMap())
 
-            PhysicalReachabilityComposer
-                .reachableSlots(devices, bindings, summaries, connections)
+            reachableSlots(devices, bindings, summaries, connections)
                 .test {
                     assertEquals(emptyMap<String, SatelliteConnection>(), awaitItem())
                     cancelAndIgnoreRemainingEvents()
                 }
         }
 
-    // ---- Moonlight sinks --------------------------------------------------
+    @Test
+    fun `reachableSlots re-emits when a moonlight pad is announced with no other change`() =
+        runTest {
+            val pads = MutableStateFlow<Map<String, MoonlightPad>>(emptyMap())
+            val conn = moonlightConnection(pads)
+            val devices = MutableStateFlow(mapOf(9 to device(9)))
+            val bindings = MutableStateFlow(mapOf("9" to "m"))
+            val summaries = MutableStateFlow(listOf(summary("m", kind = ConnectionKind.MOONLIGHT)))
+            val moonlightConnections = MutableStateFlow(mapOf("m" to conn))
 
-    private fun moonlightConnection(pad: Boolean): com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection {
-        val conn = mockk<com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection>()
-        every { conn.padFor("9") } returns
-            if (pad) {
-                com.tinkernorth.dish.source.connection.moonlight
-                    .MoonlightPad(slotId = "9", number = 0, emulatedType = 1, capabilities = 3, supportedButtons = 0xFFFF)
-            } else {
-                null
-            }
-        return conn
-    }
+            reachableSlots(devices, bindings, summaries, flowOf(emptyMap()), moonlightConnections)
+                .test {
+                    assertEquals(emptyMap<String, MoonlightConnection>(), awaitItem())
+
+                    pads.value = mapOf("9" to pad())
+
+                    assertEquals(mapOf("9" to conn), awaitItem())
+                    cancelAndIgnoreRemainingEvents()
+                }
+        }
 
     @Test
-    fun `sinkFor resolves a moonlight-bound slot to its live connection`() {
-        val conn = moonlightConnection(pad = true)
+    fun `telemetrySinkFor resolves a moonlight-bound slot to its live connection`() {
+        val conn = moonlightConnection(MutableStateFlow(mapOf("9" to pad())))
         assertSame(
             conn,
-            PhysicalReachabilityComposer.sinkFor(
+            telemetrySinkFor(
                 slotId = "9",
                 bindings = mapOf("9" to "m"),
                 summariesById = mapOf("m" to summary("m", kind = ConnectionKind.MOONLIGHT)),
@@ -219,10 +251,10 @@ class PhysicalReachabilityTest {
     }
 
     @Test
-    fun `sinkFor is null for a moonlight slot whose pad was never announced`() {
-        val conn = moonlightConnection(pad = false)
+    fun `telemetrySinkFor is null for a moonlight slot whose pad was never announced`() {
+        val conn = moonlightConnection(MutableStateFlow(emptyMap()))
         assertNull(
-            PhysicalReachabilityComposer.sinkFor(
+            telemetrySinkFor(
                 slotId = "9",
                 bindings = mapOf("9" to "m"),
                 summariesById = mapOf("m" to summary("m", kind = ConnectionKind.MOONLIGHT)),
@@ -233,10 +265,10 @@ class PhysicalReachabilityTest {
     }
 
     @Test
-    fun `sinkFor is null for a moonlight link that is not connected`() {
-        val conn = moonlightConnection(pad = true)
+    fun `telemetrySinkFor is null for a moonlight link that is not connected`() {
+        val conn = moonlightConnection(MutableStateFlow(mapOf("9" to pad())))
         assertNull(
-            PhysicalReachabilityComposer.sinkFor(
+            telemetrySinkFor(
                 slotId = "9",
                 bindings = mapOf("9" to "m"),
                 summariesById = mapOf("m" to summary("m", kind = ConnectionKind.MOONLIGHT, live = LinkState.Connecting)),
@@ -247,9 +279,9 @@ class PhysicalReachabilityTest {
     }
 
     @Test
-    fun `sinkFor never yields a telemetry lane for a bluetooth binding`() {
+    fun `telemetrySinkFor never yields a telemetry lane for a bluetooth binding`() {
         assertNull(
-            PhysicalReachabilityComposer.sinkFor(
+            telemetrySinkFor(
                 slotId = "9",
                 bindings = mapOf("9" to "b"),
                 summariesById = mapOf("b" to summary("b", kind = ConnectionKind.BLUETOOTH)),

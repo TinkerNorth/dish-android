@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.source.store
 
+import com.tinkernorth.dish.source.lights.opaqueArgb
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -11,9 +12,11 @@ import javax.inject.Singleton
 /**
  * Host-driven feedback for the on-screen virtual pad: the phone has no
  * lightbar or player-LED hardware, so the skin renders them instead. State is
- * last-known and deliberately survives the overlay closing — the host coalesces
- * these messages and will not resend an unchanged value, so forgetting it here
- * would blank the skin until the game next changes something.
+ * last-known and deliberately survives the overlay closing: a host sends a value
+ * when the game changes it, and a satellite repeats the light bar, trigger
+ * effects and player LEDs only when a new session first reaches this phone,
+ * never the mic lamp. Closing the overlay is neither, so forgetting the state
+ * here would blank the skin until the game next changes something.
  */
 data class VirtualPadFeedback(
     // ARGB color, null until a host has set one.
@@ -48,14 +51,11 @@ class VirtualPadFeedbackStore
             g: Int,
             b: Int,
         ) {
-            _state.value =
-                _state.value.copy(
-                    lightbarColor = 0xFF000000.toInt() or ((r and 0xFF) shl 16) or ((g and 0xFF) shl 8) or (b and 0xFF),
-                )
+            _state.value = _state.value.copy(lightbarColor = opaqueArgb(r, g, b))
         }
 
         fun setPlayerLeds(ledMask: Int) {
-            _state.value = _state.value.copy(playerLedMask = ledMask and 0x1F)
+            _state.value = _state.value.copy(playerLedMask = ledMask and PLAYER_LED_MASK)
         }
 
         fun setTriggerEffects(
@@ -74,3 +74,6 @@ class VirtualPadFeedbackStore
             _state.value = _state.value.copy(micLedState = state.coerceIn(MIC_LED_OFF, MIC_LED_PULSE))
         }
     }
+
+// The wire's ledMask carries five player LEDs; anything above them is reserved.
+private const val PLAYER_LED_MASK = 0x1F

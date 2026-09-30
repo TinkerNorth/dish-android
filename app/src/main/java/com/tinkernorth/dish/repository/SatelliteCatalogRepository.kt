@@ -4,10 +4,11 @@ package com.tinkernorth.dish.repository
 
 import com.tinkernorth.dish.core.model.CatalogDto
 import com.tinkernorth.dish.core.model.DiscoveredServer
-import com.tinkernorth.dish.core.model.HostFeatureSet
+import com.tinkernorth.dish.core.model.hostFeaturesFromCatalog
 import com.tinkernorth.dish.core.net.DiscoveryGateway
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import kotlinx.serialization.json.Json
+import java.net.HttpURLConnection
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -57,10 +58,10 @@ class SatelliteCatalogRepository
                 }.getOrNull() ?: return cached?.catalog
             if (reply.notModified) {
                 // 304: the cache is still authoritative, so re-publish its host features for late observers.
-                cached?.catalog?.let { hostFeaturesStore.setFeatures(satelliteId, HostFeatureSet.fromCatalog(it)) }
+                cached?.catalog?.let { hostFeaturesStore.setFeatures(satelliteId, hostFeaturesFromCatalog(it)) }
                 return cached?.catalog
             }
-            if (reply.status != 200 || reply.body.isBlank()) return cached?.catalog
+            if (reply.status != HttpURLConnection.HTTP_OK || reply.body.isBlank()) return cached?.catalog
             val catalog =
                 runCatching { json.decodeFromString(CatalogDto.serializer(), reply.body) }
                     .getOrNull() ?: return cached?.catalog
@@ -69,7 +70,7 @@ class SatelliteCatalogRepository
             // shape and the rest of the app never branches on the version.
             val normalized = legacyCatalogTranslator.normalize(catalog)
             cache[satelliteId] = CacheEntry(reply.etag, normalized)
-            hostFeaturesStore.setFeatures(satelliteId, HostFeatureSet.fromCatalog(normalized))
+            hostFeaturesStore.setFeatures(satelliteId, hostFeaturesFromCatalog(normalized))
             return normalized
         }
 

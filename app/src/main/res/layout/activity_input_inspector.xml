@@ -116,14 +116,14 @@
                     <com.tinkernorth.dish.ui.diagnostics.StickPlotView
                         android:id="@+id/plotLeftStick"
                         android:layout_width="0dp"
-                        android:layout_height="160dp"
+                        android:layout_height="@dimen/inspector_stick_plot_height"
                         android:layout_weight="1"
                         android:layout_marginEnd="@dimen/spacing_md" />
 
                     <com.tinkernorth.dish.ui.diagnostics.StickPlotView
                         android:id="@+id/plotRightStick"
                         android:layout_width="0dp"
-                        android:layout_height="160dp"
+                        android:layout_height="@dimen/inspector_stick_plot_height"
                         android:layout_weight="1" />
                 </LinearLayout>
 
@@ -187,7 +187,7 @@
                 <com.tinkernorth.dish.ui.diagnostics.TouchPlotView
                     android:id="@+id/plotTouch"
                     android:layout_width="match_parent"
-                    android:layout_height="140dp" />
+                    android:layout_height="@dimen/inspector_touch_plot_height" />
 
                 <TextView
                     android:id="@+id/tvTouchHint"

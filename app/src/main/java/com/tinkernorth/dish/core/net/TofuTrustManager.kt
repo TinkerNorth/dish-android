@@ -9,6 +9,7 @@ import com.tinkernorth.dish.repository.sha256FingerprintHex
 import com.tinkernorth.dish.repository.tofuVerdict
 import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
+import javax.net.ssl.SSLSession
 import javax.net.ssl.X509TrustManager
 
 /**
@@ -43,6 +44,10 @@ internal class TofuTrustManager(
         authType: String?,
     ): Unit = throw CertificateException("client certificates are not accepted for $hostId")
 
+    // The fingerprint of the certificate this handshake accepted, pinned or matched: null before
+    // the handshake, and after one that was refused.
+    private var accepted: String? = null
+
     override fun checkServerTrusted(
         chain: Array<out X509Certificate>?,
         authType: String?,
@@ -61,6 +66,18 @@ internal class TofuTrustManager(
                 throw CertificateException("cert pin mismatch for $hostId")
             }
         }
+        accepted = presented
+    }
+
+    /**
+     * Whether [session] carries the certificate this handshake accepted. The verifier a connection
+     * installs asks this rather than the pin store again: the store can move between the handshake
+     * and the verifier (a Forget drops the pin while the unpair it sends is on the wire), and the
+     * verdict is this handshake's.
+     */
+    fun accepted(session: SSLSession?): Boolean {
+        val cert = session?.peerCertificates?.firstOrNull() ?: return false
+        return accepted != null && accepted == sha256FingerprintHex(cert.encoded)
     }
 
     override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()

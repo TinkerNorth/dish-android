@@ -179,7 +179,7 @@ class PhysicalGamepadRegistryTest {
     }
 
     @Test
-    fun `forgetSupersededFramework drops the device immediately`() {
+    fun `forgetSupersededFramework drops the device without the disconnect grace, so a re-enumerated card never doubles it`() {
         val registry = buildRegistry()
         registry.addUsbSynthetic(-1000, "Pad", false, 0, 1, 2)
         registry.forgetSupersededFramework(-1000)
@@ -259,10 +259,10 @@ class PhysicalGamepadRegistryTest {
 
     @Test
     fun `isSyntheticId treats negative ids as synthetic and non-negative as framework`() {
-        assertTrue(PhysicalGamepadRegistry.isSyntheticId(-1000))
-        assertTrue(PhysicalGamepadRegistry.isSyntheticId(-1))
-        assertFalse(PhysicalGamepadRegistry.isSyntheticId(0))
-        assertFalse(PhysicalGamepadRegistry.isSyntheticId(42))
+        assertTrue(isSyntheticId(-1000))
+        assertTrue(isSyntheticId(-1))
+        assertFalse(isSyntheticId(0))
+        assertFalse(isSyntheticId(42))
     }
 
     // ---- the pad's own touch surface ----
@@ -363,5 +363,82 @@ class PhysicalGamepadRegistryTest {
                 .getValue(-1000)
                 .isUsbSynthetic,
         )
+    }
+
+    // ---- a re-enumerated pad replaces the placeholder its own path switch left behind ----
+
+    // The real path: the manager marks the model as switching, the OS then drops the device, and
+    // the registry holds the slot as a loader instead of removing the card.
+    private fun holdAsPlaceholder(
+        registry: PhysicalGamepadRegistry,
+        deviceId: Int,
+        vid: Int,
+        pid: Int,
+    ) {
+        registry.beginModelTransition(vid, pid)
+        mockkStatic(InputDevice::class)
+        try {
+            every { InputDevice.getDevice(deviceId) } returns null
+            registry.onInputDeviceChanged(deviceId)
+        } finally {
+            unmockkStatic(InputDevice::class)
+        }
+    }
+
+    @Test
+    fun `a device dropped while its model is switching is held as a placeholder`() {
+        val registry = buildRegistry(usb = null)
+        addFrameworkPad(registry, frameworkPad(deviceId = 7, vid = VID, pid = PID))
+        holdAsPlaceholder(registry, deviceId = 7, vid = VID, pid = PID)
+
+        assertTrue("the slot must stay visible while the path switches", registry.devices.value.containsKey(7))
+        assertTrue(
+            registry.devices.value
+                .getValue(7)
+                .transitioning,
+        )
+    }
+
+    @Test
+    fun `a re-enumerated pad replaces the held placeholder for the same model`() {
+        val registry = buildRegistry(usb = null)
+        addFrameworkPad(registry, frameworkPad(deviceId = 7, vid = VID, pid = PID))
+        holdAsPlaceholder(registry, deviceId = 7, vid = VID, pid = PID)
+
+        addFrameworkPad(registry, frameworkPad(deviceId = 9, vid = VID, pid = PID))
+
+        assertEquals(
+            "the placeholder must give way rather than leaving two cards for one pad",
+            setOf(9),
+            registry.devices.value.keys,
+        )
+        assertFalse(
+            registry.devices.value
+                .getValue(9)
+                .transitioning,
+        )
+    }
+
+    @Test
+    fun `a re-enumerated pad leaves a placeholder for a different model alone`() {
+        val registry = buildRegistry(usb = null)
+        addFrameworkPad(registry, frameworkPad(deviceId = 7, vid = VID, pid = PID))
+        holdAsPlaceholder(registry, deviceId = 7, vid = VID, pid = PID)
+
+        addFrameworkPad(registry, frameworkPad(deviceId = 9, vid = VID, pid = OTHER_PID))
+
+        assertEquals(setOf(7, 9), registry.devices.value.keys)
+        assertTrue(
+            "the other model's placeholder is not ours to drop",
+            registry.devices.value
+                .getValue(7)
+                .transitioning,
+        )
+    }
+
+    private companion object {
+        const val VID = 0x054C
+        const val PID = 0x0CE6
+        const val OTHER_PID = 0x09CC
     }
 }

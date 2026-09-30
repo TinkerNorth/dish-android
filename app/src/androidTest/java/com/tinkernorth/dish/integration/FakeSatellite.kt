@@ -3,7 +3,10 @@
 package com.tinkernorth.dish.integration
 
 import com.tinkernorth.dish.core.model.DiscoveredServer
-import com.tinkernorth.dish.core.net.SessionCrypto
+import com.tinkernorth.dish.core.net.bytesToHex
+import com.tinkernorth.dish.core.net.deriveSessionKey
+import com.tinkernorth.dish.core.net.hexToBytes
+import com.tinkernorth.dish.core.net.hmacProof
 import okhttp3.tls.HeldCertificate
 import org.json.JSONArray
 import org.json.JSONObject
@@ -366,7 +369,7 @@ class FakeSatellite(
         val key = pairingKeyHex ?: return false
         val deviceId = headers["x-device-id"] ?: return false
         val proof = headers["x-hmac-proof"] ?: return false
-        return proof == SessionCrypto.hmacProof(hexToBytes(key), deviceId)
+        return proof == hmacProof(hexToBytes(key), deviceId)
     }
 
     private fun unpair(headers: Map<String, String>): Pair<String, String> {
@@ -392,7 +395,7 @@ class FakeSatellite(
         lastTokenHex = tokenHex
         downCounter = 0
         sessionKey =
-            SessionCrypto.deriveSessionKey(
+            deriveSessionKey(
                 hexToBytes(pairingKeyHex!!),
                 hexToBytes(saltHex),
                 hexToBytes(tokenHex),
@@ -632,8 +635,6 @@ class FakeSatellite(
             .getOrElse { Cipher.getInstance("ChaCha20-Poly1305") }
 
     private companion object {
-        val INSTANCES = AtomicInteger(0)
-
         const val PROTOCOL_VERSION = 3
         const val PROTOCOL_VERSION_MIN = 1
 
@@ -700,14 +701,13 @@ class FakeSatellite(
                              "keyboardControl":{"supported":false},
                              "rumble":{"supported":true}}}
             """.trimIndent()
-
-        fun randomHex(bytes: Int): String {
-            val raw = ByteArray(bytes).also { SecureRandom().nextBytes(it) }
-            return bytesToHex(raw)
-        }
-
-        fun bytesToHex(raw: ByteArray): String = raw.joinToString("") { "%02x".format(it) }
-
-        fun hexToBytes(hex: String): ByteArray = ByteArray(hex.length / 2) { hex.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
     }
+}
+
+// Numbers every fake this process starts, so no two share a machineId.
+private val INSTANCES = AtomicInteger(0)
+
+private fun randomHex(bytes: Int): String {
+    val raw = ByteArray(bytes).also { SecureRandom().nextBytes(it) }
+    return bytesToHex(raw)
 }

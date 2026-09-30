@@ -516,4 +516,131 @@ class UsbPathMachineTest {
         assertFalse(r.effects.isEmpty())
         assertNull(r.next?.failure)
     }
+
+    @Test
+    fun `unplug while claiming ends the hold with no synthetic to remove`() {
+        val r = reduce(controller(UsbPhase.Claiming, frameworkId = 7), UsbEvent.UsbUnplugged)
+        assertNull(r.next)
+        assertEquals(listOf(UsbEffect.EndHold), r.effects)
+    }
+
+    @Test
+    fun `unplug from needs replug ends the hold`() {
+        val r = reduce(controller(UsbPhase.NeedsReplug, failure = DirectClaimFailure.Dropped), UsbEvent.UsbUnplugged)
+        assertNull(r.next)
+        assertEquals(listOf(UsbEffect.EndHold), r.effects)
+    }
+
+    @Test
+    fun `unplug from direct removes the synthetic without a hold to end`() {
+        val r = reduce(controller(UsbPhase.Direct, syntheticId = -1000), UsbEvent.UsbUnplugged)
+        assertNull(r.next)
+        assertEquals(listOf(UsbEffect.RemoveSynthetic(-1000)), r.effects)
+    }
+
+    @Test
+    fun `routed + framework up records the new framework id`() {
+        val r = reduce(controller(UsbPhase.Routed, frameworkId = 7), UsbEvent.FrameworkUp(9))
+        assertEquals(UsbPhase.Routed, r.next?.phase)
+        assertEquals(9, r.next?.frameworkId)
+        assertTrue(r.effects.isEmpty())
+    }
+
+    @Test
+    fun `routed + permission granted while wanting standard only records the permission`() {
+        val r = reduce(controller(UsbPhase.Routed, desired = PathChoice.Standard), UsbEvent.PermissionGranted)
+        assertEquals(UsbPhase.Routed, r.next?.phase)
+        assertTrue(r.next!!.hasPermission)
+        assertTrue(r.effects.isEmpty())
+    }
+
+    @Test
+    fun `routed + permission denied while wanting standard is ignored`() {
+        val before = controller(UsbPhase.Routed, desired = PathChoice.Standard)
+        val r = reduce(before, UsbEvent.PermissionDenied)
+        assertEquals(before, r.next)
+        assertTrue(r.effects.isEmpty())
+    }
+
+    @Test
+    fun `routed + auto permission denied is silent`() {
+        val r = reduce(controller(UsbPhase.Routed, desired = PathChoice.Direct, userInitiated = false), UsbEvent.PermissionDenied)
+        assertEquals(PathChoice.Standard, r.next?.desired)
+        assertEquals(
+            listOf(UsbEffect.SetPref(PathChoice.Standard), UsbEffect.MarkFailure(DirectClaimFailure.PermissionDenied)),
+            r.effects,
+        )
+    }
+
+    @Test
+    fun `routed + choose standard records the desire with no effects`() {
+        val r = reduce(controller(UsbPhase.Routed, desired = PathChoice.Direct), UsbEvent.Choose(PathChoice.Standard, userInitiated = true))
+        assertEquals(UsbPhase.Routed, r.next?.phase)
+        assertEquals(PathChoice.Standard, r.next?.desired)
+        assertTrue(r.effects.isEmpty())
+    }
+
+    @Test
+    fun `claiming + framework up records the id mid-claim`() {
+        val r = reduce(controller(UsbPhase.Claiming), UsbEvent.FrameworkUp(9))
+        assertEquals(UsbPhase.Claiming, r.next?.phase)
+        assertEquals(9, r.next?.frameworkId)
+        assertTrue(r.effects.isEmpty())
+    }
+
+    @Test
+    fun `claiming + permission granted is remembered mid-claim`() {
+        val r = reduce(controller(UsbPhase.Claiming, hasPermission = false), UsbEvent.PermissionGranted)
+        assertEquals(UsbPhase.Claiming, r.next?.phase)
+        assertTrue(r.next!!.hasPermission)
+        assertTrue(r.effects.isEmpty())
+    }
+
+    @Test
+    fun `direct + choose direct stays direct`() {
+        val r = reduce(controller(UsbPhase.Direct, syntheticId = -1000), UsbEvent.Choose(PathChoice.Direct, userInitiated = true))
+        assertEquals(UsbPhase.Direct, r.next?.phase)
+        assertEquals(PathChoice.Direct, r.next?.desired)
+        assertEquals(-1000, r.next?.syntheticId)
+        assertTrue(r.effects.isEmpty())
+    }
+
+    @Test
+    fun `direct + framework up records the id without releasing`() {
+        val r = reduce(controller(UsbPhase.Direct, syntheticId = -1000), UsbEvent.FrameworkUp(9))
+        assertEquals(UsbPhase.Direct, r.next?.phase)
+        assertEquals(9, r.next?.frameworkId)
+        assertEquals(-1000, r.next?.syntheticId)
+        assertTrue(r.effects.isEmpty())
+    }
+
+    @Test
+    fun `awaiting from a cable jiggle + framework up ends the hold, settles on Standard and clears the failure`() {
+        val r = reduce(controller(UsbPhase.AwaitingFramework), UsbEvent.FrameworkUp(9))
+        assertEquals(UsbPhase.Routed, r.next?.phase)
+        assertEquals(9, r.next?.frameworkId)
+        assertEquals(
+            listOf(UsbEffect.EndHold, UsbEffect.BindFramework(9), UsbEffect.SetPref(PathChoice.Standard), UsbEffect.ClearFailure),
+            r.effects,
+        )
+    }
+
+    @Test
+    fun `permission granted while waiting is remembered for the next direct pick`() {
+        for (phase in listOf(UsbPhase.AwaitingFramework, UsbPhase.RestoreStuck, UsbPhase.NeedsReplug)) {
+            val r = reduce(controller(phase, hasPermission = false), UsbEvent.PermissionGranted)
+            assertEquals(phase, r.next?.phase)
+            assertTrue("$phase must remember the grant", r.next!!.hasPermission)
+            assertTrue(r.effects.isEmpty())
+        }
+    }
+
+    @Test
+    fun `needs replug + choose records the desire and waits for the device`() {
+        val r = reduce(controller(UsbPhase.NeedsReplug), UsbEvent.Choose(PathChoice.Direct, userInitiated = true))
+        assertEquals(UsbPhase.NeedsReplug, r.next?.phase)
+        assertEquals(PathChoice.Direct, r.next?.desired)
+        assertTrue(r.next!!.userInitiated)
+        assertTrue(r.effects.isEmpty())
+    }
 }

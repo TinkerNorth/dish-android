@@ -5,17 +5,14 @@ package com.tinkernorth.dish.ui.diagnostics
 import android.os.Bundle
 import android.view.ViewGroup
 import androidx.activity.viewModels
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivityHostInspectorBinding
 import com.tinkernorth.dish.databinding.DiagnosticsCardActionsBinding
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class HostInspectorActivity : BaseGamepadHostActivity() {
@@ -36,11 +33,7 @@ class HostInspectorActivity : BaseGamepadHostActivity() {
         binding.sectionNetwork.labelSection.setText(R.string.diagnostics_section_network)
         binding.sectionBindings.labelSection.setText(R.string.diagnostics_section_bindings)
 
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.ui.collect { render(it) }
-            }
-        }
+        observeWhileStarted(viewModel.ui) { render(it) }
     }
 
     private fun render(state: HostInspectorUiState) {

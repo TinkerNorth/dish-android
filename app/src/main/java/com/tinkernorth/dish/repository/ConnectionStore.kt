@@ -3,7 +3,7 @@
 package com.tinkernorth.dish.repository
 
 import com.tinkernorth.dish.core.model.DiscoveredServer
-import com.tinkernorth.dish.source.connection.SatelliteConnection
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
 import javax.inject.Inject
@@ -26,13 +26,13 @@ class ConnectionStore
         fun remembered(): List<RememberedSatellite> = satellites.all()
 
         // Identity is machineId-only (satellite docs/contract.md §Identity):
-        // one physical receiver is exactly one remembered row. idFor still has
+        // one physical receiver is exactly one remembered row. satelliteConnectionIdFor still has
         // to mint an ip:port id while the machineId is unknown (manual add), so
         // the upsert itself keeps the invariant across an identity upgrade:
         // there is no separate reconciliation pass to run, or forget to run.
         fun rememberSatellite(server: DiscoveredServer) {
             if (server.machineId.isBlank() && refreshKnownBox(server)) return
-            val id = SatelliteConnection.idFor(server)
+            val id = satelliteConnectionIdFor(server)
             if (server.machineId.isNotBlank()) collapseLegacyGhosts(server, id)
             migratePinOnAddressChange(satellites.get(id)?.ip, server.ip)
             val row =
@@ -53,19 +53,24 @@ class ConnectionStore
             val knownIds = rows.mapTo(mutableSetOf()) { it.id }
             discovered
                 .filter { it.machineId.isNotBlank() }
-                .filter { server ->
-                    SatelliteConnection.idFor(server) in knownIds ||
-                        rows.any { it.machineId.isBlank() && it.ip == server.ip && it.udpPort == server.udpPort }
-                }.forEach(::rememberSatellite)
+                .filter { isRemembered(it, rows, knownIds) }
+                .forEach(::rememberSatellite)
+        }
+
+        private fun isRemembered(
+            server: DiscoveredServer,
+            rows: List<RememberedSatellite>,
+            knownIds: Set<String>,
+        ): Boolean {
+            val isKnownById = satelliteConnectionIdFor(server) in knownIds
+            val matchesALegacyRow = rows.any { it.isLegacyRowFor(server) }
+            return isKnownById || matchesALegacyRow
         }
 
         // The box may already be known under its stable id: refresh that row
         // instead of minting an ip:port ghost beside it.
         private fun refreshKnownBox(server: DiscoveredServer): Boolean {
-            val stable =
-                satellites.all().firstOrNull {
-                    it.machineId.isNotBlank() && it.ip == server.ip && it.udpPort == server.udpPort
-                } ?: return false
+            val stable = satellites.all().firstOrNull { it.isStableRowFor(server) } ?: return false
             satellites.put(
                 stable.copy(
                     name = server.name,
@@ -85,7 +90,7 @@ class ConnectionStore
         ) {
             satellites
                 .all()
-                .filter { it.machineId.isBlank() && it.ip == server.ip && it.udpPort == server.udpPort }
+                .filter { it.isLegacyRowFor(server) }
                 .forEach { ghost ->
                     if (satelliteKeys.get(id) == null) {
                         satelliteKeys.get(ghost.id)?.let { satelliteKeys.put(id, it) }
@@ -168,3 +173,10 @@ data class RememberedBt(
     val mac: String,
     val profileName: String,
 )
+
+private fun RememberedSatellite.sharesEndpointWith(server: DiscoveredServer): Boolean = ip == server.ip && udpPort == server.udpPort
+
+// A legacy row was remembered before machineId existed, so its address is all that names it.
+private fun RememberedSatellite.isLegacyRowFor(server: DiscoveredServer): Boolean = machineId.isBlank() && sharesEndpointWith(server)
+
+private fun RememberedSatellite.isStableRowFor(server: DiscoveredServer): Boolean = machineId.isNotBlank() && sharesEndpointWith(server)

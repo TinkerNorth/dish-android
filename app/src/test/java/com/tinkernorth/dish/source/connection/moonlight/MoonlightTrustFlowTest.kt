@@ -10,6 +10,7 @@ import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
 import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
 import com.tinkernorth.dish.repository.RememberedMoonlightRepository
+import com.tinkernorth.dish.source.store.MoonlightHostFactsStore
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -51,6 +52,9 @@ class MoonlightTrustFlowTest {
 
     /** What the fake store holds, so a test can assert on the record and not on a call. */
     private val rows = linkedMapOf<String, RememberedMoonlight>()
+
+    // What the host last said about itself, as the diagnostics read it.
+    private val facts = MoonlightHostFactsStore()
     private val entries = MutableStateFlow<List<RememberedMoonlight>>(emptyList())
 
     // The address-keyed form, because the live hosts publish no uniqueid TXT record and
@@ -64,6 +68,11 @@ class MoonlightTrustFlowTest {
 
     private val unpairedInfo =
         """<root status_code="200"><hostname>PC</hostname><uniqueid>host-1</uniqueid>
+           <PairStatus>0</PairStatus><currentgame>0</currentgame></root>"""
+
+    // Another machine behind the same address: a reinstall, or a new PC given the old one's lease.
+    private val rebuiltInfo =
+        """<root status_code="200"><hostname>PC</hostname><uniqueid>host-2</uniqueid>
            <PairStatus>0</PairStatus><currentgame>0</currentgame></root>"""
 
     private val appList =
@@ -81,6 +90,7 @@ class MoonlightTrustFlowTest {
         every { context.getSharedPreferences(any(), any()) } returns prefs
 
         gateway = mockk(relaxed = true)
+        answerEveryLineAlike(gateway)
         every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns reply(pairedInfo)
         every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } returns reply(pairedInfo)
         every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply(appList)
@@ -122,6 +132,7 @@ class MoonlightTrustFlowTest {
             gateway = gateway,
             identity = mockk<MoonlightIdentity>(relaxed = true),
             store = store,
+            hostFacts = facts,
         )
 
     // ── Pairing ────────────────────────────────────────────────────────────────
@@ -154,7 +165,7 @@ class MoonlightTrustFlowTest {
             manager.pairHost(host)
             dispatcher.scheduler.advanceUntilIdle()
 
-            verify(exactly = 0) { gateway.getHttp(match { it.contains("/pair") }, any()) }
+            verify(exactly = 0) { gateway.getHttpOn(any(), match { it.contains("/pair") }, any()) }
         }
 
     // The host was verified this visit, which is the only proof there is that the pairing
@@ -174,7 +185,7 @@ class MoonlightTrustFlowTest {
     fun `a host that refuses phase 1 fails with a reason and writes nothing`() =
         runTest(dispatcher) {
             every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } returns unreachable()
-            every { gateway.getHttp(match { it.contains("/pair") }, any()) } returns reply("""<root status_code="400"/>""")
+            every { gateway.getHttpOn(any(), match { it.contains("/pair") }, any()) } returns reply("""<root status_code="400"/>""")
             val seen = mutableListOf<MoonlightConnectionEvent>()
             val collector = launch { manager.events.toList(seen) }
             dispatcher.scheduler.runCurrent()
@@ -192,7 +203,7 @@ class MoonlightTrustFlowTest {
     fun `a PIN is offered before phase 1 blocks on the human`() =
         runTest(dispatcher) {
             every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } returns unreachable()
-            every { gateway.getHttp(match { it.contains("/pair") }, any()) } returns reply("""<root status_code="400"/>""")
+            every { gateway.getHttpOn(any(), match { it.contains("/pair") }, any()) } returns reply("""<root status_code="400"/>""")
             val seen = mutableListOf<MoonlightConnectionEvent>()
             val collector = launch { manager.events.toList(seen) }
             dispatcher.scheduler.runCurrent()
@@ -224,6 +235,23 @@ class MoonlightTrustFlowTest {
             // The pin used to survive a forget, so a host that rotated its certificate
             // afterwards was refused with no way past it from inside the app.
             verify { gateway.forgetPin(host.id) }
+        }
+
+    // B6. Nothing about a forgotten host may outlive it, including what it last said about itself:
+    // a connection made to the same address later showed it in the diagnostics until the host
+    // answered again, and for good when it did not.
+    @Test
+    fun `forget leaves nothing of what the host last said about itself`() =
+        runTest(dispatcher) {
+            manager.pairHost(host)
+            manager.probe(host)
+            dispatcher.scheduler.advanceUntilIdle()
+            assertNotNull(facts.factsFor(host.id))
+
+            manager.forget(host.id)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertNull(facts.factsFor(host.id))
         }
 
     @Test
@@ -387,6 +415,52 @@ class MoonlightTrustFlowTest {
             assertFalse("adding is not pairing", record.paired)
         }
 
+    // MOON-D6. A scan finds the host by its address alone, since no host publishes its uniqueid
+    // over mDNS, and a typed address is answered with one. Keying on that answer made two rows,
+    // two records and two pins out of one machine.
+    @Test
+    fun `a host found by a scan and then added by its address is one host`() =
+        runTest(dispatcher) {
+            coEvery { discovery.discover(any()) } returns listOf(host)
+            manager.startDiscovery()
+            dispatcher.scheduler.advanceUntilIdle()
+
+            manager.addManualHost(host.address)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(listOf(host.id), manager.discovered.value.map { it.id })
+            assertEquals(listOf(host.id), rows.keys.toList())
+        }
+
+    @Test
+    fun `a host added by its address and then found by a scan is one host`() =
+        runTest(dispatcher) {
+            manager.addManualHost(host.address)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            coEvery { discovery.discover(any()) } returns listOf(host)
+            manager.startDiscovery()
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(listOf(host.id), manager.discovered.value.map { it.id })
+            assertEquals(listOf(host.id), rows.keys.toList())
+        }
+
+    // The typed address is answered with the uniqueid, which a host remembered from a scan has never
+    // been asked for.
+    @Test
+    fun `adding by address records the uniqueid of a host already remembered from a scan`() =
+        runTest(dispatcher) {
+            manager.rememberInterest(host)
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals("", rows.getValue(host.id).uniqueId)
+
+            manager.addManualHost(host.address)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals("host-1", rows.getValue(host.id).uniqueId)
+        }
+
     @Test
     fun `an address nothing answers is reported and not remembered`() =
         runTest(dispatcher) {
@@ -398,7 +472,7 @@ class MoonlightTrustFlowTest {
             manager.addManualHost("192.168.68.5")
             dispatcher.scheduler.advanceUntilIdle()
 
-            assertTrue(seen.any { it is MoonlightConnectionEvent.Error })
+            assertTrue(MoonlightConnectionEvent.Error(MoonlightError.NoHostAnswered("192.168.68.5")) in seen)
             assertTrue(rows.isEmpty())
             collector.cancel()
         }
@@ -456,6 +530,77 @@ class MoonlightTrustFlowTest {
 
             assertEquals("1", manager.rememberedAppId(host.id))
             assertEquals("Desktop", manager.rememberedAppName(host.id))
+        }
+
+    // The host's app list is its own word on what it can start. A pick it no longer lists was
+    // refused on every attempt, and the refusal hid the picker that could have changed it; the
+    // card's promise for a host with no pick is its first app, and that is what such a pick is.
+    @Test
+    fun `an app the host no longer lists is forgotten as the pick when the host is asked`() =
+        runTest(dispatcher) {
+            store.put(RememberedMoonlight(id = host.id, name = "PC", address = host.address, lastAppId = "9", lastAppName = "Removed"))
+
+            manager.probe(host)
+
+            assertEquals("", rows.getValue(host.id).lastAppId)
+            assertEquals("", rows.getValue(host.id).lastAppName)
+        }
+
+    @Test
+    fun `an app the host still lists stays the pick`() =
+        runTest(dispatcher) {
+            store.put(RememberedMoonlight(id = host.id, name = "PC", address = host.address, lastAppId = "1", lastAppName = "Desktop"))
+
+            manager.probe(host)
+
+            assertEquals("1", rows.getValue(host.id).lastAppId)
+        }
+
+    // An app list that could not be read says nothing about the pick.
+    @Test
+    fun `a pick stays when the host's app list cannot be read`() =
+        runTest(dispatcher) {
+            store.put(RememberedMoonlight(id = host.id, name = "PC", address = host.address, lastAppId = "9", lastAppName = "Removed"))
+            every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns MoonlightHttpGateway.Reply(status = 401, body = "")
+
+            manager.probe(host)
+
+            assertEquals("9", rows.getValue(host.id).lastAppId)
+        }
+
+    // A reply cut off mid-list parses as no apps at all, which is not the host saying it dropped one.
+    @Test
+    fun `a pick stays when the host's app list does not parse`() =
+        runTest(dispatcher) {
+            store.put(RememberedMoonlight(id = host.id, name = "PC", address = host.address, lastAppId = "9", lastAppName = "Removed"))
+            every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply(CUT_OFF_APP_LIST)
+
+            manager.probe(host)
+
+            assertEquals("9", rows.getValue(host.id).lastAppId)
+        }
+
+    // A host refuses in the body as often as in the status line, and a refusal lists no apps.
+    @Test
+    fun `a pick stays when the host refuses its app list in the body`() =
+        runTest(dispatcher) {
+            store.put(RememberedMoonlight(id = host.id, name = "PC", address = host.address, lastAppId = "9", lastAppName = "Removed"))
+            every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply(REFUSED_IN_THE_BODY)
+
+            manager.probe(host)
+
+            assertEquals("9", rows.getValue(host.id).lastAppId)
+        }
+
+    @Test
+    fun `an app list the host refuses in the body is reported as not loaded`() =
+        runTest(dispatcher) {
+            every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply(REFUSED_IN_THE_BODY)
+
+            val probe = manager.probe(host)
+
+            assertTrue(probe.appsFailed)
+            assertFalse(probe.appsFetched)
         }
 
     @Test
@@ -554,6 +699,60 @@ class MoonlightTrustFlowTest {
             )
         }
 
+    // MOON-D6. The uniqueid is the witness that tells the machine that was paired from another one
+    // at the same address, so the first answer a remembered host gives has to be kept.
+    @Test
+    fun `the first answer a remembered host gives records its uniqueid`() =
+        runTest(dispatcher) {
+            manager.rememberInterest(host)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            manager.probe(host)
+
+            assertEquals("host-1", rows.getValue(host.id).uniqueId)
+        }
+
+    // MOON-D6. A host paired from a scan used to be remembered with no uniqueid at all, so a rebuild
+    // behind the same address could only ever read as trust lost, and "pair again" as the answer to
+    // a pairing the host had merely forgotten.
+    @Test
+    fun `a rebuilt host remembered from a scan reads as replaced, not as untrusted`() =
+        runTest(dispatcher) {
+            manager.pairHost(host)
+            dispatcher.scheduler.advanceUntilIdle()
+            every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns reply(rebuiltInfo)
+            every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } returns unreachable()
+
+            assertEquals(MoonlightTrustState.REPLACED, manager.probe(host).trust)
+        }
+
+    // A pairing that cannot ask the host who it is has nothing better to write than what it knew.
+    @Test
+    fun `a pairing that cannot ask the host its uniqueid keeps the one remembered`() =
+        runTest(dispatcher) {
+            store.put(RememberedMoonlight(id = host.id, name = "PC", address = host.address, uniqueId = "host-1"))
+            every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns unreachable()
+
+            manager.pairHost(host)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals("host-1", rows.getValue(host.id).uniqueId)
+        }
+
+    // MOON-D6. A screen hands over the host as it read it, which can be from before the last pairing
+    // recorded another machine; only the host's own answer may change which machine is remembered.
+    @Test
+    fun `a pairing that cannot ask the host its uniqueid keeps the one remembered over the one it is handed`() =
+        runTest(dispatcher) {
+            store.put(RememberedMoonlight(id = host.id, name = "PC", address = host.address, uniqueId = "host-2", paired = true))
+            every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns unreachable()
+
+            manager.pairHost(host.copy(uniqueId = "host-1"))
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals("host-2", rows.getValue(host.id).uniqueId)
+        }
+
     @Test
     fun `a host that will not answer mutual TLS has lost trust once it was paired`() =
         runTest(dispatcher) {
@@ -615,5 +814,17 @@ class MoonlightTrustFlowTest {
     private companion object {
         // Anything longer than this is a subscription, not a scan.
         const val MAX_SCAN_MS = 10_000
+        const val CUT_OFF_APP_LIST = """<root status_code="200"><App><AppTitle>Desktop</AppTitle><ID>1</ID></App><App><AppTi"""
+        const val REFUSED_IN_THE_BODY =
+            """<root status_code="401" status_message="The client is not authorized. Certificate verification failed."/>"""
     }
+
+    @Test
+    fun `remembering interest in an unknown host writes nothing`() =
+        runTest(dispatcher) {
+            manager.rememberInterest("moonlight:uid:ghost")
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertTrue(rows.isEmpty())
+        }
 }

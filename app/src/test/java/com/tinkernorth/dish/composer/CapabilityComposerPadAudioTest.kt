@@ -4,10 +4,10 @@ package com.tinkernorth.dish.composer
 
 import com.tinkernorth.dish.architecture.testing.composerTest
 import com.tinkernorth.dish.architecture.testing.probe
+import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.audio.PadAudioRoute
-import com.tinkernorth.dish.source.audio.PadAudioRoutes
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -53,7 +53,7 @@ class CapabilityComposerPadAudioTest {
             val routes =
                 MutableStateFlow(
                     mapOf(
-                        PadAudioRoutes.key(0x054C, 0x0CE6) to PadAudioRoute(microphone = true, speaker = true),
+                        vidPidKey(0x054C, 0x0CE6) to PadAudioRoute(microphone = true, speaker = true),
                     ),
                 )
             val devices = MutableStateFlow(mapOf(-1000 to device(-1000, vendorId = 0x054C, productId = 0x0CE6, isUsbSynthetic = true)))
@@ -78,7 +78,7 @@ class CapabilityComposerPadAudioTest {
 
             // A headset-less pad that only plays: one endpoint, not the pair.
             routes.value =
-                mapOf(PadAudioRoutes.key(0x054C, 0x0CE6) to PadAudioRoute(microphone = false, speaker = true))
+                mapOf(vidPidKey(0x054C, 0x0CE6) to PadAudioRoute(microphone = false, speaker = true))
             testScheduler.runCurrent()
             val speakerOnly = composer.capabilityFor("-1000").controller
             assertFalse(Feature.MIC in speakerOnly)
@@ -90,7 +90,7 @@ class CapabilityComposerPadAudioTest {
         composerTest {
             val routes =
                 MutableStateFlow(
-                    mapOf(PadAudioRoutes.key(0x054C, 0x09CC) to PadAudioRoute(microphone = true, speaker = true)),
+                    mapOf(vidPidKey(0x054C, 0x09CC) to PadAudioRoute(microphone = true, speaker = true)),
                 )
             val devices = MutableStateFlow(mapOf(-1000 to device(-1000, vendorId = 0x054C, productId = 0x0CE6, isUsbSynthetic = true)))
             val composer =
@@ -121,7 +121,7 @@ class CapabilityComposerPadAudioTest {
             val routes =
                 MutableStateFlow(
                     mapOf(
-                        PadAudioRoutes.key(0x054C, 0x0CE6) to
+                        vidPidKey(0x054C, 0x0CE6) to
                             PadAudioRoute(microphone = true, speaker = true, haptics = true, playbackChannels = 4),
                     ),
                 )
@@ -153,7 +153,7 @@ class CapabilityComposerPadAudioTest {
             // No audio function over Bluetooth, and the same vendor:product as a USB DualSense.
             val routes =
                 MutableStateFlow(
-                    mapOf(PadAudioRoutes.key(0x054C, 0x0CE6) to PadAudioRoute(microphone = true, speaker = true)),
+                    mapOf(vidPidKey(0x054C, 0x0CE6) to PadAudioRoute(microphone = true, speaker = true)),
                 )
             val devices =
                 MutableStateFlow(
@@ -186,7 +186,7 @@ class CapabilityComposerPadAudioTest {
             val routes =
                 MutableStateFlow(
                     mapOf(
-                        PadAudioRoutes.key(0x054C, 0x0CE6) to
+                        vidPidKey(0x054C, 0x0CE6) to
                             PadAudioRoute(microphone = true, speaker = true, haptics = false, playbackChannels = 2),
                     ),
                 )

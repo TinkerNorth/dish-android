@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.composer
 
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
+import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import kotlinx.coroutines.CoroutineScope
@@ -29,15 +30,16 @@ class CatalogPrewarmer
         private val warmed = ConcurrentHashMap.newKeySet<String>()
 
         fun start() {
-            satellite.connections
-                .onEach { conns ->
-                    for ((id, conn) in conns) {
-                        if (!warmed.add(id)) continue
-                        scope.launch {
-                            conn.state.first { it == SatelliteSessionState.Live }
-                            catalogRepo.catalogFor(conn.server.value, id)
-                        }
-                    }
-                }.launchIn(scope)
+            satellite.connections.onEach(::warmNewConnections).launchIn(scope)
+        }
+
+        private fun warmNewConnections(conns: Map<String, SatelliteConnection>) {
+            for ((id, conn) in conns) {
+                if (!warmed.add(id)) continue
+                scope.launch {
+                    conn.state.first { it == SatelliteSessionState.Live }
+                    catalogRepo.catalogFor(conn.server.value, id)
+                }
+            }
         }
     }

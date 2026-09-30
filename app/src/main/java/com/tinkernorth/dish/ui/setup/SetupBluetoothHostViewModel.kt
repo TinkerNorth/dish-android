@@ -9,11 +9,12 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
-import com.tinkernorth.dish.core.input.BluetoothGamepad
+import com.tinkernorth.dish.core.input.GamepadProfile
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
+import com.tinkernorth.dish.source.bluetooth.bluetoothConnectionIdFor
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -30,13 +31,15 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+private const val EVENT_BUFFER = 4
+
 // Stage 3 Bluetooth host (design 5H). The phone advertises itself as a gamepad
 // to a PC, so this wizard owns a BluetoothGamepadRegistry session rather than a
 // claim: it commits the controller type the PC will see (locked per host, since
 // re-pairing is the only way to change it), drives the system discoverable +
 // passkey prompts from the Activity, and proceeds once the registry reports the
 // host link connected. The connectionId handed forward is the registry's stable
-// id (idFor(mac) == "bt:<mac>"), which is also the coordinator's summary id, so
+// id (bluetoothConnectionIdFor(mac) == "bt:<mac>"), which is also the coordinator's summary id, so
 // the configure screen resolves the same host. The input slotId rides in from
 // the prior step's extras unchanged.
 @HiltViewModel
@@ -59,7 +62,7 @@ class SetupBluetoothHostViewModel
             val id: String,
             val name: String,
             val mac: String,
-            val profile: BluetoothGamepad.GamepadProfile,
+            val profile: GamepadProfile,
         )
 
         data class State(
@@ -68,7 +71,7 @@ class SetupBluetoothHostViewModel
             val permissionMissing: Boolean = false,
             val hasGyro: Boolean = false,
             // Set once advertising starts so the screen can name the committed type.
-            val advertisingProfile: BluetoothGamepad.GamepadProfile? = null,
+            val advertisingProfile: GamepadProfile? = null,
             val discoverable: Boolean = false,
         )
 
@@ -81,7 +84,7 @@ class SetupBluetoothHostViewModel
             // the dashboard. Carries what the success toast needs.
             data class Done(
                 val hostName: String,
-                val profile: BluetoothGamepad.GamepadProfile,
+                val profile: GamepadProfile,
                 val bound: Boolean,
             ) : Event
         }
@@ -89,7 +92,7 @@ class SetupBluetoothHostViewModel
         private val _state = MutableStateFlow(State(hasGyro = motion.hasGyro))
         val state: StateFlow<State> = _state.asStateFlow()
 
-        private val _events = MutableSharedFlow<Event>(extraBufferCapacity = 4)
+        private val _events = MutableSharedFlow<Event>(extraBufferCapacity = EVENT_BUFFER)
         val events: SharedFlow<Event> = _events.asSharedFlow()
 
         // The connId currently driving the registry session (transient until the
@@ -169,10 +172,10 @@ class SetupBluetoothHostViewModel
             }
         }
 
-        fun onTypeChosen(profile: BluetoothGamepad.GamepadProfile) = beginAdvertising(profile, autoConnectMac = null)
+        fun onTypeChosen(profile: GamepadProfile) = beginAdvertising(profile, autoConnectMac = null)
 
         private fun beginAdvertising(
-            profile: BluetoothGamepad.GamepadProfile,
+            profile: GamepadProfile,
             autoConnectMac: String?,
         ) {
             proceeded = false
@@ -180,7 +183,7 @@ class SetupBluetoothHostViewModel
                 registry.states.value
                     .filterValues { it.connected || it.registered }
                     .keys
-            val connId = autoConnectMac?.let { BluetoothGamepadRegistry.idFor(it) } ?: pendingId()
+            val connId = autoConnectMac?.let { bluetoothConnectionIdFor(it) } ?: pendingId()
             activeConnId = connId
             registry.start(connId, profile, autoConnectMac)
             _state.update {
@@ -200,11 +203,8 @@ class SetupBluetoothHostViewModel
         private fun onRegistryStates(states: Map<String, BluetoothGamepadRegistry.SlotState>) {
             if (proceeded) return
             val active = activeConnId ?: return
-            // A freshly-paired session starts under a transient id; the registry
-            // rewrites it to "bt:<mac>" on bond. Match our active key, else the
-            // newly-connected key that wasn't already bonded when we started. Gate on
-            // CONNECTED only: the HID app registers the instant we start (long before
-            // the PC bonds), and proceeding on that flashes past the advertising step.
+            // The registry re-keys a fresh session from its transient id to "bt:<mac>" on bond, so
+            // the match is our key or a newly connected one that was not live when we started.
             val entry =
                 states.entries.firstOrNull { it.key == active && it.value.connected }
                     ?: states.entries.firstOrNull { it.value.connected && it.key !in baselineLiveKeys }
@@ -212,9 +212,6 @@ class SetupBluetoothHostViewModel
             val profile = _state.value.advertisingProfile ?: return
             proceeded = true
             activeConnId = entry.key
-            // Bind the chosen input to this host so its state drives the advertised
-            // pad; a Bluetooth host needs no further configuration. Binding fails
-            // only if the chosen controller vanished during the bond wait.
             val bound = hub.bind(slotId, entry.key, typeFor(profile))
             emitDone(entry.value.connectedName ?: entry.key, profile, bound)
         }
@@ -247,22 +244,21 @@ class SetupBluetoothHostViewModel
             activeConnId = null
         }
 
+        // A finished wizard leaves the live session to the dashboard; an abandoned one takes it down.
         override fun onCleared() {
-            // Don't keep advertising once the wizard goes away unless we already
-            // bonded and finished (the dashboard owns the live session from here).
             if (!proceeded) stopActive()
         }
 
         private fun emitDone(
             hostName: String,
-            profile: BluetoothGamepad.GamepadProfile,
+            profile: GamepadProfile,
             bound: Boolean,
         ) {
             viewModelScope.launch { _events.emit(Event.Done(hostName, profile, bound)) }
         }
 
-        private fun typeFor(profile: BluetoothGamepad.GamepadProfile): Int =
-            if (profile == BluetoothGamepad.GamepadProfile.PLAYSTATION) CONTROLLER_TYPE_PLAYSTATION else CONTROLLER_TYPE_XBOX
+        private fun typeFor(profile: GamepadProfile): Int =
+            if (profile == GamepadProfile.PLAYSTATION) CONTROLLER_TYPE_PLAYSTATION else CONTROLLER_TYPE_XBOX
 
         private fun RememberedBt.toRow(): HostRow =
             HostRow(
@@ -274,8 +270,8 @@ class SetupBluetoothHostViewModel
 
         private fun pendingId(): String = "bt-pending-${System.currentTimeMillis()}"
 
-        private fun profileOf(profileName: String): BluetoothGamepad.GamepadProfile =
-            BluetoothGamepad.GamepadProfile.entries
+        private fun profileOf(profileName: String): GamepadProfile =
+            GamepadProfile.entries
                 .firstOrNull { it.profileName == profileName || it.name == profileName }
-                ?: BluetoothGamepad.GamepadProfile.XBOX
+                ?: GamepadProfile.XBOX
     }

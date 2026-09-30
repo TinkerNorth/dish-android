@@ -11,7 +11,7 @@ class PairingApprovalTest {
     @Test
     fun `generated pin is four digits`() {
         repeat(50) {
-            val pin = PairingApproval.generatePin(Random(it))
+            val pin = generatePin(Random(it))
             assertEquals(4, pin.length)
             assertTrue(pin.all { c -> c in '0'..'9' })
         }
@@ -21,26 +21,26 @@ class PairingApprovalTest {
     fun `approved with a full 64-hex key parses to Approved`() {
         val key = "a".repeat(64)
         val st =
-            PairingApproval.classifyStatus(
+            classifyStatus(
                 """{"ok":true,"status":"approved","sharedKey":"$key"}""",
             )
-        assertTrue(st is PairingApproval.Status.Approved)
-        assertEquals(key, (st as PairingApproval.Status.Approved).sharedKeyHex)
+        assertTrue(st is Status.Approved)
+        assertEquals(key, (st as Status.Approved).sharedKeyHex)
     }
 
     @Test
     fun `pending parses to Pending`() {
         assertEquals(
-            PairingApproval.Status.Pending,
-            PairingApproval.classifyStatus("""{"ok":false,"status":"pending"}"""),
+            Status.Pending,
+            classifyStatus("""{"ok":false,"status":"pending"}"""),
         )
     }
 
     @Test
     fun `none parses to Declined`() {
         assertEquals(
-            PairingApproval.Status.Declined,
-            PairingApproval.classifyStatus("""{"ok":false,"status":"none"}"""),
+            Status.Declined,
+            classifyStatus("""{"ok":false,"status":"none"}"""),
         )
     }
 
@@ -48,14 +48,14 @@ class PairingApprovalTest {
     fun `approved without a full-length key is not trusted`() {
         // A short/garbage key must never be mistaken for a usable session key.
         assertEquals(
-            PairingApproval.Status.Declined,
-            PairingApproval.classifyStatus("""{"status":"approved","sharedKey":"abcd"}"""),
+            Status.Declined,
+            classifyStatus("""{"status":"approved","sharedKey":"abcd"}"""),
         )
     }
 
     @Test
     fun `an unparseable body is Declined`() {
-        assertEquals(PairingApproval.Status.Declined, PairingApproval.classifyStatus("not json"))
+        assertEquals(Status.Declined, classifyStatus("not json"))
     }
 
     @Test
@@ -63,8 +63,8 @@ class PairingApprovalTest {
         // Right length but wrong alphabet: must not be trusted as a session key.
         val notHex = "g".repeat(64)
         assertEquals(
-            PairingApproval.Status.Declined,
-            PairingApproval.classifyStatus("""{"status":"approved","sharedKey":"$notHex"}"""),
+            Status.Declined,
+            classifyStatus("""{"status":"approved","sharedKey":"$notHex"}"""),
         )
     }
 }

@@ -86,4 +86,16 @@ class WakeStateComposerTest {
             assertEquals(false, probe.latest.shouldKeepScreenOn)
             assertEquals(0, probe.latest.streamingSlotCount)
         }
+
+    @Test
+    fun `wakeStateFor counts only the bound slots whose link is Connected`() {
+        val bindings = mapOf("slot-1" to "sat-A", "slot-2" to "sat-A", "slot-3" to "sat-B", "slot-4" to "sat-gone")
+        val conns =
+            listOf(
+                connectionSummary("sat-A", LinkState.Connected),
+                connectionSummary("sat-B", LinkState.Unstable),
+            )
+
+        assertEquals(WakeState(streamingSlotCount = 2, shouldKeepScreenOn = true), wakeStateFor(bindings, conns))
+    }
 }

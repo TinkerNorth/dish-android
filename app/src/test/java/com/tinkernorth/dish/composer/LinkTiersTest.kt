@@ -9,22 +9,22 @@ import org.junit.Test
 class LinkTiersTest {
     @Test
     fun `satellite is the fastest tier`() {
-        assertEquals(LinkTier.FASTEST, LinkTiers.forKind(ConnectionKind.SATELLITE))
+        assertEquals(LinkTier.FASTEST, linkTierFor(ConnectionKind.SATELLITE))
     }
 
     @Test
     fun `moonlight host is the fast tier`() {
-        assertEquals(LinkTier.FAST, LinkTiers.forKind(ConnectionKind.MOONLIGHT))
+        assertEquals(LinkTier.FAST, linkTierFor(ConnectionKind.MOONLIGHT))
     }
 
     @Test
     fun `bluetooth is the basic tier`() {
-        assertEquals(LinkTier.BASIC, LinkTiers.forKind(ConnectionKind.BLUETOOTH))
+        assertEquals(LinkTier.BASIC, linkTierFor(ConnectionKind.BLUETOOTH))
     }
 
     @Test
     fun `every kind resolves to a tier`() {
-        for (kind in ConnectionKind.entries) LinkTiers.forKind(kind)
+        for (kind in ConnectionKind.entries) linkTierFor(kind)
     }
 
     @Test
@@ -35,7 +35,7 @@ class LinkTiersTest {
 
     @Test
     fun `each tier is claimed by exactly one kind`() {
-        val tiers = ConnectionKind.entries.map { LinkTiers.forKind(it) }
+        val tiers = ConnectionKind.entries.map { linkTierFor(it) }
         assertEquals(LinkTier.entries.toSet(), tiers.toSet())
         assertEquals(tiers.size, tiers.toSet().size)
     }
@@ -47,7 +47,7 @@ class LinkTiersTest {
                 ConnectionKind.BLUETOOTH,
                 ConnectionKind.MOONLIGHT,
                 ConnectionKind.SATELLITE,
-            ).sortedWith(LinkTiers.byTier { it })
+            ).sortedWith(comparatorByLinkTier { it })
 
         assertEquals(
             listOf(ConnectionKind.SATELLITE, ConnectionKind.MOONLIGHT, ConnectionKind.BLUETOOTH),
@@ -57,7 +57,7 @@ class LinkTiersTest {
 
     @Test
     fun `comparator treats same-kind entries as equal`() {
-        val cmp = LinkTiers.byTier<ConnectionKind> { it }
+        val cmp = comparatorByLinkTier<ConnectionKind> { it }
         for (kind in ConnectionKind.entries) {
             assertEquals(0, cmp.compare(kind, kind))
         }
@@ -65,7 +65,7 @@ class LinkTiersTest {
 
     @Test
     fun `comparator is consistent with the tier declaration order`() {
-        val cmp = LinkTiers.byTier<ConnectionKind> { it }
+        val cmp = comparatorByLinkTier<ConnectionKind> { it }
         assertTrue(cmp.compare(ConnectionKind.SATELLITE, ConnectionKind.MOONLIGHT) < 0)
         assertTrue(cmp.compare(ConnectionKind.MOONLIGHT, ConnectionKind.BLUETOOTH) < 0)
         assertTrue(cmp.compare(ConnectionKind.SATELLITE, ConnectionKind.BLUETOOTH) < 0)
@@ -84,7 +84,7 @@ class LinkTiersTest {
                 Row("bt", ConnectionKind.BLUETOOTH),
                 Row("sat", ConnectionKind.SATELLITE),
                 Row("ml", ConnectionKind.MOONLIGHT),
-            ).sortedWith(LinkTiers.byTier(Row::kind))
+            ).sortedWith(comparatorByLinkTier(Row::kind))
 
         assertEquals(listOf("sat", "ml", "bt"), sorted.map { it.name })
     }

@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.source.audio
 
 import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
+import com.tinkernorth.dish.core.input.vidPidKey
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -67,18 +68,10 @@ class PadAudioRoutes
         fun routeFor(
             vendorId: Int,
             productId: Int,
-        ): PadAudioRoute = state.value[key(vendorId, productId)] ?: PadAudioRoute.NONE
+        ): PadAudioRoute = state.value[vidPidKey(vendorId, productId)] ?: PadAudioRoute.NONE
 
         /** Republish the whole table; the resolver owns it wholesale, one map per device change. */
         fun publishRoutes(routes: Map<Int, PadAudioRoute>) {
             setState(routes)
-        }
-
-        companion object {
-            /** Same vendor:product packing the USB path keys its per-model preferences on. */
-            fun key(
-                vendorId: Int,
-                productId: Int,
-            ): Int = (vendorId shl 16) or productId
         }
     }

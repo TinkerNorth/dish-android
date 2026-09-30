@@ -74,12 +74,14 @@ class SatelliteConnectionTest {
     private fun newConnection(
         wireCapsFor: (String) -> Int = { SatelliteConnection.DEFAULT_WIRE_CAPABILITIES },
         store: SatelliteMotionBackendStatusStore? = null,
+        ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO,
     ): SatelliteConnection =
         SatelliteConnection(
-            id = SatelliteConnection.idFor(server),
+            id = satelliteConnectionIdFor(server),
             server = server,
             scope = scope,
             controllerRepo = repo,
+            ioDispatcher = ioDispatcher,
             hooks =
                 SatelliteConnection.Hooks(
                     wireCapsFor = wireCapsFor,
@@ -123,16 +125,18 @@ class SatelliteConnectionTest {
         callbacks: SatelliteConnection.SessionCallbacks = callbacks(),
     ) {
         target.markConnecting()
-        target.markConnected(
-            SatelliteConnection.SessionGrant(
-                handle = handle,
-                connectionId = "conn_abc",
-                epoch = epoch,
-                applied = applied,
-                mouseControlGranted = mouseControlGranted,
-            ),
-            callbacks,
-        )
+        val adopted =
+            target.markConnected(
+                SatelliteConnection.SessionGrant(
+                    handle = handle,
+                    connectionId = "conn_abc",
+                    epoch = epoch,
+                    applied = applied,
+                    mouseControlGranted = mouseControlGranted,
+                ),
+                callbacks,
+            )
+        assertTrue("a Linking connection takes the grant", adopted)
     }
 
     // Every callback defaults to a no-op here: a test wires only the one it watches.
@@ -164,8 +168,8 @@ class SatelliteConnectionTest {
         }
 
     @Test
-    fun `idFor derives stable id from the machineId`() {
-        assertEquals("satellite:mid:abc123", SatelliteConnection.idFor(server))
+    fun `satelliteConnectionIdFor derives stable id from the machineId`() {
+        assertEquals("satellite:mid:abc123", satelliteConnectionIdFor(server))
     }
 
     @Test
@@ -886,8 +890,10 @@ class SatelliteConnectionTest {
 
     @Test
     fun `markConnected from IDLE is rejected and leaves state IDLE`() {
-        conn.markConnected(SatelliteConnection.SessionGrant(handle = 11, connectionId = "c", epoch = 0, applied = emptyList()), callbacks())
+        val grant = SatelliteConnection.SessionGrant(handle = 11, connectionId = "c", epoch = 0, applied = emptyList())
+        val adopted = conn.markConnected(grant, callbacks())
 
+        assertFalse(adopted)
         assertEquals(SatelliteSessionState.Idle, conn.state.value)
         assertEquals(-1, conn.handle)
         verify(exactly = 0) { repo.startHeartbeat(any()) }
@@ -898,11 +904,13 @@ class SatelliteConnectionTest {
         every { repo.isConnectionAlive(any()) } returns true
 
         connectLive(handle = 1)
-        conn.markConnected(
-            SatelliteConnection.SessionGrant(handle = 2, connectionId = "second", epoch = 0, applied = emptyList()),
-            callbacks(),
-        )
+        val adopted =
+            conn.markConnected(
+                SatelliteConnection.SessionGrant(handle = 2, connectionId = "second", epoch = 0, applied = emptyList()),
+                callbacks(),
+            )
 
+        assertFalse(adopted)
         assertEquals(SatelliteSessionState.Live, conn.state.value)
         assertEquals(1, conn.handle)
         assertEquals("conn_abc", conn.connectionId)
@@ -1069,8 +1077,132 @@ class SatelliteConnectionTest {
         verify(exactly = 1) { repo.closeSocket(9) }
     }
 
+    @Test
+    fun `two missed heartbeats flip the session to Faltering`() =
+        connTest {
+            every { repo.isConnectionAlive(any()) } returns false
+            connectLive()
+
+            scope.advanceTimeBy(1100)
+            assertEquals(SatelliteSessionState.Live, conn.state.value)
+
+            scope.advanceTimeBy(1000)
+            assertEquals(SatelliteSessionState.Faltering, conn.state.value)
+        }
+
+    @Test
+    fun `an alive tick after Faltering returns to Live and resets the miss count`() =
+        connTest {
+            every { repo.isConnectionAlive(any()) } returns false
+            var died = false
+            connectLive(callbacks = callbacks(onDead = { died = true }))
+            scope.advanceTimeBy(2100)
+            assertEquals(SatelliteSessionState.Faltering, conn.state.value)
+
+            every { repo.isConnectionAlive(any()) } returns true
+            scope.advanceTimeBy(1000)
+            assertEquals(SatelliteSessionState.Live, conn.state.value)
+
+            // One fresh miss is one miss, not the third: the session neither falters nor dies yet.
+            every { repo.isConnectionAlive(any()) } returns false
+            scope.advanceTimeBy(1000)
+            assertEquals(SatelliteSessionState.Live, conn.state.value)
+            scope.advanceTimeBy(2000)
+            assertFalse(died)
+        }
+
+    @Test
+    fun `the ack drain stops once the socket reports negative`() =
+        connTest {
+            val ioDispatcher = StandardTestDispatcher(scope.testScheduler)
+            val drained = newConnection(ioDispatcher = ioDispatcher)
+            every { repo.receiveAck(7) } returnsMany listOf(0, 0, -1)
+            try {
+                connectLive(target = drained, handle = 7)
+                scope.advanceTimeBy(1100)
+
+                verify(exactly = 3) { repo.receiveAck(7) }
+            } finally {
+                drained.markDisconnected()
+            }
+        }
+
+    @Test
+    fun `renameSlot carries the motion backend status to the new id`() {
+        val store = SatelliteMotionBackendStatusStore()
+        val tracked = newConnection(store = store)
+        val id = satelliteConnectionIdFor(server)
+        val status =
+            com.tinkernorth.dish.source.store
+                .SatelliteMotionBackendStatus(sinkSupportedForType = true, backendOk = true)
+        tracked.attachSlot("a", controllerType = 1)
+        store.setStatus(id, "a", status)
+
+        tracked.renameSlot("a", "b")
+
+        assertEquals(status, store.statusFor(id, "b"))
+        assertNull(store.statusFor(id, "a"))
+    }
+
+    @Test
+    fun `renameSlot to itself is a no-op`() {
+        conn.attachSlot("a", controllerType = 1)
+        val before = conn.slots.value
+
+        assertTrue(conn.renameSlot("a", "a"))
+        assertFalse(conn.renameSlot("ghost", "ghost"))
+        assertEquals(before, conn.slots.value)
+    }
+
+    @Test
+    fun `detachSlot clears the slot's motion backend status`() {
+        val store = SatelliteMotionBackendStatusStore()
+        val tracked = newConnection(store = store)
+        val id = satelliteConnectionIdFor(server)
+        tracked.attachSlot("a", controllerType = 1)
+        store.setStatus(
+            id,
+            "a",
+            com.tinkernorth.dish.source.store
+                .SatelliteMotionBackendStatus(true, true),
+        )
+
+        tracked.detachSlot("a")
+
+        assertNull(store.statusFor(id, "a"))
+    }
+
+    @Test
+    fun `markDisconnected clears every motion backend status of the connection`() {
+        val store = SatelliteMotionBackendStatusStore()
+        val tracked = newConnection(store = store)
+        val id = satelliteConnectionIdFor(server)
+        tracked.attachSlot("a", controllerType = 1)
+        tracked.attachSlot("b", controllerType = 1)
+        connectLive(target = tracked, applied = listOf(okApply(0, appliedType = 1), okApply(1, appliedType = 1)))
+        assertEquals(2, store.slotStatusesFor(id, listOf("a", "b")).size)
+        store.setStatus(
+            "satellite:other",
+            "a",
+            com.tinkernorth.dish.source.store
+                .SatelliteMotionBackendStatus(true, true),
+        )
+
+        tracked.markDisconnected()
+
+        assertTrue(store.slotStatusesFor(id, listOf("a", "b")).isEmpty())
+        assertEquals(1, store.slotStatusesFor("satellite:other", listOf("a")).size)
+    }
+
+    @Test
+    fun `lowestFreeIndex takes the first gap and zero for an empty set`() {
+        assertEquals(0, lowestFreeIndex(emptyList()))
+        assertEquals(1, lowestFreeIndex(listOf(0, 2)))
+        assertEquals(3, lowestFreeIndex(listOf(2, 0, 1)))
+    }
+
     private companion object {
-        // What CapabilityResolver.wireCaps gives every pad; the tests build caps
+        // What wireCaps gives every pad; the tests build caps
         // words on top of it the way the composer does.
         const val BASE_CAPS =
             ControllerDescriptor.CAP_ANALOG_TRIGGERS or ControllerDescriptor.CAP_RUMBLE

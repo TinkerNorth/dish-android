@@ -9,12 +9,17 @@ import com.tinkernorth.dish.core.net.moonlight.enet.EnetClient
  * Drives the Moonlight control stream: the ENet connect handshake, the reliable
  * CONTROLLER_MULTI / ping / termination sends, and the inbound rumble / trigger
  * / motion / LED events. Composes the pure pieces ([EnetClient],
- * [MoonlightHotSealer], [MoonlightControlPacket], [MoonlightEventDecoder]) over
+ * [MoonlightHotSealer], [MoonlightControlPacket], [decodeMoonlightEvent]) over
  * a swappable [Transport] so the whole lifecycle unit-tests with a fake
  * transport and a controllable clock; production plugs in a UDP socket.
  *
- * The hot path ([sendControllerState]) reuses the sealer's buffers and only the
- * ENet framing allocates.
+ * The hot paths ([sendControllerState], [sendControllerTouch] and the mouse
+ * sends) encode and seal in the sealer's reused buffers. A connected send cannot
+ * be allocation-free: the cipher re-inits for every packet's IV, and ENet keeps
+ * each reliable command, as sent, until the host acks it, so the pump thread's
+ * retransmit has an immutable copy whatever the input thread sends next. Each
+ * packet's own frame is that copy. A send dropped while not connected builds
+ * nothing.
  *
  * ONE LOCK OVER THE WHOLE PROTOCOL STATE, and it has to be. Input arrives on the
  * dispatch thread while [pump] runs the receive/ping loop on an IO thread, and
@@ -30,7 +35,7 @@ class MoonlightControlSession(
     private val transport: Transport,
     private val nowMs: () -> Long,
     private val onEvent: (MoonlightEvent) -> Unit = {},
-) {
+) : MoonlightTouchSink {
     /** The datagram plumbing under the session (a UDP socket in production). */
     interface Transport {
         fun send(datagram: ByteArray)
@@ -61,7 +66,8 @@ class MoonlightControlSession(
     /** A one-line account of what the link did, for the session log. */
     fun linkStats(): String =
         synchronized(lock) {
-            "acks ${enet.acksSent}, retransmits ${enet.retransmits}, unknown commands ${enet.unknownCommands}"
+            val stats = enet.stats
+            "acks ${stats.acksSent}, retransmits ${stats.retransmits}, unknown commands ${stats.unknownCommands}"
         }
 
     fun roundTripMs(): Long? = synchronized(lock) { enet.roundTripMs }
@@ -72,38 +78,44 @@ class MoonlightControlSession(
      * elapses. Returns true on success.
      */
     fun connect(handshakeTimeoutMs: Int = DEFAULT_HANDSHAKE_TIMEOUT_MS): Boolean {
+        beginHandshake()
+        pumpUntilHandshakeSettles(nowMs() + handshakeTimeoutMs)
+        return finishHandshake()
+    }
+
+    private fun beginHandshake() {
         synchronized(lock) {
             state = State.CONNECTING
             transport.send(enet.connect())
         }
-        val deadline = nowMs() + handshakeTimeoutMs
+    }
+
+    // A quiet poll still ticks, so a dropped connect request is retransmitted rather than waited
+    // out until the deadline.
+    private fun pumpUntilHandshakeSettles(deadline: Long) {
         while (nowMs() < deadline && enetState() == EnetClient.State.CONNECTING) {
             val datagram = transport.receive(HANDSHAKE_POLL_MS)
             synchronized(lock) {
-                if (datagram == null) {
-                    enet.tick().forEach(transport::send)
-                } else {
-                    enet.onDatagram(datagram).forEach(transport::send)
-                }
-            }
-        }
-        return synchronized(lock) {
-            if (enet.state == EnetClient.State.CONNECTED) {
-                state = State.CONNECTED
-                true
-            } else {
-                state = State.CLOSED
-                false
+                val outgoing = if (datagram == null) enet.tick() else enet.onDatagram(datagram)
+                outgoing.forEach(transport::send)
             }
         }
     }
 
+    private fun finishHandshake(): Boolean =
+        synchronized(lock) {
+            val connected = enet.state == EnetClient.State.CONNECTED
+            state = if (connected) State.CONNECTED else State.CLOSED
+            connected
+        }
+
     private fun enetState(): EnetClient.State = synchronized(lock) { enet.state }
 
     /**
-     * HOT PATH: seal and send the controller state on channel 0. No allocation
-     * beyond the ENet frame. Silently drops when not connected so a dead session
-     * never blocks the input thread.
+     * HOT PATH: seal and send the controller state on channel 0. Nothing is built
+     * beyond the sealed frame and what ENet keeps for a retransmit (see the class
+     * comment). Silently drops when not connected so a dead session never blocks
+     * the input thread.
      */
     fun sendControllerState(
         controllerNumber: Int,
@@ -145,17 +157,43 @@ class MoonlightControlSession(
     ) {
         synchronized(lock) {
             sendControlPlaintextLocked(
-                MoonlightInputEncoder.controllerArrival(controllerNumber, emulatedType, capabilities, supportedButtons),
+                controllerArrival(controllerNumber, emulatedType, capabilities, supportedButtons),
             )
         }
     }
 
+    /**
+     * Plug [controllerNumber] back in as [emulatedType]. Wolf skips a CONTROLLER_ARRIVAL for a
+     * number it still holds, and drops the pad on the CONTROLLER_MULTI that names its number
+     * with its bit cleared from the active mask, so this sends that unplug ([otherPadsMask] is
+     * every other pad the session holds) and then the arrival. Both go under one hold of the
+     * lock: an input frame for the number landing between them would make Wolf plug a default
+     * Xbox pad for it, and the arrival would then be skipped.
+     */
+    fun sendControllerReplug(
+        controllerNumber: Int,
+        otherPadsMask: Int,
+        emulatedType: Int,
+        capabilities: Int,
+        supportedButtons: Int,
+    ) {
+        synchronized(lock) {
+            if (state != State.CONNECTED) return
+            sendSealedLocked(sealer.sealControllerMulti(controllerNumber, otherPadsMask, 0, 0, 0, 0, 0, 0, 0))
+            sendControlPlaintextLocked(controllerArrival(controllerNumber, emulatedType, capabilities, supportedButtons))
+        }
+    }
+
+    // The mouse sends run per touch frame, so they seal in the sealer's reused buffers like
+    // the controller state rather than building a plaintext first. The state check comes
+    // before the seal, as on the cold path, so a dropped send never spends a seq.
     fun sendMouseMoveRel(
         deltaX: Int,
         deltaY: Int,
     ) {
         synchronized(lock) {
-            sendControlPlaintextLocked(MoonlightInputEncoder.mouseMoveRel(deltaX, deltaY))
+            if (state != State.CONNECTED) return
+            sendSealedLocked(sealer.sealMouseMoveRel(deltaX, deltaY))
         }
     }
 
@@ -164,17 +202,21 @@ class MoonlightControlSession(
         button: Int,
     ) {
         synchronized(lock) {
-            sendControlPlaintextLocked(MoonlightInputEncoder.mouseButton(down, button))
+            if (state != State.CONNECTED) return
+            sendSealedLocked(sealer.sealMouseButton(down, button))
         }
     }
 
     fun sendMouseScroll(amount: Int) {
         synchronized(lock) {
-            sendControlPlaintextLocked(MoonlightInputEncoder.mouseScroll(amount))
+            if (state != State.CONNECTED) return
+            sendSealedLocked(sealer.sealMouseScroll(amount))
         }
     }
 
-    fun sendControllerTouch(
+    // A touch event is per pad-touch frame too, so it seals in the sealer's reused buffers like the
+    // mouse sends, and a dropped send, checked first, encodes nothing and spends no seq.
+    override fun sendControllerTouch(
         controllerNumber: Int,
         eventType: Int,
         pointerId: Int,
@@ -183,9 +225,8 @@ class MoonlightControlSession(
         pressure: Float,
     ) {
         synchronized(lock) {
-            sendControlPlaintextLocked(
-                MoonlightInputEncoder.controllerTouch(controllerNumber, eventType, pointerId, x, y, pressure),
-            )
+            if (state != State.CONNECTED) return
+            sendSealedLocked(sealer.sealControllerTouch(controllerNumber, eventType, pointerId, x, y, pressure))
         }
     }
 
@@ -198,7 +239,7 @@ class MoonlightControlSession(
     ) {
         synchronized(lock) {
             sendControlPlaintextLocked(
-                MoonlightInputEncoder.controllerMotion(controllerNumber, motionType, x, y, z),
+                controllerMotion(controllerNumber, motionType, x, y, z),
             )
         }
     }
@@ -210,7 +251,7 @@ class MoonlightControlSession(
     ) {
         synchronized(lock) {
             sendControlPlaintextLocked(
-                MoonlightInputEncoder.controllerBattery(controllerNumber, batteryState, percentage),
+                controllerBattery(controllerNumber, batteryState, percentage),
             )
         }
     }
@@ -222,8 +263,19 @@ class MoonlightControlSession(
      * loop.
      */
     fun pump(budget: Int = RECEIVE_BUDGET) {
-        var handled = 0
         val events = mutableListOf<MoonlightEvent>()
+        receiveUpTo(budget, events)
+        tickAndObserveClose()
+        // Dispatched outside the lock: a rumble sink is somebody else's code and must never be
+        // able to hold up the input thread.
+        events.forEach(onEvent)
+    }
+
+    private fun receiveUpTo(
+        budget: Int,
+        events: MutableList<MoonlightEvent>,
+    ) {
+        var handled = 0
         while (handled < budget) {
             val datagram = transport.receive(RECEIVE_POLL_MS) ?: break
             synchronized(lock) {
@@ -232,23 +284,22 @@ class MoonlightControlSession(
             }
             handled += 1
         }
+    }
+
+    private fun tickAndObserveClose() {
         synchronized(lock) {
             enet.tick().forEach(transport::send)
             maybePingLocked()
-            if (enet.state == EnetClient.State.DISCONNECTED && state == State.CONNECTED) {
-                state = State.CLOSED
-            }
+            val peerGaveUp = enet.state == EnetClient.State.DISCONNECTED && state == State.CONNECTED
+            if (peerGaveUp) state = State.CLOSED
         }
-        // Dispatched outside the lock: a rumble sink is somebody else's code and
-        // must never be able to hold up the input thread.
-        events.forEach(onEvent)
     }
 
     private fun drainEventsLocked(into: MutableList<MoonlightEvent>) {
         while (enet.received.isNotEmpty()) {
             val payload = enet.received.removeFirst()
             val plaintext = runCatching { opener.open(payload) }.getOrNull() ?: continue
-            MoonlightEventDecoder.decode(plaintext)?.let(into::add)
+            decodeMoonlightEvent(plaintext)?.let(into::add)
         }
     }
 
@@ -261,23 +312,27 @@ class MoonlightControlSession(
         val now = nowMs()
         if (state == State.CONNECTED && now - lastPingMs >= PING_INTERVAL_MS) {
             lastPingMs = now
-            sendControlPlaintextLocked(MoonlightInputEncoder.periodicPing())
+            sendControlPlaintextLocked(periodicPing())
         }
     }
 
     private fun sendControlPlaintextLocked(plaintext: ByteArray) {
         if (state != State.CONNECTED) return
         // Route every outbound packet through the sealer so the whole control
-        // stream shares one monotonic seq (no GCM IV reuse).
-        val sealed = sealer.seal(plaintext)
-        enet.sendReliable(sealed)?.let(transport::send)
+        // stream shares one seq, the one the host derives each packet's IV from.
+        sendSealedLocked(sealer.seal(plaintext))
+    }
+
+    private fun sendSealedLocked(sealed: ByteArray) {
+        val datagram = enet.sendReliable(sealed) ?: return
+        transport.send(datagram)
     }
 
     /** Graceful teardown: TERMINATION then ENet disconnect. */
     fun stop() {
         synchronized(lock) {
             if (state == State.CONNECTED) {
-                runCatching { sendControlPlaintextLocked(MoonlightInputEncoder.termination()) }
+                runCatching { sendControlPlaintextLocked(termination()) }
             }
             runCatching { enet.disconnect()?.let(transport::send) }
             runCatching { transport.close() }

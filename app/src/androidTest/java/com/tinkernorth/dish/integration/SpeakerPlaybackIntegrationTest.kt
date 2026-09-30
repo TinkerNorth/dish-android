@@ -15,15 +15,14 @@ import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.FeedbackRouter
-import com.tinkernorth.dish.integration.AppSingletons.fieldValue
 import com.tinkernorth.dish.source.audio.NativeSpeakerFrameSource
 import com.tinkernorth.dish.source.audio.PlayoutLane
 import com.tinkernorth.dish.source.audio.SlotAudioRoutes
 import com.tinkernorth.dish.source.audio.SpeakerEngine
 import com.tinkernorth.dish.source.audio.SpeakerPlayoutSession
 import com.tinkernorth.dish.source.audio.SpeakerPlayoutSink
-import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.source.store.MIC_LED_OFF
 import com.tinkernorth.dish.source.store.MIC_LED_ON
 import com.tinkernorth.dish.source.store.MIC_LED_PULSE
@@ -74,6 +73,19 @@ class SpeakerPlaybackIntegrationTest {
         val closes = AtomicInteger()
         val played = ConcurrentLinkedQueue<ShortArray>()
 
+        // Keeps every sample that reached the track, so the assertions can look at the audio
+        // rather than at a write count.
+        private inner class RecordingSession : SpeakerPlayoutSession {
+            override fun write(pcmStereo: ShortArray): Int {
+                played += pcmStereo
+                return pcmStereo.size
+            }
+
+            override fun close() {
+                closes.incrementAndGet()
+            }
+        }
+
         override fun open(
             frameSamples: Int,
             preferredDeviceId: Int,
@@ -81,16 +93,7 @@ class SpeakerPlaybackIntegrationTest {
             lane: PlayoutLane,
         ): SpeakerPlayoutSession {
             opens.incrementAndGet()
-            return object : SpeakerPlayoutSession {
-                override fun write(pcmStereo: ShortArray): Int {
-                    played += pcmStereo
-                    return pcmStereo.size
-                }
-
-                override fun close() {
-                    closes.incrementAndGet()
-                }
-            }
+            return RecordingSession()
         }
     }
 
@@ -134,11 +137,11 @@ class SpeakerPlaybackIntegrationTest {
     private fun bindVirtualAndGoLive(): DiscoveredServer {
         val satellite = FakeSatellite().also { fake = it }
         val server = satellite.server()
-        val id = SatelliteConnection.idFor(server)
+        val id = satelliteConnectionIdFor(server)
         manager.pairWithPin(server, "1234")
         assertTrue(
             "session should reach Live",
-            AppSingletons.await { manager.get(id)?.state?.value == SatelliteSessionState.Live },
+            await { manager.get(id)?.state?.value == SatelliteSessionState.Live },
         )
         // A DualSense: the only identity a host can materialize with audio endpoints, so it is the
         // one a speaker slot would really bind to. Bound through the hub as well as applied to the
@@ -148,7 +151,7 @@ class SpeakerPlaybackIntegrationTest {
         manager.get(id)!!.applyDesired(mapOf(VIRTUAL_SLOT_ID to CONTROLLER_TYPE_DUALSENSE))
         assertTrue(
             "the virtual slot must register before streams flow",
-            AppSingletons.await {
+            await {
                 manager
                     .get(id)
                     ?.slots
@@ -176,7 +179,7 @@ class SpeakerPlaybackIntegrationTest {
                 SlotAudioRoutes.NONE,
                 engineScope,
             )
-        return SpeakerEngine(composer, sink, NativeSpeakerFrameSource, engineScope).also {
+        return SpeakerEngine(composer, sink, NativeSpeakerFrameSource(), engineScope).also {
             engine = it
             owner.registry.addObserver(it)
             owner.registry.currentState = Lifecycle.State.STARTED
@@ -192,7 +195,7 @@ class SpeakerPlaybackIntegrationTest {
         // would pin the library version. Mono where a host's would be stereo, which a stereo
         // decoder upmixes, so the shape the sink receives is identical.
         val satellite = fake!!
-        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val conn = manager.get(satelliteConnectionIdFor(server))!!
         val ctrlIdx = conn.slots.value[VIRTUAL_SLOT_ID]!!.controllerIndex
         for (f in 0 until count + 2) {
             SlotReportNative.sendMicFrame(conn.handle, ctrlIdx, tone(f))
@@ -209,7 +212,7 @@ class SpeakerPlaybackIntegrationTest {
     fun speakerFrames_playThroughAnEligibleSlotAndStopWhenItIsSwitchedOff() {
         val server = bindVirtualAndGoLive()
         val satellite = fake!!
-        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val conn = manager.get(satelliteConnectionIdFor(server))!!
         val ctrlIdx = conn.slots.value[VIRTUAL_SLOT_ID]!!.controllerIndex
         val packets = speakerPackets(server, count = 8)
 
@@ -219,19 +222,19 @@ class SpeakerPlaybackIntegrationTest {
         // when the link goes Live. The second is the engine acting on that.
         assertTrue(
             "the host's controller-audio verdict must reach the capability model",
-            AppSingletons.await { Feature.SPEAKER in slotCapabilities().live },
+            await { Feature.SPEAKER in slotCapabilities().live },
         )
         startEngine()
         assertTrue(
             "the composer must find the bound DualSense slot eligible for controller sound",
-            AppSingletons.await { sink.opens.get() == 1 },
+            await { sink.opens.get() == 1 },
         )
 
         for ((seq, packet) in packets.withIndex()) {
             satellite.sendSpeakerAudio(ctrlIdx, seq, packet)
             Thread.sleep(FRAME_MS)
         }
-        assertTrue("decoded audio must reach the output", AppSingletons.await { sink.played.size >= 4 })
+        assertTrue("decoded audio must reach the output", await { sink.played.size >= 4 })
         val window = sink.played.first()
         assertEquals("one 20 ms window of interleaved stereo", SpeakerEngine.FRAME_SAMPLES, window.size)
         assertTrue("a decoded window is not silence", window.any { it.toInt() != 0 })
@@ -241,7 +244,7 @@ class SpeakerPlaybackIntegrationTest {
         speakerEnabled.setEnabled(VIRTUAL_SLOT_ID, false)
         assertTrue(
             "the output must be released when the slot stops carrying a speaker",
-            AppSingletons.await { sink.closes.get() == 1 },
+            await { sink.closes.get() == 1 },
         )
         val playedAtToggle = sink.played.size
         for ((seq, packet) in packets.withIndex()) {
@@ -259,7 +262,7 @@ class SpeakerPlaybackIntegrationTest {
     fun micLed_reachesTheVirtualPadsSkinInEveryStateTheWireCarries() {
         val server = bindVirtualAndGoLive()
         val satellite = fake!!
-        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val conn = manager.get(satelliteConnectionIdFor(server))!!
         val ctrlIdx = conn.slots.value[VIRTUAL_SLOT_ID]!!.controllerIndex
         val store = virtualFeedback
 
@@ -271,7 +274,7 @@ class SpeakerPlaybackIntegrationTest {
             satellite.sendMicLed(ctrlIdx, state)
             assertTrue(
                 "lamp state $state must reach the virtual pad",
-                AppSingletons.await(timeoutMs = 5_000) { store.state.value.micLedState == state },
+                await(timeoutMs = 5_000) { store.state.value.micLedState == state },
             )
         }
 

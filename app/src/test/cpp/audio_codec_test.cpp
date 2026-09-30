@@ -491,3 +491,39 @@ TEST(AudioCodec, ATightOutputBufferTruncatesThePacketRatherThanOverrunningIt) {
     EXPECT_GT(bytes, 0u);
     EXPECT_LE(bytes, sizeof(tight));
 }
+
+TEST(AudioCodec, DecodeFecOnACarrierWithoutFecStillProducesAFrame) {
+    auto enc = OpusStreamEncoder::create(Stream::Mic);
+    auto dec = OpusStreamDecoder::create(Stream::Mic);
+    ASSERT_NE(enc, nullptr);
+    ASSERT_NE(dec, nullptr);
+
+    std::vector<int16_t> src;
+    std::vector<int16_t> out(MIC_FRAME, 0);
+    uint8_t packet[MAX_PACKET];
+    for (int f = 0; f < 8; f++) {
+        fillMicFrame(src, f);
+        const size_t bytes = enc->encode(src.data(), MIC_FRAME, packet, sizeof(packet));
+        ASSERT_EQ(dec->decode(packet, bytes, out.data(), MIC_FRAME), MIC_FRAME);
+    }
+
+    // The jitter window hands over whatever packet follows a hole, and whether that packet
+    // carries a redundant copy is the encoder's call. A DTX packet has no room for one...
+    const std::vector<int16_t> silence(MIC_FRAME, 0);
+    size_t dtxBytes = 0;
+    for (int i = 0; i < 40; i++) {
+        dtxBytes = enc->encode(silence.data(), MIC_FRAME, packet, sizeof(packet));
+    }
+    ASSERT_GE(dtxBytes, 1u);
+    ASSERT_LE(dtxBytes, 2u);
+    EXPECT_EQ(dec->decodeFec(packet, dtxBytes, out.data(), MIC_FRAME), MIC_FRAME);
+
+    // ...and a CELT-only packet cannot carry one at all (TOC config 31: fullband CELT, 20 ms).
+    const uint8_t celtOnly[] = {0xF8};
+    EXPECT_EQ(dec->decodeFec(celtOnly, sizeof(celtOnly), out.data(), MIC_FRAME), MIC_FRAME);
+
+    // Neither wedged the decoder.
+    fillMicFrame(src, 9);
+    const size_t bytes = enc->encode(src.data(), MIC_FRAME, packet, sizeof(packet));
+    EXPECT_EQ(dec->decode(packet, bytes, out.data(), MIC_FRAME), MIC_FRAME);
+}

@@ -7,6 +7,69 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Cancelling a Moonlight pairing cancels it.** A PIN typed after Cancel
+  still paired the host, saved it and showed "Paired". Cancel now ends the
+  pairing at once, even while Dish is still asking the host who it is, and
+  records, shows and pairs nothing. A pairing the host never confirms in its
+  last step fails and says which step, instead of being saved as paired, and
+  that last step trusts only the certificate the earlier steps proved: the
+  pinned certificate changes only once the pairing is recorded.
+- **Forgetting a Moonlight host while Dish is still asking it about itself,
+  or while its session is starting, leaves it forgotten.** A late answer
+  used to verify the host again or write its record back. The same holds
+  while a pairing runs: a PIN typed after the host was forgotten, or a host
+  answering that it already trusts this phone, no longer brings it back.
+- **The PIN dialog's Back cancels the pairing**, like its Cancel button,
+  instead of leaving the pairing waiting for the PIN behind a closed
+  dialog, and the dialog is closed with the screen and reopened by the
+  rebuilt one.
+- **A host saved by an older build keeps its trusted certificate** when its
+  record is moved under its address on the first start, even where a scan
+  had left a stray certificate at that address.
+- **A Moonlight host is one host, however Dish found it.** A host found by a
+  scan and the same host added by its address were filed under different
+  ids, with two records and two pins for one machine, and a rebuilt machine
+  behind a scanned host read as "trust lost" instead of "replaced". Every
+  host is now filed under its address, as the Windows and Linux apps do,
+  records an older build saved are folded together on the first start, and
+  a rebuilt machine reads as replaced.
+- **After "Pair again", the first session no longer writes the old identity
+  back**, which made the host read as replaced again until Dish restarted.
+- **Pairing from the hosts screen survives turning the phone.** The new,
+  faster Cancel also fired when the screen was rebuilt for a rotation.
+- **A Moonlight host that refuses a session without giving a reason** no
+  longer leaves the card reading "refused the session:" with nothing after
+  the colon.
+- **An app removed on the Moonlight host stops being the pick.** Every
+  launch was refused, and Retry launched the same app again, until you left
+  and re-entered the screen. The next launch now starts the host's first
+  app and the picker comes back. An app the host renamed under a new id
+  counts as removed; a list Dish could not read leaves the pick alone.
+- **Forgetting a Moonlight host forgets what it last said about itself**,
+  so a new host at the same address cannot show the old one's diagnostics.
+- **After you quit the host's app, Dish asks the host again once the quit
+  has gone out**, not while it may still be on its way.
+- **Light bars on Standard and Bluetooth pads.** Update Satellite too. The
+  bar went dark after Dish came back from the background and stayed dark
+  until the game changed colour; releasing one pad's bar could paint
+  another pad's colour onto it; a pad bound to a different host could show
+  the previous host's colour; the input inspector's colour test was kept as
+  if the host had sent it; and a released bar could keep its light session
+  open after the pad was gone. Each pad's last host colour now comes back
+  when the pad is bound again under the same host, a released bar stays
+  dark instead of taking a neighbour's colour, and Satellite re-sends the
+  current colour when Dish reconnects.
+- **A pad whose rumble is switched off gets no trigger rumble from a
+  Moonlight host**, and a Direct pad's trigger motors stop when the host
+  stops refreshing them, as the main motors already did.
+- **The heartbeat and the motion-sensor threads run at the same priority as
+  the other input senders**, so a busy phone cannot let one of them hold up
+  a pad's input.
+
 ## [2.2.0] - 2026-09-21
 
 ### Added

@@ -189,6 +189,7 @@
     <string name="ml_resume_failed_title">No se pudo volver a la sesión en %1$s</string>
     <string name="ml_resume_failed_body">El host tiene una sesión pero no la devuelve. Cierra la app en %1$s e inicia una nueva.</string>
     <string name="ml_refused_title">%1$s rechazó la sesión: %2$s</string>
+    <string name="ml_refused_title_no_reason">%1$s rechazó la sesión</string>
     <string name="ml_refused_body">Añade el mando igualmente y Dish lo intentará de nuevo la próxima vez que lo uses.</string>
     <string name="ml_setup_failed_title">No se pudo completar la sesión en %1$s</string>
     <string name="ml_setup_failed_body">La app arrancó pero la transmisión no se estableció, así que Dish la cerró de nuevo.</string>
@@ -315,6 +316,36 @@
     <string name="notif_pairing_needed_title">Emparejamiento necesario</string>
     <string name="notif_pairing_needed_body">Abre Conexiones para introducir el PIN de %1$s.</string>
     <string name="notif_server_unreachable_title">%1$s no responde</string>
+
+    <!-- Por qué falló una conexión, una cadena por cada tipo que informan los gestores de conexión. -->
+    <string name="conn_error_server_unreachable">Servidor inaccesible. Comprueba que esté encendido y en la misma Wi-Fi.</string>
+    <string name="conn_error_repair_needed">Este satélite ya no reconoce este dispositivo. Hay que volver a emparejarlo.</string>
+    <string name="conn_error_identity_changed">La identidad de seguridad de este satélite ha cambiado. Si se reinstaló, olvídalo aquí y vuelve a emparejarlo.</string>
+    <string name="conn_error_wire_failed">El satélite aceptó, pero el enlace del mando no se abrió. Inténtalo de nuevo.</string>
+    <string name="conn_error_ipv6_unsupported">El satélite solo acepta conexiones por IPv4. Usa su dirección IPv4 (por ejemplo, 192.168.1.20) en lugar de una IPv6.</string>
+    <string name="conn_error_satellite_update_required">Este satélite es demasiado antiguo para esta app. Actualiza Satellite en el equipo receptor.</string>
+    <string name="conn_error_app_update_required">Este satélite necesita una versión más reciente de la app. Actualiza Dish en este dispositivo.</string>
+    <string name="conn_error_approval_declined">El satélite rechazó la solicitud de emparejamiento.</string>
+    <string name="conn_error_approval_timed_out">El satélite no respondió. La solicitud de emparejamiento caducó.</string>
+    <string name="conn_error_pairing_failed">El emparejamiento falló.</string>
+    <string name="conn_error_pairing_refused">El emparejamiento falló: %1$s</string>
+    <string name="conn_error_session_failed">El satélite rechazó la conexión.</string>
+    <string name="conn_error_session_refused">El satélite rechazó la conexión: %1$s</string>
+    <string name="conn_error_apply_failed">No se pudo aplicar el mando en %1$s: %2$s</string>
+    <string name="conn_error_title_repair_needed">%1$s ya no reconoce este dispositivo</string>
+    <string name="conn_error_title_identity_changed">%1$s tiene una nueva identidad</string>
+    <string name="conn_error_title_wire_failed">No se pudo abrir el enlace con %1$s</string>
+    <string name="conn_error_title_ipv6_unsupported">%1$s necesita una dirección IPv4</string>
+    <string name="conn_error_title_satellite_update_required">%1$s necesita una actualización</string>
+    <string name="conn_error_title_app_update_required">%1$s necesita una versión más reciente de Dish</string>
+    <string name="conn_error_title_approval_declined">%1$s rechazó el emparejamiento</string>
+    <string name="conn_error_title_approval_timed_out">Sin respuesta de %1$s</string>
+    <string name="conn_error_title_pairing_failed">No se pudo emparejar con %1$s</string>
+    <string name="conn_error_title_session_failed">No se pudo conectar con %1$s</string>
+    <string name="conn_error_title_apply_failed">Mando no configurado en %1$s</string>
+    <string name="ml_error_no_host_answered">Ningún host Moonlight respondió en %1$s.</string>
+    <string name="ml_error_no_apps">No hay apps disponibles en %1$s.</string>
+    <string name="ml_notice_app_close_requested">Se pidió a %1$s que cierre la app que está ejecutando.</string>
 
     <!-- Estado vacío dinámico para la lista de satélites. -->
     <string name="discovery_empty_never_scanned">Toca Buscar para encontrar satélites en tu red</string>

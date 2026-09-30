@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Test
 import java.util.concurrent.CyclicBarrier
 
@@ -80,6 +81,66 @@ class SlotBindingStoreTest {
         val prior = store.replace("slot-A", "conn-1")
         assertNull(prior)
         assertEquals("conn-1", store.connectionFor("slot-A"))
+    }
+
+    @Test
+    fun `migrate moves the binding in one emission`() =
+        runTest {
+            val store = SlotBindingStore()
+            store.bind("slot-A", "conn-1")
+            val seen = mutableListOf<Map<String, String>>()
+            val job = launch(UnconfinedTestDispatcher(testScheduler)) { store.state.collect { seen += it } }
+
+            store.migrate("slot-A", "slot-B")
+            runCurrent()
+            job.cancel()
+
+            assertEquals(listOf(mapOf("slot-A" to "conn-1"), mapOf("slot-B" to "conn-1")), seen)
+        }
+
+    @Test
+    fun `migrate from an unbound slot changes nothing`() {
+        val store = SlotBindingStore()
+        store.bind("slot-A", "conn-1")
+
+        store.migrate("ghost", "slot-B")
+
+        assertEquals(mapOf("slot-A" to "conn-1"), store.bindings.value)
+    }
+
+    @Test
+    fun `migrate onto a slot that is already bound takes it over`() {
+        val store = SlotBindingStore()
+        store.bind("slot-A", "conn-1")
+        store.bind("slot-B", "conn-2")
+
+        store.migrate("slot-A", "slot-B")
+
+        assertEquals(mapOf("slot-B" to "conn-1"), store.bindings.value)
+    }
+
+    // ---- the migrate reducer ----
+
+    private val boundA = mapOf("slot-A" to "conn-1", "slot-C" to "conn-2")
+
+    @Test
+    fun `migrating a bound slot moves its connection and keeps the other bindings`() {
+        assertEquals(mapOf("slot-B" to "conn-1", "slot-C" to "conn-2"), withSlotMigrated(boundA, "slot-A", "slot-B"))
+    }
+
+    @Test
+    fun `migrating an unbound slot hands back the same map`() {
+        assertSame(boundA, withSlotMigrated(boundA, "ghost", "slot-B"))
+    }
+
+    @Test
+    fun `migrating onto a bound slot replaces its connection`() {
+        assertEquals(mapOf("slot-C" to "conn-1"), withSlotMigrated(boundA, "slot-A", "slot-C"))
+    }
+
+    @Test
+    fun `migrating a slot onto itself keeps its binding`() {
+        assertEquals(boundA, withSlotMigrated(boundA, "slot-A", "slot-A"))
     }
 
     @Test

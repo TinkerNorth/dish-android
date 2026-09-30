@@ -3,7 +3,7 @@
 
 package com.tinkernorth.dish.source.connection.moonlight
 
-import com.tinkernorth.dish.core.net.moonlight.MoonlightXml
+import com.tinkernorth.dish.core.net.moonlight.MoonlightApp
 
 /**
  * How much a Moonlight host is trusted, as of the last time we asked it. There is
@@ -15,7 +15,7 @@ enum class MoonlightTrustState { CHECKING, PAIRED, NOT_PAIRED, UNREACHABLE, REME
 
 data class MoonlightProbe(
     val trust: MoonlightTrustState = MoonlightTrustState.CHECKING,
-    val apps: List<MoonlightXml.App> = emptyList(),
+    val apps: List<MoonlightApp> = emptyList(),
     val appsFetched: Boolean = false,
     val appsFailed: Boolean = false,
     val ownSession: Boolean = false,
