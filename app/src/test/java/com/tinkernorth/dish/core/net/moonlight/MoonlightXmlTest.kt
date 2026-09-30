@@ -26,7 +26,7 @@ class MoonlightXmlTest {
               <currentgame>0</currentgame>
               <state>SUNSHINE_SERVER_FREE</state>
             </root>"""
-        val info = MoonlightXml.parseServerInfo(xml)!!
+        val info = parseServerInfo(xml)!!
         assertEquals("living-room-pc", info.hostname)
         assertEquals("0123456789abcdef", info.uniqueId)
         assertEquals(47984, info.httpsPort)
@@ -41,14 +41,14 @@ class MoonlightXmlTest {
         val xml =
             """<root status_code="200"><PairStatus>1</PairStatus>
                <currentgame>881448767</currentgame><state>SUNSHINE_SERVER_BUSY</state></root>"""
-        val info = MoonlightXml.parseServerInfo(xml)!!
+        val info = parseServerInfo(xml)!!
         assertTrue(info.busy)
     }
 
     @Test
     fun `parses a phase-1 pair reply with plaincert`() {
         val xml = """<root status_code="200"><paired>1</paired><plaincert>2d2d2d2d2d</plaincert></root>"""
-        val reply = MoonlightXml.parsePairReply(xml)!!
+        val reply = parsePairReply(xml)!!
         assertTrue(reply.paired)
         assertEquals("2d2d2d2d2d", reply.plainCert)
     }
@@ -56,7 +56,7 @@ class MoonlightXmlTest {
     @Test
     fun `parses a failed pair reply`() {
         val xml = """<root status_code="400" status_message="Invalid client hash"><paired>0</paired></root>"""
-        val reply = MoonlightXml.parsePairReply(xml)!!
+        val reply = parsePairReply(xml)!!
         assertFalse(reply.paired)
         assertEquals("Invalid client hash", reply.statusMessage)
     }
@@ -68,7 +68,7 @@ class MoonlightXmlTest {
                  <App><IsHdrSupported>0</IsHdrSupported><AppTitle>Desktop</AppTitle><ID>881448767</ID></App>
                  <App><IsHdrSupported>1</IsHdrSupported><AppTitle>Steam Big Picture</AppTitle><ID>1</ID></App>
                </root>"""
-        val apps = MoonlightXml.parseAppList(xml)
+        val apps = parseAppList(xml)
         assertEquals(2, apps.size)
         assertEquals("Desktop", apps[0].title)
         assertEquals("881448767", apps[0].id)
@@ -78,9 +78,9 @@ class MoonlightXmlTest {
 
     @Test
     fun `malformed xml decodes to null or empty, not a crash`() {
-        assertNull(MoonlightXml.parseServerInfo("not xml at all"))
-        assertNull(MoonlightXml.parsePairReply("<root>"))
-        assertTrue(MoonlightXml.parseAppList("garbage").isEmpty())
+        assertNull(parseServerInfo("not xml at all"))
+        assertNull(parsePairReply("<root>"))
+        assertTrue(parseAppList("garbage").isEmpty())
     }
 
     /**
@@ -99,7 +99,7 @@ class MoonlightXmlTest {
                 "<ServerCodecModeSupport>2032385</ServerCodecModeSupport><PairStatus>0</PairStatus>" +
                 "<currentgame>0</currentgame><state>SUNSHINE_SERVER_FREE</state></root>"
 
-        val info = MoonlightXml.parseServerInfo(xml)!!
+        val info = parseServerInfo(xml)!!
 
         assertEquals("Samus Aran", info.hostname)
         assertEquals("61651FD7-3927-3E2E-FD1A-6464FCEDE28F", info.uniqueId)
@@ -122,7 +122,7 @@ class MoonlightXmlTest {
                 "<root status_code=\"400\" status_message=\"An app is already running on this host\">" +
                 "<resume>0</resume></root>"
 
-        val status = MoonlightXml.parseStatus(xml)!!
+        val status = parseStatus(xml)!!
 
         assertEquals(400, status.code)
         assertEquals("An app is already running on this host", status.message)
@@ -137,7 +137,7 @@ class MoonlightXmlTest {
             "<root status_code=\"400\" status_message=\"An app is already running on this host\">" +
                 "<resume>1</resume></root>"
 
-        val status = MoonlightXml.parseStatus(xml)!!
+        val status = parseStatus(xml)!!
 
         assertTrue(status.appAlreadyRunning)
         assertTrue(status.resume)
@@ -149,7 +149,7 @@ class MoonlightXmlTest {
             "<root status_code=\"200\"><sessionUrl0>rtsp://192.168.68.98:48010</sessionUrl0>" +
                 "<gamesession>1</gamesession></root>"
 
-        val status = MoonlightXml.parseStatus(xml)!!
+        val status = parseStatus(xml)!!
 
         assertTrue(status.ok)
         assertFalse(status.appAlreadyRunning)
@@ -158,17 +158,17 @@ class MoonlightXmlTest {
     @Test
     fun `a reply naming no status code at all is a plain success`() {
         // Wolf answers /applist this way.
-        assertTrue(MoonlightXml.parseStatus("<root><App><ID>1</ID></App></root>")!!.ok)
+        assertTrue(parseStatus("<root><App><ID>1</ID></App></root>")!!.ok)
     }
 
     @Test
     fun `an unparsable reply has no status`() {
-        assertNull(MoonlightXml.parseStatus("not xml at all"))
+        assertNull(parseStatus("not xml at all"))
     }
 
     @Test
     fun `a refusal that is not about a running app is not mistaken for one`() {
-        val status = MoonlightXml.parseStatus("<root status_code=\"401\" status_message=\"Unauthorized\"></root>")!!
+        val status = parseStatus("<root status_code=\"401\" status_message=\"Unauthorized\"></root>")!!
         assertFalse(status.ok)
         assertFalse(status.appAlreadyRunning)
     }
@@ -192,7 +192,96 @@ class MoonlightXmlTest {
 
         // Either the DTD is refused outright (null) or it parses with the entity
         // unresolved. What must never happen is the file's contents coming back.
-        val hostname = MoonlightXml.parseServerInfo(xml)?.hostname
+        val hostname = parseServerInfo(xml)?.hostname
         assertFalse("leaked the file into the parsed document", hostname.orEmpty().contains("TOP-SECRET"))
+    }
+
+    @Test
+    fun `an app without an id is skipped and the rest are kept`() {
+        val xml =
+            """<root status_code="200">
+                 <App><AppTitle>No Id</AppTitle></App>
+                 <App><AppTitle>Desktop</AppTitle><ID>7</ID></App>
+               </root>"""
+        assertEquals(listOf(MoonlightApp("7", "Desktop", hdrSupported = false)), parseAppList(xml))
+    }
+
+    @Test
+    fun `an app without a title or hdr flag parses with an empty title and no hdr`() {
+        val apps = parseAppList("""<root><App><ID>7</ID></App></root>""")
+        assertEquals(listOf(MoonlightApp("7", "", hdrSupported = false)), apps)
+    }
+
+    @Test
+    fun `a status code that is present but not a number fails closed`() {
+        val status = parseStatus("""<root status_code="ok" status_message="garbled"></root>""")!!
+        assertFalse(status.ok)
+        assertEquals("garbled", status.message)
+    }
+
+    @Test
+    fun `a status code that is present but empty fails closed`() {
+        assertFalse(parseStatus("""<root status_code=""></root>""")!!.ok)
+    }
+
+    @Test
+    fun `busy follows either a running game or a busy state`() {
+        val gameOnly = parseServerInfo("""<root><currentgame>5</currentgame><state>SUNSHINE_SERVER_FREE</state></root>""")!!
+        val stateOnly = parseServerInfo("""<root><currentgame>0</currentgame><state>SUNSHINE_SERVER_BUSY</state></root>""")!!
+        val neither = parseServerInfo("""<root><currentgame>0</currentgame><state>SUNSHINE_SERVER_FREE</state></root>""")!!
+        assertTrue(gameOnly.busy)
+        assertTrue(stateOnly.busy)
+        assertFalse(neither.busy)
+    }
+
+    @Test
+    fun `serverinfo fields absent from the reply read as their defaults`() {
+        val info = parseServerInfo("<root></root>")!!
+        assertEquals("", info.hostname)
+        assertEquals("", info.uniqueId)
+        assertEquals(0, info.pairStatus)
+        assertEquals(0, info.currentGame)
+        assertEquals("", info.state)
+        assertNull(info.httpsPort)
+        assertNull(info.externalPort)
+        assertNull(info.mac)
+        assertNull(info.localIp)
+        assertNull(info.appVersion)
+        assertNull(info.gfeVersion)
+        assertFalse(info.paired)
+        assertFalse(info.busy)
+    }
+
+    @Test
+    fun `an empty element reads as absent`() {
+        val info = parseServerInfo("<root><mac></mac><LocalIP>   </LocalIP></root>")!!
+        assertNull(info.mac)
+        assertNull(info.localIp)
+    }
+
+    @Test
+    fun `a non-numeric port reads as absent`() {
+        assertNull(parseServerInfo("<root><HttpsPort>lots</HttpsPort></root>")!!.httpsPort)
+    }
+
+    @Test
+    fun `a pair reply carries whichever phase field the host sent`() {
+        val phase2 = parsePairReply("""<root><paired>1</paired><challengeresponse>ab12</challengeresponse></root>""")!!
+        val phase3 = parsePairReply("""<root><paired>1</paired><pairingsecret>cd34</pairingsecret></root>""")!!
+        assertEquals("ab12", phase2.challengeResponse)
+        assertNull(phase2.pairingSecret)
+        assertEquals("cd34", phase3.pairingSecret)
+        assertNull(phase3.challengeResponse)
+        assertNull(phase3.statusMessage)
+    }
+
+    @Test
+    fun `a pair reply without a paired element is not paired`() {
+        assertFalse(parsePairReply("<root></root>")!!.paired)
+    }
+
+    @Test
+    fun `a status with a resume value other than one is not resumable`() {
+        assertFalse(parseStatus("""<root status_code="400"><resume>2</resume></root>""")!!.resume)
     }
 }

@@ -10,7 +10,7 @@ class BluetoothPermissionBannerDecisionTest {
     @Test
     fun `dismissed suppresses the banner even when both permissions are missing`() {
         val state = BluetoothPermissionState(required = true, connectGranted = false, scanGranted = false)
-        assertNull(BluetoothPermissionBannerDecision.evaluate(state, dismissed = true))
+        assertNull(evaluate(state, dismissed = true))
     }
 
     @Test
@@ -18,7 +18,7 @@ class BluetoothPermissionBannerDecisionTest {
         val state = BluetoothPermissionState(required = true, connectGranted = false, scanGranted = true)
         assertEquals(
             BluetoothPermissionBannerVariant.CONNECT,
-            BluetoothPermissionBannerDecision.evaluate(state, dismissed = false),
+            evaluate(state, dismissed = false),
         )
     }
 
@@ -27,7 +27,7 @@ class BluetoothPermissionBannerDecisionTest {
         val state = BluetoothPermissionState(required = true, connectGranted = true, scanGranted = false)
         assertEquals(
             BluetoothPermissionBannerVariant.SCAN,
-            BluetoothPermissionBannerDecision.evaluate(state, dismissed = false),
+            evaluate(state, dismissed = false),
         )
     }
 
@@ -36,18 +36,18 @@ class BluetoothPermissionBannerDecisionTest {
         val state = BluetoothPermissionState(required = true, connectGranted = false, scanGranted = false)
         assertEquals(
             BluetoothPermissionBannerVariant.CONNECT,
-            BluetoothPermissionBannerDecision.evaluate(state, dismissed = false),
+            evaluate(state, dismissed = false),
         )
     }
 
     @Test
     fun `nothing missing yields no banner`() {
         val state = BluetoothPermissionState(required = true, connectGranted = true, scanGranted = true)
-        assertNull(BluetoothPermissionBannerDecision.evaluate(state, dismissed = false))
+        assertNull(evaluate(state, dismissed = false))
     }
 
     @Test
     fun `pre-S satisfied state yields no banner`() {
-        assertNull(BluetoothPermissionBannerDecision.evaluate(BluetoothPermissionState.SATISFIED, dismissed = false))
+        assertNull(evaluate(BluetoothPermissionState.SATISFIED, dismissed = false))
     }
 }

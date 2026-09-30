@@ -4,6 +4,12 @@ package com.tinkernorth.dish.source.usb
 
 internal const val MAX_FS_INTERRUPT_PACKET = 64
 
+// bInterval is an exponent on the 125 us microframe at high speed, and a count of 1 ms frames below it.
+private const val MAX_INTERVAL_EXPONENT = 15
+private const val MICROFRAME_US = 125L
+private const val US_PER_MS = 1000L
+private const val US_PER_SECOND = 1_000_000L
+
 internal fun computeUsbPollRateHz(
     epInterval: Int,
     epMaxPacketSize: Int,
@@ -12,13 +18,13 @@ internal fun computeUsbPollRateHz(
     val isHighSpeed = epMaxPacketSize > MAX_FS_INTERRUPT_PACKET
     val periodMicros =
         if (isHighSpeed) {
-            val exp = (epInterval - 1).coerceIn(0, 15)
-            (1L shl exp) * 125L
+            val exp = (epInterval - 1).coerceIn(0, MAX_INTERVAL_EXPONENT)
+            (1L shl exp) * MICROFRAME_US
         } else {
-            epInterval.toLong() * 1000L
+            epInterval.toLong() * US_PER_MS
         }
     if (periodMicros <= 0L) return 0
-    return (1_000_000L / periodMicros).toInt()
+    return (US_PER_SECOND / periodMicros).toInt()
 }
 
 internal fun measuredPollRateHz(

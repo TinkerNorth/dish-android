@@ -25,13 +25,16 @@ interface SlotAudioRoutes {
 
     companion object {
         /** A device with no pad endpoints at all: everything plays out of, and into, the phone. */
-        val NONE: SlotAudioRoutes =
-            object : SlotAudioRoutes {
-                override val changes = MutableStateFlow(emptyMap<Int, PadAudioRoute>())
-
-                override fun forSlot(slotId: String) = PadAudioRoute.NONE
-            }
+        val NONE: SlotAudioRoutes = NoPadRoutes()
     }
+}
+
+// A device with no pad endpoints at all. The empty map never changes, so this carries no
+// subscription of its own.
+private class NoPadRoutes : SlotAudioRoutes {
+    override val changes = MutableStateFlow(emptyMap<Int, PadAudioRoute>())
+
+    override fun forSlot(slotId: String) = PadAudioRoute.NONE
 }
 
 /**

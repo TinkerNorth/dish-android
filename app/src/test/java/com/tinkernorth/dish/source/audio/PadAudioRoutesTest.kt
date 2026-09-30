@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.source.audio
 
+import com.tinkernorth.dish.core.input.vidPidKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -12,8 +13,8 @@ import org.junit.Test
 // really does separate models, and a claimed surface comes with the endpoint id that backs it.
 // What decides WHICH endpoint belongs to which pad is PadAudioMatcherTest.
 class PadAudioRoutesTest {
-    private val ds5 = PadAudioRoutes.key(0x054C, 0x0CE6)
-    private val ds4v2 = PadAudioRoutes.key(0x054C, 0x09CC)
+    private val ds5 = vidPidKey(0x054C, 0x0CE6)
+    private val ds4v2 = vidPidKey(0x054C, 0x09CC)
 
     @Test
     fun `an empty table reports no route for anything`() {
@@ -51,8 +52,8 @@ class PadAudioRoutesTest {
     @Test
     fun `the key separates models of the same vendor and vendors of the same model`() {
         assertNotEquals(ds5, ds4v2)
-        assertNotEquals(PadAudioRoutes.key(0x054C, 0x0CE6), PadAudioRoutes.key(0x057E, 0x0CE6))
-        assertEquals(PadAudioRoutes.key(0x054C, 0x0CE6), PadAudioRoutes.key(0x054C, 0x0CE6))
+        assertNotEquals(vidPidKey(0x054C, 0x0CE6), vidPidKey(0x057E, 0x0CE6))
+        assertEquals(vidPidKey(0x054C, 0x0CE6), vidPidKey(0x054C, 0x0CE6))
     }
 
     @Test

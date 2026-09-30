@@ -11,7 +11,7 @@ import org.junit.Test
 class SatelliteMotionBackendStatusStoreTest {
     @Test
     fun `fromFlags decodes both bits clear`() {
-        val s = SatelliteMotionBackendStatus.fromFlags(0)
+        val s = motionBackendStatusFromFlags(0)
         assertFalse(s.sinkSupportedForType)
         assertFalse(s.backendOk)
         assertFalse(s.effective)
@@ -20,7 +20,7 @@ class SatelliteMotionBackendStatusStoreTest {
     @Test
     fun `fromFlags decodes only SINK_SUPPORTED_FOR_TYPE`() {
         val s =
-            SatelliteMotionBackendStatus.fromFlags(
+            motionBackendStatusFromFlags(
                 SatelliteMotionBackendStatus.FLAG_SINK_SUPPORTED_FOR_TYPE,
             )
         assertTrue(s.sinkSupportedForType)
@@ -30,7 +30,7 @@ class SatelliteMotionBackendStatusStoreTest {
 
     @Test
     fun `fromFlags decodes only BACKEND_OK`() {
-        val s = SatelliteMotionBackendStatus.fromFlags(SatelliteMotionBackendStatus.FLAG_BACKEND_OK)
+        val s = motionBackendStatusFromFlags(SatelliteMotionBackendStatus.FLAG_BACKEND_OK)
         assertFalse(s.sinkSupportedForType)
         assertTrue(s.backendOk)
         assertFalse(s.effective)
@@ -39,7 +39,7 @@ class SatelliteMotionBackendStatusStoreTest {
     @Test
     fun `fromFlags decodes both bits set`() {
         val s =
-            SatelliteMotionBackendStatus.fromFlags(
+            motionBackendStatusFromFlags(
                 SatelliteMotionBackendStatus.FLAG_SINK_SUPPORTED_FOR_TYPE or
                     SatelliteMotionBackendStatus.FLAG_BACKEND_OK,
             )
@@ -50,7 +50,7 @@ class SatelliteMotionBackendStatusStoreTest {
 
     @Test
     fun `fromFlags ignores reserved upper bits`() {
-        val s = SatelliteMotionBackendStatus.fromFlags(0xFF)
+        val s = motionBackendStatusFromFlags(0xFF)
         assertTrue(s.sinkSupportedForType)
         assertTrue(s.backendOk)
     }

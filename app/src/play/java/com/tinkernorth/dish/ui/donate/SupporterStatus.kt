@@ -5,7 +5,7 @@ package com.tinkernorth.dish.ui.donate
 
 import android.content.Context
 import com.tinkernorth.dish.source.billing.TipJarSource
-import com.tinkernorth.dish.source.store.SupporterPlanStore
+import com.tinkernorth.dish.source.store.storedSupporterActive
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -18,7 +18,7 @@ internal interface TipJarEntryPoint {
 }
 
 internal fun Context.isSupporter(): Boolean {
-    if (!SupporterPlanStore.isSupporter(this)) return false
+    if (!storedSupporterActive(this)) return false
     EntryPointAccessors.fromApplication(applicationContext, TipJarEntryPoint::class.java).tipJar().verifySupporter()
     return true
 }

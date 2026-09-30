@@ -8,6 +8,7 @@ import com.tinkernorth.dish.core.model.CatalogTypeDto
 import com.tinkernorth.dish.core.model.Direction
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.core.net.ControllerDescriptor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -21,7 +22,7 @@ class CapabilityResolverTest {
     @Test
     fun `typeCapabilities always passes through GAMEPAD, MOUSE, and KEYBOARD`() {
         // MOUSE/KEYBOARD are host-injected, so the type layer always carries them for the host to gate.
-        val caps = CapabilityResolver.typeCapabilities(CatalogTypeDto())
+        val caps = catalogTypeCapabilities(CatalogTypeDto())
         assertTrue(Feature.GAMEPAD in caps)
         assertTrue(Feature.MOUSE in caps)
         assertTrue(Feature.KEYBOARD in caps)
@@ -29,7 +30,7 @@ class CapabilityResolverTest {
 
     @Test
     fun `typeCapabilities maps supported catalog feature slugs`() {
-        val caps = CapabilityResolver.typeCapabilities(catalogType("motion", "rumble", "touchpad"))
+        val caps = catalogTypeCapabilities(catalogType("motion", "rumble", "touchpad"))
         assertTrue(Feature.MOTION in caps)
         assertTrue(Feature.RUMBLE in caps)
         assertTrue(Feature.TOUCHPAD in caps)
@@ -38,7 +39,7 @@ class CapabilityResolverTest {
     @Test
     fun `typeCapabilities ignores unsupported catalog features`() {
         val type = CatalogTypeDto(features = mapOf("motion" to CatalogFeatureDto(supported = false)))
-        assertFalse(Feature.MOTION in CapabilityResolver.typeCapabilities(type))
+        assertFalse(Feature.MOTION in catalogTypeCapabilities(type))
     }
 
     @Test
@@ -47,7 +48,7 @@ class CapabilityResolverTest {
             CatalogTypeDto(
                 features = mapOf("touchpad" to CatalogFeatureDto(supported = true, modes = listOf("ds4"))),
             )
-        assertTrue(Feature.TOUCHPAD in CapabilityResolver.typeCapabilities(type))
+        assertTrue(Feature.TOUCHPAD in catalogTypeCapabilities(type))
     }
 
     @Test
@@ -58,19 +59,19 @@ class CapabilityResolverTest {
             CatalogTypeDto(
                 features = mapOf("touchpad" to CatalogFeatureDto(supported = true, modes = listOf("mouse"))),
             )
-        assertFalse(Feature.TOUCHPAD in CapabilityResolver.typeCapabilities(type))
+        assertFalse(Feature.TOUCHPAD in catalogTypeCapabilities(type))
     }
 
     @Test
     fun `typeCapabilities treats a supported touchpad with no modes as pad-capable (back-compat)`() {
         // A pre-modes catalog omits the array; fall back to the legacy assumption.
         val type = CatalogTypeDto(features = mapOf("touchpad" to CatalogFeatureDto(supported = true)))
-        assertTrue(Feature.TOUCHPAD in CapabilityResolver.typeCapabilities(type))
+        assertTrue(Feature.TOUCHPAD in catalogTypeCapabilities(type))
     }
 
     @Test
     fun `userEnabledCapabilities always carries GAMEPAD and ANALOG_TRIGGERS`() {
-        val caps = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = false, speakerOn = false)
+        val caps = userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = false, speakerOn = false)
         assertTrue(Feature.GAMEPAD in caps)
         assertTrue(Feature.ANALOG_TRIGGERS in caps)
         assertFalse(Feature.MOTION in caps)
@@ -79,14 +80,14 @@ class CapabilityResolverTest {
 
     @Test
     fun `userEnabledCapabilities reflects motion and rumble toggles`() {
-        val caps = CapabilityResolver.userEnabledCapabilities(motionOn = true, rumbleOn = true, micOn = true, speakerOn = true)
+        val caps = userEnabledCapabilities(motionOn = true, rumbleOn = true, micOn = true, speakerOn = true)
         assertTrue(Feature.MOTION in caps)
         assertTrue(Feature.RUMBLE in caps)
     }
 
     @Test
     fun `touch and mouse have no user toggle and always ride userEnabled`() {
-        val caps = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = false, speakerOn = false)
+        val caps = userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = false, speakerOn = false)
         assertTrue(Feature.TOUCHPAD in caps)
         assertTrue(Feature.MOUSE in caps)
     }
@@ -95,10 +96,10 @@ class CapabilityResolverTest {
     fun `available is the intersection of all four inherent layers, not userEnabled`() {
         val all = CapabilitySet(Feature.entries.toSet())
         val resolved =
-            CapabilityResolver.resolve(
-                controller = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION, Feature.RUMBLE),
+            resolve(
+                controller = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION, Feature.RUMBLE),
                 transport = all,
-                type = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
+                type = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION),
                 host = all,
                 userEnabled = CapabilitySet.EMPTY,
                 runtimeDown = CapabilitySet.EMPTY,
@@ -113,12 +114,12 @@ class CapabilityResolverTest {
     fun `enabled intersects available with userEnabled`() {
         val all = CapabilitySet(Feature.entries.toSet())
         val resolved =
-            CapabilityResolver.resolve(
+            resolve(
                 controller = all,
                 transport = all,
                 type = all,
                 host = all,
-                userEnabled = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
+                userEnabled = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION),
                 runtimeDown = CapabilitySet.EMPTY,
             )
         assertTrue(resolved.isEnabled(Feature.MOTION))
@@ -129,13 +130,13 @@ class CapabilityResolverTest {
     fun `live subtracts runtimeDown from enabled`() {
         val all = CapabilitySet(Feature.entries.toSet())
         val resolved =
-            CapabilityResolver.resolve(
+            resolve(
                 controller = all,
                 transport = all,
                 type = all,
                 host = all,
-                userEnabled = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
-                runtimeDown = CapabilitySet.of(Feature.MOTION),
+                userEnabled = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION),
+                runtimeDown = capabilitySetOf(Feature.MOTION),
             )
         assertTrue(Feature.MOTION in resolved.enabled)
         assertFalse(Feature.MOTION in resolved.live)
@@ -145,11 +146,11 @@ class CapabilityResolverTest {
     @Test
     fun `column helpers report the limiting layer per feature`() {
         val resolved =
-            CapabilityResolver.resolve(
-                controller = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
-                transport = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
-                type = CapabilitySet.of(Feature.GAMEPAD),
-                host = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
+            resolve(
+                controller = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION),
+                transport = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION),
+                type = capabilitySetOf(Feature.GAMEPAD),
+                host = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION),
                 userEnabled = CapabilitySet.EMPTY,
                 runtimeDown = CapabilitySet.EMPTY,
             )
@@ -162,10 +163,10 @@ class CapabilityResolverTest {
     @Test
     fun `destinationOk requires both transport and host`() {
         val resolved =
-            CapabilityResolver.resolve(
-                controller = CapabilitySet.of(Feature.MOTION),
-                transport = CapabilitySet.of(Feature.MOTION),
-                type = CapabilitySet.of(Feature.MOTION),
+            resolve(
+                controller = capabilitySetOf(Feature.MOTION),
+                transport = capabilitySetOf(Feature.MOTION),
+                type = capabilitySetOf(Feature.MOTION),
                 host = CapabilitySet.EMPTY,
                 userEnabled = CapabilitySet.EMPTY,
                 runtimeDown = CapabilitySet.EMPTY,
@@ -175,7 +176,7 @@ class CapabilityResolverTest {
 
     @Test
     fun `sends and receives partition by direction`() {
-        val set = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION, Feature.RUMBLE, Feature.LIGHTBAR)
+        val set = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION, Feature.RUMBLE, Feature.LIGHTBAR)
         assertTrue(set.sends().all { it.direction == Direction.SEND })
         assertTrue(set.receives().all { it.direction == Direction.RECEIVE })
         assertTrue(Feature.RUMBLE in set.receives())
@@ -194,7 +195,7 @@ class CapabilityResolverTest {
         typeMotion: Boolean = !gyro,
         runtimeMotionDown: Boolean = gyro,
     ): SlotCapabilities {
-        fun motionSet(present: Boolean) = if (present) CapabilitySet.of(Feature.MOTION) else CapabilitySet.EMPTY
+        fun motionSet(present: Boolean) = if (present) capabilitySetOf(Feature.MOTION) else CapabilitySet.EMPTY
         return SlotCapabilities(
             controller = motionSet(gyro),
             transport = CapabilitySet(Feature.entries.toSet()),
@@ -213,7 +214,7 @@ class CapabilityResolverTest {
                 assertEquals(
                     "gyro=$gyro userMotion=$userMotion",
                     expected,
-                    CapabilityResolver.wireCaps(slot(gyro = gyro, userMotion = userMotion)),
+                    wireCaps(slot(gyro = gyro, userMotion = userMotion)),
                 )
             }
         }
@@ -223,9 +224,9 @@ class CapabilityResolverTest {
     fun `wireCaps decisive cases - gyro pad with motion on is 0x0007, no-gyro pad is 0x0003`() {
         // An xbox360-typed (no motion sink) pad with a gyro and motion enabled still advertises CAP_MOTION:
         // the wire describes the emulated pad's input, not the host's sink.
-        assertEquals(0x0007, CapabilityResolver.wireCaps(slot(gyro = true, userMotion = true, typeMotion = false)))
+        assertEquals(0x0007, wireCaps(slot(gyro = true, userMotion = true, typeMotion = false)))
         // A ds4-typed (motion sink present) pad with NO gyro carries only analog+rumble.
-        assertEquals(0x0003, CapabilityResolver.wireCaps(slot(gyro = false, userMotion = true, typeMotion = true)))
+        assertEquals(0x0003, wireCaps(slot(gyro = false, userMotion = true, typeMotion = true)))
     }
 
     @Test
@@ -233,7 +234,7 @@ class CapabilityResolverTest {
         // The motion-only slots above have no LED/trigger surfaces: nothing rides.
         for (gyro in listOf(true, false)) {
             for (userMotion in listOf(true, false)) {
-                val caps = CapabilityResolver.wireCaps(slot(gyro = gyro, userMotion = userMotion))
+                val caps = wireCaps(slot(gyro = gyro, userMotion = userMotion))
                 assertEquals(0, caps and ControllerDescriptor.CAP_LIGHTBAR)
                 assertEquals(0, caps and ControllerDescriptor.CAP_TRIGGER_EFFECTS)
                 assertEquals(0, caps and ControllerDescriptor.CAP_PLAYER_LEDS)
@@ -244,19 +245,19 @@ class CapabilityResolverTest {
         val ds5 =
             SlotCapabilities(
                 controller =
-                    CapabilitySet.of(
+                    capabilitySetOf(
                         Feature.GAMEPAD,
                         Feature.LIGHTBAR,
                         Feature.TRIGGER_EFFECTS,
                         Feature.PLAYER_LEDS,
                     ),
                 transport = CapabilitySet(Feature.entries.toSet()),
-                type = CapabilitySet.of(Feature.GAMEPAD),
+                type = capabilitySetOf(Feature.GAMEPAD),
                 host = CapabilitySet(Feature.entries.toSet()),
                 userEnabled = CapabilitySet.EMPTY,
                 runtimeDown = CapabilitySet.EMPTY,
             )
-        val caps = CapabilityResolver.wireCaps(ds5)
+        val caps = wireCaps(ds5)
         assertEquals(ControllerDescriptor.CAP_LIGHTBAR, caps and ControllerDescriptor.CAP_LIGHTBAR)
         assertEquals(
             ControllerDescriptor.CAP_TRIGGER_EFFECTS,
@@ -272,7 +273,7 @@ class CapabilityResolverTest {
     fun `battery and trigger rumble pass the type layer without a catalog slug`() {
         // A catalog type that advertises nothing still lets the slug-less
         // features through; the transport/host layers are their real gates.
-        val bare = CapabilityResolver.typeCapabilities(CatalogTypeDto(features = emptyMap()))
+        val bare = catalogTypeCapabilities(CatalogTypeDto(features = emptyMap()))
         assertTrue(Feature.BATTERY in bare)
         assertTrue(Feature.TRIGGER_RUMBLE in bare)
         assertFalse(Feature.TRIGGER_EFFECTS in bare)
@@ -281,13 +282,13 @@ class CapabilityResolverTest {
 
     @Test
     fun `trigger rumble follows the rumble toggle, the feedback surfaces have none`() {
-        val off = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = false, speakerOn = false)
+        val off = userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = false, speakerOn = false)
         assertFalse(Feature.TRIGGER_RUMBLE in off)
         assertTrue(Feature.LIGHTBAR in off)
         assertTrue(Feature.TRIGGER_EFFECTS in off)
         assertTrue(Feature.PLAYER_LEDS in off)
         assertTrue(Feature.BATTERY in off)
-        val on = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = true, micOn = false, speakerOn = false)
+        val on = userEnabledCapabilities(motionOn = false, rumbleOn = true, micOn = false, speakerOn = false)
         assertTrue(Feature.TRIGGER_RUMBLE in on)
     }
 
@@ -324,7 +325,7 @@ class CapabilityResolverTest {
     fun `wireCaps carries the audio caps only where the client both can and will`() {
         for (canMic in listOf(true, false)) {
             for (wantsMic in listOf(true, false)) {
-                val caps = CapabilityResolver.wireCaps(audioSlot(canMic, false, wantsMic, false))
+                val caps = wireCaps(audioSlot(canMic, false, wantsMic, false))
                 val expected = if (canMic && wantsMic) ControllerDescriptor.CAP_MIC else 0
                 assertEquals(
                     "canMic=$canMic wantsMic=$wantsMic",
@@ -335,7 +336,7 @@ class CapabilityResolverTest {
         }
         for (canSpeaker in listOf(true, false)) {
             for (wantsSpeaker in listOf(true, false)) {
-                val caps = CapabilityResolver.wireCaps(audioSlot(false, canSpeaker, false, wantsSpeaker))
+                val caps = wireCaps(audioSlot(false, canSpeaker, false, wantsSpeaker))
                 val expected = if (canSpeaker && wantsSpeaker) ControllerDescriptor.CAP_SPEAKER else 0
                 assertEquals(
                     "canSpeaker=$canSpeaker wantsSpeaker=$wantsSpeaker",
@@ -350,14 +351,14 @@ class CapabilityResolverTest {
     fun `wireCaps keeps the audio directions independent`() {
         // A muted-by-toggle microphone must not take the speaker down with it.
         val speakerOnly =
-            CapabilityResolver.wireCaps(
+            wireCaps(
                 audioSlot(controllerMic = true, controllerSpeaker = true, userMic = false, userSpeaker = true),
             )
         assertEquals(0, speakerOnly and ControllerDescriptor.CAP_MIC)
         assertEquals(ControllerDescriptor.CAP_SPEAKER, speakerOnly and ControllerDescriptor.CAP_SPEAKER)
 
         val micOnly =
-            CapabilityResolver.wireCaps(
+            wireCaps(
                 audioSlot(controllerMic = true, controllerSpeaker = true, userMic = true, userSpeaker = false),
             )
         assertEquals(ControllerDescriptor.CAP_MIC, micOnly and ControllerDescriptor.CAP_MIC)
@@ -367,7 +368,7 @@ class CapabilityResolverTest {
     @Test
     fun `wireCaps decisive case - a full-audio DualSense slot is 0x00C3`() {
         val both =
-            CapabilityResolver.wireCaps(
+            wireCaps(
                 audioSlot(controllerMic = true, controllerSpeaker = true, userMic = true, userSpeaker = true),
             )
         // analog triggers + rumble base, plus both audio bits, and nothing else.
@@ -378,7 +379,7 @@ class CapabilityResolverTest {
     fun `the motion-only slots advertise no audio at all`() {
         for (gyro in listOf(true, false)) {
             for (userMotion in listOf(true, false)) {
-                val caps = CapabilityResolver.wireCaps(slot(gyro = gyro, userMotion = userMotion))
+                val caps = wireCaps(slot(gyro = gyro, userMotion = userMotion))
                 assertEquals(0, caps and ControllerDescriptor.CAP_MIC)
                 assertEquals(0, caps and ControllerDescriptor.CAP_SPEAKER)
             }
@@ -387,23 +388,23 @@ class CapabilityResolverTest {
 
     @Test
     fun `userEnabledCapabilities reflects the mic and speaker toggles`() {
-        val off = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = false, speakerOn = false)
+        val off = userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = false, speakerOn = false)
         assertFalse(Feature.MIC in off)
         assertFalse(Feature.SPEAKER in off)
 
-        val on = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = true, speakerOn = true)
+        val on = userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = true, speakerOn = true)
         assertTrue(Feature.MIC in on)
         assertTrue(Feature.SPEAKER in on)
 
         // Each toggle moves only its own direction.
-        val micOnly = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = true, speakerOn = false)
+        val micOnly = userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = true, speakerOn = false)
         assertTrue(Feature.MIC in micOnly)
         assertFalse(Feature.SPEAKER in micOnly)
     }
 
     @Test
     fun `typeCapabilities maps the mic and speaker catalog slugs`() {
-        val audioType = CapabilityResolver.typeCapabilities(catalogType("mic", "speaker"))
+        val audioType = catalogTypeCapabilities(catalogType("mic", "speaker"))
         assertTrue(Feature.MIC in audioType)
         assertTrue(Feature.SPEAKER in audioType)
 
@@ -416,12 +417,12 @@ class CapabilityResolverTest {
                         "speaker" to CatalogFeatureDto(supported = false),
                     ),
             )
-        assertFalse(Feature.MIC in CapabilityResolver.typeCapabilities(silent))
-        assertFalse(Feature.SPEAKER in CapabilityResolver.typeCapabilities(silent))
+        assertFalse(Feature.MIC in catalogTypeCapabilities(silent))
+        assertFalse(Feature.SPEAKER in catalogTypeCapabilities(silent))
 
         // A catalog predating the slugs omits them entirely, which is also off: unlike
         // battery and trigger rumble, audio is NOT a slug-less pass-through.
-        val preAudio = CapabilityResolver.typeCapabilities(CatalogTypeDto(features = emptyMap()))
+        val preAudio = catalogTypeCapabilities(CatalogTypeDto(features = emptyMap()))
         assertFalse(Feature.MIC in preAudio)
         assertFalse(Feature.SPEAKER in preAudio)
     }
@@ -432,16 +433,69 @@ class CapabilityResolverTest {
         // probe) lands in the controller layer the same way, so the wire advertises CAP_MOTION.
         val staticDbPad =
             SlotCapabilities(
-                controller = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
+                controller = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION),
                 transport = CapabilitySet(Feature.entries.toSet()),
-                type = CapabilitySet.of(Feature.GAMEPAD),
+                type = capabilitySetOf(Feature.GAMEPAD),
                 host = CapabilitySet(Feature.entries.toSet()),
-                userEnabled = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
+                userEnabled = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION),
                 runtimeDown = CapabilitySet.EMPTY,
             )
         assertEquals(
             analogRumble or ControllerDescriptor.CAP_MOTION,
-            CapabilityResolver.wireCaps(staticDbPad),
+            wireCaps(staticDbPad),
         )
+    }
+
+    @Test
+    fun `haptic audio follows the speaker toggle`() {
+        val speakerOn = userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = false, speakerOn = true)
+        val speakerOff = userEnabledCapabilities(motionOn = true, rumbleOn = true, micOn = true, speakerOn = false)
+        assertTrue(Feature.HAPTIC_AUDIO in speakerOn)
+        assertTrue(Feature.HAPTIC_AUDIO !in speakerOff)
+    }
+
+    private fun hapticSlot(
+        controllerHaptics: Boolean,
+        userSpeaker: Boolean,
+    ): SlotCapabilities {
+        val controller = if (controllerHaptics) capabilitySetOf(Feature.HAPTIC_AUDIO) else CapabilitySet.EMPTY
+        val userEnabled = if (userSpeaker) capabilitySetOf(Feature.SPEAKER, Feature.HAPTIC_AUDIO) else CapabilitySet.EMPTY
+        return SlotCapabilities(
+            controller = controller,
+            transport = CapabilitySet(Feature.entries.toSet()),
+            type = CapabilitySet.EMPTY,
+            host = CapabilitySet.EMPTY,
+            userEnabled = userEnabled,
+            runtimeDown = CapabilitySet.EMPTY,
+        )
+    }
+
+    @Test
+    fun `wireCaps carries CAP_HAPTIC_AUDIO only where the client both can and will`() {
+        for (canPlayHaptics in listOf(true, false)) {
+            for (speakerOn in listOf(true, false)) {
+                val caps = wireCaps(hapticSlot(canPlayHaptics, speakerOn))
+                val expected = if (canPlayHaptics && speakerOn) ControllerDescriptor.CAP_HAPTIC_AUDIO else 0
+                assertEquals(
+                    "canPlayHaptics=$canPlayHaptics speakerOn=$speakerOn",
+                    expected,
+                    caps and ControllerDescriptor.CAP_HAPTIC_AUDIO,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `wireCaps decisive case - a DualSense on a four-channel endpoint is 0x01C3`() {
+        val fourChannelDualSense =
+            SlotCapabilities(
+                controller = capabilitySetOf(Feature.MIC, Feature.SPEAKER, Feature.HAPTIC_AUDIO),
+                transport = CapabilitySet(Feature.entries.toSet()),
+                type = CapabilitySet.EMPTY,
+                host = CapabilitySet.EMPTY,
+                userEnabled = capabilitySetOf(Feature.MIC, Feature.SPEAKER, Feature.HAPTIC_AUDIO),
+                runtimeDown = CapabilitySet.EMPTY,
+            )
+        assertEquals(0x01C3, wireCaps(fourChannelDualSense))
     }
 }

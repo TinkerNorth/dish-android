@@ -28,6 +28,7 @@ class PhoneMotionSourceTest {
             private set
         var released = 0
             private set
+        var onRelease: () -> Unit = {}
 
         override fun acquire(): Handler {
             acquired++
@@ -36,6 +37,7 @@ class PhoneMotionSourceTest {
 
         override fun release() {
             released++
+            onRelease()
         }
     }
 
@@ -235,7 +237,7 @@ class PhoneMotionSourceTest {
     fun `deriveState - no gyro present means Disabled regardless of started`() {
         assertEquals(
             MotionStreamState.Disabled,
-            PhoneMotionSource.deriveState(
+            deriveMotionStreamState(
                 gyroPresent = false,
                 started = false,
                 lastGyroMonoMs = 0L,
@@ -244,7 +246,7 @@ class PhoneMotionSourceTest {
         )
         assertEquals(
             MotionStreamState.Disabled,
-            PhoneMotionSource.deriveState(
+            deriveMotionStreamState(
                 gyroPresent = false,
                 started = true,
                 lastGyroMonoMs = 10_000L,
@@ -257,7 +259,7 @@ class PhoneMotionSourceTest {
     fun `deriveState - gyro present but not started means Stopped`() {
         assertEquals(
             MotionStreamState.Stopped,
-            PhoneMotionSource.deriveState(
+            deriveMotionStreamState(
                 gyroPresent = true,
                 started = false,
                 lastGyroMonoMs = 0L,
@@ -270,7 +272,7 @@ class PhoneMotionSourceTest {
     fun `deriveState - started with no gyro sample yet means Stalled`() {
         assertEquals(
             MotionStreamState.Stalled,
-            PhoneMotionSource.deriveState(
+            deriveMotionStreamState(
                 gyroPresent = true,
                 started = true,
                 lastGyroMonoMs = 0L,
@@ -283,7 +285,7 @@ class PhoneMotionSourceTest {
     fun `deriveState - last gyro within window means Streaming`() {
         assertEquals(
             MotionStreamState.Streaming,
-            PhoneMotionSource.deriveState(
+            deriveMotionStreamState(
                 gyroPresent = true,
                 started = true,
                 lastGyroMonoMs = 800L,
@@ -296,7 +298,7 @@ class PhoneMotionSourceTest {
     fun `deriveState - last gyro past stall window means Stalled`() {
         assertEquals(
             MotionStreamState.Stalled,
-            PhoneMotionSource.deriveState(
+            deriveMotionStreamState(
                 gyroPresent = true,
                 started = true,
                 lastGyroMonoMs = 1000L,
@@ -310,20 +312,87 @@ class PhoneMotionSourceTest {
         // lastGyroMonoMs == 0L is a special-case Stalled regardless of window math. Use non-zero anchor.
         assertEquals(
             MotionStreamState.Streaming,
-            PhoneMotionSource
-                .deriveState(
-                    gyroPresent = true,
-                    started = true,
-                    lastGyroMonoMs = 0L,
-                    nowMonoMs = PhoneMotionSource.STALL_WINDOW_MS,
-                ).let {
-                    PhoneMotionSource.deriveState(
-                        gyroPresent = true,
-                        started = true,
-                        lastGyroMonoMs = 1L,
-                        nowMonoMs = 1L + PhoneMotionSource.STALL_WINDOW_MS,
-                    )
-                },
+            deriveMotionStreamState(
+                gyroPresent = true,
+                started = true,
+                lastGyroMonoMs = 1L,
+                nowMonoMs = 1L + PhoneMotionSource.STALL_WINDOW_MS,
+            ),
         )
+    }
+
+    @Test
+    fun `a stall tick with no gyro sample yet reads Stalled`() {
+        val src = source()
+        src.start { _, _ -> }
+        assertEquals(MotionStreamState.Streaming, src.state.value)
+
+        src.stallTick(dispatch.handler)
+
+        assertEquals(MotionStreamState.Stalled, src.state.value)
+    }
+
+    @Test
+    fun `a stall tick inside the window keeps Streaming`() {
+        val src = source()
+        src.start { _, _ -> }
+        src.onAccel(floatArrayOf(0f, 9.80665f, 0f))
+        src.onGyro(floatArrayOf(0.1f, 0.2f, 0.3f))
+        fakeNowMs += PhoneMotionSource.STALL_WINDOW_MS
+
+        src.stallTick(dispatch.handler)
+
+        assertEquals(MotionStreamState.Streaming, src.state.value)
+    }
+
+    @Test
+    fun `a stall tick past the window reads Stalled until the gyro reports again`() {
+        val src = source()
+        src.start { _, _ -> }
+        src.onAccel(floatArrayOf(0f, 9.80665f, 0f))
+        src.onGyro(floatArrayOf(0.1f, 0.2f, 0.3f))
+        fakeNowMs += PhoneMotionSource.STALL_WINDOW_MS + 1
+
+        src.stallTick(dispatch.handler)
+        assertEquals(MotionStreamState.Stalled, src.state.value)
+
+        src.onGyro(floatArrayOf(0.1f, 0.2f, 0.3f))
+        assertEquals(MotionStreamState.Streaming, src.state.value)
+    }
+
+    @Test
+    fun `every stall tick re-arms the next one`() {
+        val src = source()
+        src.start { _, _ -> }
+
+        src.stallTick(dispatch.handler)
+        src.stallTick(dispatch.handler)
+
+        verify(exactly = 3) { dispatch.handler.postDelayed(any(), PhoneMotionSource.STALL_TICK_MS) }
+    }
+
+    @Test
+    fun `a stall tick that outlives stop neither publishes nor re-arms`() {
+        val src = source()
+        src.start { _, _ -> }
+        src.stop()
+
+        src.stallTick(dispatch.handler)
+
+        assertEquals(MotionStreamState.Stopped, src.state.value)
+        verify(exactly = 1) { dispatch.handler.postDelayed(any(), PhoneMotionSource.STALL_TICK_MS) }
+    }
+
+    @Test
+    fun `stop cancels the stall tick before releasing the dispatch thread`() {
+        val order = mutableListOf<String>()
+        every { dispatch.handler.removeCallbacks(any()) } answers { order += "cancel" }
+        dispatch.onRelease = { order += "release" }
+        val src = source()
+        src.start { _, _ -> }
+
+        src.stop()
+
+        assertEquals(listOf("cancel", "release"), order)
     }
 }

@@ -20,7 +20,7 @@ class LatencyProfilingStore
     constructor(
         @ApplicationContext context: Context,
     ) : AbstractStateSource<Boolean>(
-            initialState = readInitial(context),
+            initialState = readLatencyProfilingEnabled(context),
         ) {
         private val prefs: SharedPreferences =
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -34,10 +34,10 @@ class LatencyProfilingStore
             const val PREFS_NAME = "user_preferences"
             const val KEY = "latency_profiling_enabled"
             const val DEFAULT_ENABLED = false
-
-            private fun readInitial(context: Context): Boolean {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                return prefs.getBoolean(KEY, DEFAULT_ENABLED)
-            }
         }
     }
+
+private fun readLatencyProfilingEnabled(context: Context): Boolean {
+    val prefs = context.getSharedPreferences(LatencyProfilingStore.PREFS_NAME, Context.MODE_PRIVATE)
+    return prefs.getBoolean(LatencyProfilingStore.KEY, LatencyProfilingStore.DEFAULT_ENABLED)
+}

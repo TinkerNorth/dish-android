@@ -6,12 +6,16 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.net.ControllerDescriptor
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.audio.MicCapturePlan
 import com.tinkernorth.dish.source.audio.MicCaptureTarget
 import com.tinkernorth.dish.source.audio.SpeakerTarget
+import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.connection.SatelliteConnection
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightPad
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightSessionState
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.source.store.FeedbackActivity
 import com.tinkernorth.dish.source.store.FeedbackKind
@@ -130,9 +134,149 @@ class BindingDiagMappersTest {
     @Test
     fun `an unbound slot has no binding and the estimate stays unknown without every part`() {
         assertNull(bindingDiag(VIRTUAL_SLOT_ID, world(), touchpadMode))
-        val estimate = LatencyEstimatePolicy.estimate(pollRateHz = 0, phonePathMs = 0.3, rttMs = null)
+        val estimate = estimate(pollRateHz = 0, phonePathMs = 0.3, rttMs = null)
         assertNull(estimate.pollHalfMs)
         assertNull(estimate.totalMs)
+    }
+
+    private fun boundTo(
+        kind: ConnectionKind,
+        links: LinkWorld,
+        rates: Map<String, SlotInputRates> = emptyMap(),
+    ): DiagnosticsWorld {
+        val device = PhysicalGamepadRegistry.Device(id = 7, name = "Pad", vendorId = 0x054C, productId = 0x0CE6, pollRateHz = 250)
+        val summary =
+            ConnectionSummary(id = "host", kind = kind, label = "Host", detail = "", live = LinkState.Connected, boundSlotIds = listOf("7"))
+        return DiagnosticsWorld(
+            devices = mapOf(7 to device),
+            virtualName = "Virtual Controller",
+            bindings = mapOf("7" to "host"),
+            summaries = listOf(summary),
+            satellites = emptyMap(),
+            rates = rates,
+            batteries = emptyMap(),
+            caps = emptyMap(),
+            hostFeatures = emptyMap(),
+            serverVersions = emptyMap(),
+            links = links,
+        )
+    }
+
+    @Test
+    fun `a Moonlight binding counts the pad's own reports and reads the control round trip`() {
+        val pad = MoonlightPad(slotId = "7", number = 2, emulatedType = 1, capabilities = 0, supportedButtons = 0)
+        val snapshot =
+            MoonlightSnapshot(
+                state = MoonlightSessionState.Live,
+                rttMs = 6L,
+                pads = mapOf("7" to pad),
+                reportsByNumber = mapOf(1 to 10L, 2 to 77L),
+                facts = null,
+            )
+        val b = bindingDiag("7", boundTo(ConnectionKind.MOONLIGHT, LinkWorld(moonlight = mapOf("host" to snapshot))), touchpadMode)
+        assertEquals(77L, b?.packetsSent)
+        assertEquals(3.0, b?.latency?.networkOneWayMs ?: 0.0, 1e-9)
+    }
+
+    @Test
+    fun `a Moonlight binding whose pad is not on the host yet has no packet count`() {
+        val snapshot =
+            MoonlightSnapshot(
+                state = MoonlightSessionState.Launching,
+                rttMs = null,
+                pads = emptyMap(),
+                reportsByNumber = emptyMap(),
+                facts = null,
+            )
+        val b = bindingDiag("7", boundTo(ConnectionKind.MOONLIGHT, LinkWorld(moonlight = mapOf("host" to snapshot))), touchpadMode)
+        assertNull(b?.packetsSent)
+        assertNull(b?.latency?.networkOneWayMs)
+    }
+
+    @Test
+    fun `a Bluetooth binding counts the host's reports and has no round trip`() {
+        val bt = BtHostSnapshot(state = BluetoothGamepadRegistry.SlotState(connected = true), reportsSent = 55L)
+        val b = bindingDiag("7", boundTo(ConnectionKind.BLUETOOTH, LinkWorld(btHosts = mapOf("host" to bt))), touchpadMode)
+        assertEquals(55L, b?.packetsSent)
+        assertNull(b?.latency?.networkOneWayMs)
+    }
+
+    @Test
+    fun `the estimate uses the measured rate over the descriptor rate`() {
+        val measured =
+            bindingDiag(
+                "7",
+                boundTo(
+                    ConnectionKind.BLUETOOTH,
+                    LinkWorld(),
+                    rates =
+                        mapOf(
+                            "7" to SlotInputRates(controllerHz = 125),
+                        ),
+                ),
+                touchpadMode,
+            )
+        assertEquals(4.0, measured?.latency?.pollHalfMs ?: 0.0, 1e-9)
+        val unmeasured =
+            bindingDiag(
+                "7",
+                boundTo(
+                    ConnectionKind.BLUETOOTH,
+                    LinkWorld(),
+                    rates =
+                        mapOf(
+                            "7" to SlotInputRates(controllerHz = 0),
+                        ),
+                ),
+                touchpadMode,
+            )
+        assertEquals(2.0, unmeasured?.latency?.pollHalfMs ?: 0.0, 1e-9)
+    }
+
+    @Test
+    fun `a positive poll rate yields half its interval`() {
+        assertEquals(2.0, estimate(pollRateHz = 250, phonePathMs = null, rttMs = null).pollHalfMs ?: 0.0, 1e-9)
+    }
+
+    @Test
+    fun `a delivering slot reads capturing and an unarmed one reads off`() {
+        val delivering =
+            AudioWorld(
+                micPlan = MicCapturePlan(armed = setOf(MicCaptureTarget("7", "host")), delivering = setOf(MicCaptureTarget("7", "host"))),
+            )
+        assertEquals(MicSlotState.CAPTURING, micState("7", boundTo(ConnectionKind.SATELLITE, LinkWorld()).copy(audio = delivering)))
+        assertEquals(MicSlotState.OFF, micState("7", boundTo(ConnectionKind.SATELLITE, LinkWorld())))
+    }
+
+    @Test
+    fun `every declared cap bit maps to its feature in wire order`() {
+        assertEquals(
+            listOf(
+                Feature.ANALOG_TRIGGERS,
+                Feature.RUMBLE,
+                Feature.MOTION,
+                Feature.LIGHTBAR,
+                Feature.TRIGGER_EFFECTS,
+                Feature.PLAYER_LEDS,
+                Feature.MIC,
+                Feature.SPEAKER,
+                Feature.HAPTIC_AUDIO,
+            ),
+            declaredFeatures(0x01FF),
+        )
+        assertTrue(declaredFeatures(0).isEmpty())
+    }
+
+    @Test
+    fun `each declared cap bit on its own maps to exactly its own feature`() {
+        for ((bit, feature) in WIRE_CAP_FEATURES) {
+            assertEquals("cap bit 0x${bit.toString(HEX)}", listOf(feature), declaredFeatures(bit))
+        }
+    }
+
+    @Test
+    fun `a cap bit past the known ones declares nothing`() {
+        assertTrue(declaredFeatures(FIRST_UNKNOWN_CAP_BIT).isEmpty())
     }
 
     @Test
@@ -143,5 +287,23 @@ class BindingDiagMappersTest {
         assertEquals(FeedbackTargetKind.PHONE, feedbackTarget(VIRTUAL_SLOT_ID))
         assertEquals(FeedbackTargetKind.PAD_FRAMEWORK, feedbackTarget("9"))
         assertEquals(FeedbackTargetKind.NONE, feedbackTarget("nope"))
+    }
+
+    private companion object {
+        const val HEX = 16
+        const val FIRST_UNKNOWN_CAP_BIT = 0x0200
+
+        val WIRE_CAP_FEATURES =
+            listOf(
+                ControllerDescriptor.CAP_ANALOG_TRIGGERS to Feature.ANALOG_TRIGGERS,
+                ControllerDescriptor.CAP_RUMBLE to Feature.RUMBLE,
+                ControllerDescriptor.CAP_MOTION to Feature.MOTION,
+                ControllerDescriptor.CAP_LIGHTBAR to Feature.LIGHTBAR,
+                ControllerDescriptor.CAP_TRIGGER_EFFECTS to Feature.TRIGGER_EFFECTS,
+                ControllerDescriptor.CAP_PLAYER_LEDS to Feature.PLAYER_LEDS,
+                ControllerDescriptor.CAP_MIC to Feature.MIC,
+                ControllerDescriptor.CAP_SPEAKER to Feature.SPEAKER,
+                ControllerDescriptor.CAP_HAPTIC_AUDIO to Feature.HAPTIC_AUDIO,
+            )
     }
 }

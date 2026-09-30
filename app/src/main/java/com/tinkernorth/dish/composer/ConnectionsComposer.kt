@@ -18,6 +18,7 @@ import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightSessionState
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.source.store.ControllerTypeStore
 import com.tinkernorth.dish.source.store.SlotBindingStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -134,7 +135,7 @@ class ConnectionsComposer
                 .distinctUntilChanged()
 
         private fun discoveredIdSet(discovered: List<DiscoveredServer>): Set<String> =
-            discovered.mapTo(mutableSetOf()) { SatelliteConnection.idFor(it) }
+            discovered.mapTo(mutableSetOf()) { satelliteConnectionIdFor(it) }
 
         private fun buildSummaries(
             satellites: SatelliteWorld,

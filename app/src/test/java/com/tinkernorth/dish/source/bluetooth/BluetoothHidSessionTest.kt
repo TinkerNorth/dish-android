@@ -2,7 +2,7 @@
 
 package com.tinkernorth.dish.source.bluetooth
 
-import com.tinkernorth.dish.core.input.BluetoothGamepad.GamepadProfile
+import com.tinkernorth.dish.core.input.GamepadProfile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -155,5 +155,18 @@ class BluetoothHidSessionTest {
         fake.fireHostConnected("11:22", "Premature PC")
 
         assertTrue(session.state.value is BluetoothSessionState.Acquiring)
+    }
+
+    @Test
+    fun `onAcquired outside Acquiring is ignored`() {
+        session.start(GamepadProfile.XBOX, autoConnectMac = null)
+        fake.fireAcquired()
+        fake.fireAppRegistered()
+        val registrations = fake.calls.count { it is FakeHidProxyClient.Call.RegisterApp }
+
+        fake.fireAcquired()
+
+        assertEquals(registrations, fake.calls.count { it is FakeHidProxyClient.Call.RegisterApp })
+        assertTrue(session.state.value is BluetoothSessionState.Registered)
     }
 }

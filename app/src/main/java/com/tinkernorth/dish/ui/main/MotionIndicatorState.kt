@@ -26,43 +26,34 @@ enum class MotionIndicatorState(
     UNAVAILABLE(R.string.motion_unavailable, R.color.colorMuted),
     ;
 
-    val hasDetail: Boolean
-        get() =
-            this == UNAVAILABLE ||
-                this == NOT_FORWARDED ||
-                this == STALLED ||
-                this == USER_DISABLED ||
-                this == NO_HOST_SINK ||
-                this == BACKEND_BROKEN
-
-    companion object {
-        // Precedence: UNAVAILABLE > USER_DISABLED > NOT_FORWARDED > NO_HOST_SINK > BACKEND_BROKEN > STALLED > STREAMING > PAUSED.
-        fun of(
-            isAvailable: Boolean,
-            isStreaming: Boolean,
-            connectionCarriesMotion: Boolean,
-            connectionConnected: Boolean,
-            userEnabled: Boolean = true,
-            hostHasSinkForType: Boolean = true,
-            satelliteBackendOk: Boolean? = null,
-            isStalled: Boolean = false,
-        ): MotionIndicatorState =
-            when {
-                !isAvailable -> UNAVAILABLE
-                !userEnabled -> USER_DISABLED
-                !connectionCarriesMotion -> NOT_FORWARDED
-                !hostHasSinkForType -> NO_HOST_SINK
-                satelliteBackendOk == false -> BACKEND_BROKEN
-                isStreaming && connectionConnected && isStalled -> STALLED
-                isStreaming && connectionConnected -> STREAMING
-                else -> PAUSED
-            }
-    }
+    val hasDetail: Boolean get() = motionDetailRes(this) != null
 }
+
+// Precedence: UNAVAILABLE > USER_DISABLED > NOT_FORWARDED > NO_HOST_SINK > BACKEND_BROKEN > STALLED > STREAMING > PAUSED.
+fun motionIndicatorStateOf(
+    isAvailable: Boolean,
+    isStreaming: Boolean,
+    connectionCarriesMotion: Boolean,
+    connectionConnected: Boolean,
+    userEnabled: Boolean = true,
+    hostHasSinkForType: Boolean = true,
+    satelliteBackendOk: Boolean? = null,
+    isStalled: Boolean = false,
+): MotionIndicatorState =
+    when {
+        !isAvailable -> MotionIndicatorState.UNAVAILABLE
+        !userEnabled -> MotionIndicatorState.USER_DISABLED
+        !connectionCarriesMotion -> MotionIndicatorState.NOT_FORWARDED
+        !hostHasSinkForType -> MotionIndicatorState.NO_HOST_SINK
+        satelliteBackendOk == false -> MotionIndicatorState.BACKEND_BROKEN
+        isStreaming && connectionConnected && isStalled -> MotionIndicatorState.STALLED
+        isStreaming && connectionConnected -> MotionIndicatorState.STREAMING
+        else -> MotionIndicatorState.PAUSED
+    }
 
 /**
  * Translate the three live overlay inputs into the boolean flags of
- * [MotionIndicatorState.of]. Pure so the toolbar-paint decision is testable
+ * [motionIndicatorStateOf]. Pure so the toolbar-paint decision is testable
  * outside the Activity.
  */
 fun motionIndicatorFor(
@@ -83,7 +74,7 @@ fun motionIndicatorFor(
     // runtimeDown carries MOTION only when the satellite reported its backend down; map that
     // back to the false/null the indicator's backend branch expects (null = no observation).
     val satelliteBackendOk = if (Feature.MOTION in capability.runtimeDown) false else null
-    return MotionIndicatorState.of(
+    return motionIndicatorStateOf(
         isAvailable = isAvailable,
         isStreaming = isStreaming,
         connectionCarriesMotion = carriesMotion,
@@ -94,3 +85,35 @@ fun motionIndicatorFor(
         isStalled = isStalled,
     )
 }
+
+// The readout's motion entry shows a rate (or the pending glyph) in the states where motion
+// is user-facing on, and Off in the muted indicator states. STALLED and PAUSED count as on: no
+// samples flow there, so the entry reads pending rather than a misleading Off.
+fun motionReadoutOn(state: MotionIndicatorState?): Boolean =
+    when (state) {
+        MotionIndicatorState.STREAMING,
+        MotionIndicatorState.STALLED,
+        MotionIndicatorState.PAUSED,
+        -> true
+        MotionIndicatorState.USER_DISABLED,
+        MotionIndicatorState.NOT_FORWARDED,
+        MotionIndicatorState.NO_HOST_SINK,
+        MotionIndicatorState.BACKEND_BROKEN,
+        MotionIndicatorState.UNAVAILABLE,
+        null,
+        -> false
+    }
+
+// The second paragraph of the motion dialog: every limit state explains itself, the live
+// ones have nothing to add.
+@StringRes
+fun motionDetailRes(state: MotionIndicatorState): Int? =
+    when (state) {
+        MotionIndicatorState.UNAVAILABLE -> R.string.motion_unavailable_detail
+        MotionIndicatorState.NOT_FORWARDED -> R.string.motion_not_forwarded_detail
+        MotionIndicatorState.STALLED -> R.string.motion_stalled_detail
+        MotionIndicatorState.USER_DISABLED -> R.string.motion_user_disabled_detail
+        MotionIndicatorState.NO_HOST_SINK -> R.string.motion_no_host_sink_detail
+        MotionIndicatorState.BACKEND_BROKEN -> R.string.motion_backend_broken_detail
+        MotionIndicatorState.STREAMING, MotionIndicatorState.PAUSED -> null
+    }

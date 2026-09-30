@@ -22,6 +22,30 @@ data class LatencyRows(
     val pads: List<PadLatencyRow>,
 )
 
+// The one figure a host's latency row can show: Moonlight measures its control round trip,
+// a satellite halves its heartbeat round trip over the last pings, and anything without a
+// measurement reads unknown.
+internal sealed interface HostLatencyFigure {
+    data class ControlRoundTrip(
+        val ms: Long,
+    ) : HostLatencyFigure
+
+    data class OneWay(
+        val ms: Double,
+        val samples: Int,
+    ) : HostLatencyFigure
+
+    data object Unknown : HostLatencyFigure
+}
+
+internal fun hostLatencyFigure(row: HostLatencyRow): HostLatencyFigure =
+    when {
+        row.kind == ConnectionKind.MOONLIGHT ->
+            row.controlRttMs?.let { HostLatencyFigure.ControlRoundTrip(it) } ?: HostLatencyFigure.Unknown
+        row.oneWayMs != null -> HostLatencyFigure.OneWay(row.oneWayMs, row.samples)
+        else -> HostLatencyFigure.Unknown
+    }
+
 internal fun latencyRows(
     controllers: List<ControllerDiag>,
     hosts: List<HostDiag>,

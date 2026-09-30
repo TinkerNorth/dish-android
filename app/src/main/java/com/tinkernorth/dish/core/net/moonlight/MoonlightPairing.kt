@@ -18,15 +18,15 @@ import com.tinkernorth.dish.core.net.bytesToHex
  * to send and each `onPhaseN` folds the host's XML-extracted value back in.
  *
  * Randomness is injected so tests are deterministic; production passes
- * [MoonlightCrypto.randomBytes].
+ * [randomBytes].
  */
 class MoonlightPairing(
     private val identity: MoonlightIdentity,
     private val pin: String,
-    private val randomBytes: (Int) -> ByteArray = MoonlightCrypto::randomBytes,
+    private val randomBytes: (Int) -> ByteArray = ::randomBytes,
 ) {
     private val salt: ByteArray = randomBytes(SALT_LEN)
-    private val aesKey: ByteArray = MoonlightCrypto.pairingKey(salt, pin)
+    private val aesKey: ByteArray = pairingKey(salt, pin)
     private val clientChallenge: ByteArray = randomBytes(BLOCK_LEN)
     private val clientSecret: ByteArray = randomBytes(BLOCK_LEN)
 
@@ -48,13 +48,13 @@ class MoonlightPairing(
     /** Phase 1 response: the host's plaincert (server cert PEM). */
     fun onPhase1(serverCertPem: String) {
         this.serverCertPem = serverCertPem
-        serverCertSignature = MoonlightCert.signatureOf(serverCertPem)
+        serverCertSignature = signatureOf(serverCertPem)
     }
 
     /** Phase 2: send the client challenge (AES-ECB encrypted). */
     fun phase2Params(uniqueId: String): Map<String, String> =
         mapOf(
-            "clientchallenge" to bytesToHex(MoonlightCrypto.aesEcbEncrypt(aesKey, clientChallenge)),
+            "clientchallenge" to bytesToHex(aesEcbEncrypt(aesKey, clientChallenge)),
             "uniqueid" to uniqueId,
         )
 
@@ -64,7 +64,7 @@ class MoonlightPairing(
      * once phase 3 reveals the server secret.
      */
     fun onPhase2(challengeResponseHex: String): Boolean {
-        val decrypted = MoonlightCrypto.aesEcbDecrypt(aesKey, hexToBytes(challengeResponseHex))
+        val decrypted = aesEcbDecrypt(aesKey, hexToBytes(challengeResponseHex))
         if (decrypted.size < HASH_LEN + BLOCK_LEN) return false
         serverResponseHash = decrypted.copyOfRange(0, HASH_LEN)
         serverChallenge = decrypted.copyOfRange(HASH_LEN, HASH_LEN + BLOCK_LEN)
@@ -77,9 +77,9 @@ class MoonlightPairing(
      * client hash for the phase 4 check.
      */
     fun phase3Params(uniqueId: String): Map<String, String> {
-        val clientHash = MoonlightCrypto.sha256(serverChallenge, identity.certificateSignature, clientSecret)
+        val clientHash = sha256(serverChallenge, identity.certificateSignature, clientSecret)
         return mapOf(
-            "serverchallengeresp" to bytesToHex(MoonlightCrypto.aesEcbEncrypt(aesKey, clientHash)),
+            "serverchallengeresp" to bytesToHex(aesEcbEncrypt(aesKey, clientHash)),
             "uniqueid" to uniqueId,
         )
     }
@@ -95,10 +95,10 @@ class MoonlightPairing(
         if (secret.size < BLOCK_LEN + MIN_SIGNATURE_LEN) return false
         val serverSecret = secret.copyOfRange(0, BLOCK_LEN)
         val serverSignature = secret.copyOfRange(BLOCK_LEN, secret.size)
-        val expectedHash = MoonlightCrypto.sha256(clientChallenge, serverCertSignature, serverSecret)
-        if (!MoonlightCrypto.constantTimeEquals(expectedHash, serverResponseHash)) return false
-        val serverPublicKey = MoonlightCert.publicKeyOf(serverCertPem)
-        return MoonlightCrypto.verifyRsaSha256(serverPublicKey, serverSecret, serverSignature)
+        val expectedHash = sha256(clientChallenge, serverCertSignature, serverSecret)
+        if (!constantTimeEquals(expectedHash, serverResponseHash)) return false
+        val serverPublicKey = publicKeyOf(serverCertPem)
+        return verifyRsaSha256(serverPublicKey, serverSecret, serverSignature)
     }
 
     /**
@@ -107,7 +107,7 @@ class MoonlightPairing(
      * marks us paired.
      */
     fun phase4Params(uniqueId: String): Map<String, String> {
-        val signature = MoonlightCrypto.signRsaSha256(identity.privateKey, clientSecret)
+        val signature = signRsaSha256(identity.privateKey, clientSecret)
         return mapOf(
             "clientpairingsecret" to bytesToHex(clientSecret + signature),
             "uniqueid" to uniqueId,

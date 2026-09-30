@@ -34,7 +34,7 @@ class MdnsDiscovery
 
                 // Serialise via channel: NsdManager.resolveService is single-flight on older Android.
                 val found = Channel<NsdServiceInfo>(Channel.UNLIMITED)
-                val listener = discoveryListener(found)
+                val listener = ChannelDiscoveryListener(TAG, found)
 
                 // Many devices drop inbound mDNS multicast in Wi-Fi power-save unless a lock is held.
                 val multicastLock = acquireMulticastLock()
@@ -79,41 +79,15 @@ class MdnsDiscovery
             }.getOrNull()
         }
 
-        private fun discoveryListener(found: Channel<NsdServiceInfo>): NsdManager.DiscoveryListener =
-            object : NsdManager.DiscoveryListener {
-                override fun onServiceFound(serviceInfo: NsdServiceInfo) {
-                    found.trySend(serviceInfo)
-                }
-
-                override fun onServiceLost(serviceInfo: NsdServiceInfo) = Unit
-
-                override fun onDiscoveryStarted(serviceType: String) = Unit
-
-                override fun onDiscoveryStopped(serviceType: String) = Unit
-
-                override fun onStartDiscoveryFailed(
-                    serviceType: String,
-                    errorCode: Int,
-                ) {
-                    Log.w(TAG, "discovery start failed: $errorCode")
-                    found.close()
-                }
-
-                override fun onStopDiscoveryFailed(
-                    serviceType: String,
-                    errorCode: Int,
-                ) = Unit
-            }
-
         private suspend fun resolveOne(
             nsd: NsdManager,
             info: NsdServiceInfo,
-        ): DiscoveredServer? = NsdServiceResolver.resolve(nsd, info)?.let(::toServer)
+        ): DiscoveredServer? = resolveNsdService(nsd, info)?.let(::toServer)
 
         private fun toServer(info: NsdServiceInfo): DiscoveredServer? =
             mdnsServiceToServer(
                 serviceName = info.serviceName.orEmpty(),
-                hostAddress = NsdServiceResolver.hostAddress(info),
+                hostAddress = hostAddress(info),
                 srvPort = info.port,
                 txt = info.attributes.orEmpty(),
             )
@@ -139,10 +113,10 @@ internal fun mdnsServiceToServer(
     return DiscoveredServer(
         name = serviceName.ifEmpty { ip },
         ip = ip,
-        udpPort = mdnsTxtInt(txt, "udp") ?: srvPort.takeIf { it > 0 } ?: MDNS_DEFAULT_UDP,
-        pairPort = mdnsTxtInt(txt, "pair") ?: MDNS_DEFAULT_PAIR,
-        httpPort = mdnsTxtInt(txt, "http") ?: MDNS_DEFAULT_HTTP,
-        machineId = mdnsTxtString(txt, "mid").orEmpty(),
+        udpPort = mdnsTxtInt(txt, TXT_UDP) ?: srvPort.takeIf { it > 0 } ?: MDNS_DEFAULT_UDP,
+        pairPort = mdnsTxtInt(txt, TXT_PAIR) ?: MDNS_DEFAULT_PAIR,
+        httpPort = mdnsTxtInt(txt, TXT_HTTP) ?: MDNS_DEFAULT_HTTP,
+        machineId = mdnsTxtString(txt, TXT_MACHINE_ID).orEmpty(),
         source = DiscoverySource.MDNS,
     )
 }
@@ -156,3 +130,9 @@ internal fun mdnsTxtString(
     txt: Map<String, ByteArray?>,
     key: String,
 ): String? = txt[key]?.let { String(it).trim() }?.takeIf { it.isNotEmpty() }
+
+// The TXT record keys a satellite advertises (satellite docs/contract.md §discovery).
+private const val TXT_UDP = "udp"
+private const val TXT_PAIR = "pair"
+private const val TXT_HTTP = "http"
+private const val TXT_MACHINE_ID = "mid"

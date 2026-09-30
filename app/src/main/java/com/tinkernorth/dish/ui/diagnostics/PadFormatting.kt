@@ -104,34 +104,46 @@ internal fun Context.padTimingLines(facts: PadFacts): List<String> {
 
 private fun Context.stickHistoryLines(record: StickTestRecord?): List<String> {
     record ?: return emptyList()
-    val lines = mutableListOf<String>()
     val format = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
-    record.driftAtMs?.let { at ->
-        lines +=
-            diagKv(
-                R.string.diagnostics_last_drift,
-                getString(
-                    R.string.diagnostics_drift_history,
-                    percentLabel(record.driftLeft),
-                    percentLabel(record.driftRight),
-                    percentLabel(record.suggestedDeadzone),
-                    format.format(Date(at)),
-                ),
-            )
-    }
-    record.rangeAtMs?.let { at ->
-        lines +=
-            diagKv(
-                R.string.diagnostics_last_range,
-                getString(
-                    R.string.diagnostics_range_history,
-                    percentLabel(record.reachLeft),
-                    percentLabel(record.reachRight),
-                    format.format(Date(at)),
-                ),
-            )
-    }
-    return lines
+    return listOfNotNull(
+        driftHistoryLine(record, format),
+        rangeHistoryLine(record, format),
+    )
+}
+
+// Null until that test has been run once: a pad with no history shows no row rather than an empty
+// one.
+private fun Context.driftHistoryLine(
+    record: StickTestRecord,
+    format: DateFormat,
+): String? {
+    val at = record.driftAtMs ?: return null
+    return diagKv(
+        R.string.diagnostics_last_drift,
+        getString(
+            R.string.diagnostics_drift_history,
+            percentLabel(record.driftLeft),
+            percentLabel(record.driftRight),
+            percentLabel(record.suggestedDeadzone),
+            format.format(Date(at)),
+        ),
+    )
+}
+
+private fun Context.rangeHistoryLine(
+    record: StickTestRecord,
+    format: DateFormat,
+): String? {
+    val at = record.rangeAtMs ?: return null
+    return diagKv(
+        R.string.diagnostics_last_range,
+        getString(
+            R.string.diagnostics_range_history,
+            percentLabel(record.reachLeft),
+            percentLabel(record.reachRight),
+            format.format(Date(at)),
+        ),
+    )
 }
 
 internal fun Context.percentLabel(fraction: Float?): String =

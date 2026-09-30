@@ -20,7 +20,7 @@ class OnboardingPreferenceStore
     constructor(
         @ApplicationContext context: Context,
     ) : AbstractStateSource<OnboardingState>(
-            initialState = readInitial(context),
+            initialState = readOnboardingState(context),
         ) {
         private val prefs: SharedPreferences =
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -38,13 +38,13 @@ class OnboardingPreferenceStore
         companion object {
             const val PREFS_NAME = "user_preferences"
             const val KEY_WELCOME_COMPLETED = "onboarding_welcome_completed"
-
-            private fun readInitial(context: Context): OnboardingState =
-                OnboardingState(
-                    welcomeCompleted =
-                        context
-                            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                            .getBoolean(KEY_WELCOME_COMPLETED, false),
-                )
         }
     }
+
+private fun readOnboardingState(context: Context): OnboardingState =
+    OnboardingState(
+        welcomeCompleted =
+            context
+                .getSharedPreferences(OnboardingPreferenceStore.PREFS_NAME, Context.MODE_PRIVATE)
+                .getBoolean(OnboardingPreferenceStore.KEY_WELCOME_COMPLETED, false),
+    )

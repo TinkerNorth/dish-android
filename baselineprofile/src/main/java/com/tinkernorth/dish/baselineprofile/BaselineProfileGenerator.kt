@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+
 package com.tinkernorth.dish.baselineprofile
 
 import androidx.benchmark.macro.junit4.BaselineProfileRule

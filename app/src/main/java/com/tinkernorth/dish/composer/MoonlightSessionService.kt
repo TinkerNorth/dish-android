@@ -86,23 +86,29 @@ class MoonlightSessionService : Service() {
         nm.notify(NOTIFICATION_ID, build(hostIds))
     }
 
-    private fun build(hostIds: Set<String>): Notification {
-        val openIntent =
-            PendingIntent.getActivity(
-                this,
-                0,
-                Intent(this, MainActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP) },
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
+    private fun openAppIntent(): PendingIntent =
+        PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP) },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    private fun bodyFor(hostIds: Set<String>): String {
         val primary = hostIds.firstOrNull()
         val label = primary?.let { hub.summary(it)?.label }
         val pads = primary?.let { moonlight.get(it)?.padCount } ?: 0
-        val body =
-            when {
-                label == null -> getString(R.string.ml_service_body_idle)
-                pads > 0 -> resources.getQuantityString(R.plurals.ml_service_body, pads, pads, label)
-                else -> getString(R.string.ml_service_body_starting, label)
-            }
+        return when (val body = moonlightServiceBodyFor(label, pads)) {
+            MoonlightServiceBody.Idle -> getString(R.string.ml_service_body_idle)
+            is MoonlightServiceBody.Starting -> getString(R.string.ml_service_body_starting, body.hostLabel)
+            is MoonlightServiceBody.Pads ->
+                resources.getQuantityString(R.plurals.ml_service_body, body.padCount, body.padCount, body.hostLabel)
+        }
+    }
+
+    private fun build(hostIds: Set<String>): Notification {
+        val openIntent = openAppIntent()
+        val body = bodyFor(hostIds)
         return NotificationCompat
             .Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_dish_connected)
@@ -140,7 +146,7 @@ class MoonlightSessionService : Service() {
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
                 .apply { acquire(WAKE_LOCK_TIMEOUT_MS) }
         val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        wifiLock = wifi.createWifiLock(wifiLockMode(), WIFI_LOCK_TAG).apply { acquire() }
+        wifiLock = wifi.createWifiLock(wifiLockMode(Build.VERSION.SDK_INT), WIFI_LOCK_TAG).apply { acquire() }
     }
 
     private fun releaseLocks() {

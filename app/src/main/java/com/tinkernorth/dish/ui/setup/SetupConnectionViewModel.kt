@@ -11,13 +11,15 @@ import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.satelliteLinkState
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.HostFeatureSet
-import com.tinkernorth.dish.core.net.DishProtocol
+import com.tinkernorth.dish.core.net.DishProtocolCompat
 import com.tinkernorth.dish.source.connection.ConnectIntent
+import com.tinkernorth.dish.source.connection.ConnectionError
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.ui.connections.moonlightTrustFor
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -33,6 +35,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+private const val EVENT_BUFFER = 4
 
 // Stage 3 destination. Thin orchestration over SatelliteConnectionManager:
 // 3A is a local path pick; 3B drives discovery + the manager's connect/auto-
@@ -58,7 +62,7 @@ class SetupConnectionViewModel
             val name: String,
             val link: LinkState,
             val server: DiscoveredServer,
-            val compat: DishProtocol.Compat = DishProtocol.Compat.UNKNOWN,
+            val compat: DishProtocolCompat = DishProtocolCompat.UNKNOWN,
         )
 
         // A Moonlight host is picked, never connected: pairing is remembered trust and the
@@ -89,14 +93,14 @@ class SetupConnectionViewModel
             ) : Event
 
             data class Error(
-                val message: String,
+                val error: ConnectionError,
             ) : Event
         }
 
         private val _state = MutableStateFlow(State())
         val state: StateFlow<State> = _state.asStateFlow()
 
-        private val _events = MutableSharedFlow<Event>(extraBufferCapacity = 4)
+        private val _events = MutableSharedFlow<Event>(extraBufferCapacity = EVENT_BUFFER)
         val events: SharedFlow<Event> = _events.asSharedFlow()
 
         // Hosts we've kicked an auto-reconnect for, so a remembered host that
@@ -184,7 +188,7 @@ class SetupConnectionViewModel
             server: DiscoveredServer,
             pin: String,
         ) {
-            pendingHostId = SatelliteConnection.idFor(server)
+            pendingHostId = satelliteConnectionIdFor(server)
             satellite.pairWithPin(server, pin)
         }
 
@@ -192,7 +196,7 @@ class SetupConnectionViewModel
             server: DiscoveredServer,
             clientPin: String,
         ) {
-            pendingHostId = SatelliteConnection.idFor(server)
+            pendingHostId = satelliteConnectionIdFor(server)
             satellite.requestApproval(server, clientPin)
         }
 
@@ -217,11 +221,8 @@ class SetupConnectionViewModel
                     satellite.connect(host.server, ConnectIntent.AUTO_RECONNECT)
                 }
             }
-            // Promote to configure only for the host the user actually drove
-            // (tapped or paired -> pendingHostId). A background auto-reconnect
-            // going live on its own must not yank the user forward, and
-            // re-entering with a satellite already connected must not skip the
-            // picker entirely.
+            // Only the host the user drove (tapped or paired) hands off; a background reconnect
+            // going live must not yank the user forward.
             val target = hosts.firstOrNull { it.id == pendingHostId && it.link.isLive() }
             if (target != null) {
                 pendingHostId = null
@@ -232,7 +233,7 @@ class SetupConnectionViewModel
         private fun onConnectionEvent(event: ConnectionEvent) {
             when (event) {
                 is ConnectionEvent.PairingRequired -> emit(Event.ShowPairing(event.server))
-                is ConnectionEvent.Error -> emit(Event.Error(event.message))
+                is ConnectionEvent.Error -> emit(Event.Error(event.error))
             }
         }
 
@@ -243,7 +244,7 @@ class SetupConnectionViewModel
             stale: Set<String>,
             features: Map<String, HostFeatureSet> = emptyMap(),
         ): List<Host> {
-            val discoveredById = discovered.associateBy { SatelliteConnection.idFor(it) }
+            val discoveredById = discovered.associateBy { satelliteConnectionIdFor(it) }
             // The coordinator's summary carries the reactive LinkState; prefer it,
             // and fall back to a computed state for a freshly discovered host the
             // coordinator hasn't surfaced yet.
@@ -261,7 +262,7 @@ class SetupConnectionViewModel
                             isDiscovered = id in discoveredById,
                         ),
                     server = server,
-                    compat = features[id]?.compat ?: DishProtocol.Compat.UNKNOWN,
+                    compat = features[id]?.compat ?: DishProtocolCompat.UNKNOWN,
                 )
             }
         }

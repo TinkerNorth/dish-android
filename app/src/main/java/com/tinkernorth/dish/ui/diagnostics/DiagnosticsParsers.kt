@@ -12,8 +12,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 
-private const val MICROS_PER_MS = 1000.0
-
 private fun parseObject(
     json: Json,
     raw: String,
@@ -54,13 +52,13 @@ internal fun parseDeviceLatency(
     raw: String,
 ): DeviceLatency? {
     val root = parseObject(json, raw) ?: return null
-    val samples = root.groupInt("stage1_hotpath_us", "n") ?: 0
+    val samples = root.groupInt(STAGE1, SAMPLES) ?: 0
     return DeviceLatency(
         samples = samples,
-        stage1P50Ms = root.groupMs("stage1_hotpath_us", "p50"),
-        stage1P99Ms = root.groupMs("stage1_hotpath_us", "p99"),
-        gapP50Ms = root.groupMs("urb_gap_us", "p50"),
-        gapP99Ms = root.groupMs("urb_gap_us", "p99"),
+        stage1P50Ms = root.groupMs(STAGE1, P50),
+        stage1P99Ms = root.groupMs(STAGE1, P99),
+        gapP50Ms = root.groupMs(URB_GAP, P50),
+        gapP99Ms = root.groupMs(URB_GAP, P99),
     )
 }
 
@@ -86,12 +84,12 @@ internal fun parseSessionStats(
     val root = parseObject(json, raw) ?: return null
     val recent =
         runCatching {
-            root["rtt_recent_us"]?.jsonArray?.map { (it.jsonPrimitive.float / MICROS_PER_MS).toFloat() }
+            root[RTT_RECENT]?.jsonArray?.map { (it.jsonPrimitive.float / MICROS_PER_MS).toFloat() }
         }.getOrNull().orEmpty()
     return SatelliteSessionStats(
-        rttP50Ms = root.groupMs("rtt_us", "p50"),
-        rttP99Ms = root.groupMs("rtt_us", "p99"),
-        rttSamples = root.groupInt("rtt_us", "n") ?: 0,
+        rttP50Ms = root.groupMs(RTT, P50),
+        rttP99Ms = root.groupMs(RTT, P99),
+        rttSamples = root.groupInt(RTT, SAMPLES) ?: 0,
         rttRecentMs = if (recent.size < 2) emptyList() else recent,
         pings = root.longField("pings") ?: 0L,
         acks = root.longField("acks") ?: 0L,

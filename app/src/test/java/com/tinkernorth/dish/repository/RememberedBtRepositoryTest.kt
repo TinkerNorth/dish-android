@@ -106,4 +106,14 @@ class RememberedBtRepositoryTest {
             )
         }
     }
+
+    @Test
+    fun `clear empties the observable mirror`() {
+        val (ctx, _) = mapBackedPrefs()
+        val repo = RememberedBtRepository(ctx, json)
+        repo.put(entry(id = "bt:A"))
+        assertEquals(listOf("bt:A"), repo.entries.value.map { it.id })
+        repo.clear()
+        assertEquals(emptyList<RememberedBt>(), repo.entries.value)
+    }
 }

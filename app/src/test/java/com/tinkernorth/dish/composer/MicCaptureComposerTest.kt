@@ -5,6 +5,7 @@ package com.tinkernorth.dish.composer
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.source.audio.MicCapturePlan
 import com.tinkernorth.dish.source.audio.MicCaptureTarget
 import com.tinkernorth.dish.source.store.MicMuteStore
@@ -137,37 +138,35 @@ class MicCaptureComposerTest {
             bindings.value = emptyMap()
             assertTrue(plan().armed.isEmpty())
         }
+}
 
-    private companion object {
-        const val SLOT = "virtual"
-        const val CONN = "satellite:abc"
+private const val SLOT = "virtual"
+private const val CONN = "satellite:abc"
 
-        fun summary(
-            live: LinkState,
-            kind: ConnectionKind = ConnectionKind.SATELLITE,
-        ) = ConnectionSummary(
-            id = CONN,
-            kind = kind,
-            label = "Desk PC",
-            detail = "",
-            live = live,
-            boundSlotIds = listOf(SLOT),
-        )
+private fun summary(
+    live: LinkState,
+    kind: ConnectionKind = ConnectionKind.SATELLITE,
+) = ConnectionSummary(
+    id = CONN,
+    kind = kind,
+    label = "Desk PC",
+    detail = "",
+    live = live,
+    boundSlotIds = listOf(SLOT),
+)
 
-        // Every layer permissive; the toggle and the runtime probe are what the tests move.
-        fun capsWithMic(
-            on: Boolean,
-            down: Boolean = false,
-        ): SlotCapabilities {
-            val mic = CapabilitySet.of(Feature.MIC)
-            return SlotCapabilities(
-                controller = mic,
-                transport = mic,
-                type = mic,
-                host = mic,
-                userEnabled = if (on) mic else CapabilitySet.EMPTY,
-                runtimeDown = if (down) mic else CapabilitySet.EMPTY,
-            )
-        }
-    }
+// Every layer permissive; the toggle and the runtime probe are what the tests move.
+private fun capsWithMic(
+    on: Boolean,
+    down: Boolean = false,
+): SlotCapabilities {
+    val mic = capabilitySetOf(Feature.MIC)
+    return SlotCapabilities(
+        controller = mic,
+        transport = mic,
+        type = mic,
+        host = mic,
+        userEnabled = if (on) mic else CapabilitySet.EMPTY,
+        runtimeDown = if (down) mic else CapabilitySet.EMPTY,
+    )
 }

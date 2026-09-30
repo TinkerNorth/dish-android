@@ -65,7 +65,7 @@ class TipJarSource
                     val tiers =
                         runCatching {
                             if (gateway.connect()) {
-                                gateway.catalog(TipCatalog.tipProductIds, TipCatalog.SUBSCRIPTION_PRODUCT_ID)
+                                gateway.catalog(TIP_PRODUCT_IDS, SUBSCRIPTION_PRODUCT_ID)
                             } else {
                                 null
                             }
@@ -179,7 +179,7 @@ class TipJarSource
         }
 
         private fun kindOf(purchase: OwnedPurchase): TierKind =
-            if (TipCatalog.SUBSCRIPTION_PRODUCT_ID in purchase.productIds) TierKind.MONTHLY else TierKind.TIP
+            if (SUBSCRIPTION_PRODUCT_ID in purchase.productIds) TierKind.MONTHLY else TierKind.TIP
 
         private companion object {
             private const val TAG = "TipJarSource"

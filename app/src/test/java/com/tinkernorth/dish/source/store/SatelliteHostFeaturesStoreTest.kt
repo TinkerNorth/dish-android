@@ -100,22 +100,13 @@ class SatelliteHostFeaturesStoreTest {
     }
 
     @Test
-    fun `an unchanged verdict writes nothing, one direction at a time`() {
-        // The no-op guard reads the PAIR: a re-probe that moves neither direction must not
-        // republish the map (every capability collector downstream would recompute), while a
-        // re-probe that moves either one must.
+    fun `a re-probe that moves either direction lands, one at a time`() {
         store.setFeatures("sat-A", features.copy(controllerMic = true, controllerSpeaker = false))
-
-        val settled = store.state.value
-        store.noteControllerAudio("sat-A", mic = true, speaker = false)
-        assertSame(settled, store.state.value)
 
         store.noteControllerAudio("sat-A", mic = true, speaker = true)
         assertEquals(true, store.featuresFor("sat-A")?.controllerSpeaker)
 
-        val withSpeaker = store.state.value
         store.noteControllerAudio("sat-A", mic = false, speaker = true)
-        assertNotSame(withSpeaker, store.state.value)
         assertEquals(false, store.featuresFor("sat-A")?.controllerMic)
     }
 
@@ -146,5 +137,118 @@ class SatelliteHostFeaturesStoreTest {
         store.clearConnection("sat-A")
         assertNull(store.featuresFor("sat-A"))
         assertEquals(HostFeatureSet.SATELLITE_DEFAULT, store.featuresFor("sat-B"))
+    }
+
+    @Test
+    fun `noteProtocolVersion seeds an unknown host from the default`() {
+        store.noteProtocolVersion("sat-A", 3)
+
+        assertEquals(HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = 3), store.featuresFor("sat-A"))
+    }
+
+    @Test
+    fun `noteProtocolVersion updates a known host in place`() {
+        store.setFeatures("sat-A", features)
+
+        store.noteProtocolVersion("sat-A", 3)
+
+        assertEquals(features.copy(protocolVersion = 3), store.featuresFor("sat-A"))
+    }
+
+    @Test
+    fun `noteProtocolVersion ignores an invalid version`() {
+        store.noteProtocolVersion("sat-A", 0)
+        store.noteProtocolVersion("sat-A", -1)
+
+        assertNull(store.featuresFor("sat-A"))
+    }
+
+    // ── the merge reducers: the store's StateFlow drops a map equal to the one it holds, so
+    // whether an unchanged read builds a new map at all is only visible here, by reference ──
+
+    private val settledAudio = mapOf("sat-A" to features.copy(controllerMic = true, controllerSpeaker = false))
+
+    @Test
+    fun `an unchanged audio verdict hands back the same map`() {
+        assertSame(settledAudio, withControllerAudio(settledAudio, "sat-A", mic = true, speaker = false))
+    }
+
+    @Test
+    fun `an audio verdict that moves only the mic builds a new map`() {
+        val next = withControllerAudio(settledAudio, "sat-A", mic = false, speaker = false)
+
+        assertNotSame(settledAudio, next)
+        assertEquals(features.copy(controllerMic = false, controllerSpeaker = false), next["sat-A"])
+    }
+
+    @Test
+    fun `an audio verdict that moves only the speaker builds a new map`() {
+        val next = withControllerAudio(settledAudio, "sat-A", mic = true, speaker = true)
+
+        assertNotSame(settledAudio, next)
+        assertEquals(features.copy(controllerMic = true, controllerSpeaker = true), next["sat-A"])
+    }
+
+    @Test
+    fun `a silent verdict for an unknown host hands back the same map`() {
+        val empty = emptyMap<String, HostFeatureSet>()
+
+        assertSame(empty, withControllerAudio(empty, "sat-A", mic = false, speaker = false))
+    }
+
+    @Test
+    fun `an audio verdict for an unknown host is merged into the default`() {
+        val next = withControllerAudio(emptyMap(), "sat-A", mic = true, speaker = false)
+
+        assertEquals(mapOf("sat-A" to HostFeatureSet.SATELLITE_DEFAULT.copy(controllerMic = true)), next)
+    }
+
+    private val probedAudio = features.copy(controllerMic = true, controllerSpeaker = false)
+    private val catalog = features.copy(mouseControl = false, controllerMic = false, controllerSpeaker = true)
+
+    @Test
+    fun `a catalog read for an unknown host lands as read`() {
+        val next = withCatalogFeatures(emptyMap(), "sat-A", catalog)
+
+        assertEquals(mapOf("sat-A" to catalog), next)
+    }
+
+    @Test
+    fun `a catalog read for a known host wins its own fields and keeps the probed audio`() {
+        val next = withCatalogFeatures(mapOf("sat-A" to probedAudio), "sat-A", catalog)
+
+        assertEquals(catalog.copy(controllerMic = true, controllerSpeaker = false), next["sat-A"])
+    }
+
+    @Test
+    fun `a catalog read leaves the other hosts alone`() {
+        val other = HostFeatureSet.SATELLITE_DEFAULT
+
+        val next = withCatalogFeatures(mapOf("sat-B" to other), "sat-A", catalog)
+
+        assertSame(other, next["sat-B"])
+    }
+
+    private val settledVersion = mapOf("sat-A" to features.copy(protocolVersion = 3))
+
+    @Test
+    fun `an unchanged protocol version hands back the same map`() {
+        assertSame(settledVersion, withProtocolVersion(settledVersion, "sat-A", 3))
+    }
+
+    @Test
+    fun `a changed protocol version builds a new map`() {
+        val next = withProtocolVersion(settledVersion, "sat-A", 4)
+
+        assertNotSame(settledVersion, next)
+        assertEquals(features.copy(protocolVersion = 4), next["sat-A"])
+    }
+
+    @Test
+    fun `a protocol version for an unknown host is merged into the default`() {
+        val next = withProtocolVersion(settledVersion, "sat-B", 3)
+
+        assertEquals(HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = 3), next["sat-B"])
+        assertEquals(settledVersion["sat-A"], next["sat-A"])
     }
 }

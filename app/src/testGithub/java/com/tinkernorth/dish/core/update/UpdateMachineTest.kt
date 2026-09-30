@@ -2,12 +2,12 @@
 
 package com.tinkernorth.dish.core.update
 
-import com.tinkernorth.dish.core.update.UpdateMachine.BACKOFF_BASE_MS
-import com.tinkernorth.dish.core.update.UpdateMachine.BACKOFF_CAP_MS
-import com.tinkernorth.dish.core.update.UpdateMachine.PERIODIC_INTERVAL_MS
-import com.tinkernorth.dish.core.update.UpdateMachine.RECONNECT_CHECK_DELAY_MS
-import com.tinkernorth.dish.core.update.UpdateMachine.STARTUP_DELAY_MS
-import com.tinkernorth.dish.core.update.UpdateMachine.reduce
+import com.tinkernorth.dish.core.update.BACKOFF_BASE_MS
+import com.tinkernorth.dish.core.update.BACKOFF_CAP_MS
+import com.tinkernorth.dish.core.update.PERIODIC_INTERVAL_MS
+import com.tinkernorth.dish.core.update.RECONNECT_CHECK_DELAY_MS
+import com.tinkernorth.dish.core.update.STARTUP_DELAY_MS
+import com.tinkernorth.dish.core.update.reduce
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -58,33 +58,33 @@ class UpdateMachineTest {
     @Test
     fun `the schedule constants are the documented ones`() {
         assertEquals(15_000L, STARTUP_DELAY_MS)
-        assertEquals(60L * 60 * 1000, UpdateMachine.MIN_CHECK_GAP_MS)
-        assertEquals(24L * 60 * 60 * 1000, UpdateMachine.FUTURE_SKEW_ESCAPE_MS)
+        assertEquals(60L * 60 * 1000, MIN_CHECK_GAP_MS)
+        assertEquals(24L * 60 * 60 * 1000, FUTURE_SKEW_ESCAPE_MS)
         assertEquals(4L * 60 * 60 * 1000, PERIODIC_INTERVAL_MS)
         assertEquals(10L * 60 * 1000, BACKOFF_BASE_MS)
         assertEquals(6L * 60 * 60 * 1000, BACKOFF_CAP_MS)
-        assertEquals(10_000L, UpdateMachine.MANUAL_MIN_GAP_MS)
+        assertEquals(10_000L, MANUAL_MIN_GAP_MS)
         assertEquals(30_000L, RECONNECT_CHECK_DELAY_MS)
     }
 
     @Test
     fun `the backoff ladder doubles to a six-hour cap`() {
-        assertEquals(BACKOFF_BASE_MS, UpdateMachine.backoffDelayMs(0))
-        assertEquals(BACKOFF_BASE_MS, UpdateMachine.backoffDelayMs(1))
-        assertEquals(20L * 60 * 1000, UpdateMachine.backoffDelayMs(2))
-        assertEquals(40L * 60 * 1000, UpdateMachine.backoffDelayMs(3))
-        assertEquals(320L * 60 * 1000, UpdateMachine.backoffDelayMs(6))
-        assertEquals(BACKOFF_CAP_MS, UpdateMachine.backoffDelayMs(7))
-        assertEquals(BACKOFF_CAP_MS, UpdateMachine.backoffDelayMs(40))
+        assertEquals(BACKOFF_BASE_MS, backoffDelayMs(0))
+        assertEquals(BACKOFF_BASE_MS, backoffDelayMs(1))
+        assertEquals(20L * 60 * 1000, backoffDelayMs(2))
+        assertEquals(40L * 60 * 1000, backoffDelayMs(3))
+        assertEquals(320L * 60 * 1000, backoffDelayMs(6))
+        assertEquals(BACKOFF_CAP_MS, backoffDelayMs(7))
+        assertEquals(BACKOFF_CAP_MS, backoffDelayMs(40))
     }
 
     @Test
     fun `jitter stays inside plus or minus 20 percent`() {
-        assertEquals(800L, UpdateMachine.jitteredDelayMs(1000L, 0.0))
-        assertEquals(1000L, UpdateMachine.jitteredDelayMs(1000L, 0.5))
-        assertEquals(1200L, UpdateMachine.jitteredDelayMs(1000L, 1.0))
-        assertEquals(800L, UpdateMachine.jitteredDelayMs(1000L, -3.0))
-        assertEquals(1200L, UpdateMachine.jitteredDelayMs(1000L, 7.0))
+        assertEquals(800L, jitteredDelayMs(1000L, 0.0))
+        assertEquals(1000L, jitteredDelayMs(1000L, 0.5))
+        assertEquals(1200L, jitteredDelayMs(1000L, 1.0))
+        assertEquals(800L, jitteredDelayMs(1000L, -3.0))
+        assertEquals(1200L, jitteredDelayMs(1000L, 7.0))
     }
 
     // ── Preferences ─────────────────────────────────────────────────────────

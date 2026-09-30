@@ -19,7 +19,7 @@ class SpeakerEnabledStore
     @Inject
     constructor(
         @ApplicationContext context: Context,
-    ) : AbstractStateSource<Map<String, Boolean>>(initialState = readAll(context)) {
+    ) : AbstractStateSource<Map<String, Boolean>>(initialState = readSlotFlags(context, PREFIX)) {
         private val prefs: SharedPreferences =
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -27,7 +27,7 @@ class SpeakerEnabledStore
             slotId: String,
             enabled: Boolean,
         ) {
-            prefs.edit { putBoolean(key(slotId), enabled) }
+            prefs.edit { putBoolean(slotFlagKey(PREFIX, slotId), enabled) }
             setState { it + (slotId to enabled) }
         }
 
@@ -38,15 +38,5 @@ class SpeakerEnabledStore
             const val DEFAULT_ENABLED: Boolean = true
             private const val PREFS_NAME = "user_preferences"
             private const val PREFIX = "speaker_enabled:"
-
-            private fun key(slotId: String): String = "$PREFIX$slotId"
-
-            private fun readAll(context: Context): Map<String, Boolean> =
-                context
-                    .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                    .all
-                    .asSequence()
-                    .filter { it.key.startsWith(PREFIX) && it.value is Boolean }
-                    .associate { it.key.removePrefix(PREFIX) to (it.value as Boolean) }
         }
     }

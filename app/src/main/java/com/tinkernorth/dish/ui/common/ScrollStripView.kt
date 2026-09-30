@@ -75,44 +75,55 @@ class ScrollStripView
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
             when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    requestUnbufferedDispatch(event)
-                    trackedPointerId = event.getPointerId(0)
-                    downY = event.y
-                    lastY = event.y
-                    downTimeMs = event.eventTime
-                    scrolled = false
-                    touching = true
-                    accumulator.reset()
-                    invalidate()
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val index = event.findPointerIndex(trackedPointerId)
-                    if (index < 0) return true
-                    val y = event.getY(index)
-                    if (!scrolled && abs(y - downY) > touchSlop) scrolled = true
-                    if (scrolled) {
-                        val notches = accumulator.add(lastY - y)
-                        if (notches != 0) onScroll?.invoke(notches)
-                    }
-                    lastY = y
-                }
+                MotionEvent.ACTION_DOWN -> onStripTouchDown(event)
+                MotionEvent.ACTION_MOVE -> onStripDragged(event)
                 MotionEvent.ACTION_UP -> {
+                    // performClick stays in onTouchEvent: the ClickableViewAccessibility check
+                    // only recognises the call when it is here.
                     touching = false
-                    if (!scrolled && event.eventTime - downTimeMs <= TAP_MAX_MS) performClick()
-                    trackedPointerId = INVALID_POINTER
-                    accumulator.reset()
-                    invalidate()
+                    if (wasATap(event)) performClick()
+                    endStripTouch()
                 }
-                MotionEvent.ACTION_CANCEL -> {
-                    touching = false
-                    trackedPointerId = INVALID_POINTER
-                    accumulator.reset()
-                    invalidate()
-                }
+                MotionEvent.ACTION_CANCEL -> endStripTouch()
                 else -> return false
             }
             return true
+        }
+
+        private fun onStripTouchDown(event: MotionEvent) {
+            requestUnbufferedDispatch(event)
+            trackedPointerId = event.getPointerId(0)
+            downY = event.y
+            lastY = event.y
+            downTimeMs = event.eventTime
+            scrolled = false
+            touching = true
+            accumulator.reset()
+            invalidate()
+        }
+
+        private fun onStripDragged(event: MotionEvent) {
+            val index = event.findPointerIndex(trackedPointerId)
+            val isTracked = index >= 0
+            if (!isTracked) return
+
+            val y = event.getY(index)
+            val passedTheSlop = !scrolled && abs(y - downY) > touchSlop
+            if (passedTheSlop) scrolled = true
+            if (scrolled) {
+                val notches = accumulator.add(lastY - y)
+                if (notches != 0) onScroll?.invoke(notches)
+            }
+            lastY = y
+        }
+
+        private fun wasATap(event: MotionEvent): Boolean = !scrolled && event.eventTime - downTimeMs <= TAP_MAX_MS
+
+        private fun endStripTouch() {
+            touching = false
+            trackedPointerId = INVALID_POINTER
+            accumulator.reset()
+            invalidate()
         }
 
         override fun performClick(): Boolean {

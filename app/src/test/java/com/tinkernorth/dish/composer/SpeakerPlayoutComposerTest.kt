@@ -2,13 +2,15 @@
 
 package com.tinkernorth.dish.composer
 
+import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
+import com.tinkernorth.dish.source.audio.MapSlotAudioRoutes
 import com.tinkernorth.dish.source.audio.PadAudioRoute
-import com.tinkernorth.dish.source.audio.PadAudioRoutes
-import com.tinkernorth.dish.source.audio.SlotAudioRoutes
 import com.tinkernorth.dish.source.audio.SpeakerPlayoutPlan
+import com.tinkernorth.dish.source.audio.speakerRouteKey
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import io.mockk.every
@@ -54,17 +56,14 @@ class SpeakerPlayoutComposerTest {
             every { this@mockk.slots } returns this@SpeakerPlayoutComposerTest.slots
         }
 
+    private val satConnections = MutableStateFlow(mapOf(CONN to connection))
+
     private val satellite =
         mockk<SatelliteConnectionManager> {
-            every { this@mockk.connections } returns MutableStateFlow(mapOf(CONN to connection))
+            every { this@mockk.connections } returns satConnections
         }
 
-    private val routing =
-        object : SlotAudioRoutes {
-            override val changes get() = routeTable
-
-            override fun forSlot(slotId: String) = padRoutes[slotId] ?: PadAudioRoute.NONE
-        }
+    private val routing = MapSlotAudioRoutes(routeTable, padRoutes)
 
     private val composer = SpeakerPlayoutComposer(hub, capabilities, satellite, routing, scope)
 
@@ -79,7 +78,7 @@ class SpeakerPlayoutComposerTest {
         return composer.state.value
     }
 
-    private fun voice() = plan().voices[SpeakerPlayoutPlan.routeKey(HANDLE, CTRL_IDX)]
+    private fun voice() = plan().voices[speakerRouteKey(HANDLE, CTRL_IDX)]
 
     @Test
     fun `a live satellite slot with controller sound on plays, addressed the way frames arrive`() =
@@ -151,7 +150,7 @@ class SpeakerPlayoutComposerTest {
             assertNull("the old address must stop playing", voice())
             assertEquals(
                 SLOT,
-                plan().voices[SpeakerPlayoutPlan.routeKey(HANDLE, CTRL_IDX + 1)]!!.slotId,
+                plan().voices[speakerRouteKey(HANDLE, CTRL_IDX + 1)]!!.slotId,
             )
         }
 
@@ -162,52 +161,64 @@ class SpeakerPlayoutComposerTest {
 
             // The plan itself does not change when a route does, so the table has to be an input.
             padRoutes[SLOT] = PadAudioRoute(microphone = false, speaker = true, playbackDeviceId = PAD_ENDPOINT)
-            routeTable.value = mapOf(PadAudioRoutes.key(0x054C, 0x0CE6) to padRoutes[SLOT]!!)
+            routeTable.value = mapOf(vidPidKey(0x054C, 0x0CE6) to padRoutes[SLOT]!!)
             assertEquals(PAD_ENDPOINT, voice()!!.playbackDeviceId)
         }
 
-    private companion object {
-        const val SLOT = "virtual"
-        const val CONN = "satellite:abc"
-        const val HANDLE = 7
-        const val CTRL_IDX = 0
-        const val PAD_ENDPOINT = 11
-
-        fun binding(
-            registered: Boolean,
-            index: Int = CTRL_IDX,
-        ) = SatelliteConnection.SlotBinding(
-            controllerIndex = index,
-            controllerType = 2,
-            registered = registered,
-        )
-
-        fun summary(
-            live: LinkState,
-            kind: ConnectionKind = ConnectionKind.SATELLITE,
-        ) = ConnectionSummary(
-            id = CONN,
-            kind = kind,
-            label = "Desk PC",
-            detail = "",
-            live = live,
-            boundSlotIds = listOf(SLOT),
-        )
-
-        // Every layer permissive; the toggle and the runtime probe are what the tests move.
-        fun capsWithSpeaker(
-            on: Boolean,
-            down: Boolean = false,
-        ): SlotCapabilities {
-            val speaker = CapabilitySet.of(Feature.SPEAKER)
-            return SlotCapabilities(
-                controller = speaker,
-                transport = speaker,
-                type = speaker,
-                host = speaker,
-                userEnabled = if (on) speaker else CapabilitySet.EMPTY,
-                runtimeDown = if (down) speaker else CapabilitySet.EMPTY,
-            )
+    @Test
+    fun `a binding whose session object is gone opens no output`() =
+        runTest(scope.testScheduler) {
+            satConnections.value = emptyMap()
+            assertTrue(plan().voices.isEmpty())
         }
-    }
+
+    @Test
+    fun `a slot the session has not declared opens no output`() =
+        runTest(scope.testScheduler) {
+            slots.value = emptyMap()
+            assertTrue(plan().voices.isEmpty())
+        }
+}
+
+private const val SLOT = "virtual"
+private const val CONN = "satellite:abc"
+private const val HANDLE = 7
+private const val CTRL_IDX = 0
+private const val PAD_ENDPOINT = 11
+
+private fun binding(
+    registered: Boolean,
+    index: Int = CTRL_IDX,
+) = SatelliteConnection.SlotBinding(
+    controllerIndex = index,
+    controllerType = 2,
+    registered = registered,
+)
+
+private fun summary(
+    live: LinkState,
+    kind: ConnectionKind = ConnectionKind.SATELLITE,
+) = ConnectionSummary(
+    id = CONN,
+    kind = kind,
+    label = "Desk PC",
+    detail = "",
+    live = live,
+    boundSlotIds = listOf(SLOT),
+)
+
+// Every layer permissive; the toggle and the runtime probe are what the tests move.
+private fun capsWithSpeaker(
+    on: Boolean,
+    down: Boolean = false,
+): SlotCapabilities {
+    val speaker = capabilitySetOf(Feature.SPEAKER)
+    return SlotCapabilities(
+        controller = speaker,
+        transport = speaker,
+        type = speaker,
+        host = speaker,
+        userEnabled = if (on) speaker else CapabilitySet.EMPTY,
+        runtimeDown = if (down) speaker else CapabilitySet.EMPTY,
+    )
 }

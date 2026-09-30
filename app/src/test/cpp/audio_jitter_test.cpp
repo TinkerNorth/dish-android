@@ -343,3 +343,21 @@ TEST(AudioJitter, WindowConstantsMatchTheContract) {
     EXPECT_EQ(dish_audio::AUDIO_JITTER_MAX_PACKET_BYTES, 1500);
     EXPECT_EQ(dish_audio::AUDIO_JITTER_MAX_EVENTS_PER_PUSH, 6);
 }
+
+TEST(AudioJitter, DrainedEventDataStaysValidUntilTheNextPush) {
+    AudioJitterWindow w;
+    push(w, 10, packet(0xA0));
+
+    // 12 is held, so it is copied into the window's own storage.
+    const auto p12 = packet(0xA2);
+    EXPECT_EQ(push(w, 12, p12).count, 0);
+
+    // 11 flushes both. The drained 12 points into the window, not the caller's buffer, and
+    // those bytes are still the packet once push() has returned and the slot is free again.
+    const auto r = push(w, 11, packet(0xA1));
+    ASSERT_EQ(shape(r), std::string("P11 P12"));
+    EXPECT_NE(r.events[1].data, p12.data());
+    EXPECT_EQ(w.buffered(), 0);
+    EXPECT_TRUE(payloadIs(r.events[0], 0xA1));
+    EXPECT_TRUE(payloadIs(r.events[1], 0xA2));
+}

@@ -2,8 +2,9 @@
 
 package com.tinkernorth.dish.composer
 
-import com.tinkernorth.dish.source.audio.MicIndicatorPolicy
 import com.tinkernorth.dish.source.audio.MicIndicatorState
+import com.tinkernorth.dish.source.audio.micIndicatorStateOf
+import com.tinkernorth.dish.source.audio.toggleAll
 import com.tinkernorth.dish.source.store.MicMuteStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -29,7 +30,7 @@ class MicIndicatorCoordinator
         private val micMute: MicMuteStore,
     ) {
         val state: Flow<MicIndicatorState> =
-            micCapture.state.map(MicIndicatorPolicy::of).distinctUntilChanged()
+            micCapture.state.map(::micIndicatorStateOf).distinctUntilChanged()
 
         /**
          * Mute every armed slot, or unmute every armed slot — whichever the current plan says
@@ -38,7 +39,7 @@ class MicIndicatorCoordinator
          * for slots that no longer capture.
          */
         fun toggleAll() {
-            val order = MicIndicatorPolicy.toggleAll(micCapture.state.value) ?: return
+            val order = toggleAll(micCapture.state.value) ?: return
             for (slotId in order.slotIds) micMute.setMuted(slotId, order.muted)
         }
     }

@@ -93,44 +93,6 @@ internal fun Context.capabilityLines(caps: SlotCapabilities?): List<String> {
     }
 }
 
-private fun Context.streamLines(b: BindingDiag): List<String> {
-    val lines = mutableListOf<String>()
-    b.packetsSent?.let { lines += diagKv(R.string.diagnostics_packets_sent, it.toString()) }
-    b.motionSent?.let { lines += diagKv(R.string.diagnostics_motion_sent, it.toString()) }
-    lines += diagKv(R.string.diagnostics_touchpad_mode, b.touchpadMode)
-    val battery =
-        when (b.batterySource) {
-            BatterySource.PHONE -> R.string.diagnostics_battery_phone
-            BatterySource.PAD -> R.string.diagnostics_battery_pad
-            BatterySource.LOWEST_OF_BOTH -> R.string.diagnostics_battery_lowest
-        }
-    lines += diagKv(R.string.diagnostics_battery_source, getString(battery))
-    val mic =
-        when (b.micState) {
-            MicSlotState.OFF -> R.string.diagnostics_mic_off
-            MicSlotState.ARMED_MUTED -> R.string.diagnostics_mic_muted
-            MicSlotState.CAPTURING -> R.string.diagnostics_mic_capturing
-        }
-    lines += diagKv(R.string.setup_cap_mic, getString(mic))
-    val speaker = getString(if (b.speakerPlaying) R.string.diagnostics_speaker_playing else R.string.diagnostics_speaker_idle)
-    val speakerValue =
-        if (b.speakerDropped > 0) {
-            getString(
-                R.string.diagnostics_joined,
-                speaker,
-                resources.getQuantityString(
-                    R.plurals.diagnostics_dropped_samples,
-                    b.speakerDropped.pluralCount(),
-                    b.speakerDropped,
-                ),
-            )
-        } else {
-            speaker
-        }
-    lines += diagKv(R.string.setup_cap_speaker, speakerValue)
-    return lines
-}
-
 private fun Context.feedbackLines(
     b: BindingDiag,
     nowMs: Long,

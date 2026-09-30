@@ -3,17 +3,28 @@
 
 package com.tinkernorth.dish.source.connection.moonlight
 
-import com.tinkernorth.dish.core.net.moonlight.MoonlightControlProtocol
+import com.tinkernorth.dish.core.net.moonlight.BATTERY_CHARGING
+import com.tinkernorth.dish.core.net.moonlight.BATTERY_PERCENTAGE_UNKNOWN
+import com.tinkernorth.dish.core.net.moonlight.BATTERY_STATE_UNKNOWN
+import com.tinkernorth.dish.core.net.moonlight.BTN_A
+import com.tinkernorth.dish.core.net.moonlight.BTN_TOUCHPAD
+import com.tinkernorth.dish.core.net.moonlight.MOTION_TYPE_ACCEL
+import com.tinkernorth.dish.core.net.moonlight.MOTION_TYPE_GYRO
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEvent
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
+import com.tinkernorth.dish.core.net.moonlight.TOUCH_EVENT_DOWN
+import com.tinkernorth.dish.core.net.moonlight.TOUCH_EVENT_UP
 import com.tinkernorth.dish.source.connection.TouchpadReport
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
+import io.mockk.runs
 import io.mockk.verify
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -40,7 +51,7 @@ class MoonlightConnectionTelemetryTest {
             )
         session = mockk(relaxed = true)
         every { session.state } returns MoonlightControlSession.State.CONNECTED
-        conn.acquirePad("slot-a", MoonlightEmulatedType.PLAYSTATION, 0xFF, 0x10FFFF)
+        conn.acquirePad("slot-a", PLAYSTATION, 0xFF, 0x10FFFF)
         conn.markLive(session, appId = null, appName = null)
     }
 
@@ -53,7 +64,7 @@ class MoonlightConnectionTelemetryTest {
             MoonlightEvent.MotionRequest(
                 controllerNumber = 0,
                 reportRateHz = 100,
-                motionType = MoonlightControlProtocol.MOTION_TYPE_GYRO,
+                motionType = MOTION_TYPE_GYRO,
             ),
         )
         assertTrue(conn.motionWanted("slot-a"))
@@ -62,14 +73,14 @@ class MoonlightConnectionTelemetryTest {
         verify(exactly = 1) {
             session.sendControllerMotion(
                 controllerNumber = 0,
-                motionType = MoonlightControlProtocol.MOTION_TYPE_GYRO,
+                motionType = MOTION_TYPE_GYRO,
                 x = match { kotlin.math.abs(it - 1000.03f) < 0.5f }, // 16384 wire = half scale = ~1000 deg/s
                 y = 0f,
                 z = 0f,
             )
         }
         verify(exactly = 0) {
-            session.sendControllerMotion(any(), MoonlightControlProtocol.MOTION_TYPE_ACCEL, any(), any(), any())
+            session.sendControllerMotion(any(), MOTION_TYPE_ACCEL, any(), any(), any())
         }
 
         // Rate 0 stops the stream again.
@@ -77,7 +88,7 @@ class MoonlightConnectionTelemetryTest {
             MoonlightEvent.MotionRequest(
                 controllerNumber = 0,
                 reportRateHz = 0,
-                motionType = MoonlightControlProtocol.MOTION_TYPE_GYRO,
+                motionType = MOTION_TYPE_GYRO,
             ),
         )
         assertFalse(conn.motionWanted("slot-a"))
@@ -89,7 +100,7 @@ class MoonlightConnectionTelemetryTest {
         verify(exactly = 1) {
             session.sendControllerBattery(
                 controllerNumber = 0,
-                batteryState = MoonlightControlProtocol.BATTERY_CHARGING,
+                batteryState = BATTERY_CHARGING,
                 percentage = 73,
             )
         }
@@ -97,8 +108,8 @@ class MoonlightConnectionTelemetryTest {
         verify(exactly = 1) {
             session.sendControllerBattery(
                 controllerNumber = 0,
-                batteryState = MoonlightControlProtocol.BATTERY_STATE_UNKNOWN,
-                percentage = MoonlightControlProtocol.BATTERY_PERCENTAGE_UNKNOWN,
+                batteryState = BATTERY_STATE_UNKNOWN,
+                percentage = BATTERY_PERCENTAGE_UNKNOWN,
             )
         }
     }
@@ -132,7 +143,7 @@ class MoonlightConnectionTelemetryTest {
         verify(exactly = 1) {
             session.sendControllerTouch(
                 controllerNumber = 0,
-                eventType = MoonlightControlProtocol.TOUCH_EVENT_DOWN,
+                eventType = TOUCH_EVENT_DOWN,
                 pointerId = 4,
                 x = match { kotlin.math.abs(it - 0.5f) < 0.001f },
                 y = match { kotlin.math.abs(it - 1.0f) < 0.001f },
@@ -160,7 +171,7 @@ class MoonlightConnectionTelemetryTest {
         verify(exactly = 1) {
             session.sendControllerTouch(
                 controllerNumber = 0,
-                eventType = MoonlightControlProtocol.TOUCH_EVENT_UP,
+                eventType = TOUCH_EVENT_UP,
                 pointerId = 4,
                 x = any(),
                 y = any(),
@@ -174,7 +185,7 @@ class MoonlightConnectionTelemetryTest {
         // A pad report first, so there is a frame to replay.
         conn.sendControllerState(
             0,
-            buttons = MoonlightControlProtocol.BTN_A,
+            buttons = BTN_A,
             leftTrigger = 0,
             rightTrigger = 0,
             leftX = 1,
@@ -204,7 +215,7 @@ class MoonlightConnectionTelemetryTest {
             session.sendControllerState(
                 controllerNumber = 0,
                 activeMask = any(),
-                buttons = MoonlightControlProtocol.BTN_A or MoonlightControlProtocol.BTN_TOUCHPAD,
+                buttons = BTN_A or BTN_TOUCHPAD,
                 leftTrigger = 0,
                 rightTrigger = 0,
                 leftStickX = 1,
@@ -219,7 +230,7 @@ class MoonlightConnectionTelemetryTest {
             session.sendControllerState(
                 controllerNumber = 0,
                 activeMask = any(),
-                buttons = MoonlightControlProtocol.BTN_TOUCHPAD,
+                buttons = BTN_TOUCHPAD,
                 leftTrigger = 0,
                 rightTrigger = 0,
                 leftStickX = 0,
@@ -228,5 +239,57 @@ class MoonlightConnectionTelemetryTest {
                 rightStickY = 0,
             )
         }
+    }
+
+    private fun clickReport(pressed: Boolean) =
+        TouchpadReport(
+            finger0Active = false,
+            finger1Active = false,
+            buttonPressed = pressed,
+            rightPressed = false,
+            middlePressed = false,
+            finger0TrackingId = 0,
+            finger0X = 0,
+            finger0Y = 0,
+            finger1TrackingId = 0,
+            finger1X = 0,
+            finger1Y = 0,
+            eventTimeMs = 0L,
+            scrollDelta = 0,
+        )
+
+    // The click edge itself replays the cached frame with the bit set, once; the pad that takes the
+    // number afterwards reports without it.
+    @Test
+    fun `a released pad's click latch does not leak onto the next pad at that number`() {
+        val buttons = mutableListOf<Int>()
+        every { session.sendControllerState(any(), any(), capture(buttons), any(), any(), any(), any(), any(), any()) } just runs
+        conn.sendControllerState(0, buttons = 0, leftTrigger = 0, rightTrigger = 0, leftX = 0, leftY = 0, rightX = 0, rightY = 0)
+        conn.sendTouchpad("slot-a", clickReport(pressed = true))
+        conn.releasePad("slot-a")
+
+        conn.acquirePad("slot-b", PLAYSTATION, 0xFF, 0x10FFFF)
+        conn.sendControllerState(0, buttons = 0, leftTrigger = 0, rightTrigger = 0, leftX = 0, leftY = 0, rightX = 0, rightY = 0)
+
+        assertEquals(1, buttons.count { it == BTN_TOUCHPAD })
+        assertEquals(0, buttons.last())
+    }
+
+    @Test
+    fun `reportsSentFor counts only that controller's reports`() {
+        conn.sendControllerState(0, buttons = 0, leftTrigger = 0, rightTrigger = 0, leftX = 0, leftY = 0, rightX = 0, rightY = 0)
+        conn.sendControllerState(0, buttons = 0, leftTrigger = 0, rightTrigger = 0, leftX = 0, leftY = 0, rightX = 0, rightY = 0)
+
+        assertEquals(2L, conn.reportsSentFor(0))
+        assertEquals(0L, conn.reportsSentFor(1))
+        assertEquals(0L, conn.reportsSentFor(9))
+        assertEquals(0L, conn.reportsSentFor(-1))
+    }
+
+    @Test
+    fun `markLaunching on a live session is ignored`() {
+        conn.markLaunching()
+
+        assertEquals(MoonlightSessionState.Live, conn.state.value)
     }
 }

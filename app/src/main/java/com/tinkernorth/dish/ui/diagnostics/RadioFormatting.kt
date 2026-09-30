@@ -11,6 +11,7 @@ import com.tinkernorth.dish.source.system.BluetoothAdapterState
 import com.tinkernorth.dish.source.system.WifiBand
 import com.tinkernorth.dish.source.system.WifiGeneration
 import com.tinkernorth.dish.source.system.WifiLink
+import com.tinkernorth.dish.source.system.wifiBandForFrequency
 import com.tinkernorth.dish.source.usb.UsbEndpointFacts
 
 internal fun Context.wifiBandLabel(band: WifiBand): String =
@@ -35,7 +36,7 @@ internal fun Context.wifiGenerationLabel(generation: WifiGeneration): String? =
 internal fun Context.wifiLines(radios: RadioFacts): List<String> {
     val link = radios.wifi ?: return listOf(getString(R.string.diagnostics_wifi_none))
     val lines = mutableListOf<String>()
-    val band = wifiBandLabel(WifiBand.fromFrequencyMhz(link.frequencyMhz))
+    val band = wifiBandLabel(wifiBandForFrequency(link.frequencyMhz))
     lines += diagKv(R.string.diagnostics_signal, getString(R.string.diagnostics_signal_value, link.rssiDbm, band))
     lines += diagKv(R.string.diagnostics_link_speed, linkSpeedValue(link))
     wifiGenerationLabel(link.generation)?.let { lines += diagKv(R.string.diagnostics_wifi_generation, it) }

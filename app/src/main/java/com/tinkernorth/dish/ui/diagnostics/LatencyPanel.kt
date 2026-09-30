@@ -34,7 +34,7 @@ fun parseLatencyPanel(
         pollingJitterP50Ms = microToMs(root, URB_GAP, P50),
         pollingJitterP99Ms = microToMs(root, URB_GAP, P99),
         networkOneWayP50Ms = microToMs(root, RTT, P50)?.let { it / 2 },
-        rttSamples = intField(root, RTT, "n"),
+        rttSamples = intField(root, RTT, SAMPLES),
         rttHistoryMs = rttHistoryMs(root),
     )
 }
@@ -77,10 +77,12 @@ private fun intField(
             ?.int
     }.getOrNull()
 
-private const val MICROS_PER_MS = 1000.0
-private const val STAGE1 = "stage1_hotpath_us"
-private const val URB_GAP = "urb_gap_us"
-private const val RTT = "rtt_us"
-private const val RTT_RECENT = "rtt_recent_us"
-private const val P50 = "p50"
-private const val P99 = "p99"
+// The native bench's JSON contract, shared with the per-device and per-session parsers.
+internal const val MICROS_PER_MS = 1000.0
+internal const val STAGE1 = "stage1_hotpath_us"
+internal const val URB_GAP = "urb_gap_us"
+internal const val RTT = "rtt_us"
+internal const val RTT_RECENT = "rtt_recent_us"
+internal const val SAMPLES = "n"
+internal const val P50 = "p50"
+internal const val P99 = "p99"

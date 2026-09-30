@@ -2,20 +2,20 @@
 
 package com.tinkernorth.dish.ui.diagnostics
 
-import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FeatureBenchTest {
-    private fun caps(vararg features: Feature) = SlotCapabilities.NONE.copy(controller = CapabilitySet.of(*features))
+    private fun caps(vararg features: Feature) = SlotCapabilities.NONE.copy(controller = capabilitySetOf(*features))
 
     @Test
     fun `the virtual pad benches rumble, sound and microphone only`() {
-        val bench = FeatureBench.from(caps(Feature.LIGHTBAR, Feature.PLAYER_LEDS), virtual = true)
+        val bench = featureBenchFor(caps(Feature.LIGHTBAR, Feature.PLAYER_LEDS), virtual = true)
         assertTrue(bench.rumble)
         assertTrue(bench.speaker)
         assertTrue(bench.mic)
@@ -28,7 +28,7 @@ class FeatureBenchTest {
 
     @Test
     fun `a physical pad benches exactly what its own input can actuate`() {
-        val bench = FeatureBench.from(caps(Feature.RUMBLE, Feature.LIGHTBAR, Feature.MIC), virtual = false)
+        val bench = featureBenchFor(caps(Feature.RUMBLE, Feature.LIGHTBAR, Feature.MIC), virtual = false)
         assertTrue(bench.rumble)
         assertTrue(bench.lightbar)
         assertTrue(bench.mic)
@@ -42,7 +42,7 @@ class FeatureBenchTest {
 
     @Test
     fun `no capabilities means an empty bench`() {
-        val bench = FeatureBench.from(null, virtual = false)
+        val bench = featureBenchFor(null, virtual = false)
         assertEquals(FeatureBench.NONE, bench)
         assertFalse(bench.anyFeedback)
         assertFalse(bench.anyAudio)
@@ -50,7 +50,7 @@ class FeatureBenchTest {
 
     @Test
     fun `the rigid trigger blocks arm both triggers at full force`() {
-        val blocks = InputInspectorViewModel.rigidTriggerBlocks()
+        val blocks = rigidTriggerBlocks()
         assertEquals(22, blocks.size)
         for (offset in listOf(0, 11)) {
             assertEquals(0x01, blocks[offset].toInt())

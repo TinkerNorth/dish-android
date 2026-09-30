@@ -2,7 +2,7 @@
 
 package com.tinkernorth.dish.repository
 
-import com.tinkernorth.dish.composer.CapabilityResolver
+import com.tinkernorth.dish.composer.catalogTypeCapabilities
 import com.tinkernorth.dish.core.model.CatalogDto
 import com.tinkernorth.dish.core.model.CatalogHostFeatureDto
 import com.tinkernorth.dish.core.model.CatalogTypeDto
@@ -42,8 +42,8 @@ class LegacyCatalogTranslatorTest {
     @Test
     fun `the hardcoded features drive the expected type capabilities`() {
         val out = translator.normalize(CatalogDto())
-        val xboxCaps = CapabilityResolver.typeCapabilities(out.controllerTypes[0])
-        val ds4Caps = CapabilityResolver.typeCapabilities(out.controllerTypes[1])
+        val xboxCaps = catalogTypeCapabilities(out.controllerTypes[0])
+        val ds4Caps = catalogTypeCapabilities(out.controllerTypes[1])
 
         assertTrue(Feature.RUMBLE in xboxCaps)
         assertFalse(Feature.MOTION in xboxCaps)
@@ -65,7 +65,7 @@ class LegacyCatalogTranslatorTest {
         assertFalse(ds4.features.containsKey("mic"))
         assertFalse(ds4.features.containsKey("speaker"))
 
-        val ds4Caps = CapabilityResolver.typeCapabilities(ds4)
+        val ds4Caps = catalogTypeCapabilities(ds4)
         assertFalse(Feature.MIC in ds4Caps)
         assertFalse(Feature.SPEAKER in ds4Caps)
     }

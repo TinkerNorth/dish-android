@@ -91,22 +91,14 @@ class HelpActivity : BaseGamepadHostActivity() {
     private fun bindLinkCards() {
         binding.cardRowHelpPrivacy.cardRowIcon.setImageResource(R.drawable.ic_shield)
         binding.cardRowHelpPrivacy.cardRowTitle.setText(R.string.help_view_privacy_policy)
-        binding.cardRowHelpPrivacy.cardRowSubtitle.text =
-            getString(R.string.url_privacy_policy)
-                .removePrefix("https://")
-                .removePrefix("http://")
-                .removeSuffix("/")
+        binding.cardRowHelpPrivacy.cardRowSubtitle.text = hostLabel(getString(R.string.url_privacy_policy))
         binding.cardHelpPrivacy.setOnClickListener {
             openExternalUrl(getString(R.string.url_privacy_policy))
         }
 
         binding.cardRowHelpGithub.cardRowIcon.setImageResource(R.drawable.ic_open_in_new)
         binding.cardRowHelpGithub.cardRowTitle.setText(R.string.help_view_github)
-        binding.cardRowHelpGithub.cardRowSubtitle.text =
-            getString(R.string.url_github)
-                .removePrefix("https://")
-                .removePrefix("http://")
-                .removeSuffix("/")
+        binding.cardRowHelpGithub.cardRowSubtitle.text = hostLabel(getString(R.string.url_github))
         binding.cardHelpGithub.setOnClickListener {
             openExternalUrl(getString(R.string.url_github))
         }

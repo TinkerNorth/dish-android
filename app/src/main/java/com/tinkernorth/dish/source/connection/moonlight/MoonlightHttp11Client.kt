@@ -4,7 +4,12 @@
 package com.tinkernorth.dish.source.connection.moonlight
 
 import android.util.Log
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.job
 import java.io.ByteArrayOutputStream
+import java.io.Closeable
 import java.io.IOException
 import java.io.InputStream
 import java.net.InetSocketAddress
@@ -71,11 +76,13 @@ internal class MoonlightHttp11Client(
      * [readTimeoutMs] overrides the default for requests the host deliberately
      * holds open, such as the pairing phase that blocks on a human typing the
      * PIN. The connect timeout is unaffected: an unreachable host still fails
-     * fast.
+     * fast. Hanging up [line] ends the request unanswered, whatever it is
+     * waiting on.
      */
     fun get(
         urlString: String,
         readTimeoutMs: Int = defaultReadTimeoutMs,
+        line: CallLine = CallLine(),
     ): MoonlightHttpGateway.Reply {
         val uri = runCatching { URI(urlString) }.getOrNull()
         val host = uri?.host
@@ -85,7 +92,7 @@ internal class MoonlightHttp11Client(
             return UNREACHABLE
         }
         return try {
-            exchange(uri, host, port, readTimeoutMs)
+            exchange(uri, host, port, readTimeoutMs, line)
         } catch (e: IOException) {
             // Connect refused, DNS failure, both timeouts (SocketTimeoutException
             // is an IOException), and every TLS failure including the pin
@@ -99,15 +106,18 @@ internal class MoonlightHttp11Client(
      * One request over one socket: connect, hand it to [upgrade], ask, read the
      * answer, close. Nested `use` on purpose, so the close that reaches the host
      * first is the TLS one and it gets a close_notify before the socket under it
-     * goes away.
+     * goes away. The raw socket is what goes on the [line]: closing it ends a
+     * TLS read as well, without writing anything to a host that is not reading.
      */
     private fun exchange(
         uri: URI,
         host: String,
         port: Int,
         readTimeoutMs: Int,
+        line: CallLine,
     ): MoonlightHttpGateway.Reply =
         Socket().use { raw ->
+            line.attach(raw)
             raw.connect(InetSocketAddress(host, port), connectTimeoutMs)
             raw.soTimeout = readTimeoutMs
             (upgrade?.invoke(raw, host, port) ?: raw).use { socket ->
@@ -305,4 +315,56 @@ internal class MoonlightHttp11Client(
 
         val UNREACHABLE = MoonlightHttpGateway.Reply(0, "")
     }
+}
+
+/**
+ * The line a call to the host is on, which another thread can hang up. A socket read blocked on a
+ * host that is holding its answer ends only when the socket closes: a thread interrupt does not
+ * reach it. Hanging up closes the socket of the call on the line, and the socket of every call
+ * that comes onto the line afterwards before it can dial.
+ */
+internal class CallLine {
+    private val lock = Any()
+    private var socket: Closeable? = null
+    private var hungUp = false
+
+    fun attach(socket: Closeable) {
+        synchronized(lock) {
+            if (hungUp) closeQuietly(socket) else this.socket = socket
+        }
+    }
+
+    fun hangUp() {
+        synchronized(lock) {
+            hungUp = true
+            socket?.let(::closeQuietly)
+        }
+    }
+
+    // A completion handler: a cause is the caller's cancellation, and there is none when the call finished first.
+    fun hangUpIfCancelled(cause: Throwable?) {
+        if (cause != null) hangUp()
+    }
+}
+
+// Runs inside a completion handler, which must not throw.
+private fun closeQuietly(socket: Closeable) {
+    runCatching { socket.close() }
+}
+
+/**
+ * Runs the blocking [request] on a line that cancelling the caller hangs up, so a request the host
+ * is holding open ends when the caller is cancelled rather than when the host answers. A cancelled
+ * caller gets its CancellationException, never the reply or the failure the hung-up line left behind.
+ */
+internal suspend fun <T> hangingUpOnCancel(request: (CallLine) -> T): T {
+    val line = CallLine()
+    // A child of the caller ends the moment the caller is cancelled, on the cancelling thread, while
+    // the caller itself cannot end until the blocked request returns.
+    val callerWatch = Job(currentCoroutineContext().job)
+    callerWatch.invokeOnCompletion(line::hangUpIfCancelled)
+    val outcome = runCatching { request(line) }
+    callerWatch.complete()
+    currentCoroutineContext().ensureActive()
+    return outcome.getOrThrow()
 }

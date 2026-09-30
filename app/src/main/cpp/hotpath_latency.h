@@ -50,8 +50,8 @@ struct RttStats {
 // concurrent sessions can never pair one session's ping with another's ack; these keep
 // the policy (in-flight guard, loss reclaim, sample validity) in one place.
 int64_t nowMonotonicNs();
-bool shouldArmPing(int64_t outstandingNs, int64_t nowNs);
-void addRttSample(RttStats* session, int64_t sentNs, int64_t nowNs);
+bool shouldArmPing(int64_t outstandingNs, int64_t atNs);
+void addRttSample(RttStats* session, int64_t sentNs, int64_t atNs);
 void clearRtt(RttStats& session);
 std::string sessionStatsJson(RttStats& session, int missedAcks);
 

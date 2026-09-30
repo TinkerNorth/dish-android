@@ -335,12 +335,32 @@ class WakeStateControllerTest {
         }
 
     @Test
+    fun `a lock the OS already dropped is not released twice`() =
+        runTest(scope.testScheduler) {
+            buildAndStart()
+            connectionsFlow.value = listOf(summary("s:1", LinkState.Connected))
+            bindingsFlow.value = mapOf("virtual" to "s:1")
+            scope.testScheduler.runCurrent()
+
+            every { wakeLock.isHeld } returns false
+            every { wifiLock.isHeld } returns false
+            connectionsFlow.value = listOf(summary("s:1", LinkState.Saved))
+            scope.testScheduler.runCurrent()
+
+            verify(exactly = 0) { wakeLock.release() }
+            verify(exactly = 0) { wifiLock.release() }
+        }
+
+    @Test
     fun `wifiLockMode falls back to high-perf below Q`() {
-        // The JVM stub reports SDK_INT 0, so this exercises the pre-Q branch. 3 is the platform's
-        // WIFI_MODE_FULL_HIGH_PERF; pinned as a literal so the legacy branch is checked against the
-        // value the OS defines, not against its own constant.
-        assertTrue(Build.VERSION.SDK_INT < Build.VERSION_CODES.Q)
+        // 3 is the platform's WIFI_MODE_FULL_HIGH_PERF, pinned as a literal so the legacy branch is
+        // checked against the value the OS defines, not against its own constant.
         assertEquals(3, WIFI_MODE_FULL_HIGH_PERF_LEGACY)
-        assertEquals(WIFI_MODE_FULL_HIGH_PERF_LEGACY, wifiLockMode())
+        assertEquals(WIFI_MODE_FULL_HIGH_PERF_LEGACY, wifiLockMode(Build.VERSION_CODES.P))
+    }
+
+    @Test
+    fun `wifiLockMode picks low latency from Q`() {
+        assertEquals(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, wifiLockMode(Build.VERSION_CODES.Q))
     }
 }

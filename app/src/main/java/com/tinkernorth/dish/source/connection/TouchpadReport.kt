@@ -12,19 +12,23 @@ package com.tinkernorth.dish.source.connection
  * mode; scrollDelta is signed with 120 per wheel notch and older satellites ignore
  * all three. [eventTimeMs] is the sensor sample time: resends carry the same
  * value so the receiver can drop duplicates by equality.
+ *
+ * Mutable because a per-frame sender refills one it owns rather than building one a frame
+ * ([com.tinkernorth.dish.ui.common.TouchpadReportBuffer]); a sink reads it during the call and
+ * keeps nothing of it ([TelemetrySink.sendTouchpad]).
  */
 data class TouchpadReport(
-    val finger0Active: Boolean,
-    val finger1Active: Boolean,
-    val buttonPressed: Boolean,
-    val rightPressed: Boolean,
-    val middlePressed: Boolean,
-    val finger0TrackingId: Int,
-    val finger0X: Short,
-    val finger0Y: Short,
-    val finger1TrackingId: Int,
-    val finger1X: Short,
-    val finger1Y: Short,
-    val eventTimeMs: Long,
-    val scrollDelta: Short,
+    var finger0Active: Boolean,
+    var finger1Active: Boolean,
+    var buttonPressed: Boolean,
+    var rightPressed: Boolean,
+    var middlePressed: Boolean,
+    var finger0TrackingId: Int,
+    var finger0X: Short,
+    var finger0Y: Short,
+    var finger1TrackingId: Int,
+    var finger1X: Short,
+    var finger1Y: Short,
+    var eventTimeMs: Long,
+    var scrollDelta: Short,
 )

@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.source.usb
 
 import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
+import com.tinkernorth.dish.core.input.vidPidKey
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,21 +25,11 @@ class UsbDescriptorStore
             productId: Int,
             facts: UsbEndpointFacts,
         ) {
-            setState { it + (key(vendorId, productId) to facts) }
+            setState { it + (vidPidKey(vendorId, productId) to facts) }
         }
 
         fun factsFor(
             vendorId: Int,
             productId: Int,
-        ): UsbEndpointFacts? = state.value[key(vendorId, productId)]
-
-        companion object {
-            private const val VENDOR_SHIFT = 16
-            private const val PRODUCT_MASK = 0xFFFF
-
-            fun key(
-                vendorId: Int,
-                productId: Int,
-            ): Int = (vendorId shl VENDOR_SHIFT) or (productId and PRODUCT_MASK)
-        }
+        ): UsbEndpointFacts? = state.value[vidPidKey(vendorId, productId)]
     }

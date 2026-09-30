@@ -3,7 +3,7 @@
 package com.tinkernorth.dish.integration
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.tinkernorth.dish.source.connection.SatelliteConnection
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -40,7 +40,7 @@ class CatalogIntegrationTest {
     fun catalog_fetchReturnsTheTypeListAndPublishesHostFeatures() {
         val satellite = FakeSatellite().also { fake = it }
         val server = satellite.server()
-        val id = SatelliteConnection.idFor(server)
+        val id = satelliteConnectionIdFor(server)
 
         val catalog = runBlocking { AppSingletons.catalogRepo.catalogFor(server, id) }
         assertNotNull("catalog must be fetched from the satellite", catalog)
@@ -64,7 +64,7 @@ class CatalogIntegrationTest {
     fun catalog_secondFetchRevalidatesWithEtagAndServesCache() {
         val satellite = FakeSatellite().also { fake = it }
         val server = satellite.server()
-        val id = SatelliteConnection.idFor(server)
+        val id = satelliteConnectionIdFor(server)
 
         val first = runBlocking { AppSingletons.catalogRepo.catalogFor(server, id) }
         val second = runBlocking { AppSingletons.catalogRepo.catalogFor(server, id) }

@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.ui.common
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.navigation.ActivityNavigator
@@ -11,8 +12,20 @@ import androidx.navigation.NavGraphNavigator
 import androidx.navigation.NavInflater
 import androidx.navigation.NavigatorProvider
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.ui.connections.ConnectionsActivity
+import com.tinkernorth.dish.ui.diagnostics.BindingInspectorViewModel
+import com.tinkernorth.dish.ui.diagnostics.HostInspectorViewModel
+import com.tinkernorth.dish.ui.diagnostics.InputInspectorActivity
+import com.tinkernorth.dish.ui.diagnostics.InputInspectorViewModel
+import com.tinkernorth.dish.ui.main.ConfigureBindingsActivity
+import com.tinkernorth.dish.ui.main.GamepadOverlayActivity
 import com.tinkernorth.dish.ui.main.MainActivity
-import com.tinkernorth.dish.ui.setup.SetupFlow
+import com.tinkernorth.dish.ui.main.MouseOverlayActivity
+import com.tinkernorth.dish.ui.main.TouchpadOverlayActivity
+import com.tinkernorth.dish.ui.setup.EXTRA_CONNECTION_ID
+import com.tinkernorth.dish.ui.setup.EXTRA_INPUT_TYPE
+import com.tinkernorth.dish.ui.setup.EXTRA_SLOT_ID
+import com.tinkernorth.dish.ui.setup.SetupInputActivity
 
 // Activity destinations can't carry <action> children, so navigate by destination id, not action id.
 // Drives ActivityNavigator directly instead of NavController: setGraph() auto-navigates to the start
@@ -20,16 +33,20 @@ import com.tinkernorth.dish.ui.setup.SetupFlow
 // every screen opened from a non-dashboard activity.
 class DishNavigator(
     private val activity: Activity,
+    // How a stack reset builds its intent; a test stands in a recorder to read the target screen.
+    private val newIntent: (Context, Class<*>) -> Intent = ::Intent,
 ) {
     private val navigator by lazy { ActivityNavigator(activity) }
 
-    private val graph: NavGraph by lazy {
+    private val graph: NavGraph by lazy(::inflateGraph)
+
+    private fun inflateGraph(): NavGraph {
         val provider =
             NavigatorProvider().apply {
                 addNavigator(NavGraphNavigator(this))
                 addNavigator(navigator)
             }
-        NavInflater(activity, provider).inflate(R.navigation.nav_graph)
+        return NavInflater(activity, provider).inflate(R.navigation.nav_graph)
     }
 
     private fun go(
@@ -46,7 +63,7 @@ class DishNavigator(
     fun toConnectionsForPairing(connectionId: String) {
         go(
             R.id.connectionsActivity,
-            Bundle().apply { putString("extra_pair_prompt_for_id", connectionId) },
+            Bundle().apply { putString(ConnectionsActivity.EXTRA_PAIR_PROMPT_FOR_ID, connectionId) },
         )
     }
 
@@ -61,7 +78,7 @@ class DishNavigator(
     fun toConfigureBindings(slotId: String) {
         go(
             R.id.configureBindingsActivity,
-            Bundle().apply { putString("extra_slot_id", slotId) },
+            Bundle().apply { putString(ConfigureBindingsActivity.EXTRA_SLOT_ID, slotId) },
         )
     }
 
@@ -84,8 +101,8 @@ class DishNavigator(
         go(
             R.id.setupConnectionActivity,
             Bundle().apply {
-                putString(SetupFlow.EXTRA_INPUT_TYPE, inputType)
-                putString(SetupFlow.EXTRA_SLOT_ID, slotId)
+                putString(EXTRA_INPUT_TYPE, inputType)
+                putString(EXTRA_SLOT_ID, slotId)
             },
         )
     }
@@ -97,8 +114,8 @@ class DishNavigator(
         go(
             R.id.setupBluetoothHostActivity,
             Bundle().apply {
-                putString(SetupFlow.EXTRA_INPUT_TYPE, inputType)
-                putString(SetupFlow.EXTRA_SLOT_ID, slotId)
+                putString(EXTRA_INPUT_TYPE, inputType)
+                putString(EXTRA_SLOT_ID, slotId)
             },
         )
     }
@@ -110,8 +127,8 @@ class DishNavigator(
         go(
             R.id.setupConfigureActivity,
             Bundle().apply {
-                putString(SetupFlow.EXTRA_SLOT_ID, slotId)
-                putString(SetupFlow.EXTRA_CONNECTION_ID, connectionId)
+                putString(EXTRA_SLOT_ID, slotId)
+                putString(EXTRA_CONNECTION_ID, connectionId)
             },
         )
     }
@@ -135,8 +152,8 @@ class DishNavigator(
         go(
             R.id.inputInspectorActivity,
             Bundle().apply {
-                putString("extra_slot_id", slotId)
-                putString("extra_device_name", deviceName)
+                putString(InputInspectorViewModel.EXTRA_SLOT_ID, slotId)
+                putString(InputInspectorActivity.EXTRA_DEVICE_NAME, deviceName)
             },
         )
     }
@@ -148,8 +165,8 @@ class DishNavigator(
         go(
             R.id.hostInspectorActivity,
             Bundle().apply {
-                putString("extra_connection_id", connectionId)
-                putString("extra_label", label)
+                putString(HostInspectorViewModel.EXTRA_CONNECTION_ID, connectionId)
+                putString(HostInspectorViewModel.EXTRA_LABEL, label)
             },
         )
     }
@@ -161,19 +178,23 @@ class DishNavigator(
         go(
             R.id.bindingInspectorActivity,
             Bundle().apply {
-                putString("extra_slot_id", slotId)
-                putString("extra_label", label)
+                putString(BindingInspectorViewModel.EXTRA_SLOT_ID, slotId)
+                putString(BindingInspectorViewModel.EXTRA_LABEL, label)
             },
         )
     }
 
-    // Setup flow handoff to the dashboard: the setup task is over, so the back stack resets.
     fun finishSetupToDashboard() {
-        activity.startActivity(
-            Intent(activity, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
-        )
+        reset(StackReset.SETUP_TO_DASHBOARD)
         activity.finish()
+    }
+
+    fun rewindSetupToStart() {
+        reset(StackReset.SETUP_TO_START)
+    }
+
+    private fun reset(reset: StackReset) {
+        activity.startActivity(newIntent(activity, reset.target).addFlags(reset.flags))
     }
 
     fun toTouchpad(
@@ -183,8 +204,8 @@ class DishNavigator(
         go(
             R.id.touchpadOverlayActivity,
             Bundle().apply {
-                putString("extra_connection_id", connectionId)
-                putString("extra_slot_id", slotId)
+                putString(TouchpadOverlayActivity.EXTRA_CONNECTION_ID, connectionId)
+                putString(TouchpadOverlayActivity.EXTRA_SLOT_ID, slotId)
             },
         )
     }
@@ -196,8 +217,8 @@ class DishNavigator(
         go(
             R.id.mouseOverlayActivity,
             Bundle().apply {
-                putString("extra_connection_id", connectionId)
-                putString("extra_slot_id", slotId)
+                putString(MouseOverlayActivity.EXTRA_CONNECTION_ID, connectionId)
+                putString(MouseOverlayActivity.EXTRA_SLOT_ID, slotId)
             },
         )
     }
@@ -209,8 +230,8 @@ class DishNavigator(
         go(
             R.id.gamepadOverlayActivity,
             Bundle().apply {
-                putString("extra_connection_id", connectionId)
-                putString("extra_gamepad_skin", skin.name)
+                putString(GamepadOverlayActivity.EXTRA_CONNECTION_ID, connectionId)
+                putString(GamepadOverlayActivity.EXTRA_GAMEPAD_SKIN, skin.name)
             },
         )
     }
@@ -218,4 +239,17 @@ class DishNavigator(
     fun toNativeUnavailable() {
         go(R.id.nativeUnavailableActivity)
     }
+}
+
+// A launch that resets the back stack, which a nav-graph destination cannot express.
+internal enum class StackReset(
+    val target: Class<out Activity>,
+    val flags: Int,
+) {
+    // The setup task is over, so the dashboard starts a fresh task.
+    SETUP_TO_DASHBOARD(MainActivity::class.java, Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+
+    // SetupInputActivity sits at the root of the setup task, so CLEAR_TOP rewinds to it and
+    // drops every screen stacked above.
+    SETUP_TO_START(SetupInputActivity::class.java, Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
 }

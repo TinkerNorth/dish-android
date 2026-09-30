@@ -56,3 +56,23 @@ internal fun Context.batteryValue(battery: BatteryUi): String {
     val level = battery.level?.let { getString(R.string.battery_percent, it) } ?: getString(R.string.battery_unknown_level)
     return if (battery.charging) getString(R.string.diagnostics_joined, level, getString(R.string.battery_state_charging)) else level
 }
+
+// The controller card on the diagnostics overview: a virtual pad has no transport, poll rate or
+// device state to report, and a gyro with no measured rate is still worth naming as present.
+internal fun Context.controllerCardLines(diag: ControllerDiag): List<String> {
+    val lines = mutableListOf<String>()
+    if (!diag.isVirtual) {
+        lines += diagKv(R.string.diagnostics_transport, transportLabel(diag))
+        lines += diagKv(R.string.diagnostics_poll_rate, hzLabel(diag.pollRateHz))
+    }
+    if (diag.hasGyro || diag.gyroHz > 0) {
+        val gyro = if (diag.gyroHz > 0) hzLabel(diag.gyroHz) else getString(R.string.diagnostics_present)
+        lines += diagKv(R.string.diagnostics_gyro, gyro)
+    }
+    diag.battery?.let { lines += diagKv(R.string.setup_cap_battery, batteryValue(it)) }
+    if (!diag.isVirtual) lines += diagKv(R.string.diagnostics_state, controllerStateLabel(diag.state))
+    lines += diagKv(R.string.diagnostics_host, hostValue(diag.host))
+    diag.host?.let { lines += boundSlotLines(it) }
+    if (diag.functions.isNotEmpty()) lines += diagKv(R.string.binding_label_functions, featureList(diag.functions))
+    return lines
+}

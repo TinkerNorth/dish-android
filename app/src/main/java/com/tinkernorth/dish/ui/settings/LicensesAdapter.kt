@@ -30,7 +30,6 @@ class LicensesAdapter(
         position: Int,
     ) {
         val entry = items[position]
-        val ctx = holder.itemView.context
         holder.binding.tvLibraryName.text =
             entry.name?.takeIf { it.isNotBlank() }
                 ?: listOfNotNull(entry.group, entry.artifact).joinToString(":")
@@ -48,19 +47,35 @@ class LicensesAdapter(
             holder.binding.tvLicense.visibility = View.GONE
         }
 
-        val clickUrl = entry.licenses.firstOrNull()?.url ?: entry.url
-        if (!clickUrl.isNullOrBlank()) {
-            holder.itemView.isClickable = true
-            holder.itemView.isFocusable = true
-            holder.itemView.contentDescription =
-                ctx.getString(R.string.licenses_open_external, holder.binding.tvLibraryName.text)
-            holder.itemView.setOnClickListener { onClick(entry) }
-        } else {
-            holder.itemView.isClickable = false
-            holder.itemView.isFocusable = false
-            holder.itemView.setOnClickListener(null)
-        }
+        if (licenseLinkOf(entry) == null) bindInertRow(holder.itemView) else bindClickable(holder, entry)
+    }
+
+    private fun bindClickable(
+        holder: VH,
+        entry: LicenseEntry,
+    ) {
+        val ctx = holder.itemView.context
+        holder.itemView.isClickable = true
+        holder.itemView.isFocusable = true
+        holder.itemView.contentDescription =
+            ctx.getString(R.string.licenses_open_external, holder.binding.tvLibraryName.text)
+        holder.itemView.setOnClickListener { onClick(entry) }
     }
 
     override fun getItemCount(): Int = items.size
+}
+
+// The link a row opens: its first licence's, else the library's own, and none when that is blank.
+internal fun licenseLinkOf(entry: LicenseEntry): String? {
+    val link = entry.licenses.firstOrNull()?.url ?: entry.url
+    return link?.takeIf { it.isNotBlank() }
+}
+
+// Platform quirk: setOnClickListener, even with null, makes the view clickable again, so the
+// listener goes before the flags. A recycled link row also drops the description it announced.
+internal fun bindInertRow(row: View) {
+    row.setOnClickListener(null)
+    row.isClickable = false
+    row.isFocusable = false
+    row.contentDescription = null
 }

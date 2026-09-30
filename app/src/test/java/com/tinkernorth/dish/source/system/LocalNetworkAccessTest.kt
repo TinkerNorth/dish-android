@@ -26,37 +26,37 @@ class LocalNetworkAccessTest {
 
     @Test
     fun `permission is the platform ACCESS_LOCAL_NETWORK string`() {
-        assertEquals("android.permission.ACCESS_LOCAL_NETWORK", LocalNetworkAccess.PERMISSION)
+        assertEquals("android.permission.ACCESS_LOCAL_NETWORK", PERMISSION)
     }
 
     @Test
     fun `enforcement boundary is API 37`() {
-        assertFalse(LocalNetworkAccess.isEnforced(24))
-        assertFalse(LocalNetworkAccess.isEnforced(36))
-        assertTrue(LocalNetworkAccess.isEnforced(37))
-        assertTrue(LocalNetworkAccess.isEnforced(40))
+        assertFalse(isEnforced(24))
+        assertFalse(isEnforced(36))
+        assertTrue(isEnforced(37))
+        assertTrue(isEnforced(40))
     }
 
     @Test
     fun `pre-enforcement OS is granted without checking the runtime permission`() {
         mockkStatic(ContextCompat::class)
-        assertTrue(LocalNetworkAccess.isGranted(context, sdkInt = 36))
+        assertTrue(isGranted(context, sdkInt = 36))
         verify(exactly = 0) { ContextCompat.checkSelfPermission(any(), any()) }
     }
 
     @Test
     fun `enforcing OS is granted when the permission is held`() {
         mockkStatic(ContextCompat::class)
-        every { ContextCompat.checkSelfPermission(context, LocalNetworkAccess.PERMISSION) } returns
+        every { ContextCompat.checkSelfPermission(context, PERMISSION) } returns
             PackageManager.PERMISSION_GRANTED
-        assertTrue(LocalNetworkAccess.isGranted(context, sdkInt = 37))
+        assertTrue(isGranted(context, sdkInt = 37))
     }
 
     @Test
     fun `enforcing OS is not granted when the permission is denied`() {
         mockkStatic(ContextCompat::class)
-        every { ContextCompat.checkSelfPermission(context, LocalNetworkAccess.PERMISSION) } returns
+        every { ContextCompat.checkSelfPermission(context, PERMISSION) } returns
             PackageManager.PERMISSION_DENIED
-        assertFalse(LocalNetworkAccess.isGranted(context, sdkInt = 37))
+        assertFalse(isGranted(context, sdkInt = 37))
     }
 }

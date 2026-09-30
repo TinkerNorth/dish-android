@@ -15,12 +15,18 @@ import com.tinkernorth.dish.composer.TouchpadSource
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.moonlight.AUTO
+import com.tinkernorth.dish.core.net.moonlight.XBOX
+import com.tinkernorth.dish.core.net.moonlight.fromStored
+import com.tinkernorth.dish.core.net.moonlight.resolveMoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.source.inputrate.InputRateStore
+import com.tinkernorth.dish.source.inputrate.InputRates
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
+import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.SatelliteHostFacts
@@ -29,6 +35,9 @@ import com.tinkernorth.dish.source.usb.PhysicalPadSources
 import com.tinkernorth.dish.source.usb.UsbController
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.ui.common.GamepadSkin
+import com.tinkernorth.dish.ui.common.gamepadSkinForBtProfile
+import com.tinkernorth.dish.ui.common.gamepadSkinForControllerType
+import com.tinkernorth.dish.ui.common.gamepadSkinForMoonlightType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -67,7 +76,7 @@ class MainViewModel
         private val _uiState = MutableStateFlow(MainUiState())
         val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
-        private val _events = MutableSharedFlow<MainEvent>(extraBufferCapacity = 8)
+        private val _events = MutableSharedFlow<MainEvent>(extraBufferCapacity = EVENT_BUFFER)
         val events: SharedFlow<MainEvent> = _events.asSharedFlow()
 
         init {
@@ -78,111 +87,140 @@ class MainViewModel
                     gamepadRegistry.devices,
                     batteryStatusStore.samples,
                     capabilityComposer.state,
-                ) { conns, bindings, devices, batteries, motionCaps ->
-                    val virtual =
-                        ControllerSlot(
-                            id = VIRTUAL_SLOT_ID,
-                            inputType = SlotInputType.VIRTUAL,
-                            name = context.getString(R.string.default_virtual_controller_name),
-                        )
-                    val hiddenRoutedIds = routedTwinIdsHiddenBySynthetics(devices.values)
-                    val physical =
-                        devices.values
-                            .filter { dev -> dev.isUsbSynthetic || dev.id !in hiddenRoutedIds }
-                            .map { dev ->
-                                ControllerSlot(
-                                    id = dev.id.toString(),
-                                    inputType = SlotInputType.PHYSICAL,
-                                    name = dev.name,
-                                    physicalDeviceId = dev.id,
-                                    isDisconnecting = dev.isDisconnecting,
-                                    disconnectTimeLeft = dev.disconnectingTimeLeftSec ?: 0,
-                                )
-                            }
-                    val slots =
-                        (listOf(virtual) + physical).map { slot ->
-                            val cid = bindings[slot.id]
-                            slot.copy(
-                                boundConnectionId = cid,
-                                boundStatus = cid?.let { id -> conns.firstOrNull { it.id == id } },
-                                battery =
-                                    batteries[slot.id]?.let { s ->
-                                        BatteryUi.fromWire(s.level, s.status)
-                                    },
-                            )
-                        }
-                    SlotsBase(slots, conns, motionCaps, devices)
-                }
+                    ::slotsBaseFor,
+                )
 
-            // Second stage keyed off path prefs so a choice re-evaluates promptly; the cards themselves are
+            // Keyed off path prefs so a choice re-evaluates promptly; the cards themselves are
             // derived from the live device state, so the badge and toggle always show the actual mode.
             combine(
                 slotsBase,
                 pads.pathPrefs.state,
                 inputRateStore.state,
                 usbGamepadManager.controllers,
-            ) { base, _, rates, usbControllers ->
-                val pathCards =
-                    base.slots
-                        .mapNotNull { slot ->
-                            pathCardFor(slot, base.devices, usbControllers)?.let { slot.id to it }
-                        }.toMap()
-                val inputRates =
-                    base.slots
-                        .mapNotNull { slot ->
-                            rates.slots[slot.id]?.let { slot.id to it }
-                        }.toMap()
-                SlotsRender(base.slots, base.connections, base.motionCapabilities, pathCards, inputRates, rates.screenPeakHz)
-            }.onEach { render ->
-                _uiState.update { prev ->
-                    prev.copy(
-                        slots = render.slots,
-                        connections = render.connections,
-                        motionCapabilities = render.motionCapabilities,
-                        pathCards = render.pathCards,
-                        inputRates = render.inputRates,
-                        screenPeakHz = render.screenPeakHz,
-                    )
-                }
-            }.launchIn(viewModelScope)
+            ) { base, _, rates, usbControllers -> slotsRenderFor(base, rates, usbControllers) }
+                .onEach(::publishSlotsRender)
+                .launchIn(viewModelScope)
 
             satellite.events
-                .onEach { event ->
-                    when (event) {
-                        is ConnectionEvent.PairingRequired ->
-                            _events.emit(
-                                MainEvent.ShowPairingDialog(
-                                    com.tinkernorth.dish.source.connection.SatelliteConnection
-                                        .idFor(event.server),
-                                ),
-                            )
-                        is ConnectionEvent.Error -> _events.emit(MainEvent.ShowToast(event.message))
-                    }
-                }.launchIn(viewModelScope)
+                .onEach(::onConnectionEvent)
+                .launchIn(viewModelScope)
 
-            // The buttons and the wire read the SAME capability projection, so a card can
-            // never offer a surface the satellite would dead-letter: touch needs the type
-            // to carry a trackpad, mouse needs the host grant, and both need the phone to
-            // be the slot's touch source.
             capabilityComposer.state
-                .onEach { caps ->
-                    val map =
-                        caps.mapValues { (slotId, cap) ->
-                            val phoneSourced = capabilityComposer.touchpadSource(slotId) == TouchpadSource.PHONE
-                            PointerSlotUi(
-                                mode = capabilityComposer.touchpadWireMode(slotId),
-                                touchpadOpenable =
-                                    phoneSourced && slotId != VIRTUAL_SLOT_ID && cap.isAvailable(Feature.TOUCHPAD),
-                                mouseOpenable = phoneSourced && cap.isAvailable(Feature.MOUSE),
-                            )
-                        }
-                    _uiState.update { it.copy(pointerBySlot = map) }
-                }.launchIn(viewModelScope)
+                .onEach(::publishPointerSlots)
+                .launchIn(viewModelScope)
 
             hostFacts.features.state
                 .onEach { features ->
                     _uiState.update { it.copy(hostCompat = features.mapValues { (_, f) -> f.compat }) }
                 }.launchIn(viewModelScope)
+        }
+
+        // The slot list: the on-screen pad first, then every registry device that is not a
+        // routed twin hidden behind its claimed synthetic, each with its binding and battery.
+        private fun slotsBaseFor(
+            conns: List<ConnectionSummary>,
+            bindings: Map<String, String>,
+            devices: Map<Int, PhysicalGamepadRegistry.Device>,
+            batteries: Map<String, BatterySample>,
+            motionCaps: Map<String, SlotCapabilities>,
+        ): SlotsBase {
+            val virtual =
+                ControllerSlot(
+                    id = VIRTUAL_SLOT_ID,
+                    inputType = SlotInputType.VIRTUAL,
+                    name = context.getString(R.string.default_virtual_controller_name),
+                )
+            val hiddenRoutedIds = routedTwinIdsHiddenBySynthetics(devices.values)
+            val physical =
+                devices.values
+                    .filter { dev -> dev.isUsbSynthetic || dev.id !in hiddenRoutedIds }
+                    .map(::physicalSlotFor)
+            val slots = (listOf(virtual) + physical).map { slot -> slot.boundTo(conns, bindings, batteries) }
+            return SlotsBase(slots, conns, motionCaps, devices)
+        }
+
+        private fun physicalSlotFor(dev: PhysicalGamepadRegistry.Device): ControllerSlot =
+            ControllerSlot(
+                id = dev.id.toString(),
+                inputType = SlotInputType.PHYSICAL,
+                name = dev.name,
+                physicalDeviceId = dev.id,
+                isDisconnecting = dev.isDisconnecting,
+                disconnectTimeLeft = dev.disconnectingTimeLeftSec ?: 0,
+            )
+
+        private fun ControllerSlot.boundTo(
+            conns: List<ConnectionSummary>,
+            bindings: Map<String, String>,
+            batteries: Map<String, BatterySample>,
+        ): ControllerSlot {
+            val cid = bindings[id]
+            return copy(
+                boundConnectionId = cid,
+                boundStatus = cid?.let { bound -> conns.firstOrNull { it.id == bound } },
+                battery = batteries[id]?.let { batteryUiFromWire(it.level, it.status) },
+            )
+        }
+
+        private fun slotsRenderFor(
+            base: SlotsBase,
+            rates: InputRates,
+            usbControllers: Map<Int, UsbController>,
+        ): SlotsRender {
+            val pathCards =
+                base.slots
+                    .mapNotNull { slot ->
+                        pathCardFor(slot, base.devices, usbControllers)?.let { slot.id to it }
+                    }.toMap()
+            val inputRates =
+                base.slots
+                    .mapNotNull { slot ->
+                        rates.slots[slot.id]?.let { slot.id to it }
+                    }.toMap()
+            return SlotsRender(base.slots, base.connections, base.motionCapabilities, pathCards, inputRates, rates.screenPeakHz)
+        }
+
+        private fun publishSlotsRender(render: SlotsRender) {
+            _uiState.update { prev ->
+                prev.copy(
+                    slots = render.slots,
+                    connections = render.connections,
+                    motionCapabilities = render.motionCapabilities,
+                    pathCards = render.pathCards,
+                    inputRates = render.inputRates,
+                    screenPeakHz = render.screenPeakHz,
+                )
+            }
+        }
+
+        private suspend fun onConnectionEvent(event: ConnectionEvent) {
+            when (event) {
+                is ConnectionEvent.PairingRequired ->
+                    _events.emit(MainEvent.ShowPairingDialog(satelliteConnectionIdFor(event.server)))
+                is ConnectionEvent.Error -> _events.emit(MainEvent.ShowConnectionError(event.error))
+            }
+        }
+
+        // The buttons and the wire read the SAME capability projection, so a card can
+        // never offer a surface the satellite would dead-letter: touch needs the type
+        // to carry a trackpad, mouse needs the host grant, and both need the phone to
+        // be the slot's touch source.
+        private fun publishPointerSlots(caps: Map<String, SlotCapabilities>) {
+            val pointerSlots = caps.mapValues { (slotId, cap) -> pointerSlotFor(slotId, cap) }
+            _uiState.update { it.copy(pointerBySlot = pointerSlots) }
+        }
+
+        private fun pointerSlotFor(
+            slotId: String,
+            cap: SlotCapabilities,
+        ): PointerSlotUi {
+            val phoneSourced = capabilityComposer.touchpadSource(slotId) == TouchpadSource.PHONE
+            val isPhysical = slotId != VIRTUAL_SLOT_ID
+            return PointerSlotUi(
+                mode = capabilityComposer.touchpadWireMode(slotId),
+                touchpadOpenable = phoneSourced && isPhysical && cap.isAvailable(Feature.TOUCHPAD),
+                mouseOpenable = phoneSourced && cap.isAvailable(Feature.MOUSE),
+            )
         }
 
         fun bindSlot(
@@ -224,34 +262,45 @@ class MainViewModel
 
         // The skin the on-screen pad opens with, matching the pad the host really builds:
         // a Bluetooth host carries it in the profile name, a Moonlight host in its own type
-        // table (Auto resolved the same way the session resolves it), a satellite in the
-        // per-slot catalog type.
+        // table (the type the session announced for a pad it holds, else the pick with Auto
+        // resolved the way the session will resolve it), a satellite in the per-slot
+        // catalog type.
         fun gamepadSkinFor(slotId: String): GamepadSkin {
             val summary =
                 uiState.value.slots
                     .firstOrNull { it.id == slotId }
                     ?.boundStatus
             return when (summary?.kind) {
-                ConnectionKind.BLUETOOTH -> GamepadSkin.forBtProfile(summary.btProfile)
-                ConnectionKind.MOONLIGHT -> GamepadSkin.forMoonlightType(resolvedMoonlightType(slotId, summary))
-                else -> GamepadSkin.forControllerType(summary?.satelliteControllerTypes?.get(slotId) ?: CONTROLLER_TYPE_XBOX)
+                ConnectionKind.BLUETOOTH -> gamepadSkinForBtProfile(summary.btProfile)
+                ConnectionKind.MOONLIGHT -> gamepadSkinForMoonlightType(moonlightTypeFor(slotId, summary))
+                else -> gamepadSkinForControllerType(summary?.satelliteControllerTypes?.get(slotId) ?: CONTROLLER_TYPE_XBOX)
             }
         }
+
+        // The composer's rule (boundMoonlightType): a held pad is the type its host was told.
+        private fun moonlightTypeFor(
+            slotId: String,
+            summary: ConnectionSummary,
+        ): Int =
+            hub.moonlightSessions.value[summary.id]
+                ?.padFor(slotId)
+                ?.emulatedType
+                ?: resolvedMoonlightType(slotId, summary)
 
         private fun resolvedMoonlightType(
             slotId: String,
             summary: ConnectionSummary,
         ): Int {
-            val picked = MoonlightEmulatedType.fromStored(summary.satelliteControllerTypes[slotId] ?: MoonlightEmulatedType.AUTO)
-            if (picked != MoonlightEmulatedType.AUTO) return picked
+            val picked = fromStored(summary.satelliteControllerTypes[slotId] ?: AUTO)
+            if (picked != AUTO) return picked
             val source =
                 capabilityComposer.capabilityForCandidate(
                     slotId = slotId,
-                    candidateType = MoonlightEmulatedType.XBOX,
+                    candidateType = XBOX,
                     candidateHostKind = ConnectionKind.MOONLIGHT,
                     candidateHostId = summary.id,
                 )
-            return MoonlightEmulatedType.resolve(picked, source.inputOk(Feature.MOTION))
+            return resolveMoonlightEmulatedType(picked, source.inputOk(Feature.MOTION))
         }
 
         private fun pathCardFor(
@@ -274,7 +323,7 @@ class MainViewModel
                 } else {
                     PathCapabilities(rumble = device.hasRumble, motion = device.hasGyro)
                 }
-            return PathCardMapper.map(
+            return mapPathCard(
                 transport = device.transport,
                 claim =
                     ClaimState(
@@ -324,4 +373,8 @@ class MainViewModel
             val inputRates: Map<String, SlotInputRates>,
             val screenPeakHz: Int,
         )
+
+        private companion object {
+            const val EVENT_BUFFER = 8
+        }
     }

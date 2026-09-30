@@ -33,7 +33,7 @@ class StickTestHistoryStore
     constructor(
         @ApplicationContext context: Context,
         private val json: Json,
-    ) : AbstractStateSource<Map<String, StickTestRecord>>(readInitial(context, json)) {
+    ) : AbstractStateSource<Map<String, StickTestRecord>>(readInitialStickHistory(context, json)) {
         private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
         fun recordFor(key: String): StickTestRecord? = state.value[key]
@@ -72,26 +72,31 @@ class StickTestHistoryStore
             transform: (StickTestRecord) -> StickTestRecord,
         ) {
             setState { it + (key to transform(it[key] ?: StickTestRecord())) }
-            prefs.edit { putString(KEY, json.encodeToString(SERIALIZER, state.value)) }
+            prefs.edit { putString(KEY, json.encodeToString(STICK_HISTORY_SERIALIZER, state.value)) }
         }
 
         companion object {
             const val PREFS_NAME = "stick_test_history"
             const val KEY = "records"
-            private val SERIALIZER = MapSerializer(String.serializer(), StickTestRecord.serializer())
-
-            fun keyFor(
-                vendorId: Int,
-                productId: Int,
-                name: String,
-            ): String = if (vendorId != 0 && productId != 0) "$vendorId:$productId" else name
-
-            private fun readInitial(
-                context: Context,
-                json: Json,
-            ): Map<String, StickTestRecord> {
-                val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(KEY, null) ?: return emptyMap()
-                return runCatching { json.decodeFromString(SERIALIZER, raw) }.getOrDefault(emptyMap())
-            }
         }
     }
+
+fun stickHistoryKeyFor(
+    vendorId: Int,
+    productId: Int,
+    name: String,
+): String = if (vendorId != 0 && productId != 0) "$vendorId:$productId" else name
+
+private val STICK_HISTORY_SERIALIZER = MapSerializer(String.serializer(), StickTestRecord.serializer())
+
+// A blob this build cannot read is an empty history, not a crash at injection time.
+private fun readInitialStickHistory(
+    context: Context,
+    json: Json,
+): Map<String, StickTestRecord> {
+    val raw =
+        context
+            .getSharedPreferences(StickTestHistoryStore.PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(StickTestHistoryStore.KEY, null) ?: return emptyMap()
+    return runCatching { json.decodeFromString(STICK_HISTORY_SERIALIZER, raw) }.getOrDefault(emptyMap())
+}

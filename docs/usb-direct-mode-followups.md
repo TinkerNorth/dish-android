@@ -53,21 +53,18 @@ generic parser is reached only through that deliberate, reversible action. No si
 
 ---
 
-## 4. Output mutex held across encrypt + sendto
+## 4. Output mutex held across encrypt + sendto (resolved, measurement open)
 
-**Context:** `publishIfChanged` holds `g_slotsMtx` (and the caller `applyUsbReport` holds
-`g_devicesMtx`) across the ChaCha20-Poly1305 encrypt and the `sendto` syscall. Both mutexes are
-global and shared by the framework input path and every Direct-mode poll thread. Fine for one or two
-controllers; with four pads near 1kHz this serializes ~4k syscalls/sec through one lock. Pre-existing
-design, now exercised harder by the dedicated poll thread.
+**Resolved.** `publishIfChanged` stages the report and draws its counter under `g_devicesMtx` and
+`g_slotsMtx`; the caller encrypts and sends it after letting both go (`stageDatagram`,
+`transmitDatagram`). The session's send turn is held from the counter to `sendto`, because the
+satellite drops a counter that is not above the last one it accepted from the session, whichever slot
+it carries: the turn keeps the wire in counter order, and staging under the device lock keeps a
+slot's counters in the order its latch consumed them. The global locks now cover the latch, the
+binding and a memcpy; two sends to one session still serialize on its turn.
 
-**Where:** `app/src/main/cpp/satellite_jni.cpp` (`publishIfChanged`, `applyUsbReport`).
-
-**Task:** Measure under a 3 to 4 controller load. If the lock is a bottleneck, shrink the critical
-section (snapshot the report under the lock, encrypt+send outside it) without breaking the
-`devices < slots < sessions` lock order.
-
-**Acceptance:** No measurable added latency with four controllers streaming at their native rate.
+**Still open:** measure under a 3 to 4 controller load. **Acceptance:** no measurable added latency
+with four controllers streaming at their native rate.
 
 ---
 

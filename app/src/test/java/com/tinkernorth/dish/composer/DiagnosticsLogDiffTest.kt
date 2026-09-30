@@ -27,6 +27,7 @@ class DiagnosticsLogDiffTest {
         name: String = "Pad-$id",
         isUsbSynthetic: Boolean = false,
         needsReplug: Boolean = false,
+        restoreStuck: Boolean = false,
         directFailure: DirectClaimFailure? = null,
         disconnectingTimeLeftSec: Int? = null,
     ) = PhysicalGamepadRegistry.Device(
@@ -36,17 +37,18 @@ class DiagnosticsLogDiffTest {
         productId = 0x09CC,
         isUsbSynthetic = isUsbSynthetic,
         needsReplug = needsReplug,
+        restoreStuck = restoreStuck,
         directFailure = directFailure,
         disconnectingTimeLeftSec = disconnectingTimeLeftSec,
     )
 
     @Test
     fun `a new connection and a link change each produce one line`() {
-        val appeared = DiagnosticsLogDiff.connectionEvents(emptyList(), listOf(summary("s:1", LinkState.Connected, "Desk PC")))
+        val appeared = connectionEvents(emptyList(), listOf(summary("s:1", LinkState.Connected, "Desk PC")))
         assertEquals(listOf("Desk PC: appeared (SATELLITE, Connected)"), appeared)
 
         val changed =
-            DiagnosticsLogDiff.connectionEvents(
+            connectionEvents(
                 listOf(summary("s:1", LinkState.Connected, "Desk PC")),
                 listOf(summary("s:1", LinkState.Unstable, "Desk PC")),
             )
@@ -56,7 +58,7 @@ class DiagnosticsLogDiffTest {
     @Test
     fun `a removed connection produces a removed line and no change spam`() {
         val events =
-            DiagnosticsLogDiff.connectionEvents(
+            connectionEvents(
                 listOf(summary("s:1", LinkState.Connected, "Desk PC")),
                 emptyList(),
             )
@@ -66,17 +68,17 @@ class DiagnosticsLogDiffTest {
     @Test
     fun `an unchanged snapshot produces nothing`() {
         val same = listOf(summary("s:1", LinkState.Connected))
-        assertTrue(DiagnosticsLogDiff.connectionEvents(same, same).isEmpty())
+        assertTrue(connectionEvents(same, same).isEmpty())
         val devices = mapOf(1 to device(1))
-        assertTrue(DiagnosticsLogDiff.deviceEvents(devices, devices).isEmpty())
+        assertTrue(deviceEvents(devices, devices).isEmpty())
     }
 
     @Test
     fun `device attach carries the path and the usb identity`() {
-        val events = DiagnosticsLogDiff.deviceEvents(emptyMap(), mapOf(1 to device(1, name = "DualShock 4")))
+        val events = deviceEvents(emptyMap(), mapOf(1 to device(1, name = "DualShock 4")))
         assertEquals(listOf("DualShock 4: attached (Usb, 054c:09cc)"), events)
 
-        val direct = DiagnosticsLogDiff.deviceEvents(emptyMap(), mapOf(-1001 to device(-1001, isUsbSynthetic = true)))
+        val direct = deviceEvents(emptyMap(), mapOf(-1001 to device(-1001, isUsbSynthetic = true)))
         assertEquals(listOf("Pad--1001: attached (USB direct, 054c:09cc)"), direct)
     }
 
@@ -87,7 +89,7 @@ class DiagnosticsLogDiffTest {
             mapOf(
                 1 to device(1, needsReplug = true, directFailure = DirectClaimFailure.Busy, disconnectingTimeLeftSec = 5),
             )
-        val events = DiagnosticsLogDiff.deviceEvents(before, after)
+        val events = deviceEvents(before, after)
         assertEquals(
             listOf(
                 "Pad-1: needs replug",
@@ -97,6 +99,50 @@ class DiagnosticsLogDiffTest {
             events,
         )
 
-        assertEquals(listOf("Pad-1: detached"), DiagnosticsLogDiff.deviceEvents(after, emptyMap()))
+        assertEquals(listOf("Pad-1: detached"), deviceEvents(after, emptyMap()))
+    }
+
+    @Test
+    fun `a restore-stuck onset logs one line`() {
+        val events = deviceEvents(mapOf(1 to device(1)), mapOf(1 to device(1, restoreStuck = true)))
+        assertEquals(listOf("Pad-1: restore stuck"), events)
+    }
+
+    @Test
+    fun `a flag that stays set logs nothing on the next snapshot`() {
+        val stillFlagged =
+            mapOf(
+                1 to
+                    device(
+                        1,
+                        needsReplug = true,
+                        restoreStuck = true,
+                        directFailure = DirectClaimFailure.Busy,
+                        disconnectingTimeLeftSec = 5,
+                    ),
+            )
+        assertTrue(deviceEvents(stillFlagged, stillFlagged).isEmpty())
+    }
+
+    @Test
+    fun `a flag that clears logs nothing either`() {
+        val flagged = mapOf(1 to device(1, needsReplug = true, restoreStuck = true))
+        assertTrue(deviceEvents(flagged, mapOf(1 to device(1))).isEmpty())
+    }
+
+    @Test
+    fun `a relabel with the same link state logs nothing`() {
+        val events =
+            connectionEvents(
+                listOf(summary("s:1", LinkState.Connected, "Desk PC")),
+                listOf(summary("s:1", LinkState.Connected, "Desk PC (2)")),
+            )
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun `a direct usb attach names the direct path`() {
+        val events = deviceEvents(emptyMap(), mapOf(1 to device(1, isUsbSynthetic = true)))
+        assertEquals(listOf("Pad-1: attached (USB direct, 054c:09cc)"), events)
     }
 }

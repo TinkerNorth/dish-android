@@ -17,6 +17,33 @@ import androidx.core.graphics.withClip
 import com.tinkernorth.dish.R
 import kotlin.math.abs
 
+private const val ALPHA_MAX = 255f
+private const val FULL_TURN_DEG = 360f
+private const val TOP_START_DEG = -90f
+private const val SPEC_SIZE_PX = 64f
+
+// The spinner spec: stroke and sweep as fractions of the 64px art, the track dimmed under it.
+private const val SPINNER_STROKE_RATIO = 6f / SPEC_SIZE_PX
+private const val SPINNER_SWEEP_FRACTION = 50f / 138f
+private const val SPINNER_TRACK_ALPHA = 0.25f
+
+// The dots spec: three dots on a 16px pitch, each breathing in size and opacity a step behind
+// the last.
+private const val DOT_COUNT = 3
+private const val DOT_STAGGER_FRACTION = 0.18f / 1.2f
+private const val DOT_PITCH_PX = 16f
+private const val DOT_RADIUS_MIN_PX = 4f
+private const val DOT_RADIUS_RANGE_PX = 2f
+private const val DOT_ALPHA_MIN = 0.25f
+private const val DOT_ALPHA_RANGE = 0.75f
+
+// The bar spec, as fractions of the 240px art.
+private const val BAR_SPEC_WIDTH_PX = 240f
+private const val BAR_HEIGHT_RATIO = 16f / BAR_SPEC_WIDTH_PX
+private const val BAR_TRACK_RATIO = 8f / BAR_SPEC_WIDTH_PX
+private const val BAR_SLIDER_RATIO = 80f / BAR_SPEC_WIDTH_PX
+private const val BAR_TRACK_ALPHA = 0.22f
+
 private fun linearLoop(
     durationMs: Long,
     onFrame: (phase: Float) -> Unit,
@@ -47,11 +74,12 @@ class DishSpinnerDrawable(
     private val rect = RectF()
 
     private var phase: Float = 0f
-    private val animator =
-        linearLoop(context.resources.getInteger(R.integer.motion_duration_spinner).toLong()) { p ->
-            phase = p
-            invalidateSelf()
-        }
+    private val animator = linearLoop(context.resources.getInteger(R.integer.motion_duration_spinner).toLong(), ::onFrame)
+
+    private fun onFrame(p: Float) {
+        phase = p
+        invalidateSelf()
+    }
 
     override fun getIntrinsicWidth(): Int = sizePx
 
@@ -61,7 +89,7 @@ class DishSpinnerDrawable(
         val b = bounds
         if (b.width() == 0 || b.height() == 0) return
         val side = minOf(b.width(), b.height()).toFloat()
-        val stroke = side * (6f / 64f)
+        val stroke = side * SPINNER_STROKE_RATIO
         strokePaint.strokeWidth = stroke
         val inset = stroke / 2f
         rect.set(
@@ -70,12 +98,12 @@ class DishSpinnerDrawable(
             b.right - inset,
             b.bottom - inset,
         )
-        strokePaint.alpha = (0.25f * 255f).toInt()
-        canvas.drawArc(rect, 0f, 360f, false, strokePaint)
-        strokePaint.alpha = 255
-        val sweep = 360f * (50f / 138f)
-        val rotation = phase * 360f
-        canvas.drawArc(rect, -90f + rotation, sweep, false, strokePaint)
+        strokePaint.alpha = (SPINNER_TRACK_ALPHA * ALPHA_MAX).toInt()
+        canvas.drawArc(rect, 0f, FULL_TURN_DEG, false, strokePaint)
+        strokePaint.alpha = ALPHA_MAX.toInt()
+        val sweep = FULL_TURN_DEG * SPINNER_SWEEP_FRACTION
+        val rotation = phase * FULL_TURN_DEG
+        canvas.drawArc(rect, TOP_START_DEG + rotation, sweep, false, strokePaint)
     }
 
     override fun setAlpha(alpha: Int) {
@@ -134,11 +162,12 @@ class DishDotsDrawable(
         }
 
     private var phase: Float = 0f
-    private val animator =
-        linearLoop(context.resources.getInteger(R.integer.motion_duration_spinner).toLong()) { p ->
-            phase = p
-            invalidateSelf()
-        }
+    private val animator = linearLoop(context.resources.getInteger(R.integer.motion_duration_spinner).toLong(), ::onFrame)
+
+    private fun onFrame(p: Float) {
+        phase = p
+        invalidateSelf()
+    }
 
     override fun getIntrinsicWidth(): Int = sizePx
 
@@ -148,16 +177,15 @@ class DishDotsDrawable(
         val b = bounds
         if (b.width() == 0 || b.height() == 0) return
         val side = minOf(b.width(), b.height()).toFloat()
-        val scale = side / 64f
-        val staggerFraction = 0.18f / 1.2f
-        for (i in 0..2) {
-            val dotPhase = ((phase + i * staggerFraction) % 1f).let { if (it < 0f) it + 1f else it }
+        val scale = side / SPEC_SIZE_PX
+        for (i in 0 until DOT_COUNT) {
+            val dotPhase = ((phase + i * DOT_STAGGER_FRACTION) % 1f).let { if (it < 0f) it + 1f else it }
             val tri = 1f - abs(dotPhase - 0.5f) * 2f
-            val opacity = 0.25f + 0.75f * tri
-            val r = scale * (4f + 2f * tri)
-            val cx = b.left + scale * (16f + i * 16f)
+            val opacity = DOT_ALPHA_MIN + DOT_ALPHA_RANGE * tri
+            val r = scale * (DOT_RADIUS_MIN_PX + DOT_RADIUS_RANGE_PX * tri)
+            val cx = b.left + scale * (DOT_PITCH_PX + i * DOT_PITCH_PX)
             val cy = b.exactCenterY()
-            fillPaint.alpha = (opacity * 255f).toInt()
+            fillPaint.alpha = (opacity * ALPHA_MAX).toInt()
             canvas.drawCircle(cx, cy, r, fillPaint)
         }
     }
@@ -215,7 +243,7 @@ class DishBarDrawable(
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
             this.color = this@DishBarDrawable.color
-            alpha = (0.22f * 255f).toInt()
+            alpha = (BAR_TRACK_ALPHA * ALPHA_MAX).toInt()
         }
 
     private val sliderPaint =
@@ -228,22 +256,23 @@ class DishBarDrawable(
     private val sliderRect = RectF()
 
     private var phase: Float = 0f
-    private val animator =
-        linearLoop(context.resources.getInteger(R.integer.motion_duration_bar).toLong()) { p ->
-            phase = p
-            invalidateSelf()
-        }
+    private val animator = linearLoop(context.resources.getInteger(R.integer.motion_duration_bar).toLong(), ::onFrame)
+
+    private fun onFrame(p: Float) {
+        phase = p
+        invalidateSelf()
+    }
 
     override fun getIntrinsicWidth(): Int = widthPx
 
-    override fun getIntrinsicHeight(): Int = (widthPx * (16f / 240f)).toInt()
+    override fun getIntrinsicHeight(): Int = (widthPx * BAR_HEIGHT_RATIO).toInt()
 
     override fun draw(canvas: Canvas) {
         val b = bounds
         if (b.width() == 0 || b.height() == 0) return
         val w = b.width().toFloat()
-        val trackHeight = w * (8f / 240f)
-        val sliderWidth = w * (80f / 240f)
+        val trackHeight = w * BAR_TRACK_RATIO
+        val sliderWidth = w * BAR_SLIDER_RATIO
         val cy = b.exactCenterY()
         val top = cy - trackHeight / 2f
         val bottom = cy + trackHeight / 2f
@@ -270,7 +299,7 @@ class DishBarDrawable(
         val tinted = tint?.defaultColor ?: color
         sliderPaint.color = tinted
         trackPaint.color = tinted
-        trackPaint.alpha = (0.22f * 255f).toInt()
+        trackPaint.alpha = (BAR_TRACK_ALPHA * ALPHA_MAX).toInt()
     }
 
     // Abstract on Drawable, so it must be implemented; deprecated there since API 29 because the

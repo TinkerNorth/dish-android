@@ -13,28 +13,13 @@ class SatelliteHostFeaturesStore
     constructor() : AbstractStateSource<Map<String, HostFeatureSet>>(emptyMap()) {
         fun featuresFor(connectionId: String): HostFeatureSet? = state.value[connectionId]
 
-        // The catalog is the richer read and wins, with ONE exception: it has no `audio`
-        // fields to win with (those live on the capabilities probe, since they are the only
-        // runtime-switched host facts and the catalog is cached on version + locale). So a
-        // catalog write carries the probed audio verdict forward rather than erasing it —
-        // both directions, since a catalog that cannot speak for one cannot speak for either.
+        // The catalog is the richer read and wins, except for the audio verdict it has no fields
+        // for: that stays with the capabilities probe, so a catalog write carries it forward.
         fun setFeatures(
             connectionId: String,
             features: HostFeatureSet,
         ) {
-            setState { current ->
-                val prior = current[connectionId]
-                val merged =
-                    if (prior == null) {
-                        features
-                    } else {
-                        features.copy(
-                            controllerMic = prior.controllerMic,
-                            controllerSpeaker = prior.controllerSpeaker,
-                        )
-                    }
-                current + (connectionId to merged)
-            }
+            setState { withCatalogFeatures(it, connectionId, features) }
         }
 
         // Pre-bind/pre-catalog publish: fills the host layer from a capabilities probe
@@ -55,38 +40,62 @@ class SatelliteHostFeaturesStore
             protocolVersion: Int,
         ) {
             if (protocolVersion <= 0) return
-            setState { current ->
-                val base = current[connectionId] ?: HostFeatureSet.SATELLITE_DEFAULT
-                if (base.protocolVersion == protocolVersion) {
-                    current
-                } else {
-                    current + (connectionId to base.copy(protocolVersion = protocolVersion))
-                }
-            }
+            setState { withProtocolVersion(it, connectionId, protocolVersion) }
         }
 
-        // The capabilities probe is the only document carrying the audio verdict, and a
-        // cached catalog may already have published this host, so setIfAbsent would drop it.
-        // Merged like noteProtocolVersion instead, and an unchanged PAIR writes nothing, so
-        // probing an old satellite never conjures an entry. Both directions ride one write
-        // because one document reports both: two setState calls would publish a host with
-        // the mic already moved and the speaker not, and every collector would see it.
+        // Merged like noteProtocolVersion, and both directions ride one write because one document
+        // reports both: two writes would publish a host with the mic moved and the speaker not.
         fun noteControllerAudio(
             connectionId: String,
             mic: Boolean,
             speaker: Boolean,
         ) {
-            setState { current ->
-                val base = current[connectionId] ?: HostFeatureSet.SATELLITE_DEFAULT
-                if (base.controllerMic == mic && base.controllerSpeaker == speaker) {
-                    current
-                } else {
-                    current + (connectionId to base.copy(controllerMic = mic, controllerSpeaker = speaker))
-                }
-            }
+            setState { withControllerAudio(it, connectionId, mic, speaker) }
         }
 
         fun clearConnection(connectionId: String) {
             setState { if (connectionId in it) it - connectionId else it }
         }
     }
+
+// A host the store already holds keeps the audio verdict its capabilities probe read.
+internal fun withCatalogFeatures(
+    features: Map<String, HostFeatureSet>,
+    connectionId: String,
+    catalog: HostFeatureSet,
+): Map<String, HostFeatureSet> {
+    val prior = features[connectionId]
+    val merged =
+        if (prior == null) {
+            catalog
+        } else {
+            catalog.copy(controllerMic = prior.controllerMic, controllerSpeaker = prior.controllerSpeaker)
+        }
+    return features + (connectionId to merged)
+}
+
+// A host the store has not heard of starts from the default. A read that changes nothing hands
+// back the same map, so a re-probe that learned nothing builds no new one.
+internal fun withProtocolVersion(
+    features: Map<String, HostFeatureSet>,
+    connectionId: String,
+    protocolVersion: Int,
+): Map<String, HostFeatureSet> {
+    val base = features[connectionId] ?: HostFeatureSet.SATELLITE_DEFAULT
+    val isUnchanged = base.protocolVersion == protocolVersion
+    if (isUnchanged) return features
+    return features + (connectionId to base.copy(protocolVersion = protocolVersion))
+}
+
+// The same rule for the audio verdict, read as a pair: moving either direction is a change.
+internal fun withControllerAudio(
+    features: Map<String, HostFeatureSet>,
+    connectionId: String,
+    mic: Boolean,
+    speaker: Boolean,
+): Map<String, HostFeatureSet> {
+    val base = features[connectionId] ?: HostFeatureSet.SATELLITE_DEFAULT
+    val isUnchanged = base.controllerMic == mic && base.controllerSpeaker == speaker
+    if (isUnchanged) return features
+    return features + (connectionId to base.copy(controllerMic = mic, controllerSpeaker = speaker))
+}

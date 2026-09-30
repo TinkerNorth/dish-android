@@ -9,12 +9,16 @@
 
 namespace usbhid {
 
+// How many Push items (HID 1.11 §6.2.2.7) may be outstanding at once. The spec sets no bound; one
+// more than this ends the parse, as any other malformed stream does.
+inline constexpr size_t HID_GLOBAL_STACK_DEPTH = 8;
+
 struct HidAxis {
     bool present = false;
     uint16_t bitOffset = 0;
     uint8_t bitSize = 0;
     int32_t logicalMin = 0;
-    int32_t logicalMax = 0;
+    int64_t logicalMax = 0;
 };
 
 // A gamepad field map distilled from a HID report descriptor: where each stick/trigger/hat/button
@@ -28,7 +32,7 @@ struct HidLayout {
     uint16_t hatBitOffset = 0;
     uint8_t hatBitSize = 0;
     int32_t hatLogicalMin = 0;
-    int32_t hatLogicalMax = 0;
+    int64_t hatLogicalMax = 0;
     uint16_t buttonBitOffset = 0;
     uint8_t buttonCount = 0;
     // Set by the attach path from the model catalog, after parseReportDescriptor resets the
@@ -36,9 +40,8 @@ struct HidLayout {
     bool switchOrderButtons = false;
 };
 
-// Parses a HID report descriptor into the gamepad field map. Pure and defensive: returns false and
-// leaves the layout invalid on malformed input or when nothing gamepad-like is found, so callers
-// fall back to a fixed-offset guess.
+// Parses a HID report descriptor into the gamepad field map. Pure; false leaves the layout invalid
+// and the caller on the fixed-offset guess.
 bool parseReportDescriptor(const uint8_t* desc, size_t len, HidLayout& out);
 
 // Decodes one input report into the XUSB DeviceState using a parsed layout. Pure.

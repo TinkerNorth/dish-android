@@ -13,6 +13,7 @@ import com.tinkernorth.dish.source.audio.MicLevelProbe
 import com.tinkernorth.dish.source.audio.MicProbeReading
 import com.tinkernorth.dish.source.audio.SpeakerTestTone
 import com.tinkernorth.dish.source.store.StickTestHistoryStore
+import com.tinkernorth.dish.source.store.stickHistoryKeyFor
 import com.tinkernorth.dish.source.system.MicPermissionGate
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,6 +33,11 @@ import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import kotlin.math.max
 import kotlin.math.roundToInt
+
+private const val TRIGGER_EFFECT_BYTES = 22
+private const val TRIGGER_EFFECT_BLOCK_BYTES = 11
+private const val TRIGGER_MODE_RIGID = 0x01
+private const val TRIGGER_FORCE_MAX = 0xFF
 
 data class FeatureBench(
     val rumble: Boolean,
@@ -62,26 +68,36 @@ data class FeatureBench(
         // The phone's vibrator, speaker and microphone stand in for the on-screen pad; its light
         // surfaces only exist on the skin, so they are not bench-testable from here.
         val VIRTUAL = NONE.copy(rumble = true, speaker = true, mic = true)
-
-        fun from(
-            caps: SlotCapabilities?,
-            virtual: Boolean,
-        ): FeatureBench {
-            if (virtual) return VIRTUAL
-            caps ?: return NONE
-            return FeatureBench(
-                rumble = caps.inputOk(Feature.RUMBLE),
-                triggerRumble = caps.inputOk(Feature.TRIGGER_RUMBLE),
-                lightbar = caps.inputOk(Feature.LIGHTBAR),
-                playerLeds = caps.inputOk(Feature.PLAYER_LEDS),
-                triggerEffects = caps.inputOk(Feature.TRIGGER_EFFECTS),
-                micLed = caps.inputOk(Feature.MIC),
-                speaker = caps.inputOk(Feature.SPEAKER),
-                mic = caps.inputOk(Feature.MIC),
-            )
-        }
     }
 }
+
+fun featureBenchFor(
+    caps: SlotCapabilities?,
+    virtual: Boolean,
+): FeatureBench {
+    if (virtual) return FeatureBench.VIRTUAL
+    caps ?: return FeatureBench.NONE
+    return FeatureBench(
+        rumble = caps.inputOk(Feature.RUMBLE),
+        triggerRumble = caps.inputOk(Feature.TRIGGER_RUMBLE),
+        lightbar = caps.inputOk(Feature.LIGHTBAR),
+        playerLeds = caps.inputOk(Feature.PLAYER_LEDS),
+        triggerEffects = caps.inputOk(Feature.TRIGGER_EFFECTS),
+        micLed = caps.inputOk(Feature.MIC),
+        speaker = caps.inputOk(Feature.SPEAKER),
+        mic = caps.inputOk(Feature.MIC),
+    )
+}
+
+// Left block (0..10) then right (11..21); byte 0 is the DualSense mode, byte 1 the start
+// position, byte 2 the force.
+internal fun rigidTriggerBlocks(): ByteArray =
+    ByteArray(TRIGGER_EFFECT_BYTES).also { blocks ->
+        for (offset in listOf(0, TRIGGER_EFFECT_BLOCK_BYTES)) {
+            blocks[offset] = TRIGGER_MODE_RIGID.toByte()
+            blocks[offset + 2] = TRIGGER_FORCE_MAX.toByte()
+        }
+    }
 
 data class InspectorUiState(
     val controller: ControllerDiag?,
@@ -130,7 +146,7 @@ class InputInspectorViewModel
             combine(sources.world, micPermission.state) { world, granted ->
                 InspectorUiState(
                     controller = controllerDiags(world, sources::touchpadMode).firstOrNull { it.slotId == slotId },
-                    bench = FeatureBench.from(world.caps[slotId], isVirtual),
+                    bench = featureBenchFor(world.caps[slotId], isVirtual),
                     micPermissionGranted = granted,
                     nowMs = world.nowMs,
                 )
@@ -173,10 +189,10 @@ class InputInspectorViewModel
         fun cycleLightbar() {
             viewModelScope.launch {
                 for ((r, g, b) in LIGHTBAR_CYCLE) {
-                    feedback.dispatchLightbarToSlot(slotId, r, g, b)
+                    feedback.testLightbar(slotId, r, g, b)
                     delay(CYCLE_STEP_MS)
                 }
-                feedback.dispatchLightbarToSlot(slotId, 0, 0, 0)
+                feedback.endLightbarTest(slotId)
             }
         }
 
@@ -273,7 +289,7 @@ class InputInspectorViewModel
         private fun historyKey(): String? {
             val controller = ui.value.controller ?: return null
             val facts = controller.facts ?: return null
-            return StickTestHistoryStore.keyFor(facts.vendorId, facts.productId, controller.name)
+            return stickHistoryKeyFor(facts.vendorId, facts.productId, controller.name)
         }
 
         private fun percent(fraction: Float): Int = (fraction * PERCENT).roundToInt().coerceIn(0, PERCENT)
@@ -289,11 +305,6 @@ class InputInspectorViewModel
             private const val METER_DECAY = 0.04f
             private const val PERCENT = 100
 
-            private const val TRIGGER_EFFECT_BYTES = 22
-            private const val TRIGGER_EFFECT_BLOCK_BYTES = 11
-            private const val TRIGGER_MODE_RIGID = 0x01
-            private const val TRIGGER_FORCE_MAX = 0xFF
-
             private val LIGHTBAR_CYCLE =
                 listOf(
                     Triple(0xFF, 0x00, 0x00),
@@ -301,15 +312,5 @@ class InputInspectorViewModel
                     Triple(0x00, 0x00, 0xFF),
                 )
             private val PLAYER_LED_CYCLE = listOf(0x01, 0x02, 0x04, 0x08, 0x10)
-
-            // Left block (0..10) then right (11..21); byte 0 is the DualSense mode, byte 1 the
-            // start position, byte 2 the force.
-            internal fun rigidTriggerBlocks(): ByteArray =
-                ByteArray(TRIGGER_EFFECT_BYTES).also { blocks ->
-                    for (offset in listOf(0, TRIGGER_EFFECT_BLOCK_BYTES)) {
-                        blocks[offset] = TRIGGER_MODE_RIGID.toByte()
-                        blocks[offset + 2] = TRIGGER_FORCE_MAX.toByte()
-                    }
-                }
         }
     }

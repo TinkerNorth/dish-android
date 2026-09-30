@@ -16,8 +16,8 @@ import com.tinkernorth.dish.source.audio.MicCaptureSource
 import com.tinkernorth.dish.source.audio.MicCaptureTarget
 import com.tinkernorth.dish.source.audio.MicEngine
 import com.tinkernorth.dish.source.audio.SlotAudioRoutes
-import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.source.store.MicMuteStore
 import com.tinkernorth.dish.source.system.MicPermissionGate
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
@@ -60,30 +60,34 @@ class MicCaptureIntegrationTest {
         private val phase = AtomicInteger()
         private val open = AtomicBoolean(false)
 
+        // A 220 Hz tone at real time: the sleep is what makes this an integration test rather
+        // than a scheduler one, since the engine's cadence is what is under test.
+        private inner class ToneSession : MicCaptureSession {
+            override val voiceProcessed = true
+
+            override fun read(out: ShortArray): Int {
+                Thread.sleep(WINDOW_MS)
+                val base = phase.getAndIncrement() * out.size
+                for (i in out.indices) {
+                    val t = (base + i) / SAMPLE_RATE.toDouble()
+                    out[i] = (sin(2.0 * PI * 220.0 * t) * 8000.0).toInt().toShort()
+                }
+                return out.size
+            }
+
+            override fun close() {
+                open.set(false)
+                closes.incrementAndGet()
+            }
+        }
+
         override fun open(
             frameSamples: Int,
             preferredDeviceId: Int,
         ): MicCaptureSession? {
             opens.incrementAndGet()
             open.set(true)
-            return object : MicCaptureSession {
-                override val voiceProcessed = true
-
-                override fun read(out: ShortArray): Int {
-                    Thread.sleep(WINDOW_MS)
-                    val base = phase.getAndIncrement() * out.size
-                    for (i in out.indices) {
-                        val t = (base + i) / SAMPLE_RATE.toDouble()
-                        out[i] = (sin(2.0 * PI * 220.0 * t) * 8000.0).toInt().toShort()
-                    }
-                    return out.size
-                }
-
-                override fun close() {
-                    open.set(false)
-                    closes.incrementAndGet()
-                }
-            }
+            return ToneSession()
         }
     }
 
@@ -126,16 +130,16 @@ class MicCaptureIntegrationTest {
     private fun bindVirtualAndGoLive(): DiscoveredServer {
         val satellite = FakeSatellite().also { fake = it }
         val server = satellite.server()
-        val id = SatelliteConnection.idFor(server)
+        val id = satelliteConnectionIdFor(server)
         manager.pairWithPin(server, "1234")
         assertTrue(
             "session should reach Live",
-            AppSingletons.await { manager.get(id)?.state?.value == SatelliteSessionState.Live },
+            await { manager.get(id)?.state?.value == SatelliteSessionState.Live },
         )
         manager.get(id)!!.applyDesired(mapOf(VIRTUAL_SLOT_ID to CONTROLLER_TYPE_DUALSENSE))
         assertTrue(
             "the virtual slot must register before streams flow",
-            AppSingletons.await {
+            await {
                 manager
                     .get(id)
                     ?.slots
@@ -168,7 +172,7 @@ class MicCaptureIntegrationTest {
             .also { engine = it }
     }
 
-    private fun targetFor(server: DiscoveredServer) = MicCaptureTarget(VIRTUAL_SLOT_ID, SatelliteConnection.idFor(server))
+    private fun targetFor(server: DiscoveredServer) = MicCaptureTarget(VIRTUAL_SLOT_ID, satelliteConnectionIdFor(server))
 
     private fun eligible(server: DiscoveredServer) = targetFor(server).let { MicCapturePlan(setOf(it), setOf(it)) }
 
@@ -178,7 +182,7 @@ class MicCaptureIntegrationTest {
     fun micFrames_reachTheSatelliteOnlyWhileEveryGateIsOpen() {
         val server = bindVirtualAndGoLive()
         val satellite = fake!!
-        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val conn = manager.get(satelliteConnectionIdFor(server))!!
         val ctrlIdx = conn.slots.value[VIRTUAL_SLOT_ID]!!.controllerIndex
         val engine = newEngine()
 
@@ -223,7 +227,7 @@ class MicCaptureIntegrationTest {
         // The recorder is released when the capture body returns, which is a moment after the plan
         // said stop; wait for the engine to say it has stopped rather than assuming the settle
         // above covered it.
-        assertTrue("the engine must reach quiescence", AppSingletons.await { engine.quiescent })
+        assertTrue("the engine must reach quiescence", await { engine.quiescent })
         assertEquals("the recorder must be released, not left open", 1, mic.closes.get())
 
         // And it comes back: mute is a control, not a teardown.
@@ -237,7 +241,7 @@ class MicCaptureIntegrationTest {
     fun losingTheSessionStopsTheMicrophone() {
         val server = bindVirtualAndGoLive()
         val satellite = fake!!
-        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val conn = manager.get(satelliteConnectionIdFor(server))!!
         val ctrlIdx = conn.slots.value[VIRTUAL_SLOT_ID]!!.controllerIndex
         val engine = newEngine()
 
@@ -252,7 +256,7 @@ class MicCaptureIntegrationTest {
         // fixed-length join is a guess about how long that takes.
         assertTrue(
             "the engine must reach quiescence after an idle plan",
-            AppSingletons.await { engine.quiescent },
+            await { engine.quiescent },
         )
         assertEquals("the recorder must be released, not left open", 1, mic.closes.get())
 

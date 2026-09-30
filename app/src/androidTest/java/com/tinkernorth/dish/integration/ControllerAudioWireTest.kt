@@ -7,8 +7,8 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
 import com.tinkernorth.dish.core.jni.SlotReportNative
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.hotpath.audio.SpeakerAudioBridge
-import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -68,18 +68,18 @@ class ControllerAudioWireTest {
     private fun bindVirtualAndGoLive(): DiscoveredServer {
         val satellite = FakeSatellite().also { fake = it }
         val server = satellite.server()
-        val id = SatelliteConnection.idFor(server)
+        val id = satelliteConnectionIdFor(server)
         manager.pairWithPin(server, "1234")
         assertTrue(
             "session should reach Live",
-            AppSingletons.await { manager.get(id)?.state?.value == SatelliteSessionState.Live },
+            await { manager.get(id)?.state?.value == SatelliteSessionState.Live },
         )
         // A DualSense: the only identity a host can materialize with audio
         // endpoints, so it is the one a mic/speaker slot would really bind to.
         manager.get(id)!!.applyDesired(mapOf(VIRTUAL_SLOT_ID to CONTROLLER_TYPE_DUALSENSE))
         assertTrue(
             "the virtual slot must register before streams flow",
-            AppSingletons.await {
+            await {
                 manager
                     .get(id)
                     ?.slots
@@ -94,7 +94,7 @@ class ControllerAudioWireTest {
     @Test
     fun micFrames_reachTheSatelliteWithTheContractsLayout() {
         val server = bindVirtualAndGoLive()
-        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val conn = manager.get(satelliteConnectionIdFor(server))!!
         val satellite = fake!!
         val ctrlIdx = conn.slots.value[VIRTUAL_SLOT_ID]!!.controllerIndex
 
@@ -126,7 +126,7 @@ class ControllerAudioWireTest {
     @Test
     fun micFrames_areRefusedUnlessTheWindowIsExactlyTwentyMilliseconds() {
         val server = bindVirtualAndGoLive()
-        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val conn = manager.get(satelliteConnectionIdFor(server))!!
         val ctrlIdx = conn.slots.value[VIRTUAL_SLOT_ID]!!.controllerIndex
 
         // A mis-framed buffer must not become a packet the satellite cannot
@@ -150,7 +150,7 @@ class ControllerAudioWireTest {
     @Test
     fun speakerFrames_arriveAsInOrderStereoPcm() {
         val server = bindVirtualAndGoLive()
-        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val conn = manager.get(satelliteConnectionIdFor(server))!!
         val satellite = fake!!
         val ctrlIdx = conn.slots.value[VIRTUAL_SLOT_ID]!!.controllerIndex
         val packets = speakerPackets(count = 8)
@@ -159,7 +159,7 @@ class ControllerAudioWireTest {
             satellite.sendSpeakerAudio(ctrlIdx, seq, packet)
             Thread.sleep(20)
         }
-        assertTrue("decoded speaker PCM must reach Kotlin", AppSingletons.await { speakerFrames.size >= 4 })
+        assertTrue("decoded speaker PCM must reach Kotlin", await { speakerFrames.size >= 4 })
 
         val frame = speakerFrames.first()
         assertEquals("the bound session", conn.handle, frame.handle)
@@ -174,7 +174,7 @@ class ControllerAudioWireTest {
     @Test
     fun aGapInTheSpeakerStreamIsConcealedRatherThanSkipped() {
         val server = bindVirtualAndGoLive()
-        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val conn = manager.get(satelliteConnectionIdFor(server))!!
         val satellite = fake!!
         val ctrlIdx = conn.slots.value[VIRTUAL_SLOT_ID]!!.controllerIndex
         val packets = speakerPackets(count = 10)
@@ -188,7 +188,7 @@ class ControllerAudioWireTest {
             satellite.sendSpeakerAudio(ctrlIdx, seq, packet)
             Thread.sleep(20)
         }
-        assertTrue("the stream must keep flowing across the gap", AppSingletons.await { speakerFrames.size >= 6 })
+        assertTrue("the stream must keep flowing across the gap", await { speakerFrames.size >= 6 })
         val concealed = speakerFrames.firstOrNull { it.concealed }
         assertNotNull("the missing frame must be concealed, not skipped", concealed)
         assertEquals(FRAME_SAMPLES * 2, concealed!!.pcm.size)
@@ -197,7 +197,7 @@ class ControllerAudioWireTest {
     @Test
     fun micLed_arrivesForEveryStateAndNeverForAnUnknownOne() {
         val server = bindVirtualAndGoLive()
-        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val conn = manager.get(satelliteConnectionIdFor(server))!!
         val satellite = fake!!
         val ctrlIdx = conn.slots.value[VIRTUAL_SLOT_ID]!!.controllerIndex
 
@@ -237,7 +237,7 @@ class ControllerAudioWireTest {
      */
     private fun speakerPackets(count: Int): List<ByteArray> {
         val satellite = fake!!
-        val conn = manager.get(SatelliteConnection.idFor(satellite.server()))!!
+        val conn = manager.get(satelliteConnectionIdFor(satellite.server()))!!
         val ctrlIdx = conn.slots.value[VIRTUAL_SLOT_ID]!!.controllerIndex
         for (f in 0 until count + 2) {
             SlotReportNative.sendMicFrame(conn.handle, ctrlIdx, tone(f))

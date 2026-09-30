@@ -30,9 +30,13 @@ class SetupInputActivity : BaseGamepadHostActivity() {
         super.onCreate(savedInstanceState)
         binding = setScaffoldContent(ActivitySetupInputBinding::inflate)
         setupDishToolbar(binding.toolbar)
-        wireSetupSkip(binding.toolbar, onboarding)
+        wireSetupSkip(binding.toolbar, onboarding, nav)
         binding.breadcrumb.applyStep(SETUP_STEP_INPUT)
+        bindInputChoices()
+    }
 
+    // Wired first: it has the lowest latency, which is what the badge says.
+    private fun bindInputChoices() {
         bindChoice(
             binding.cardWired,
             R.drawable.ic_usb,
@@ -53,7 +57,7 @@ class SetupInputActivity : BaseGamepadHostActivity() {
             R.string.setup_input_onscreen_title,
             R.string.setup_input_onscreen_body,
             badge = null,
-        ) { nav.toSetupConnection(SetupFlow.INPUT_ONSCREEN, VIRTUAL_SLOT_ID) }
+        ) { nav.toSetupConnection(INPUT_ONSCREEN, VIRTUAL_SLOT_ID) }
     }
 
     private fun bindChoice(

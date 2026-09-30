@@ -3,7 +3,9 @@
 package com.tinkernorth.dish.source.inputrate
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FrameworkTimingWindowTest {
@@ -49,9 +51,9 @@ class FrameworkTimingWindowTest {
     @Test
     fun `percentiles use nearest rank`() {
         val values = floatArrayOf(5f, 1f, 3f, 2f, 4f)
-        assertEquals(3f, Percentiles.of(values, 0.5), 0f)
-        assertEquals(5f, Percentiles.of(values, 0.99), 0f)
-        assertEquals(0f, Percentiles.of(FloatArray(0), 0.5), 0f)
+        assertEquals(3f, percentileOf(values, 0.5), 0f)
+        assertEquals(5f, percentileOf(values, 0.99), 0f)
+        assertEquals(0f, percentileOf(FloatArray(0), 0.5), 0f)
     }
 
     @Test
@@ -67,5 +69,18 @@ class FrameworkTimingWindowTest {
         store.disarm()
         store.record(1, 16, 17)
         assertEquals(1, store.summary(1)?.samples)
+    }
+
+    @Test
+    fun `an extra disarm cannot leave the store armed-negative`() {
+        val store = FrameworkInputTimingStore()
+        store.arm()
+        store.disarm()
+        store.disarm()
+        assertFalse(store.enabled)
+
+        store.arm()
+
+        assertTrue(store.enabled)
     }
 }

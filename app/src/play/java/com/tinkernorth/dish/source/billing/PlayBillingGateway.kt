@@ -21,6 +21,7 @@ import com.android.billingclient.api.QueryProductDetailsParams
 import com.android.billingclient.api.QueryProductDetailsResult
 import com.android.billingclient.api.QueryPurchasesParams
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -53,21 +54,24 @@ class PlayBillingGateway
         @Volatile
         private var detailsByProductId: Map<String, ProductDetails> = emptyMap()
 
+        // Auto-reconnection re-invokes onBillingSetupFinished on every recovery; only the first
+        // call has a waiter, and a disconnect is the library's business rather than a result.
+        private class ResumeOnSetup(
+            private val continuation: CancellableContinuation<Boolean>,
+        ) : BillingClientStateListener {
+            override fun onBillingSetupFinished(result: BillingResult) {
+                if (continuation.isActive) continuation.resume(result.responseCode == BillingResponseCode.OK)
+            }
+
+            override fun onBillingServiceDisconnected() = Unit
+        }
+
         override suspend fun connect(): Boolean {
             if (client.isReady) return true
             return connectLock.withLock {
                 if (client.isReady) return true
                 suspendCancellableCoroutine { continuation ->
-                    client.startConnection(
-                        object : BillingClientStateListener {
-                            // Auto-reconnection re-invokes this on every recovery; only the first call has a waiter.
-                            override fun onBillingSetupFinished(result: BillingResult) {
-                                if (continuation.isActive) continuation.resume(result.responseCode == BillingResponseCode.OK)
-                            }
-
-                            override fun onBillingServiceDisconnected() = Unit
-                        },
-                    )
+                    client.startConnection(ResumeOnSetup(continuation))
                 }
             }
         }

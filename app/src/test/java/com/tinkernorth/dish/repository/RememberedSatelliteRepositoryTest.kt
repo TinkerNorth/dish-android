@@ -89,4 +89,14 @@ class RememberedSatelliteRepositoryTest {
             )
         }
     }
+
+    @Test
+    fun `clear empties the observable mirror`() {
+        val (ctx, _) = mapBackedPrefs()
+        val repo = RememberedSatelliteRepository(ctx, json)
+        repo.put(sat(id = "satellite:mid:abc"))
+        assertEquals(listOf("satellite:mid:abc"), repo.entries.value.map { it.id })
+        repo.clear()
+        assertEquals(emptyList<RememberedSatellite>(), repo.entries.value)
+    }
 }

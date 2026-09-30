@@ -4,8 +4,8 @@ package com.tinkernorth.dish.di
 
 import com.tinkernorth.dish.source.update.NoUpdateNotices
 import com.tinkernorth.dish.source.update.UpdateNotices
+import dagger.Binds
 import dagger.Module
-import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
@@ -13,8 +13,8 @@ import javax.inject.Singleton
 // Play updates the app; see NoUpdateNotices.
 @Module
 @InstallIn(SingletonComponent::class)
-object UpdateModule {
-    @Provides
+abstract class UpdateModule {
+    @Binds
     @Singleton
-    fun provideUpdateNotices(): UpdateNotices = NoUpdateNotices
+    abstract fun bindUpdateNotices(notices: NoUpdateNotices): UpdateNotices
 }

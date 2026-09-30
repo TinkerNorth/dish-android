@@ -5,6 +5,7 @@ package com.tinkernorth.dish.ui.main
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -27,7 +28,7 @@ class FeedbackPillsTest {
     }
 
     private fun row(cap: SlotCapabilities) =
-        ControllerAdapter.Row(
+        ControllerRow(
             slot = ControllerSlot(id = "slot", name = "Pad", inputType = SlotInputType.PHYSICAL),
             connections = emptyList(),
             motionCap = cap,
@@ -65,10 +66,10 @@ class FeedbackPillsTest {
         // type without one must not claim the pill.
         val limited =
             SlotCapabilities(
-                controller = CapabilitySet.of(Feature.LIGHTBAR),
-                transport = CapabilitySet.of(Feature.LIGHTBAR),
+                controller = capabilitySetOf(Feature.LIGHTBAR),
+                transport = capabilitySetOf(Feature.LIGHTBAR),
                 type = CapabilitySet.EMPTY,
-                host = CapabilitySet.of(Feature.LIGHTBAR),
+                host = capabilitySetOf(Feature.LIGHTBAR),
                 userEnabled = CapabilitySet.EMPTY,
                 runtimeDown = CapabilitySet.EMPTY,
             )
@@ -123,12 +124,12 @@ class FeedbackPillsTest {
         val facts =
             audioFuncFacts(
                 SlotCapabilities(
-                    controller = CapabilitySet.of(Feature.MIC, Feature.SPEAKER),
-                    transport = CapabilitySet.of(Feature.MIC, Feature.SPEAKER),
+                    controller = capabilitySetOf(Feature.MIC, Feature.SPEAKER),
+                    transport = capabilitySetOf(Feature.MIC, Feature.SPEAKER),
                     // A Moonlight or audio-less host is where this ends.
                     type = CapabilitySet.EMPTY,
                     host = CapabilitySet.EMPTY,
-                    userEnabled = CapabilitySet.of(Feature.MIC, Feature.SPEAKER),
+                    userEnabled = capabilitySetOf(Feature.MIC, Feature.SPEAKER),
                     runtimeDown = CapabilitySet.EMPTY,
                 ),
             )

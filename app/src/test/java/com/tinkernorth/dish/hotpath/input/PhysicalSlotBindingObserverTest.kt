@@ -100,6 +100,20 @@ class PhysicalSlotBindingObserverTest {
     }
 
     @Test
+    fun `a live Moonlight host with no pad number for the slot unbinds instead of binding`() {
+        // One session carries four controllers; a report that cannot name which one belongs to nobody.
+        val ops =
+            reconcile(
+                present = setOf(3),
+                bindings = mapOf("3" to "moonlight:pc"),
+                summaries = listOf(moonlightSummary("moonlight:pc")),
+                moonlightLiveIds = setOf("moonlight:pc"),
+                moonlightPadNumbers = mapOf("4" to 0),
+            )
+        assertEquals(listOf(BindOp.Unbind(3)), ops)
+    }
+
+    @Test
     fun `an unchanged Moonlight bind is deduped, a changed one is re-applied`() {
         val op = BindOp.BindMoonlight(deviceId = 3, connectionId = "moonlight:pc", controllerNumber = 0)
         val first = dedupeBindOps(listOf(op), emptyMap())
@@ -127,7 +141,7 @@ class PhysicalSlotBindingObserverTest {
                 BindOp.Unbind(7),
                 BindOp.Forget(7),
                 BindOp.ReleaseHubBinding(7),
-                BindOp.BindSatellite(deviceId = 5, handle = 9, controllerIndex = 0),
+                BindOp.BindSatellite(deviceId = 5, connectionId = "sat:a", handle = 9, controllerIndex = 0),
             ),
             ops,
         )
@@ -150,7 +164,7 @@ class PhysicalSlotBindingObserverTest {
                 summaries = listOf(satSummary("sat:a")),
                 slotInfo = mapOf("sat:a" to SatelliteSlotSnapshot(handle = 9, slots = mapOf("5" to slot(2)))),
             )
-        assertEquals(listOf(BindOp.BindSatellite(deviceId = 5, handle = 9, controllerIndex = 2)), ops)
+        assertEquals(listOf(BindOp.BindSatellite(deviceId = 5, connectionId = "sat:a", handle = 9, controllerIndex = 2)), ops)
     }
 
     @Test
@@ -230,7 +244,7 @@ class PhysicalSlotBindingObserverTest {
                 summaries = listOf(satSummary("sat:a", live = LinkState.Unstable)),
                 slotInfo = mapOf("sat:a" to SatelliteSlotSnapshot(handle = 9, slots = mapOf("5" to slot(2)))),
             )
-        assertEquals(listOf(BindOp.BindSatellite(deviceId = 5, handle = 9, controllerIndex = 2)), ops)
+        assertEquals(listOf(BindOp.BindSatellite(deviceId = 5, connectionId = "sat:a", handle = 9, controllerIndex = 2)), ops)
     }
 
     @Test
@@ -383,7 +397,7 @@ class PhysicalSlotBindingObserverTest {
                 BindOp.Unbind(7),
                 BindOp.Forget(7),
                 BindOp.ReleaseHubBinding(7),
-                BindOp.BindSatellite(deviceId = 5, handle = 9, controllerIndex = 0),
+                BindOp.BindSatellite(deviceId = 5, connectionId = "sat:a", handle = 9, controllerIndex = 0),
             ),
             ops,
         )
@@ -399,6 +413,6 @@ class PhysicalSlotBindingObserverTest {
                 summaries = listOf(satSummary("sat:a")),
                 slotInfo = mapOf("sat:a" to SatelliteSlotSnapshot(handle = 9, slots = mapOf("5" to slot(0)))),
             )
-        assertEquals(listOf(BindOp.BindSatellite(deviceId = 5, handle = 9, controllerIndex = 0)), ops)
+        assertEquals(listOf(BindOp.BindSatellite(deviceId = 5, connectionId = "sat:a", handle = 9, controllerIndex = 0)), ops)
     }
 }

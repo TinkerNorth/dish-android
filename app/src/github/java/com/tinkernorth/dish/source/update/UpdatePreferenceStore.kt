@@ -26,7 +26,7 @@ class UpdatePreferenceStore
     constructor(
         @ApplicationContext context: Context,
     ) : AbstractStateSource<UpdatePreferences>(
-            initialState = readInitial(context),
+            initialState = readInitialUpdatePreferences(context),
         ) {
         private val prefs: SharedPreferences =
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -54,13 +54,17 @@ class UpdatePreferenceStore
             const val KEY_SKIPPED_VERSION = "updates_skipped_version"
             const val KEY_LAST_CHECK_UTC_MS = "updates_last_check_utc_ms"
             const val DEFAULT_CHECKS_ENABLED = true
-
-            private fun readInitial(context: Context): UpdatePreferences {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                return UpdatePreferences(
-                    checksEnabled = prefs.getBoolean(KEY_CHECKS_ENABLED, DEFAULT_CHECKS_ENABLED),
-                    skippedVersion = prefs.getString(KEY_SKIPPED_VERSION, "").orEmpty(),
-                )
-            }
         }
     }
+
+private fun readInitialUpdatePreferences(context: Context): UpdatePreferences {
+    val prefs = context.getSharedPreferences(UpdatePreferenceStore.PREFS_NAME, Context.MODE_PRIVATE)
+    return UpdatePreferences(
+        checksEnabled =
+            prefs.getBoolean(
+                UpdatePreferenceStore.KEY_CHECKS_ENABLED,
+                UpdatePreferenceStore.DEFAULT_CHECKS_ENABLED,
+            ),
+        skippedVersion = prefs.getString(UpdatePreferenceStore.KEY_SKIPPED_VERSION, "").orEmpty(),
+    )
+}

@@ -2,7 +2,8 @@
 
 package com.tinkernorth.dish.core.model
 
-import com.tinkernorth.dish.core.net.DishProtocol
+import com.tinkernorth.dish.core.net.DISH_PROTOCOL_CURRENT
+import com.tinkernorth.dish.core.net.DishProtocolCompat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -11,23 +12,23 @@ import org.junit.Test
 class CapabilityTest {
     @Test
     fun `contains checks membership`() {
-        val set = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION)
+        val set = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION)
         assertTrue(Feature.MOTION in set)
         assertFalse(Feature.RUMBLE in set)
     }
 
     @Test
     fun `intersect keeps only shared features`() {
-        val a = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION, Feature.RUMBLE)
-        val b = CapabilitySet.of(Feature.MOTION, Feature.RUMBLE, Feature.TOUCHPAD)
-        assertEquals(CapabilitySet.of(Feature.MOTION, Feature.RUMBLE), a intersect b)
+        val a = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION, Feature.RUMBLE)
+        val b = capabilitySetOf(Feature.MOTION, Feature.RUMBLE, Feature.TOUCHPAD)
+        assertEquals(capabilitySetOf(Feature.MOTION, Feature.RUMBLE), a intersect b)
     }
 
     @Test
     fun `minus removes the right-hand features`() {
-        val a = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION, Feature.RUMBLE)
-        val b = CapabilitySet.of(Feature.MOTION)
-        assertEquals(CapabilitySet.of(Feature.GAMEPAD, Feature.RUMBLE), a - b)
+        val a = capabilitySetOf(Feature.GAMEPAD, Feature.MOTION, Feature.RUMBLE)
+        val b = capabilitySetOf(Feature.MOTION)
+        assertEquals(capabilitySetOf(Feature.GAMEPAD, Feature.RUMBLE), a - b)
     }
 
     @Test
@@ -53,6 +54,47 @@ class CapabilityTest {
         assertTrue(Feature.RUMBLE in baseline)
         assertFalse(Feature.MOUSE in baseline)
         assertFalse(Feature.KEYBOARD in baseline)
+    }
+
+    @Test
+    fun `a host with every flag off still passes each host-wide feature and nothing else`() {
+        // The per-type surfaces pass the host layer so the type layer alone decides them: a host
+        // that crossed one out would hide a capable type's trigger effects or LEDs.
+        val bare =
+            HostFeatureSet(
+                hasCatalog = false,
+                mouseControl = false,
+                keyboardControl = false,
+                rumbleReturn = false,
+            ).toCapabilitySet()
+        val hostWide =
+            capabilitySetOf(
+                Feature.GAMEPAD,
+                Feature.ANALOG_TRIGGERS,
+                Feature.MOTION,
+                Feature.TOUCHPAD,
+                Feature.BATTERY,
+                Feature.LIGHTBAR,
+                Feature.TRIGGER_EFFECTS,
+                Feature.PLAYER_LEDS,
+            )
+        assertEquals(hostWide, bare)
+    }
+
+    @Test
+    fun `a host with every flag on carries everything but the Moonlight-only trigger rumble`() {
+        val full =
+            HostFeatureSet(
+                hasCatalog = true,
+                mouseControl = true,
+                keyboardControl = true,
+                rumbleReturn = true,
+                controllerMic = true,
+                controllerSpeaker = true,
+                controllerHapticAudio = true,
+            ).toCapabilitySet()
+        val everythingButTriggerRumble = CapabilitySet(Feature.entries.toSet() - Feature.TRIGGER_RUMBLE)
+        assertEquals(everythingButTriggerRumble, full)
     }
 
     @Test
@@ -102,7 +144,7 @@ class CapabilityTest {
                         "mouseControl" to CatalogHostFeatureDto(supported = true, modes = listOf("absolute", "relative")),
                     ),
             )
-        val features = HostFeatureSet.fromCatalog(catalog)
+        val features = hostFeaturesFromCatalog(catalog)
         assertTrue(features.hasCatalog)
         assertTrue(features.mouseControl)
         assertTrue(Feature.MOUSE in features.toCapabilitySet())
@@ -110,7 +152,7 @@ class CapabilityTest {
 
     @Test
     fun `fromCatalog treats a missing mouseControl as unsupported`() {
-        val features = HostFeatureSet.fromCatalog(CatalogDto())
+        val features = hostFeaturesFromCatalog(CatalogDto())
         assertTrue(features.hasCatalog)
         assertFalse(features.mouseControl)
         assertFalse(Feature.MOUSE in features.toCapabilitySet())
@@ -119,7 +161,7 @@ class CapabilityTest {
     @Test
     fun `fromCatalog keeps rumble optimistic when the slug is absent (back-compat)`() {
         // A satellite predating the rumble host feature still returns rumble.
-        val features = HostFeatureSet.fromCatalog(CatalogDto())
+        val features = hostFeaturesFromCatalog(CatalogDto())
         assertTrue(features.rumbleReturn)
         assertTrue(Feature.RUMBLE in features.toCapabilitySet())
     }
@@ -128,16 +170,16 @@ class CapabilityTest {
     fun `fromCatalog honors an explicit rumble unsupported`() {
         val catalog =
             CatalogDto(hostFeatures = mapOf("rumble" to CatalogHostFeatureDto(supported = false)))
-        val features = HostFeatureSet.fromCatalog(catalog)
+        val features = hostFeaturesFromCatalog(catalog)
         assertFalse(features.rumbleReturn)
         assertFalse(Feature.RUMBLE in features.toCapabilitySet())
     }
 
     @Test
     fun `fromCatalog reads keyboardControl opt-in (absent stays unsupported)`() {
-        assertFalse(HostFeatureSet.fromCatalog(CatalogDto()).keyboardControl)
+        assertFalse(hostFeaturesFromCatalog(CatalogDto()).keyboardControl)
         val withKeyboard =
-            HostFeatureSet.fromCatalog(
+            hostFeaturesFromCatalog(
                 CatalogDto(hostFeatures = mapOf("keyboardControl" to CatalogHostFeatureDto(supported = true))),
             )
         assertTrue(withKeyboard.keyboardControl)
@@ -157,7 +199,7 @@ class CapabilityTest {
                         rumble = ServerHostFeatureDto(supported = false),
                     ),
             )
-        val features = HostFeatureSet.fromServerCapabilities(caps)
+        val features = hostFeaturesFromServerCapabilities(caps)
         assertTrue(features.hasCatalog)
         assertTrue(features.mouseControl)
         assertFalse(features.keyboardControl)
@@ -171,12 +213,12 @@ class CapabilityTest {
     fun `extended mouse needs a v2 protocol read, so an unversioned document means basic`() {
         assertFalse(HostFeatureSet.SATELLITE_DEFAULT.extendedMouse)
         val fromV1Catalog =
-            HostFeatureSet.fromCatalog(
+            hostFeaturesFromCatalog(
                 CatalogDto(hostFeatures = mapOf("mouseControl" to CatalogHostFeatureDto(supported = true))),
             )
         assertFalse(fromV1Catalog.extendedMouse)
         val fromV1Caps =
-            HostFeatureSet.fromServerCapabilities(
+            hostFeaturesFromServerCapabilities(
                 ServerCapabilitiesDto(host = ServerHostDto(mouseControl = ServerHostFeatureDto(supported = true))),
             )
         assertFalse(fromV1Caps.extendedMouse)
@@ -185,7 +227,7 @@ class CapabilityTest {
     @Test
     fun `fromCatalog carries the protocol version into extended mouse`() {
         val features =
-            HostFeatureSet.fromCatalog(
+            hostFeaturesFromCatalog(
                 CatalogDto(
                     protocolVersion = 2,
                     hostFeatures = mapOf("mouseControl" to CatalogHostFeatureDto(supported = true)),
@@ -198,7 +240,7 @@ class CapabilityTest {
     @Test
     fun `fromServerCapabilities carries the protocol version into extended mouse`() {
         val features =
-            HostFeatureSet.fromServerCapabilities(
+            hostFeaturesFromServerCapabilities(
                 ServerCapabilitiesDto(
                     protocolVersion = 2,
                     host = ServerHostDto(mouseControl = ServerHostFeatureDto(supported = true, available = true)),
@@ -210,18 +252,18 @@ class CapabilityTest {
 
     @Test
     fun `compat mirrors the advertised version, with zero reading as unknown`() {
-        assertEquals(DishProtocol.Compat.UNKNOWN, HostFeatureSet.SATELLITE_DEFAULT.compat)
+        assertEquals(DishProtocolCompat.UNKNOWN, HostFeatureSet.SATELLITE_DEFAULT.compat)
         assertEquals(
-            DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE,
-            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.CURRENT - 1).compat,
+            DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE,
+            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DISH_PROTOCOL_CURRENT - 1).compat,
         )
         assertEquals(
-            DishProtocol.Compat.CURRENT,
-            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.CURRENT).compat,
+            DishProtocolCompat.CURRENT,
+            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DISH_PROTOCOL_CURRENT).compat,
         )
         assertEquals(
-            DishProtocol.Compat.APP_UPDATE_REQUIRED,
-            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.CURRENT + 1).compat,
+            DishProtocolCompat.APP_UPDATE_REQUIRED,
+            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DISH_PROTOCOL_CURRENT + 1).compat,
         )
     }
 
@@ -299,14 +341,14 @@ class CapabilityTest {
                 controllerAudio = audioBlock(mic = true, speaker = false),
                 host = ServerHostDto(catalog = ServerHostFeatureDto(supported = true)),
             )
-        val features = HostFeatureSet.fromServerCapabilities(caps)
+        val features = hostFeaturesFromServerCapabilities(caps)
         assertTrue(features.controllerMic)
         assertFalse(features.controllerSpeaker)
         assertTrue(Feature.MIC in features.toCapabilitySet())
         assertFalse(Feature.SPEAKER in features.toCapabilitySet())
 
         val mirrored =
-            HostFeatureSet.fromServerCapabilities(
+            hostFeaturesFromServerCapabilities(
                 ServerCapabilitiesDto(controllerAudio = audioBlock(mic = false, speaker = true)),
             )
         assertFalse(mirrored.controllerMic)
@@ -318,7 +360,7 @@ class CapabilityTest {
         // The host folds `enabled` into both switches already; this is the client refusing to
         // hand out an endpoint on a stale switch should a host ever stop folding it.
         val features =
-            HostFeatureSet.fromServerCapabilities(
+            hostFeaturesFromServerCapabilities(
                 ServerCapabilitiesDto(controllerAudio = audioBlock(enabled = false, mic = true, speaker = true)),
             )
         assertFalse(features.controllerMic)
@@ -334,7 +376,7 @@ class CapabilityTest {
                 backends = listOf(backend("hidmaestro", available = true, audio = true)),
                 controllerAudio = audioBlock(mic = false, speaker = true),
             )
-        val features = HostFeatureSet.fromServerCapabilities(caps)
+        val features = hostFeaturesFromServerCapabilities(caps)
         assertFalse(features.controllerMic)
         assertTrue(features.controllerSpeaker)
     }
@@ -352,7 +394,7 @@ class CapabilityTest {
                     ),
                 host = ServerHostDto(catalog = ServerHostFeatureDto(supported = true)),
             )
-        val features = HostFeatureSet.fromServerCapabilities(caps)
+        val features = hostFeaturesFromServerCapabilities(caps)
         assertTrue(features.controllerMic)
         assertTrue(features.controllerSpeaker)
         assertTrue(Feature.MIC in features.toCapabilitySet())
@@ -365,7 +407,7 @@ class CapabilityTest {
     @Test
     fun `the haptics lane is its own field, re-ANDed with enabled, absent reads off`() {
         val on =
-            HostFeatureSet.fromServerCapabilities(
+            hostFeaturesFromServerCapabilities(
                 ServerCapabilitiesDto(controllerAudio = audioBlock(speaker = false, hapticAudio = true)),
             )
         assertTrue(on.controllerHapticAudio)
@@ -373,11 +415,11 @@ class CapabilityTest {
         assertTrue(Feature.HAPTIC_AUDIO in on.toCapabilitySet())
         assertFalse(Feature.SPEAKER in on.toCapabilitySet())
 
-        val off = HostFeatureSet.fromServerCapabilities(ServerCapabilitiesDto(controllerAudio = audioBlock()))
+        val off = hostFeaturesFromServerCapabilities(ServerCapabilitiesDto(controllerAudio = audioBlock()))
         assertFalse(off.controllerHapticAudio)
 
         val masterOff =
-            HostFeatureSet.fromServerCapabilities(
+            hostFeaturesFromServerCapabilities(
                 ServerCapabilitiesDto(controllerAudio = audioBlock(enabled = false, hapticAudio = true)),
             )
         assertFalse(masterOff.controllerHapticAudio)
@@ -395,7 +437,7 @@ class CapabilityTest {
                         backend("hidmaestro", available = true, audio = false),
                     ),
             )
-        val features = HostFeatureSet.fromServerCapabilities(caps)
+        val features = hostFeaturesFromServerCapabilities(caps)
         assertFalse(features.controllerMic)
         assertFalse(features.controllerSpeaker)
     }
@@ -407,14 +449,14 @@ class CapabilityTest {
             ServerCapabilitiesDto(
                 backends = listOf(backend("hidmaestro", available = false, audio = true)),
             )
-        val features = HostFeatureSet.fromServerCapabilities(caps)
+        val features = hostFeaturesFromServerCapabilities(caps)
         assertFalse(features.controllerMic)
         assertFalse(features.controllerSpeaker)
     }
 
     @Test
     fun `an older satellite sends no backends array, which reads as no audio`() {
-        val features = HostFeatureSet.fromServerCapabilities(ServerCapabilitiesDto())
+        val features = hostFeaturesFromServerCapabilities(ServerCapabilitiesDto())
         assertFalse(features.controllerMic)
         assertFalse(features.controllerSpeaker)
     }
@@ -423,14 +465,13 @@ class CapabilityTest {
     fun `fromCatalog never claims audio, because the catalog cannot carry it`() {
         // The catalog is cached on server version + locale, so an install-time switch
         // must not move it; the store carries the probe's verdict across this write.
-        assertFalse(HostFeatureSet.fromCatalog(CatalogDto()).controllerMic)
-        assertFalse(HostFeatureSet.fromCatalog(CatalogDto()).controllerSpeaker)
+        assertFalse(hostFeaturesFromCatalog(CatalogDto()).controllerMic)
+        assertFalse(hostFeaturesFromCatalog(CatalogDto()).controllerSpeaker)
         assertFalse(
             Feature.MIC in
-                HostFeatureSet
-                    .fromCatalog(
-                        CatalogDto(hostFeatures = mapOf("mouseControl" to CatalogHostFeatureDto(supported = true))),
-                    ).toCapabilitySet(),
+                hostFeaturesFromCatalog(
+                    CatalogDto(hostFeatures = mapOf("mouseControl" to CatalogHostFeatureDto(supported = true))),
+                ).toCapabilitySet(),
         )
     }
 
@@ -449,10 +490,10 @@ class CapabilityTest {
     @Test
     fun `extended mouse needs both the version and mouse control itself`() {
         val versionWithoutMouse =
-            HostFeatureSet.fromCatalog(CatalogDto(protocolVersion = 2))
+            hostFeaturesFromCatalog(CatalogDto(protocolVersion = 2))
         assertFalse(versionWithoutMouse.extendedMouse)
         val futureVersion =
-            HostFeatureSet.fromCatalog(
+            hostFeaturesFromCatalog(
                 CatalogDto(
                     protocolVersion = 3,
                     hostFeatures = mapOf("mouseControl" to CatalogHostFeatureDto(supported = true)),

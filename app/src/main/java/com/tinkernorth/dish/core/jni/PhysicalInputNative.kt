@@ -86,6 +86,41 @@ class PhysicalInputNative
             PhysicalSlotNative.setDeviceQuirk(deviceId, quirk)
         }
 
+        fun bindPhysicalSlotSatellite(
+            deviceId: Int,
+            sessionHandle: Int,
+            controllerIndex: Int,
+        ) {
+            PhysicalSlotNative.bindPhysicalSlotSatellite(deviceId, sessionHandle, controllerIndex)
+        }
+
+        fun bindPhysicalSlotBluetooth(
+            deviceId: Int,
+            connectionId: String,
+        ) {
+            PhysicalSlotNative.bindPhysicalSlotBluetooth(deviceId, connectionId)
+        }
+
+        fun bindPhysicalSlotMoonlight(
+            deviceId: Int,
+            connectionId: String,
+            controllerNumber: Int,
+        ) {
+            PhysicalSlotNative.bindPhysicalSlotMoonlight(deviceId, connectionId, controllerNumber)
+        }
+
+        fun unbindPhysicalSlot(deviceId: Int) {
+            PhysicalSlotNative.unbindPhysicalSlot(deviceId)
+        }
+
+        fun forgetPhysicalDevice(deviceId: Int) {
+            PhysicalSlotNative.forgetPhysicalDevice(deviceId)
+        }
+
+        fun clearAllPhysicalSlots() {
+            PhysicalSlotNative.clearAllPhysicalSlots()
+        }
+
         fun attachUsbDevice(
             fd: Int,
             vendorId: Int,

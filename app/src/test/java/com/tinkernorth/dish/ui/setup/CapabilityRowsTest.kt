@@ -5,6 +5,7 @@ package com.tinkernorth.dish.ui.setup
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -61,7 +62,7 @@ class CapabilityRowsTest {
         // as its crossed columns rather than hidden.
         val batteryOnlyInput =
             SlotCapabilities(
-                controller = CapabilitySet.of(Feature.BATTERY),
+                controller = capabilitySetOf(Feature.BATTERY),
                 transport = CapabilitySet.EMPTY,
                 type = CapabilitySet.EMPTY,
                 host = CapabilitySet.EMPTY,
@@ -84,10 +85,10 @@ class CapabilityRowsTest {
         // TOUCHPAD: limited at the type.
         val caps =
             SlotCapabilities(
-                controller = CapabilitySet.of(Feature.MOTION, Feature.TOUCHPAD),
-                transport = CapabilitySet.of(Feature.RUMBLE, Feature.MOTION, Feature.TOUCHPAD),
-                type = CapabilitySet.of(Feature.RUMBLE, Feature.MOTION),
-                host = CapabilitySet.of(Feature.RUMBLE, Feature.TOUCHPAD),
+                controller = capabilitySetOf(Feature.MOTION, Feature.TOUCHPAD),
+                transport = capabilitySetOf(Feature.RUMBLE, Feature.MOTION, Feature.TOUCHPAD),
+                type = capabilitySetOf(Feature.RUMBLE, Feature.MOTION),
+                host = capabilitySetOf(Feature.RUMBLE, Feature.TOUCHPAD),
                 userEnabled = CapabilitySet.EMPTY,
                 runtimeDown = CapabilitySet.EMPTY,
             )
@@ -113,10 +114,10 @@ class CapabilityRowsTest {
     fun `available is the conjunction of all three columns`() {
         val caps =
             SlotCapabilities(
-                controller = CapabilitySet.of(Feature.RUMBLE),
-                transport = CapabilitySet.of(Feature.RUMBLE),
-                type = CapabilitySet.of(Feature.RUMBLE),
-                host = CapabilitySet.of(Feature.RUMBLE),
+                controller = capabilitySetOf(Feature.RUMBLE),
+                transport = capabilitySetOf(Feature.RUMBLE),
+                type = capabilitySetOf(Feature.RUMBLE),
+                host = capabilitySetOf(Feature.RUMBLE),
                 userEnabled = CapabilitySet.EMPTY,
                 runtimeDown = CapabilitySet.EMPTY,
             )
@@ -142,9 +143,9 @@ class CapabilityRowsTest {
         val hostOnly =
             SlotCapabilities(
                 controller = CapabilitySet.EMPTY,
-                transport = CapabilitySet.of(Feature.MIC, Feature.SPEAKER),
-                type = CapabilitySet.of(Feature.MIC, Feature.SPEAKER),
-                host = CapabilitySet.of(Feature.MIC, Feature.SPEAKER),
+                transport = capabilitySetOf(Feature.MIC, Feature.SPEAKER),
+                type = capabilitySetOf(Feature.MIC, Feature.SPEAKER),
+                host = capabilitySetOf(Feature.MIC, Feature.SPEAKER),
                 userEnabled = CapabilitySet.EMPTY,
                 runtimeDown = CapabilitySet.EMPTY,
             )
@@ -162,10 +163,10 @@ class CapabilityRowsTest {
         // A pad that plays but has no headset mic shows one row, not two.
         val speakerOnly =
             SlotCapabilities(
-                controller = CapabilitySet.of(Feature.SPEAKER),
-                transport = CapabilitySet.of(Feature.SPEAKER),
-                type = CapabilitySet.of(Feature.SPEAKER),
-                host = CapabilitySet.of(Feature.SPEAKER),
+                controller = capabilitySetOf(Feature.SPEAKER),
+                transport = capabilitySetOf(Feature.SPEAKER),
+                type = capabilitySetOf(Feature.SPEAKER),
+                host = capabilitySetOf(Feature.SPEAKER),
                 userEnabled = CapabilitySet.EMPTY,
                 runtimeDown = CapabilitySet.EMPTY,
             )
@@ -182,7 +183,7 @@ class CapabilityRowsTest {
             SlotCapabilities(
                 controller = CapabilitySet.EMPTY,
                 transport = everything,
-                type = CapabilitySet.of(Feature.RUMBLE, Feature.MOTION),
+                type = capabilitySetOf(Feature.RUMBLE, Feature.MOTION),
                 host = everything,
                 userEnabled = CapabilitySet.EMPTY,
                 runtimeDown = CapabilitySet.EMPTY,

@@ -4,7 +4,7 @@ package com.tinkernorth.dish.ui.diagnostics
 
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
-import com.tinkernorth.dish.source.system.WifiSubnet
+import com.tinkernorth.dish.source.system.sameSubnet
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 
 internal fun hostDiags(
@@ -46,7 +46,7 @@ internal fun sameSubnet(
     if (summary.kind == ConnectionKind.BLUETOOTH) return null
     val wifi = world.radios.wifi ?: return null
     val hostIp = IPV4_IN_TEXT.find(summary.detail)?.value ?: return null
-    return WifiSubnet.sameSubnet(wifi.ipv4, wifi.prefixLength, hostIp)
+    return sameSubnet(wifi.ipv4, wifi.prefixLength, hostIp)
 }
 
 private val IPV4_IN_TEXT = Regex("""\b\d{1,3}(?:\.\d{1,3}){3}\b""")

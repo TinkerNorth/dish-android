@@ -30,24 +30,25 @@ class BluetoothBondMonitor
     ) : DefaultLifecycleObserver {
         @Volatile private var registered: Boolean = false
 
-        private val receiver =
-            object : BroadcastReceiver() {
-                override fun onReceive(
-                    context: Context,
-                    intent: Intent,
-                ) {
-                    val device = extractDevice(intent) ?: return
-                    val mac = device.address ?: return
-                    val remembered =
-                        store.rememberedBt().firstOrNull { it.mac.equals(mac, ignoreCase = true) }
-                            ?: return
-                    when (intent.action) {
-                        ACTION_KEY_MISSING -> handleKeyMissing(remembered)
-                        BluetoothDevice.ACTION_BOND_STATE_CHANGED ->
-                            handleBondStateChange(intent, remembered)
-                    }
+        private inner class BondChangeReceiver : BroadcastReceiver() {
+            override fun onReceive(
+                context: Context,
+                intent: Intent,
+            ) {
+                val device = extractDevice(intent) ?: return
+                val mac = device.address ?: return
+                val remembered =
+                    store.rememberedBt().firstOrNull { it.mac.equals(mac, ignoreCase = true) }
+                        ?: return
+                when (intent.action) {
+                    ACTION_KEY_MISSING -> handleKeyMissing(remembered)
+                    BluetoothDevice.ACTION_BOND_STATE_CHANGED ->
+                        handleBondStateChange(intent, remembered)
                 }
             }
+        }
+
+        private val receiver = BondChangeReceiver()
 
         override fun onStart(owner: LifecycleOwner) {
             if (registered) return

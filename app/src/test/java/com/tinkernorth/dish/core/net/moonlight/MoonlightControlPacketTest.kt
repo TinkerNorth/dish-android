@@ -65,4 +65,59 @@ class MoonlightControlPacketTest {
         val wrongType = byteArrayOf(0x02, 0x00, 0x1A, 0x00) + ByteArray(26)
         assertNull(packet.open(wrongType))
     }
+
+    @Test
+    fun `open returns null when the declared length cannot hold a tag`() {
+        val packet = MoonlightControlPacket(key)
+        val lenTooSmallForSeqAndTag = 19
+        val frame = ByteArray(HEADER_LEN + SEQ_LEN + GCM_TAG_LEN)
+        frame[0] = PACKET_TYPE_ENCRYPTED.toByte()
+        frame[2] = lenTooSmallForSeqAndTag.toByte()
+        assertNull(packet.open(frame))
+    }
+
+    @Test
+    fun `open returns null when the frame is shorter than its declared length`() {
+        val packet = MoonlightControlPacket(key)
+        val sealed = packet.sealWithSeq(5, "payload".toByteArray())
+        val declaresOneByteMoreThanPresent = sealed.copyOf()
+        declaresOneByteMoreThanPresent[2] = (sealed.size - HEADER_LEN + 1).toByte()
+        assertNull(packet.open(declaresOneByteMoreThanPresent))
+    }
+
+    @Test
+    fun `open reads only the declared length and ignores trailing bytes`() {
+        val packet = MoonlightControlPacket(key)
+        val sealed = packet.sealWithSeq(5, "payload".toByteArray())
+        val withTrailingGarbage = sealed + byteArrayOf(0x7F, 0x7F)
+        assertEquals("payload", String(packet.open(withTrailingGarbage)!!))
+    }
+
+    @Test
+    fun `an empty plaintext seals to the header, seq and tag alone and opens again`() {
+        val packet = MoonlightControlPacket(key)
+        val sealed = packet.sealWithSeq(3, ByteArray(0))
+        assertEquals(HEADER_LEN + SEQ_LEN + GCM_TAG_LEN, sealed.size)
+        assertEquals(0, packet.open(sealed)!!.size)
+    }
+
+    @Test
+    fun `seal advances the seq by one per packet starting at zero`() {
+        val sender = MoonlightControlPacket(key)
+        val first = sender.seal("a".toByteArray())
+        val second = sender.seal("b".toByteArray())
+        assertEquals(0, seqOf(first))
+        assertEquals(1, seqOf(second))
+    }
+
+    private fun seqOf(packet: ByteArray): Int =
+        java.nio.ByteBuffer
+            .wrap(packet, HEADER_LEN, SEQ_LEN)
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            .int
+
+    private companion object {
+        const val HEADER_LEN = 4
+        const val SEQ_LEN = 4
+    }
 }

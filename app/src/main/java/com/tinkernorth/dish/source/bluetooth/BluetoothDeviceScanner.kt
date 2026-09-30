@@ -110,24 +110,25 @@ class BluetoothDeviceScanner(
         }
     }
 
+    private inner class DiscoveryReceiver : BroadcastReceiver() {
+        override fun onReceive(
+            ctx: Context,
+            intent: Intent,
+        ) {
+            when (intent.action) {
+                BluetoothDevice.ACTION_FOUND -> onFound(intent)
+                BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> onDiscoveryFinished()
+            }
+        }
+    }
+
     private fun registerReceiverLocked(): BroadcastReceiver {
         val filter =
             IntentFilter().apply {
                 addAction(BluetoothDevice.ACTION_FOUND)
                 addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
             }
-        val rx =
-            object : BroadcastReceiver() {
-                override fun onReceive(
-                    ctx: Context,
-                    intent: Intent,
-                ) {
-                    when (intent.action) {
-                        BluetoothDevice.ACTION_FOUND -> onFound(intent)
-                        BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> onDiscoveryFinished()
-                    }
-                }
-            }
+        val rx = DiscoveryReceiver()
         ContextCompat.registerReceiver(context, rx, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         return rx
     }
@@ -137,7 +138,6 @@ class BluetoothDeviceScanner(
         val mac = device.address ?: return
         val name = nameOf(device)
         synchronized(lock) {
-            // Drop broadcasts delivered after stop(): a stale receiver must not resurrect state.
             if (receiver == null) return
             // Bonded entries already carry the richer paired label; don't downgrade them.
             if (byMac[mac]?.bonded == true) return

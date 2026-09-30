@@ -7,8 +7,8 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Test
 
 class NetworkUtilsTest {
@@ -84,23 +84,13 @@ class NetworkUtilsTest {
     }
 
     @Test
-    fun `hexToBytes rejects a non-hex character`() {
-        try {
-            hexToBytes("0g")
-            fail("expected IllegalArgumentException for non-hex input")
-        } catch (e: IllegalArgumentException) {
-            // expected
-        }
+    fun `hexToBytes rejects a non-hex character instead of corrupting a byte`() {
+        assertThrows(IllegalArgumentException::class.java) { hexToBytes("0g") }
     }
 
     @Test
-    fun `hexToBytes rejects odd-length input`() {
-        try {
-            hexToBytes("abc")
-            fail("expected IllegalArgumentException for odd-length input")
-        } catch (e: IllegalArgumentException) {
-            // expected
-        }
+    fun `hexToBytes rejects odd-length input instead of reading past the end`() {
+        assertThrows(IllegalArgumentException::class.java) { hexToBytes("abc") }
     }
 
     @Test
@@ -146,6 +136,22 @@ class NetworkUtilsTest {
             )
         for (h in nonPrivateHosts) {
             assertFalse("expected $h to be non-private", isPrivateHostLiteral(h))
+        }
+    }
+
+    @Test
+    fun `isIpv6Literal holds for every IPv6 literal, bracketed, zoned or IPv4-mapped`() {
+        val ipv6Hosts = listOf("fd00::5", "::1", "[fe80::1]", "fe80::1%wlan0", "::ffff:10.0.0.5", "2001:db8::1")
+        for (h in ipv6Hosts) {
+            assertTrue("expected $h to read as IPv6", isIpv6Literal(h))
+        }
+    }
+
+    @Test
+    fun `isIpv6Literal is false for an IPv4 literal, a hostname, a host with a port and a malformed literal`() {
+        val otherHosts = listOf("10.0.0.5", "[10.0.0.5]", "satellite.local", "10.0.0.5:9443", "", "fe80:::1", "%wlan0")
+        for (h in otherHosts) {
+            assertFalse("expected $h not to read as IPv6", isIpv6Literal(h))
         }
     }
 
@@ -203,5 +209,142 @@ class NetworkUtilsTest {
         val servers = parseServers(json)
         assertEquals(1, servers.size)
         assertEquals("OK", servers[0].name)
+    }
+
+    @Test
+    fun `isPrivateHostLiteral rejects an over-long or empty octet`() {
+        assertFalse(isPrivateHostLiteral("0010.0.0.1"))
+        assertFalse(isPrivateHostLiteral("10..0.1"))
+    }
+
+    @Test
+    fun `isPrivateHostLiteral rejects a zone index`() {
+        assertFalse(isPrivateHostLiteral("fe80::1%wlan0"))
+    }
+
+    @Test
+    fun `isPrivateHostLiteral rejects two double-colon runs`() {
+        assertFalse(isPrivateHostLiteral("fe80::1::2"))
+    }
+
+    @Test
+    fun `isPrivateHostLiteral rejects a double colon that stands for no group`() {
+        assertFalse(isPrivateHostLiteral("fe80:1:2:3:4:5:6::7"))
+    }
+
+    @Test
+    fun `isPrivateHostLiteral rejects a short literal without a double colon`() {
+        assertFalse(isPrivateHostLiteral("fe80:1:2"))
+    }
+
+    @Test
+    fun `isPrivateHostLiteral reads an embedded IPv4 tail as two groups`() {
+        assertTrue(isPrivateHostLiteral("fe80::10.0.0.1"))
+        assertFalse(isPrivateHostLiteral("::ffff:8.8.8.8"))
+    }
+
+    @Test
+    fun `isPrivateHostLiteral rejects an embedded IPv4 that is not the last token`() {
+        assertFalse(isPrivateHostLiteral("fe80:10.0.0.1:1::"))
+    }
+
+    @Test
+    fun `isPrivateHostLiteral rejects a malformed hextet`() {
+        assertFalse(isPrivateHostLiteral("fe80::12345"))
+        assertFalse(isPrivateHostLiteral("fe80::zz"))
+        assertFalse(isPrivateHostLiteral("fe80::1:"))
+    }
+
+    @Test
+    fun `isPrivateHostLiteral accepts the fd00 half of the unique-local block`() {
+        assertTrue(isPrivateHostLiteral("fd12:3456::1"))
+    }
+
+    @Test
+    fun `isPrivateHostLiteral bounds link-local at fe80 slash 10`() {
+        assertTrue(isPrivateHostLiteral("febf::1"))
+        assertFalse(isPrivateHostLiteral("fec0::1"))
+    }
+
+    @Test
+    fun `isPrivateHostLiteral treats a bracketed IPv4 as a literal too`() {
+        assertTrue(isPrivateHostLiteral("[10.0.0.5]"))
+    }
+
+    @Test
+    fun `jsonGet returns null for malformed json`() {
+        assertNull(jsonGet("{not json", "key"))
+    }
+
+    @Test
+    fun `jsonGet returns null when the value is not a primitive`() {
+        assertNull(jsonGet("""{"key":{"nested":1}}""", "key"))
+        assertNull(jsonGet("""{"key":[1,2]}""", "key"))
+    }
+
+    @Test
+    fun `jsonGet returns null when the document is not an object`() {
+        assertNull(jsonGet("""[{"key":"value"}]""", "key"))
+    }
+
+    @Test
+    fun `bytesToHex is lowercase and inverts hexToBytes`() {
+        val bytes = byteArrayOf(0x00, 0x1F, 0xA0.toByte(), 0xFF.toByte())
+        val hex = bytesToHex(bytes)
+        assertEquals("001fa0ff", hex)
+        assertArrayEquals(bytes, hexToBytes(hex))
+    }
+
+    @Test
+    fun `bytesToHex of nothing is the empty string`() {
+        assertEquals("", bytesToHex(byteArrayOf()))
+    }
+
+    @Test
+    fun `parseServers returns empty for a non-array body`() {
+        assertEquals(emptyList<DiscoveredServer>(), parseServers("""{"name":"PC","ip":"10.0.0.1"}"""))
+    }
+
+    @Test
+    fun `parseServers returns empty for malformed json`() {
+        assertEquals(emptyList<DiscoveredServer>(), parseServers("[{"))
+    }
+
+    @Test
+    fun `isPrivateHostLiteral accepts both ends of each private IPv4 block`() {
+        val blockEnds =
+            listOf(
+                "10.0.0.0",
+                "10.255.255.255",
+                "172.16.0.0",
+                "172.31.255.255",
+                "192.168.0.0",
+                "192.168.255.255",
+                "169.254.0.0",
+                "169.254.255.255",
+                "127.0.0.0",
+                "127.255.255.255",
+            )
+        for (h in blockEnds) {
+            assertTrue("expected $h to be private", isPrivateHostLiteral(h))
+        }
+    }
+
+    @Test
+    fun `isPrivateHostLiteral rejects the neighbours of each private IPv4 block`() {
+        val neighbours =
+            listOf(
+                "9.255.255.255",
+                "11.0.0.0",
+                "192.167.255.255",
+                "192.169.0.0",
+                "169.253.255.255",
+                "169.255.0.0",
+                "126.255.255.255",
+                "128.0.0.0",
+            )
+        for (h in neighbours) {
+            assertFalse("expected $h to be non-private", isPrivateHostLiteral(h))
+        }
     }
 }

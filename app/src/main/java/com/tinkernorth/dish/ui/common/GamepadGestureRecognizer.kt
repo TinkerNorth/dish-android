@@ -2,20 +2,18 @@
 
 package com.tinkernorth.dish.ui.common
 
-import android.graphics.RectF
 import android.view.MotionEvent
-import com.tinkernorth.dish.ui.common.GamepadConstants.ABXY_BTN_SPACING_FACTOR
-import com.tinkernorth.dish.ui.common.GamepadConstants.ABXY_CENTER_ZONE_FRACTION
-import com.tinkernorth.dish.ui.common.GamepadConstants.CENTER_BTN_PICKUP_FACTOR
-import com.tinkernorth.dish.ui.common.GamepadConstants.DPAD_DIAGONAL_THRESHOLD
-import com.tinkernorth.dish.ui.common.GamepadConstants.PICKUP_RADIUS_FACTOR
-import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_TAP_MAX_MS
-import com.tinkernorth.dish.ui.common.GamepadConstants.TRIGGER_MAX
+import com.tinkernorth.dish.ui.common.ABXY_BTN_SPACING_FACTOR
+import com.tinkernorth.dish.ui.common.ABXY_CENTER_ZONE_FRACTION
+import com.tinkernorth.dish.ui.common.CENTER_BTN_PICKUP_FACTOR
+import com.tinkernorth.dish.ui.common.DPAD_DIAGONAL_THRESHOLD
+import com.tinkernorth.dish.ui.common.PICKUP_RADIUS_FACTOR
+import com.tinkernorth.dish.ui.common.TRACKPAD_TAP_MAX_MS
+import com.tinkernorth.dish.ui.common.TRIGGER_MAX
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.roundToInt
 
 internal class GamepadGestureRecognizer {
     var state: GamepadTouchView.GamepadState = GamepadTouchView.GamepadState()
@@ -155,6 +153,12 @@ internal class GamepadGestureRecognizer {
 
     fun reset() {
         state = GamepadTouchView.GamepadState()
+        resetStickDeltas()
+        resetPointerIds()
+        resetTrackpad()
+    }
+
+    private fun resetStickDeltas() {
         leftStickDx = 0f
         leftStickDy = 0f
         rightStickDx = 0f
@@ -163,6 +167,9 @@ internal class GamepadGestureRecognizer {
         l3StickDy = 0f
         r3StickDx = 0f
         r3StickDy = 0f
+    }
+
+    private fun resetPointerIds() {
         leftStickPointerId = INVALID_POINTER
         rightStickPointerId = INVALID_POINTER
         l3StickPointerId = INVALID_POINTER
@@ -173,21 +180,25 @@ internal class GamepadGestureRecognizer {
         lbPointerId = INVALID_POINTER
         rbPointerId = INVALID_POINTER
         abxyPointerBits.clear()
+    }
+
+    private fun resetTrackpad() {
         trackpadSlotForPointer.clear()
         trackpadTouches.clear()
         trackpadClickPointers.clear()
         pendingTrackpadTap = null
-        if (trackpadState.anyFingerDown()) {
-            // Clean lift so the receiver never keeps a finger the screen no longer holds.
-            trackpadState.finger0Active = false
-            trackpadState.finger1Active = false
-            trackpadState.finger0X = 0
-            trackpadState.finger0Y = 0
-            trackpadState.finger1X = 0
-            trackpadState.finger1Y = 0
-            trackpadState.buttonPressed = false
-            trackpadDirty = true
-        }
+
+        val hadFingersDown = trackpadState.anyFingerDown()
+        if (!hadFingersDown) return
+        // Clean lift so the receiver never keeps a finger the screen no longer holds.
+        trackpadState.finger0Active = false
+        trackpadState.finger1Active = false
+        trackpadState.finger0X = 0
+        trackpadState.finger0Y = 0
+        trackpadState.finger1X = 0
+        trackpadState.finger1Y = 0
+        trackpadState.buttonPressed = false
+        trackpadDirty = true
     }
 
     // The controls a finger can land on, in hit-test precedence.
@@ -303,7 +314,7 @@ internal class GamepadGestureRecognizer {
         pid: Int,
         x: Float,
         y: Float,
-        tp: RectF,
+        tp: Box,
         timeMs: Long,
     ) {
         if (trackpadMode == GamepadTouchView.TrackpadMode.CLICK) {
@@ -318,9 +329,9 @@ internal class GamepadGestureRecognizer {
                 else -> return
             }
         trackpadSlotForPointer[pid] = slot
-        val trackingId = nextTrackpadTrackingId++ and 0xFF
-        val xNorm = trackpadNorm(x, tp.centerX(), tp.width())
-        val yNorm = trackpadNorm(y, tp.centerY(), tp.height())
+        val trackingId = nextTrackpadTrackingId++ and TRACKING_ID_WRAP_MASK
+        val xNorm = trackpadNorm(x, tp.centerX, tp.width)
+        val yNorm = trackpadNorm(y, tp.centerY, tp.height)
         if (slot == 0) {
             trackpadState.finger0Active = true
             trackpadState.finger0TrackingId = trackingId
@@ -346,10 +357,7 @@ internal class GamepadGestureRecognizer {
     ): Short {
         val s = max(span, 1f)
         val lo = center - s / 2f
-        return (((v - lo).coerceIn(0f, s) / s) * 65535f - 32768f)
-            .roundToInt()
-            .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-            .toShort()
+        return spanToWire(v - lo, s)
     }
 
     private fun applyPointerMove(
@@ -411,8 +419,8 @@ internal class GamepadGestureRecognizer {
         val trackpadSlot = trackpadSlotForPointer[pid]
         val tp = l.trackpadRect
         if (trackpadSlot != null && tp != null) {
-            val xNorm = trackpadNorm(x, tp.centerX(), tp.width())
-            val yNorm = trackpadNorm(y, tp.centerY(), tp.height())
+            val xNorm = trackpadNorm(x, tp.centerX, tp.width)
+            val yNorm = trackpadNorm(y, tp.centerY, tp.height)
             if (trackpadSlot == 0) {
                 trackpadState.finger0X = xNorm
                 trackpadState.finger0Y = yNorm
@@ -431,8 +439,9 @@ internal class GamepadGestureRecognizer {
     }
 
     // The control a lifted pointer was holding. Button regions clear by pointer ID (never by
-    // position) so a drag-off before release doesn't leave the bit stuck; the centre and
-    // stick-click buttons are not pointer-tracked, which is what NONE ends up meaning.
+    // position) so a drag-off before release doesn't leave the bit stuck. The stick clicks are
+    // tracked like the rest; only the centre buttons and the mute pill are not, which is what
+    // NONE ends up meaning.
     private fun ownerOf(pid: Int): Region =
         when {
             pid == leftStickPointerId -> Region.LEFT_STICK
@@ -456,36 +465,10 @@ internal class GamepadGestureRecognizer {
     ) {
         val pid = event.getPointerId(idx)
         when (ownerOf(pid)) {
-            Region.LEFT_STICK -> {
-                leftStickPointerId = INVALID_POINTER
-                leftStickDx = 0f
-                leftStickDy = 0f
-                state.leftX = 0
-                state.leftY = 0
-            }
-            Region.RIGHT_STICK -> {
-                rightStickPointerId = INVALID_POINTER
-                rightStickDx = 0f
-                rightStickDy = 0f
-                state.rightX = 0
-                state.rightY = 0
-            }
-            Region.L3 -> {
-                l3StickPointerId = INVALID_POINTER
-                l3StickDx = 0f
-                l3StickDy = 0f
-                state.leftX = 0
-                state.leftY = 0
-                state.buttons = state.buttons and GamepadTouchView.BTN_LS.inv()
-            }
-            Region.R3 -> {
-                r3StickPointerId = INVALID_POINTER
-                r3StickDx = 0f
-                r3StickDy = 0f
-                state.rightX = 0
-                state.rightY = 0
-                state.buttons = state.buttons and GamepadTouchView.BTN_RS.inv()
-            }
+            Region.LEFT_STICK -> releaseLeftStick()
+            Region.RIGHT_STICK -> releaseRightStick()
+            Region.L3 -> releaseL3()
+            Region.R3 -> releaseR3()
             Region.LT -> {
                 ltPointerId = INVALID_POINTER
                 state.leftTrigger = 0
@@ -510,23 +493,57 @@ internal class GamepadGestureRecognizer {
                 rbPointerId = INVALID_POINTER
                 state.buttons = state.buttons and GamepadTouchView.BTN_RB.inv()
             }
-            Region.TRACKPAD_CLICK -> {
-                trackpadClickPointers.remove(pid)
-                if (trackpadClickPointers.isEmpty()) {
-                    state.buttons = state.buttons and GamepadTouchView.BTN_TOUCHPAD_CLICK.inv()
-                }
-            }
+            Region.TRACKPAD_CLICK -> releaseTrackpadClick(pid)
             Region.TRACKPAD -> trackpadPointerUp(pid, event.eventTime)
-            // Centre / stick-click buttons aren't pointer-tracked: drop all on any unmatched up.
-            Region.MIC_MUTE, Region.SELECT, Region.START, Region.HOME, Region.NONE ->
-                state.buttons =
-                    state.buttons and
-                    (
-                        GamepadTouchView.BTN_SELECT or GamepadTouchView.BTN_START or
-                            GamepadTouchView.BTN_HOME or GamepadTouchView.BTN_LS or
-                            GamepadTouchView.BTN_RS or GamepadTouchView.BTN_MIC_MUTE
-                    ).inv()
+            // The centre buttons and the mute pill aren't pointer-tracked: drop them all on any
+            // unmatched up. The stick clicks are, and only their own pointer releases them.
+            Region.MIC_MUTE, Region.SELECT, Region.START, Region.HOME, Region.NONE -> releaseCentreButtons()
         }
+    }
+
+    private fun releaseLeftStick() {
+        leftStickPointerId = INVALID_POINTER
+        leftStickDx = 0f
+        leftStickDy = 0f
+        state.leftX = 0
+        state.leftY = 0
+    }
+
+    private fun releaseRightStick() {
+        rightStickPointerId = INVALID_POINTER
+        rightStickDx = 0f
+        rightStickDy = 0f
+        state.rightX = 0
+        state.rightY = 0
+    }
+
+    private fun releaseL3() {
+        l3StickPointerId = INVALID_POINTER
+        l3StickDx = 0f
+        l3StickDy = 0f
+        state.leftX = 0
+        state.leftY = 0
+        state.buttons = state.buttons and GamepadTouchView.BTN_LS.inv()
+    }
+
+    private fun releaseR3() {
+        r3StickPointerId = INVALID_POINTER
+        r3StickDx = 0f
+        r3StickDy = 0f
+        state.rightX = 0
+        state.rightY = 0
+        state.buttons = state.buttons and GamepadTouchView.BTN_RS.inv()
+    }
+
+    private fun releaseTrackpadClick(pid: Int) {
+        trackpadClickPointers.remove(pid)
+        if (trackpadClickPointers.isEmpty()) {
+            state.buttons = state.buttons and GamepadTouchView.BTN_TOUCHPAD_CLICK.inv()
+        }
+    }
+
+    private fun releaseCentreButtons() {
+        state.buttons = state.buttons and UNTRACKED_BUTTONS.inv()
     }
 
     private fun trackpadPointerUp(
@@ -545,19 +562,17 @@ internal class GamepadGestureRecognizer {
         }
         trackpadState.eventTimeMs = eventTimeMs
         trackpadDirty = true
-        val touch = trackpadTouches.remove(pid)
+        val touch = trackpadTouches.remove(pid) ?: return
         // A quick, still touch is the pad click; the view replays it as a press pulse
         // once this lift frame has gone out.
-        if (touch != null &&
-            !touch.moved &&
-            eventTimeMs - touch.downTimeMs <= TRACKPAD_TAP_MAX_MS &&
-            !trackpadState.anyFingerDown()
-        ) {
+        val isQuickStillLift = !touch.moved && eventTimeMs - touch.downTimeMs <= TRACKPAD_TAP_MAX_MS
+        val padIsClear = !trackpadState.anyFingerDown()
+        if (isQuickStillLift && padIsClear) {
             pendingTrackpadTap =
                 TrackpadTap(
                     x = touch.xNorm,
                     y = touch.yNorm,
-                    trackingId = nextTrackpadTrackingId++ and 0xFF,
+                    trackingId = nextTrackpadTrackingId++ and TRACKING_ID_WRAP_MASK,
                     eventTimeMs = eventTimeMs,
                 )
         }
@@ -568,8 +583,8 @@ internal class GamepadGestureRecognizer {
         y: Float,
         l: GamepadLayout,
     ) {
-        val dx = x - l.dpadRect.centerX()
-        val dy = y - l.dpadRect.centerY()
+        val dx = x - l.dpadRect.centerX
+        val dy = y - l.dpadRect.centerY
         if (dx == 0f && dy == 0f) {
             state.hatSwitch = GamepadTouchView.HAT_NONE
             return
@@ -597,8 +612,8 @@ internal class GamepadGestureRecognizer {
         y: Float,
         l: GamepadLayout,
     ): Int {
-        val dx = x - l.abxyRect.centerX()
-        val dy = y - l.abxyRect.centerY()
+        val dx = x - l.abxyRect.centerX
+        val dy = y - l.abxyRect.centerY
         val sp = l.btnRadius * ABXY_BTN_SPACING_FACTOR
         val centerR = sp * ABXY_CENTER_ZONE_FRACTION
         if ((dx * dx + dy * dy) < centerR * centerR) {
@@ -629,6 +644,11 @@ internal class GamepadGestureRecognizer {
 
     companion object {
         private const val INVALID_POINTER = -1
+
+        // The buttons no pointer owns, dropped together by any lift the tracked regions do not claim.
+        private const val UNTRACKED_BUTTONS =
+            GamepadTouchView.BTN_SELECT or GamepadTouchView.BTN_START or
+                GamepadTouchView.BTN_HOME or GamepadTouchView.BTN_MIC_MUTE
     }
 }
 
@@ -646,7 +666,7 @@ internal fun triggerRailValue(
     if (!analog) return TRIGGER_MAX
     if (bottom <= top) return TRIGGER_MAX
     val clamped = y.coerceIn(top, bottom)
-    val boundary = top + (bottom - top) * GamepadConstants.TRIGGER_FULL_ZONE_FRACTION
+    val boundary = top + (bottom - top) * TRIGGER_FULL_ZONE_FRACTION
     if (clamped <= boundary) return TRIGGER_MAX
     val ramp = (bottom - clamped) / (bottom - boundary)
     return (ramp * TRIGGER_MAX).toInt().coerceIn(0, TRIGGER_MAX)

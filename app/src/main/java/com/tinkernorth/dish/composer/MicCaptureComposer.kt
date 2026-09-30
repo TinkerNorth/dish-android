@@ -6,8 +6,8 @@ import com.tinkernorth.dish.architecture.abstracts.AbstractComposer
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.source.audio.MicCapturePlan
-import com.tinkernorth.dish.source.audio.MicCapturePolicy
 import com.tinkernorth.dish.source.audio.MicSlotInput
+import com.tinkernorth.dish.source.audio.micCapturePlanFor
 import com.tinkernorth.dish.source.store.MicMuteStore
 import com.tinkernorth.dish.source.system.MicPermissionGate
 import kotlinx.coroutines.CoroutineScope
@@ -48,27 +48,24 @@ class MicCaptureComposer
                 micPermission.state,
                 micMute.state,
             ) { bindings, summaries, caps, granted, muted ->
-                val summariesById = summaries.associateBy { it.id }
-                val slots =
-                    bindings.map { (slotId, connId) ->
-                        MicSlotInput(
-                            slotId = slotId,
-                            connectionId = connId,
-                            streaming = streaming(summariesById[connId]),
-                            micEnabled = Feature.MIC in (caps[slotId] ?: SlotCapabilities.NONE).live,
-                            muted = muted[slotId] ?: MicMuteStore.DEFAULT_MUTED,
-                        )
-                    }
-                MicCapturePolicy.plan(slots, permissionGranted = granted)
+                micCapturePlanFor(micSlotInputsFor(bindings, summaries, caps, muted), permissionGranted = granted)
             }.distinctUntilChanged()
-
-        // Only a satellite carries controller audio at all: the Moonlight control protocol has no
-        // microphone channel and a Bluetooth HID gamepad has no audio endpoints to be. Unstable
-        // counts as streaming for the same reason the gamepad reports keep flowing over it: the
-        // link is up, it is just noisy, and stopping the microphone on a blip would be worse than
-        // the packets that blip costs.
-        private fun streaming(summary: ConnectionSummary?): Boolean =
-            summary != null &&
-                summary.kind == ConnectionKind.SATELLITE &&
-                (summary.live == LinkState.Connected || summary.live == LinkState.Unstable)
     }
+
+private fun micSlotInputsFor(
+    bindings: Map<String, String>,
+    summaries: List<ConnectionSummary>,
+    caps: Map<String, SlotCapabilities>,
+    muted: Map<String, Boolean>,
+): List<MicSlotInput> {
+    val summariesById = summaries.associateBy { it.id }
+    return bindings.map { (slotId, connId) ->
+        MicSlotInput(
+            slotId = slotId,
+            connectionId = connId,
+            streaming = isStreamingSatellite(summariesById[connId]),
+            micEnabled = Feature.MIC in (caps[slotId] ?: SlotCapabilities.NONE).live,
+            muted = muted[slotId] ?: MicMuteStore.DEFAULT_MUTED,
+        )
+    }
+}

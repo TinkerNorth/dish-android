@@ -2,7 +2,7 @@
 
 package com.tinkernorth.dish.source.bluetooth
 
-import com.tinkernorth.dish.core.input.BluetoothGamepad
+import com.tinkernorth.dish.core.input.GamepadProfile
 
 internal class FakeHidProxyClient(
     var adapterEnabled: Boolean = true,
@@ -15,7 +15,7 @@ internal class FakeHidProxyClient(
         ) : Call
 
         data class RegisterApp(
-            val profile: BluetoothGamepad.GamepadProfile,
+            val profile: GamepadProfile,
         ) : Call
 
         data class ConnectToHost(
@@ -41,7 +41,7 @@ internal class FakeHidProxyClient(
         calls += Call.Acquire(events)
     }
 
-    override fun registerApp(profile: BluetoothGamepad.GamepadProfile) {
+    override fun registerApp(profile: GamepadProfile) {
         calls += Call.RegisterApp(profile)
     }
 

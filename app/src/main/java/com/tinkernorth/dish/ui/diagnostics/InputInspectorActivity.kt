@@ -20,12 +20,14 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.databinding.ActivityInputInspectorBinding
+import com.tinkernorth.dish.databinding.InspectorAudioRowBinding
 import com.tinkernorth.dish.databinding.InspectorTestRowBinding
 import com.tinkernorth.dish.source.store.MIC_LED_OFF
 import com.tinkernorth.dish.source.store.MIC_LED_ON
 import com.tinkernorth.dish.source.store.MIC_LED_PULSE
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.diagnostics.InputInspectorViewModel.Companion.TEST_MAGNITUDE
 import dagger.hilt.android.AndroidEntryPoint
@@ -50,21 +52,23 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
 
     private val deviceId: Int? get() = viewModel.deviceId
 
-    private enum class Capture { NONE, DRIFT, RANGE }
-
-    private var capture = Capture.NONE
+    private var capture: CaptureKind? = null
     private var captureEndsAtMs = 0L
     private val leftSamples = mutableListOf<StickSample>()
     private val rightSamples = mutableListOf<StickSample>()
 
     private val micPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            viewModel.refreshMicPermission()
-            when {
-                granted -> viewModel.startMicTest()
-                !shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) -> showMicPermissionBlocked()
-            }
+        registerForActivityResult(ActivityResultContracts.RequestPermission(), ::onMicPermissionResult)
+
+    // Android stops prompting after the second refusal, so a denial with no rationale left to
+    // show is the one the user can only undo in Settings.
+    private fun onMicPermissionResult(granted: Boolean) {
+        viewModel.refreshMicPermission()
+        when {
+            granted -> viewModel.startMicTest()
+            !shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) -> showMicPermissionBlocked()
         }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,48 +76,61 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         setupDishToolbar(binding.toolbar)
         intent.getStringExtra(EXTRA_DEVICE_NAME)?.let { binding.toolbar.subtitle = it }
 
+        bindSectionLabels()
+        wireStickCaptures()
+        wireBench()
+        observeViewModel()
+        startLiveInputIfAttached()
+    }
+
+    private fun bindSectionLabels() {
         binding.sectionHost.labelSection.setText(R.string.inspector_section_host)
         binding.sectionDevice.labelSection.setText(R.string.diagnostics_section_device)
         binding.sectionInput.labelSection.setText(R.string.inspector_section_input)
-        binding.btnOpenBinding.setOnClickListener {
-            nav.toBindingInspector(
-                viewModel.slotId,
-                binding.toolbar.subtitle
-                    ?.toString()
-                    .orEmpty(),
-            )
-        }
         binding.sectionMotion.labelSection.setText(R.string.inspector_section_motion)
         binding.sectionTouch.labelSection.setText(R.string.inspector_section_touch)
         binding.sectionTests.labelSection.setText(R.string.inspector_section_tests)
         binding.sectionFeedback.labelSection.setText(R.string.inspector_section_feedback)
         binding.sectionAudio.labelSection.setText(R.string.inspector_section_audio)
+        binding.btnOpenBinding.setOnClickListener { openBindingInspector() }
+    }
 
-        binding.btnDriftTest.setOnClickListener { startCapture(Capture.DRIFT, DRIFT_CAPTURE_MS) }
-        binding.btnRangeTest.setOnClickListener { startCapture(Capture.RANGE, RANGE_CAPTURE_MS) }
-        wireBench()
+    private fun openBindingInspector() {
+        nav.toBindingInspector(
+            viewModel.slotId,
+            binding.toolbar.subtitle
+                ?.toString()
+                .orEmpty(),
+        )
+    }
 
+    private fun wireStickCaptures() {
+        binding.btnDriftTest.setOnClickListener { startCapture(CaptureKind.DRIFT, DRIFT_CAPTURE_MS) }
+        binding.btnRangeTest.setOnClickListener { startCapture(CaptureKind.RANGE, RANGE_CAPTURE_MS) }
+    }
+
+    private fun observeViewModel() {
         observe(viewModel.ui, ::renderUi)
         observe(viewModel.micTest, ::renderMicTest)
         observe(viewModel.speakerTest, ::renderSpeakerTest)
         observe(viewModel.micPermissionRequests) { requestMicPermission() }
+    }
 
-        if (deviceId != null) {
-            pollWhileStarted()
-        } else {
+    // Nothing to poll for a slot with no live device behind it, so that whole panel goes away
+    // rather than showing zeroes.
+    private fun startLiveInputIfAttached() {
+        if (deviceId == null) {
             binding.containerLiveInput.visibility = View.GONE
+            return
         }
+        pollWhileStarted()
     }
 
     private fun <T> observe(
         flow: Flow<T>,
         render: (T) -> Unit,
     ) {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                flow.collect { render(it) }
-            }
-        }
+        observeWhileStarted(flow) { render(it) }
     }
 
     override fun onStart() {
@@ -171,6 +188,16 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
     }
 
     private fun wireBench() {
+        wireFeedbackBench()
+        wireAudioBench()
+    }
+
+    private fun wireFeedbackBench() {
+        wireRumbleRows()
+        wireLightRows()
+    }
+
+    private fun wireRumbleRows() {
         bindTestRow(
             binding.rowRumble,
             R.string.setup_cap_rumble,
@@ -185,6 +212,9 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
             R.string.inspector_trigger_right to { viewModel.triggerRumble(left = 0, right = TEST_MAGNITUDE) },
             R.string.inspector_rumble_both to { viewModel.triggerRumble(left = TEST_MAGNITUDE, right = TEST_MAGNITUDE) },
         )
+    }
+
+    private fun wireLightRows() {
         bindTestRow(binding.rowLightbar, R.string.setup_cap_lightbar, R.string.inspector_cycle to { viewModel.cycleLightbar() })
         bindTestRow(binding.rowPlayerLeds, R.string.setup_cap_player_leds, R.string.inspector_cycle to { viewModel.cyclePlayerLeds() })
         bindTestRow(
@@ -199,6 +229,9 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
             R.string.inspector_lamp_pulse to { viewModel.micLed(MIC_LED_PULSE) },
             R.string.setup_cap_off to { viewModel.micLed(MIC_LED_OFF) },
         )
+    }
+
+    private fun wireAudioBench() {
         binding.rowSpeaker.tvAudioLabel.setText(R.string.setup_cap_speaker)
         binding.rowSpeaker.btnAudioAction.setText(R.string.inspector_play_tone)
         binding.rowSpeaker.btnAudioAction.setOnClickListener { viewModel.playTestTone() }
@@ -226,28 +259,37 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
     private fun renderMicTest(ui: MicTestUi) {
         val row = binding.rowMic
         when (ui) {
-            MicTestUi.Idle -> {
-                row.btnAudioAction.setText(R.string.inspector_mic_test)
-                row.barAudioLevel.visibility = View.GONE
-                row.tvAudioStatus.text = ""
-            }
-            is MicTestUi.Running -> {
-                row.btnAudioAction.setText(R.string.inspector_mic_stop)
-                row.barAudioLevel.visibility = View.VISIBLE
-                row.barAudioLevel.progress = ui.meterPercent
-                row.tvAudioStatus.text =
-                    if (ui.peakPercent == 0) {
-                        getString(R.string.inspector_mic_listening)
-                    } else {
-                        getString(R.string.inspector_mic_level, ui.meterPercent, ui.peakPercent)
-                    }
-            }
-            MicTestUi.Unavailable -> {
-                row.btnAudioAction.setText(R.string.inspector_mic_test)
-                row.barAudioLevel.visibility = View.GONE
-                row.tvAudioStatus.setText(R.string.inspector_mic_unavailable)
-            }
+            MicTestUi.Idle -> renderMicIdle(row)
+            is MicTestUi.Running -> renderMicRunning(row, ui)
+            MicTestUi.Unavailable -> renderMicUnavailable(row)
         }
+    }
+
+    private fun renderMicIdle(row: InspectorAudioRowBinding) {
+        row.btnAudioAction.setText(R.string.inspector_mic_test)
+        row.barAudioLevel.visibility = View.GONE
+        row.tvAudioStatus.text = ""
+    }
+
+    private fun renderMicRunning(
+        row: InspectorAudioRowBinding,
+        ui: MicTestUi.Running,
+    ) {
+        row.btnAudioAction.setText(R.string.inspector_mic_stop)
+        row.barAudioLevel.visibility = View.VISIBLE
+        row.barAudioLevel.progress = ui.meterPercent
+        row.tvAudioStatus.text =
+            if (ui.peakPercent == 0) {
+                getString(R.string.inspector_mic_listening)
+            } else {
+                getString(R.string.inspector_mic_level, ui.meterPercent, ui.peakPercent)
+            }
+    }
+
+    private fun renderMicUnavailable(row: InspectorAudioRowBinding) {
+        row.btnAudioAction.setText(R.string.inspector_mic_test)
+        row.barAudioLevel.visibility = View.GONE
+        row.tvAudioStatus.setText(R.string.inspector_mic_unavailable)
     }
 
     private fun renderSpeakerTest(ui: SpeakerTestUi) {
@@ -302,42 +344,57 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
 
     private fun tick() {
         val id = deviceId ?: return
-        val snapshot = InputSnapshot.parse(json, physicalInputNative.deviceStateJson(id)) ?: return
+        val snapshot = parseInputSnapshot(json, physicalInputNative.deviceStateJson(id)) ?: return
         renderLive(snapshot)
-        if (capture != Capture.NONE) tickCapture(snapshot)
+        capture?.let { tickCapture(it, snapshot) }
     }
 
     private fun renderLive(s: InputSnapshot) {
+        renderSticksAndTriggers(s)
+        renderButtons(s)
+        renderMotion(s)
+        renderTouch(s)
+    }
+
+    private fun renderSticksAndTriggers(s: InputSnapshot) {
         binding.plotLeftStick.update(s.leftSample())
         binding.plotRightStick.update(s.rightSample())
         binding.tvRawValues.text = getString(R.string.inspector_values, s.lx, s.ly, s.rx, s.ry, s.lt, s.rt)
         binding.barLeftTrigger.progress = s.lt
         binding.barRightTrigger.progress = s.rt
+    }
 
+    private fun renderButtons(s: InputSnapshot) {
         val pressed = WireButton.entries.filter { (s.buttons and it.bit) != 0 }.joinToString(" · ") { it.label }
         binding.tvButtons.text =
             getString(R.string.inspector_pressed, pressed.ifEmpty { getString(R.string.inspector_none) })
+    }
 
-        if (s.motionValid) {
-            binding.tvGyro.text =
-                getString(R.string.inspector_gyro_value, wireGyroToDps(s.gx), wireGyroToDps(s.gy), wireGyroToDps(s.gz))
-            binding.tvAccel.text =
-                getString(R.string.inspector_accel_value, wireAccelToG(s.ax), wireAccelToG(s.ay), wireAccelToG(s.az))
-        } else {
+    // A pad with no IMU says so once rather than showing zeroes, which would read as a sensor
+    // that is working and perfectly still.
+    private fun renderMotion(s: InputSnapshot) {
+        if (!s.motionValid) {
             binding.tvGyro.text = getString(R.string.inspector_motion_missing)
             binding.tvAccel.text = ""
+            return
         }
+        binding.tvGyro.text =
+            getString(R.string.inspector_gyro_value, wireGyroToDps(s.gx), wireGyroToDps(s.gy), wireGyroToDps(s.gz))
+        binding.tvAccel.text =
+            getString(R.string.inspector_accel_value, wireAccelToG(s.ax), wireAccelToG(s.ay), wireAccelToG(s.az))
+    }
 
-        if (s.touchValid) {
-            binding.plotTouch.update(s)
-            binding.tvTouchHint.text = ""
-        } else {
+    private fun renderTouch(s: InputSnapshot) {
+        if (!s.touchValid) {
             binding.tvTouchHint.text = getString(R.string.inspector_touch_missing)
+            return
         }
+        binding.plotTouch.update(s)
+        binding.tvTouchHint.text = ""
     }
 
     private fun startCapture(
-        kind: Capture,
+        kind: CaptureKind,
         durationMs: Long,
     ) {
         capture = kind
@@ -345,31 +402,39 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         leftSamples.clear()
         rightSamples.clear()
         binding.tvTestResult.text = ""
-        if (kind == Capture.RANGE) {
+        if (kind == CaptureKind.RANGE) {
             binding.plotLeftStick.startTrail()
             binding.plotRightStick.startTrail()
         }
     }
 
-    private fun tickCapture(s: InputSnapshot) {
+    private fun tickCapture(
+        kind: CaptureKind,
+        s: InputSnapshot,
+    ) {
         leftSamples += s.leftSample()
         rightSamples += s.rightSample()
-        val leftMs = captureEndsAtMs - SystemClock.elapsedRealtime()
-        if (leftMs > 0) {
-            binding.tvTestResult.text = getString(R.string.inspector_capturing, (leftMs / 1000 + 1).toInt())
-            return
+        when (val tick = captureTick(kind, captureEndsAtMs - SystemClock.elapsedRealtime())) {
+            is CaptureTick.Counting -> binding.tvTestResult.text = getString(R.string.inspector_capturing, tick.secondsLeft)
+            is CaptureTick.Finished -> finishCapture(tick.kind)
         }
-        val kind = capture
-        capture = Capture.NONE
+    }
+
+    private fun finishCapture(kind: CaptureKind) {
+        capture = null
         binding.plotLeftStick.stopTrail()
         binding.plotRightStick.stopTrail()
-        binding.tvTestResult.text = if (kind == Capture.DRIFT) driftResult() else rangeResult()
+        binding.tvTestResult.text =
+            when (kind) {
+                CaptureKind.DRIFT -> driftResult()
+                CaptureKind.RANGE -> rangeResult()
+            }
     }
 
     private fun driftResult(): String {
-        val driftL = StickHealth.drift(leftSamples)
-        val driftR = StickHealth.drift(rightSamples)
-        val suggested = StickHealth.suggestedDeadzone(maxOf(driftL, driftR))
+        val driftL = drift(leftSamples)
+        val driftR = drift(rightSamples)
+        val suggested = suggestedDeadzone(maxOf(driftL, driftR))
         viewModel.noteDrift(driftL, driftR, suggested)
         return getString(
             R.string.inspector_drift_result,
@@ -380,8 +445,8 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
     }
 
     private fun rangeResult(): String {
-        val left = StickHealth.envelope(leftSamples)
-        val right = StickHealth.envelope(rightSamples)
+        val left = envelope(leftSamples)
+        val right = envelope(rightSamples)
         binding.plotLeftStick.clearTrail()
         binding.plotRightStick.clearTrail()
         viewModel.noteRange(worstReach(left), worstReach(right), left.circularityError, right.circularityError)
@@ -393,9 +458,6 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
             right.circularityError?.let { percent(it) } ?: getString(R.string.inspector_na),
         )
     }
-
-    // The rail the stick struggles to reach is the one that matters in game.
-    private fun worstReach(e: StickHealth.Envelope): Float = minOf(-e.minX, e.maxX, -e.minY, e.maxY).coerceAtLeast(0f)
 
     private fun percent(fraction: Float): String = getString(R.string.inspector_percent, (fraction * 100).roundToInt())
 

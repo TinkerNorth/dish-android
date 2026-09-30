@@ -17,7 +17,7 @@ class CrashReportingStore
     constructor(
         @ApplicationContext context: Context,
     ) : AbstractStateSource<Boolean>(
-            initialState = readInitial(context),
+            initialState = readCrashReportingEnabled(context),
         ) {
         private val prefs: SharedPreferences =
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -31,10 +31,10 @@ class CrashReportingStore
             const val PREFS_NAME = "user_preferences"
             const val KEY_COLLECTION_ENABLED = "crashlytics_collection_enabled"
             const val DEFAULT_ENABLED = true
-
-            private fun readInitial(context: Context): Boolean {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                return prefs.getBoolean(KEY_COLLECTION_ENABLED, DEFAULT_ENABLED)
-            }
         }
     }
+
+private fun readCrashReportingEnabled(context: Context): Boolean {
+    val prefs = context.getSharedPreferences(CrashReportingStore.PREFS_NAME, Context.MODE_PRIVATE)
+    return prefs.getBoolean(CrashReportingStore.KEY_COLLECTION_ENABLED, CrashReportingStore.DEFAULT_ENABLED)
+}

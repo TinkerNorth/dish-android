@@ -2,8 +2,8 @@
 
 package com.tinkernorth.dish.hotpath.input
 
-import com.tinkernorth.dish.source.connection.TouchpadReport
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
+import com.tinkernorth.dish.ui.common.TouchpadReportBuffer
 
 /**
  * Native -> Kotlin upcall target for physical pads bound to a Moonlight host,
@@ -19,6 +19,9 @@ object MoonlightGamepadBridge {
     }
 
     @Volatile private var manager: MoonlightConnectionManager? = null
+
+    // The touch upcalls' wire frame: every upcall arrives on the one bridge dispatch thread.
+    private val dispatchThreadReport = TouchpadReportBuffer()
 
     // Must run from a JVM call so the app classloader is on the stack (FindClass in JNI_OnLoad would fail).
     fun install(manager: MoonlightConnectionManager) {
@@ -87,7 +90,7 @@ object MoonlightGamepadBridge {
      * Marker: this signature is the native upcall contract (satellite_jni.cpp resolves it by
      * name and JNI signature and calls it per report from the dispatch thread with primitives).
      * A parameter object would have to be built natively with NewObject per report; the
-     * TouchpadReport is built here instead, on the JVM side, once per upcall.
+     * primitives are written into the dispatch thread's one report here instead.
      */
     @JvmStatic
     @Suppress("LongParameterList")
@@ -106,23 +109,18 @@ object MoonlightGamepadBridge {
     ) {
         val conn = manager?.get(connectionId) ?: return
         val slotId = conn.slotIdForNumber(controllerNumber) ?: return
-        conn.sendTouchpad(
-            slotId,
-            TouchpadReport(
+        val report =
+            dispatchThreadReport.reportOf(
                 finger0Active = finger0Active,
-                finger1Active = finger1Active,
-                buttonPressed = clickDown,
-                rightPressed = false,
-                middlePressed = false,
-                finger0TrackingId = finger0Id,
+                finger0Id = finger0Id,
                 finger0X = finger0X.toShort(),
                 finger0Y = finger0Y.toShort(),
-                finger1TrackingId = finger1Id,
+                finger1Active = finger1Active,
+                finger1Id = finger1Id,
                 finger1X = finger1X.toShort(),
                 finger1Y = finger1Y.toShort(),
-                eventTimeMs = 0L,
-                scrollDelta = 0,
-            ),
-        )
+                buttonPressed = clickDown,
+            )
+        conn.sendTouchpad(slotId, report)
     }
 }

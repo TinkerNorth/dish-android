@@ -146,9 +146,8 @@ enum class ProbeOutcome : uint8_t {
 
 bool probePermitsClaim(ProbeOutcome outcome, bool verifiedFastLane);
 
-// Whether releasing this model back to Standard produces a framework gamepad InputDevice. False
-// for the Steam Controller, whose stand-alone identity is a keyboard and mouse: a release that
-// waited for a framework gamepad would always time out into a false "restore stuck".
+// Whether releasing this model back to Standard produces a framework gamepad InputDevice (the
+// Steam Controller's stand-alone identity is a keyboard and mouse).
 bool modelExpectsFrameworkGamepad(uint16_t vid, uint16_t pid);
 
 const char* parserName(Parser p);
@@ -212,9 +211,8 @@ size_t buildTriggerEffectsReport(Parser p, const FeedbackState& st,
                                  const uint8_t left[TRIGGER_EFFECT_BLOCK_LEN],
                                  const uint8_t right[TRIGGER_EFFECT_BLOCK_LEN], uint8_t* out,
                                  size_t outCap);
-// state is MSG_MIC_LED's own (0 off / 1 on / 2 pulse); anything else is refused rather than
-// clamped, since a lamp state we cannot name is one this pad should not be shown. Records the
-// state in [st] so the other builders keep re-asserting it.
+// state is MSG_MIC_LED's own value; it is recorded in [st] so the other builders keep re-asserting
+// it.
 size_t buildMicMuteLedReport(Parser p, FeedbackState& st, uint8_t state, uint8_t* out,
                              size_t outCap);
 
@@ -235,7 +233,9 @@ void runTeardown(int fd, int interfaceNumber, Parser p);
 
 bool runRumble(int fd, uint8_t epOut, Parser p, uint16_t strong, uint16_t weak, uint8_t seq);
 
-// Android write wrappers over the feedback builders, mirroring runRumble.
+// Android write wrappers over the feedback builders, mirroring runRumble. Each refuses a device
+// with no OUT endpoint before it builds, so a builder never records in FeedbackState a write that
+// cannot happen.
 bool runMergedRumble(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t seq);
 bool runLightbar(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t r, uint8_t g,
                  uint8_t b);
@@ -260,7 +260,22 @@ WirelessEvent checkWirelessEvent(Parser p, const uint8_t* buf, size_t len);
 
 bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, gamepad::DeviceState& s);
 
+// A DualShock 4 / DualSense calibration feature report: gyro at bytes 1..21, accel at 23..34.
+inline constexpr size_t PS_CALIBRATION_REPORT_BYTES = 35;
+
 // Parses a DualShock 4 / DualSense calibration feature report into per-axis gyro/accel factors.
 bool parsePsCalibration(const uint8_t* buf, size_t len, PsImuCalib& out);
+
+// USB control-transfer fields the class-driver requests use (USB 2.0 §9.3, HID 1.11 §7.2), shared
+// with the descriptor and report fetches in usb_host.cpp.
+inline constexpr uint8_t USB_REQUEST_TYPE_OUT_CLASS_INTERFACE = 0x21;
+inline constexpr uint8_t USB_REQUEST_TYPE_IN_STANDARD_INTERFACE = 0x81;
+inline constexpr uint8_t USB_REQUEST_TYPE_IN_CLASS_INTERFACE = 0xA1;
+inline constexpr uint8_t USB_REQUEST_GET_REPORT = 0x01;
+inline constexpr uint8_t USB_REQUEST_GET_DESCRIPTOR = 0x06;
+inline constexpr uint8_t USB_REQUEST_SET_REPORT = 0x09;
+inline constexpr uint8_t HID_REPORT_TYPE_FEATURE = 0x03;
+inline constexpr uint8_t HID_DESCRIPTOR_TYPE_REPORT = 0x22;
+inline constexpr unsigned USB_CONTROL_TIMEOUT_MS = 250;
 
 } // namespace usbparsers

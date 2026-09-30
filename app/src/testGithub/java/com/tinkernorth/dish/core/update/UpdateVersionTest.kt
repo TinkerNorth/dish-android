@@ -9,12 +9,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UpdateVersionTest {
-    private fun v(text: String): UpdateVersion = requireNotNull(UpdateVersion.parse(text)) { "expected $text to parse" }
+    private fun v(text: String): UpdateVersion = requireNotNull(parseUpdateVersion(text)) { "expected $text to parse" }
 
     @Test
     fun `a strict triple parses`() {
-        assertEquals(UpdateVersion(2, 0, 10), UpdateVersion.parse("2.0.10"))
-        assertEquals(UpdateVersion(0, 0, 0), UpdateVersion.parse("0.0.0"))
+        assertEquals(UpdateVersion(2, 0, 10), parseUpdateVersion("2.0.10"))
+        assertEquals(UpdateVersion(0, 0, 0), parseUpdateVersion("0.0.0"))
         assertEquals("2.0.10", v("2.0.10").toString())
     }
 
@@ -35,7 +35,7 @@ class UpdateVersionTest {
                 "99999999999.0.0",
                 "2.0.a",
             )
-        for (text in bad) assertNull(text, UpdateVersion.parse(text))
+        for (text in bad) assertNull(text, parseUpdateVersion(text))
     }
 
     @Test
@@ -48,13 +48,13 @@ class UpdateVersionTest {
 
     @Test
     fun `a build past its tag reports the tag`() {
-        assertEquals(UpdateVersion(2, 0, 0), UpdateVersion.ofBuild("2.0.0"))
-        assertEquals(UpdateVersion(2, 0, 0), UpdateVersion.ofBuild("2.0.0-3-g1a2b3c4"))
-        assertEquals(UpdateVersion(2, 0, 0), UpdateVersion.ofBuild("2.0.0-3-g1a2b3c4-dirty"))
-        assertEquals(UpdateVersion(2, 0, 0), UpdateVersion.ofBuild("2.0.0-dirty"))
-        assertNull(UpdateVersion.ofBuild("dev"))
-        assertNull(UpdateVersion.ofBuild("2.0.0-rc1"))
-        assertNull(UpdateVersion.ofBuild("v2.0.0"))
+        assertEquals(UpdateVersion(2, 0, 0), updateVersionOfBuild("2.0.0"))
+        assertEquals(UpdateVersion(2, 0, 0), updateVersionOfBuild("2.0.0-3-g1a2b3c4"))
+        assertEquals(UpdateVersion(2, 0, 0), updateVersionOfBuild("2.0.0-3-g1a2b3c4-dirty"))
+        assertEquals(UpdateVersion(2, 0, 0), updateVersionOfBuild("2.0.0-dirty"))
+        assertNull(updateVersionOfBuild("dev"))
+        assertNull(updateVersionOfBuild("2.0.0-rc1"))
+        assertNull(updateVersionOfBuild("v2.0.0"))
     }
 
     @Test

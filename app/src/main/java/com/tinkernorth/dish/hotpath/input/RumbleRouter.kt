@@ -9,6 +9,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.view.InputDevice
+import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.annotation.RequiresApi
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnection
@@ -43,28 +44,39 @@ sealed interface RumbleTarget {
 
 @Singleton
 class RumbleRouter
-    @Inject
-    constructor(
-        @ApplicationContext context: Context,
+    internal constructor(
+        context: Context,
         private val satellite: SatelliteConnectionManager,
         private val native: PhysicalInputNative,
         private val scope: CoroutineScope,
         private val rumbleEnabled: RumbleEnabledStore,
         private val feedbackActivity: FeedbackActivityStore,
+        private val sdkInt: Int,
     ) {
+        @Inject
+        constructor(
+            @ApplicationContext context: Context,
+            satellite: SatelliteConnectionManager,
+            native: PhysicalInputNative,
+            scope: CoroutineScope,
+            rumbleEnabled: RumbleEnabledStore,
+            feedbackActivity: FeedbackActivityStore,
+        ) : this(context, satellite, native, scope, rumbleEnabled, feedbackActivity, Build.VERSION.SDK_INT)
+
         // A claimed USB pad has no oneshot duration, so a dropped session could leave it buzzing;
         // each rumble schedules a stop at the clamped duration, cancelled by the next rumble.
         private val usbStopJobs = ConcurrentHashMap<Int, Job>()
+        private val triggerStopJobs = ConcurrentHashMap<Int, Job>()
 
         private val phoneVibratorManager: VibratorManager? =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (atLeast(Build.VERSION_CODES.S)) {
                 context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager?
             } else {
                 null
             }
 
         private val phoneVibrator: Vibrator? =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (atLeast(Build.VERSION_CODES.S)) {
                 null
             } else {
                 context.getSystemService(Vibrator::class.java)
@@ -82,6 +94,28 @@ class RumbleRouter
             val target = classifyTarget(slotId)
             if (target is RumbleTarget.None) return
             actuate(target, strongMagnitude, weakMagnitude, rumbleSafeDurationMs(durationMs).toLong())
+        }
+
+        // A claimed pad's trigger motors hold a level until the next write, and a host that went
+        // away writes no stop of its own: each level is stopped when its hold runs out, unless a
+        // newer one replaced it.
+        fun driveDirectTriggers(
+            deviceId: Int,
+            leftMagnitude: Int,
+            rightMagnitude: Int,
+            holdMs: Int,
+        ) {
+            triggerStopJobs.remove(deviceId)?.cancel()
+            native.sendUsbTriggerRumble(deviceId, leftMagnitude, rightMagnitude)
+            val isStop = leftMagnitude == TRIGGERS_OFF && rightMagnitude == TRIGGERS_OFF
+            if (isStop) return
+            val job =
+                scope.launch {
+                    delay(rumbleSafeDurationMs(holdMs).toLong())
+                    native.sendUsbTriggerRumble(deviceId, TRIGGERS_OFF, TRIGGERS_OFF)
+                }
+            triggerStopJobs[deviceId] = job
+            job.invokeOnCompletion { triggerStopJobs.remove(deviceId, job) }
         }
 
         fun dispatch(
@@ -134,6 +168,7 @@ class RumbleRouter
             val snapshot =
                 satellite.connections.value.values.map { conn ->
                     RumbleConnectionSnapshot(
+                        connectionId = conn.id,
                         handle = conn.handle,
                         connected = conn.state.value == SatelliteSessionState.Live,
                         slots = conn.slots.value,
@@ -158,14 +193,14 @@ class RumbleRouter
         ) {
             when (target) {
                 RumbleTarget.Phone ->
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    if (atLeast(Build.VERSION_CODES.S)) {
                         phoneVibratorManager?.let { vibrateManager(it, strongMagnitude, weakMagnitude, durationMs) }
                     } else {
                         phoneVibrator?.let { vibrateSingle(it, strongMagnitude, weakMagnitude, durationMs) }
                     }
                 is RumbleTarget.Framework -> {
                     val dev = InputDevice.getDevice(target.deviceId) ?: return
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    if (atLeast(Build.VERSION_CODES.S)) {
                         vibrateManager(dev.vibratorManager, strongMagnitude, weakMagnitude, durationMs)
                     } else {
                         dev.legacyVibrator()?.let { vibrateSingle(it, strongMagnitude, weakMagnitude, durationMs) }
@@ -188,26 +223,35 @@ class RumbleRouter
 
         private fun cancel(target: RumbleTarget) {
             when (target) {
-                RumbleTarget.Phone ->
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        phoneVibratorManager?.cancel()
-                    } else {
-                        phoneVibrator?.cancel()
-                    }
-                is RumbleTarget.Framework -> {
-                    val dev = InputDevice.getDevice(target.deviceId) ?: return
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        dev.vibratorManager.cancel()
-                    } else {
-                        dev.legacyVibrator()?.cancel()
-                    }
-                }
-                is RumbleTarget.DirectUsb -> {
-                    usbStopJobs.remove(target.deviceId)?.cancel()
-                    native.sendUsbRumble(target.deviceId, 0, 0)
-                }
+                RumbleTarget.Phone -> cancelPhone()
+                is RumbleTarget.Framework -> cancelFramework(target.deviceId)
+                is RumbleTarget.DirectUsb -> cancelDirectUsb(target.deviceId)
                 RumbleTarget.None -> Unit
             }
+        }
+
+        private fun cancelPhone() {
+            if (atLeast(Build.VERSION_CODES.S)) {
+                phoneVibratorManager?.cancel()
+            } else {
+                phoneVibrator?.cancel()
+            }
+        }
+
+        private fun cancelFramework(deviceId: Int) {
+            val dev = InputDevice.getDevice(deviceId) ?: return
+            if (atLeast(Build.VERSION_CODES.S)) {
+                dev.vibratorManager.cancel()
+            } else {
+                dev.legacyVibrator()?.cancel()
+            }
+        }
+
+        // The stop job is dropped first: it would otherwise fire its own zero later and race a
+        // rumble that started in between.
+        private fun cancelDirectUsb(deviceId: Int) {
+            usbStopJobs.remove(deviceId)?.cancel()
+            native.sendUsbRumble(deviceId, 0, 0)
         }
 
         @RequiresApi(Build.VERSION_CODES.S)
@@ -242,7 +286,7 @@ class RumbleRouter
             if (!vibrator.hasVibrator()) return
             val amp = rumbleMagnitudeTo255(maxOf(strongMagnitude, weakMagnitude))
             if (amp == 0) return
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (atLeast(Build.VERSION_CODES.O)) {
                 vibrator.vibrate(VibrationEffect.createOneShot(durationMs, amp))
             } else {
                 vibrateLegacy(vibrator, durationMs)
@@ -260,26 +304,39 @@ class RumbleRouter
         ) {
             vibrator.vibrate(durationMs)
         }
+
+        // Every vibrator API branch reads the release through here: lint takes it as the gate,
+        // and a test can build the router for any release.
+        @ChecksSdkIntAtLeast(parameter = 0)
+        private fun atLeast(api: Int): Boolean = sdkInt >= api
     }
 
 // Flat, immutable view of one connection captured once per dispatch so resolveRumble stays pure.
 data class RumbleConnectionSnapshot(
+    val connectionId: String,
     val handle: Int,
     val connected: Boolean,
     val slots: Map<String, SatelliteConnection.SlotBinding>,
 )
 
-// Pure target resolver. Collision rule: a connected match wins over a non-connected one with the
-// same handle so a stale session can't steal a live controller's rumble; among equally-connected
-// matches the first wins (deterministic over the snapshot order).
+// The connection a session handle names. Collision rule: a connected match wins over a
+// non-connected one with the same handle so a stale session can't steal a live controller's
+// feedback; among equally-connected matches the first wins (deterministic over the snapshot order).
+fun connectionForHandle(
+    connections: List<RumbleConnectionSnapshot>,
+    sessionHandle: Int,
+): RumbleConnectionSnapshot? {
+    if (sessionHandle < 0) return null
+    val matches = connections.filter { it.handle == sessionHandle }
+    return matches.firstOrNull { it.connected } ?: matches.firstOrNull()
+}
+
 fun resolveRumble(
     connections: List<RumbleConnectionSnapshot>,
     sessionHandle: Int,
     controllerIndex: Int,
 ): RumbleTarget {
-    if (sessionHandle < 0) return RumbleTarget.None
-    val matches = connections.filter { it.handle == sessionHandle }
-    val conn = matches.firstOrNull { it.connected } ?: matches.firstOrNull() ?: return RumbleTarget.None
+    val conn = connectionForHandle(connections, sessionHandle) ?: return RumbleTarget.None
     val slotId = resolveSlotId(conn.slots, controllerIndex) ?: return RumbleTarget.None
     return classifyTarget(slotId)
 }
@@ -323,14 +380,23 @@ internal fun combinedRumblePlan(
 
 // Returns 0 only for exact zero; tiny magnitudes clamp to 1 so on/off response matches a physical pad.
 internal fun rumbleMagnitudeTo255(magnitude: Int): Int {
-    val clamped = magnitude.coerceIn(0, 65535)
+    val clamped = magnitude.coerceIn(0, WIRE_MAGNITUDE_MAX)
     if (clamped == 0) return 0
-    val scaled = (clamped * 255 + 32767) / 65535
-    return scaled.coerceIn(1, 255)
+    val scaled = (clamped * MOTOR_MAX + ROUND_HALF) / WIRE_MAGNITUDE_MAX
+    return scaled.coerceIn(1, MOTOR_MAX)
 }
 
-// Cap at 1500ms so a buggy/malicious satellite can't strand a multi-second buzz on the device.
+// Capped so a buggy/malicious satellite can't strand a multi-second buzz on the device.
 internal fun rumbleSafeDurationMs(durationMs: Int): Int {
     if (durationMs == 0) return 0
-    return durationMs.coerceIn(1, 1500)
+    return durationMs.coerceIn(1, RUMBLE_MAX_MS)
 }
+
+// The wire carries a 16-bit magnitude; a vibrator takes an 8-bit amplitude, rounded half up.
+private const val WIRE_MAGNITUDE_MAX = 65535
+private const val MOTOR_MAX = 255
+private const val ROUND_HALF = WIRE_MAGNITUDE_MAX / 2
+
+internal const val RUMBLE_MAX_MS = 1500
+
+private const val TRIGGERS_OFF = 0

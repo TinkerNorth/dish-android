@@ -43,7 +43,6 @@ class RememberedSatelliteRepository
             return runCatching {
                 json.decodeFromString(ListSerializer(RememberedSatellite.serializer()), raw)
             }.getOrElse { err ->
-                // Fall back to empty on parse failure: forgetting satellites beats crashing on corrupt prefs.
                 Log.w(
                     TAG,
                     "Failed to decode satellite list; treating as empty. " +

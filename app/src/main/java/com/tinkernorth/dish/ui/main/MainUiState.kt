@@ -5,7 +5,8 @@ package com.tinkernorth.dish.ui.main
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.core.net.DishProtocol
+import com.tinkernorth.dish.core.net.DishProtocolCompat
+import com.tinkernorth.dish.source.connection.ConnectionError
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 
@@ -19,21 +20,21 @@ data class BatteryUi(
 
     companion object {
         const val LOW_THRESHOLD = 15
-
-        // Returns null only when both level and status are UNKNOWN: nothing to render.
-        fun fromWire(
-            level: Int,
-            status: Int,
-        ): BatteryUi? {
-            val charging =
-                status == BatteryValidator.STATUS_CHARGING ||
-                    status == BatteryValidator.STATUS_FULL ||
-                    status == BatteryValidator.STATUS_WIRED
-            val pct = if (level == BatteryValidator.LEVEL_UNKNOWN) null else level
-            if (pct == null && status == BatteryValidator.STATUS_UNKNOWN) return null
-            return BatteryUi(level = pct, charging = charging)
-        }
     }
+}
+
+// Returns null only when both level and status are UNKNOWN: nothing to render.
+fun batteryUiFromWire(
+    level: Int,
+    status: Int,
+): BatteryUi? {
+    val charging =
+        status == BatteryValidator.STATUS_CHARGING ||
+            status == BatteryValidator.STATUS_FULL ||
+            status == BatteryValidator.STATUS_WIRED
+    val pct = if (level == BatteryValidator.LEVEL_UNKNOWN) null else level
+    if (pct == null && status == BatteryValidator.STATUS_UNKNOWN) return null
+    return BatteryUi(level = pct, charging = charging)
 }
 
 data class ControllerSlot(
@@ -74,28 +75,29 @@ data class MainUiState(
     val inputRates: Map<String, SlotInputRates> = emptyMap(),
     val screenPeakHz: Int = 0,
     // Per-connection protocol verdict (satellite hosts only), for the update chips.
-    val hostCompat: Map<String, DishProtocol.Compat> = emptyMap(),
+    val hostCompat: Map<String, DishProtocolCompat> = emptyMap(),
 ) {
     val virtualSlot get() = slots.first { it.id == VIRTUAL_SLOT_ID }
     val physicalSlots get() = slots.filter { it.inputType == SlotInputType.PHYSICAL }
-    val anyConnected get() = connections.any { it.live == com.tinkernorth.dish.composer.LinkState.Connected }
-    val anyConnecting get() = connections.any { it.live == com.tinkernorth.dish.composer.LinkState.Connecting }
+    val anyConnected get() = connections.any { it.live == LinkState.Connected }
+    val anyConnecting get() = connections.any { it.live == LinkState.Connecting }
 
     // Distinct from connections.count { CONNECTED }: excludes physical slots with no device attached.
-    val streamingSlotCount: Int get() =
-        slots.count {
-            !it.isDisconnecting &&
-                it.boundConnectionId != null &&
-                it.boundStatus?.live == com.tinkernorth.dish.composer.LinkState.Connected &&
-                (it.inputType == SlotInputType.VIRTUAL || it.physicalDeviceId >= 0)
-        }
+    val streamingSlotCount: Int get() = slots.count { it.isStreaming() }
+}
+
+private fun ControllerSlot.isStreaming(): Boolean {
+    val isBound = boundConnectionId != null
+    val hostIsConnected = boundStatus?.live == LinkState.Connected
+    val hasAnInput = inputType == SlotInputType.VIRTUAL || physicalDeviceId >= 0
+    return !isDisconnecting && isBound && hostIsConnected && hasAnInput
 }
 
 const val VIRTUAL_SLOT_ID = "virtual"
 
 sealed class MainEvent {
-    data class ShowToast(
-        val message: String,
+    data class ShowConnectionError(
+        val error: ConnectionError,
     ) : MainEvent()
 
     data class ShowPairingDialog(

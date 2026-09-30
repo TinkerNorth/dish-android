@@ -3,16 +3,29 @@
 
 package com.tinkernorth.dish.source.connection.moonlight
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.OutputStream
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import javax.net.ssl.SSLPeerUnverifiedException
 
 /**
@@ -27,8 +40,18 @@ class MoonlightHttp11ClientTest {
     @Volatile private var requestHead: String = ""
     private val served = CountDownLatch(1)
 
+    // A holding host's side of the story: it has the request, and later, the connection closing under it.
+    private val holding = CountDownLatch(1)
+    private val closedUnderIt = CountDownLatch(1)
+
+    @Volatile private var heldConnection: Socket? = null
+
+    private val callers = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     @After
     fun tearDown() {
+        callers.cancel()
+        heldConnection?.close()
         serverThread?.interrupt()
         if (::server.isInitialized) server.close()
     }
@@ -52,6 +75,34 @@ class MoonlightHttp11ClientTest {
             }
         return "http://127.0.0.1:${server.localPort}/pair?devicename=roth&phrase=getservercert"
     }
+
+    /**
+     * Starts a one-shot host that holds the request it is sent and never answers it, the way a
+     * host holds pairing phase 1 until a human types the PIN, and notes the client closing it.
+     */
+    private fun holdingHost(): String {
+        server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+        serverThread =
+            Thread { runCatching { server.accept().use(::holdUntilClosed) } }.apply {
+                isDaemon = true
+                start()
+            }
+        return "http://127.0.0.1:${server.localPort}/pair?devicename=roth&phrase=getservercert"
+    }
+
+    // The client sent nothing more, so the next read ends only when the client's side of the connection closes.
+    private fun holdUntilClosed(connection: Socket) {
+        heldConnection = connection
+        requestHead = readHead(connection)
+        holding.countDown()
+        runCatching { connection.getInputStream().read() }
+        closedUnderIt.countDown()
+    }
+
+    private fun endsWithin(
+        job: Job,
+        millis: Long,
+    ): Boolean = runBlocking { withTimeoutOrNull(millis) { job.join() } } != null
 
     // Reads exactly the request head, so the fixture never blocks on a body.
     private fun readHead(socket: Socket): String {
@@ -273,11 +324,110 @@ class MoonlightHttp11ClientTest {
         assertEquals("", requestHead)
     }
 
+    // Pairing phase 1 waits two minutes for a human; a Cancel must not.
+    @Test
+    fun `a request hung up while the host holds it ends at once, unanswered, and the host sees it close`() {
+        val url = holdingHost()
+        val line = CallLine()
+        val answer = CompletableFuture.supplyAsync { client().get(url, HELD_READ_MS, line) }
+        assertTrue("the host is holding the request", holding.await(HOLD_WAIT_MS, TimeUnit.MILLISECONDS))
+
+        line.hangUp()
+
+        assertEquals(0, answer.get(STOP_MS, TimeUnit.MILLISECONDS).status)
+        assertTrue("the host is left a closed connection", closedUnderIt.await(STOP_MS, TimeUnit.MILLISECONDS))
+    }
+
+    @Test
+    fun `a line hung up before its request dials never reaches the host`() {
+        val url = holdingHost()
+        val line = CallLine()
+        line.hangUp()
+
+        val reply = client().get(url, HELD_READ_MS, line)
+
+        assertEquals(0, reply.status)
+        assertFalse("the host was never asked", holding.await(SETTLE_MS, TimeUnit.MILLISECONDS))
+    }
+
+    @Test
+    fun `cancelling the caller hangs up the request it is waiting on`() {
+        val url = holdingHost()
+        val caller = callers.launch { hangingUpOnCancel { line -> client().get(url, HELD_READ_MS, line) } }
+        assertTrue("the host is holding the request", holding.await(HOLD_WAIT_MS, TimeUnit.MILLISECONDS))
+
+        caller.cancel()
+
+        assertTrue("the caller ends without the host answering", endsWithin(caller, STOP_MS))
+        assertTrue("the host is left a closed connection", closedUnderIt.await(STOP_MS, TimeUnit.MILLISECONDS))
+    }
+
+    @Test
+    fun `a cancelled caller never sees the reply its hung-up line left behind`() {
+        val url = holdingHost()
+        val handedBack = AtomicReference<MoonlightHttpGateway.Reply?>()
+        val caller =
+            callers.launch {
+                handedBack.set(hangingUpOnCancel { line -> client().get(url, HELD_READ_MS, line) })
+            }
+        assertTrue("the host is holding the request", holding.await(HOLD_WAIT_MS, TimeUnit.MILLISECONDS))
+
+        caller.cancel()
+
+        assertTrue(endsWithin(caller, STOP_MS))
+        assertNull("the unanswered reply is not handed back", handedBack.get())
+    }
+
+    // A call that throws once its socket is closed under it must not hand that throw to a caller
+    // that was cancelled: the caller asked to stop, and a failure it did not cause is not an answer.
+    @Test
+    fun `a cancelled caller gets its cancellation even when the hung-up call throws`() {
+        val waiting = CountDownLatch(1)
+        val outcome = CompletableFuture<Throwable>()
+        val caller =
+            callers.launch {
+                runCatching { hangingUpOnCancel { line -> throwOnceHungUp(line, waiting) } }
+                    .onFailure { outcome.complete(it) }
+            }
+        assertTrue("the call is waiting", waiting.await(HOLD_WAIT_MS, TimeUnit.MILLISECONDS))
+
+        caller.cancel()
+
+        assertTrue(outcome.get(STOP_MS, TimeUnit.MILLISECONDS) is CancellationException)
+    }
+
+    // Waits on its line until it is hung up, then fails the way a read fails on a closed socket.
+    private fun throwOnceHungUp(
+        line: CallLine,
+        waiting: CountDownLatch,
+    ): Nothing {
+        val hungUp = CountDownLatch(1)
+        line.attach { hungUp.countDown() }
+        waiting.countDown()
+        hungUp.await()
+        error("the socket closed under the read")
+    }
+
+    @Test
+    fun `a request answered before any Cancel comes back whole`() {
+        val url = host { it.send("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi") }
+
+        val reply = runBlocking { hangingUpOnCancel { line -> client().get(url, TIMEOUT, line) } }
+
+        assertEquals(200, reply.status)
+        assertEquals("hi", reply.body)
+    }
+
     private companion object {
         const val TIMEOUT = 4_000
         const val READ_TIMEOUT_SHORT = 300
         const val SLOW_MS = 3_000L
         const val HELD_MS = 900L
         const val SETTLE_MS = 500L
+
+        // Far longer than any of these tests may take: only a hang-up ends a read this long in time.
+        const val HELD_READ_MS = 60_000
+        const val STOP_MS = 2_000L
+        const val HOLD_WAIT_MS = 5_000L
     }
 }

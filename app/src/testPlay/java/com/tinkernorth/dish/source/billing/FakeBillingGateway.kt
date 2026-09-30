@@ -75,7 +75,7 @@ fun tip(
 fun plan(
     basePlanId: String,
     micros: Long,
-) = Tier(TipCatalog.SUBSCRIPTION_PRODUCT_ID, basePlanId, TierKind.MONTHLY, micros, "CA$${micros / 1_000_000}.00", "token-$basePlanId")
+) = Tier(SUBSCRIPTION_PRODUCT_ID, basePlanId, TierKind.MONTHLY, micros, "CA$${micros / 1_000_000}.00", "token-$basePlanId")
 
 fun ownedTip(
     token: String,
@@ -86,4 +86,4 @@ fun ownedPlan(
     token: String,
     acknowledged: Boolean = false,
     pending: Boolean = false,
-) = OwnedPurchase(token, listOf(TipCatalog.SUBSCRIPTION_PRODUCT_ID), acknowledged = acknowledged, pending = pending)
+) = OwnedPurchase(token, listOf(SUBSCRIPTION_PRODUCT_ID), acknowledged = acknowledged, pending = pending)

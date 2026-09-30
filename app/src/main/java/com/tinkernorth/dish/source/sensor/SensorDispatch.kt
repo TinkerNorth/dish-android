@@ -4,6 +4,7 @@ package com.tinkernorth.dish.source.sensor
 
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Process
 
 interface SensorDispatch {
     fun acquire(): Handler
@@ -18,7 +19,7 @@ class HandlerThreadSensorDispatch(
 
     override fun acquire(): Handler {
         thread?.let { return Handler(it.looper) }
-        val started = HandlerThread(threadName).apply { start() }
+        val started = HandlerThread(threadName, Process.THREAD_PRIORITY_URGENT_AUDIO).apply { start() }
         thread = started
         return Handler(started.looper)
     }

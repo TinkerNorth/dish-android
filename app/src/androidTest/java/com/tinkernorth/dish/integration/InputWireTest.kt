@@ -5,9 +5,9 @@ package com.tinkernorth.dish.integration
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.core.model.DiscoveredServer
-import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.connection.TouchpadReport
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -44,11 +44,11 @@ class InputWireTest {
     private fun bindVirtualAndGoLive(): DiscoveredServer {
         val satellite = FakeSatellite().also { fake = it }
         val server = satellite.server()
-        val id = SatelliteConnection.idFor(server)
+        val id = satelliteConnectionIdFor(server)
         manager.pairWithPin(server, "1234")
         assertTrue(
             "session should reach Live",
-            AppSingletons.await { manager.get(id)?.state?.value == SatelliteSessionState.Live },
+            await { manager.get(id)?.state?.value == SatelliteSessionState.Live },
         )
         // Declare the virtual slot straight on the live connection. Production
         // routes this through the lifecycle-scoped SlotTopologyController, which
@@ -58,7 +58,7 @@ class InputWireTest {
         manager.get(id)!!.applyDesired(mapOf(VIRTUAL_SLOT_ID to CONTROLLER_TYPE_XBOX))
         assertTrue(
             "the virtual slot must register on the satellite before streams flow",
-            AppSingletons.await {
+            await {
                 manager
                     .get(id)
                     ?.slots
@@ -73,7 +73,7 @@ class InputWireTest {
     @Test
     fun gamepadReport_reachesTheSatelliteAsEncryptedInput() {
         val server = bindVirtualAndGoLive()
-        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val conn = manager.get(satelliteConnectionIdFor(server))!!
         val satellite = fake!!
 
         // UDP is lossy by design; send a burst so the assertion isn't hostage to one packet.
@@ -88,7 +88,7 @@ class InputWireTest {
     @Test
     fun batteryAndTouchpad_reachTheSatelliteAsEncryptedTelemetry() {
         val server = bindVirtualAndGoLive()
-        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val conn = manager.get(satelliteConnectionIdFor(server))!!
         val satellite = fake!!
 
         assertTrue(
@@ -123,7 +123,7 @@ class InputWireTest {
     @Test
     fun mouseButtonsAndScroll_rideTheTouchpadFrameBytes() {
         val server = bindVirtualAndGoLive()
-        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val conn = manager.get(satelliteConnectionIdFor(server))!!
         val satellite = fake!!
 
         assertTrue(
@@ -161,7 +161,7 @@ class InputWireTest {
     @Test
     fun motionSample_reachesTheSatelliteAsEncryptedMotion() {
         val server = bindVirtualAndGoLive()
-        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val conn = manager.get(satelliteConnectionIdFor(server))!!
         val satellite = fake!!
 
         assertTrue(

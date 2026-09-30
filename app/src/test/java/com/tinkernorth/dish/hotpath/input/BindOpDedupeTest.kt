@@ -10,7 +10,7 @@ import org.junit.Test
 // publishes it, so replaying an identical bind every reconcile pass (a few Hz) momentarily releases
 // every held button/trigger -- the "tiny gap" seen on a held ZL in USB-direct mode.
 class BindOpDedupeTest {
-    private val satA = BindOp.BindSatellite(deviceId = 5, handle = 9, controllerIndex = 2)
+    private val satA = BindOp.BindSatellite(deviceId = 5, connectionId = "sat:a", handle = 9, controllerIndex = 2)
     private val btA = BindOp.BindBluetooth(deviceId = 5, connectionId = "bt:aa")
 
     @Test
@@ -77,7 +77,7 @@ class BindOpDedupeTest {
     @Test
     fun `a departed id's unbind forget and release clear it from applied`() {
         val ops = listOf(BindOp.Unbind(7), BindOp.Forget(7), BindOp.ReleaseHubBinding(7))
-        val r = dedupeBindOps(ops = ops, lastApplied = mapOf(7 to BindOp.BindSatellite(7, 9, 0)))
+        val r = dedupeBindOps(ops = ops, lastApplied = mapOf(7 to BindOp.BindSatellite(7, "sat:a", 9, 0)))
         assertEquals(ops, r.ops)
         assertEquals(emptyMap<Int, BindOp>(), r.applied)
     }
@@ -85,7 +85,7 @@ class BindOpDedupeTest {
     @Test
     fun `independent devices dedupe independently`() {
         // Device 5 unchanged (dropped); device 6 newly bound (kept).
-        val sat6 = BindOp.BindSatellite(deviceId = 6, handle = 9, controllerIndex = 3)
+        val sat6 = BindOp.BindSatellite(deviceId = 6, connectionId = "sat:a", handle = 9, controllerIndex = 3)
         val r = dedupeBindOps(ops = listOf(satA, sat6), lastApplied = mapOf(5 to satA))
         assertEquals(listOf(sat6), r.ops)
         assertEquals(mapOf(5 to satA, 6 to sat6), r.applied)
@@ -94,7 +94,7 @@ class BindOpDedupeTest {
     @Test
     fun `emitted op order is preserved when only some binds are dropped`() {
         // Departed id 7 ops must still precede the one kept bind; the deduped bind for 5 is gone.
-        val sat6 = BindOp.BindSatellite(deviceId = 6, handle = 9, controllerIndex = 3)
+        val sat6 = BindOp.BindSatellite(deviceId = 6, connectionId = "sat:a", handle = 9, controllerIndex = 3)
         val ops =
             listOf(
                 BindOp.Unbind(7),

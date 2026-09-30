@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.ui.main
 
+import android.content.Context
 import androidx.annotation.StringRes
 
 /**
@@ -14,4 +15,14 @@ fun interface StringLookup {
         @StringRes res: Int,
         vararg args: Any,
     ): String
+}
+
+/** The Context end of [StringLookup], shared by every screen that fills strings this way. */
+internal class ContextStringLookup(
+    private val context: Context,
+) : StringLookup {
+    override fun format(
+        @StringRes res: Int,
+        vararg args: Any,
+    ): String = context.getString(res, *args)
 }

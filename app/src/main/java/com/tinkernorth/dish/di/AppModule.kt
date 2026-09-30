@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import com.tinkernorth.dish.core.input.GamepadProfile
 import com.tinkernorth.dish.source.bluetooth.AndroidHidProxyClient
 import com.tinkernorth.dish.source.bluetooth.BluetoothDeviceScanner
 import com.tinkernorth.dish.source.bluetooth.BluetoothHidSession
@@ -72,7 +73,7 @@ object AppModule {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 AndroidHidProxyClient(context)
             } else {
-                UnavailableHidProxyClient
+                UnavailableHidProxyClient()
             }
         }
 
@@ -108,14 +109,14 @@ object AppModule {
         }
 }
 
-private object UnavailableHidProxyClient : HidProxyClient {
+private class UnavailableHidProxyClient : HidProxyClient {
     override fun isAdapterEnabled(): Boolean = false
 
     override fun acquire(events: HidProxyClient.Events) {
         events.onError("Bluetooth HID Device requires Android 9+")
     }
 
-    override fun registerApp(profile: com.tinkernorth.dish.core.input.BluetoothGamepad.GamepadProfile) = Unit
+    override fun registerApp(profile: GamepadProfile) = Unit
 
     override fun connectToHost(mac: String) = Unit
 

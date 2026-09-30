@@ -2,8 +2,9 @@
 
 package com.tinkernorth.dish.composer
 
-import com.tinkernorth.dish.source.store.LinkHistoryPolicy
 import com.tinkernorth.dish.source.store.LinkHistoryStore
+import com.tinkernorth.dish.source.store.onBindings
+import com.tinkernorth.dish.source.store.onConnections
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
@@ -24,12 +25,12 @@ class LinkHistoryRecorder
             if (!installed.compareAndSet(false, true)) return
             scope.launch {
                 hub.connections.collect { summaries ->
-                    store.update { LinkHistoryPolicy.onConnections(it, summaries, System.currentTimeMillis()) }
+                    store.update { onConnections(it, summaries, System.currentTimeMillis()) }
                 }
             }
             scope.launch {
                 hub.bindings.collect { bindings ->
-                    store.update { LinkHistoryPolicy.onBindings(it, bindings, System.currentTimeMillis()) }
+                    store.update { onBindings(it, bindings, System.currentTimeMillis()) }
                 }
             }
         }

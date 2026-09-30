@@ -205,6 +205,17 @@ class MoonlightSessionUiTest {
         assertEquals(listOf(MoonlightAction.RETRY), state.actions())
     }
 
+    // H3. Wolf refuses an app it does not know with HTTP 400 and no wording of its own, which left
+    // the title quoting nothing after its colon.
+    @Test
+    fun `M17 a refusal the host gave no reason for reads as a whole sentence`() {
+        val state = ui(failure = MoonlightFailure.Refused(""))
+        assertEquals(R.string.ml_refused_title_no_reason, state.titleRes)
+        assertEquals(rendered(R.string.ml_refused_title_no_reason, "PC"), state.title("PC", strings))
+        assertEquals(R.string.ml_refused_body, state.bodyRes)
+        assertEquals(listOf(MoonlightAction.RETRY), state.actions())
+    }
+
     @Test
     fun `M18 a stream that never came up says the app was closed again`() {
         val state = ui(failure = MoonlightFailure.SetupFailed)

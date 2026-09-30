@@ -40,7 +40,6 @@ class MotionPreferenceRepository
             return runCatching {
                 json.decodeFromString(ListSerializer(MotionPreference.serializer()), raw)
             }.getOrElse { err ->
-                // Fall back to empty on parse failure: losing toggles beats crashing on corrupt prefs.
                 Log.w(
                     TAG,
                     "Failed to decode motion-preference list; treating as empty. " +

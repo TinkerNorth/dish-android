@@ -50,4 +50,22 @@ class VirtualPadFeedbackStoreTest {
         assertEquals(false, state.rightTriggerEffect)
         assertEquals(MIC_LED_ON, state.micLedState)
     }
+
+    @Test
+    fun `player leds are masked to the five led bits`() {
+        val store = VirtualPadFeedbackStore()
+
+        store.setPlayerLeds(0b1111_1111)
+
+        assertEquals(0b1_1111, store.state.value.playerLedMask)
+    }
+
+    @Test
+    fun `the lightbar colour is stored opaque`() {
+        val store = VirtualPadFeedbackStore()
+
+        store.setLightbar(r = 0x12, g = 0x34, b = 0x56)
+
+        assertEquals(0xFF123456.toInt(), store.state.value.lightbarColor)
+    }
 }

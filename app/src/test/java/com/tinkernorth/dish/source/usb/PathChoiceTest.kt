@@ -10,13 +10,13 @@ class PathChoiceTest {
     @Test
     fun `every choice round trips through its storage value`() {
         for (choice in PathChoice.values()) {
-            assertEquals(choice, PathChoice.fromStorageValue(choice.toStorageValue()))
+            assertEquals(choice, pathChoiceFromStorage(choice.toStorageValue()))
         }
     }
 
     @Test
     fun `an absent or unrecognised storage value resolves to null (Auto)`() {
-        assertNull(PathChoice.fromStorageValue(null))
-        assertNull(PathChoice.fromStorageValue("legacy-unknown-value"))
+        assertNull(pathChoiceFromStorage(null))
+        assertNull(pathChoiceFromStorage("legacy-unknown-value"))
     }
 }

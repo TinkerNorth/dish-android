@@ -27,7 +27,7 @@ class EnetClientTest {
     // --- host-side datagram builders (the bytes a Sunshine/Wolf host would send) ---
 
     private fun hostHeader(
-        w: EnetProtocol.Writer,
+        w: EnetWriter,
         sentTime: Int,
     ) {
         // Host addresses our peer 0, with the sent-time flag set.
@@ -40,9 +40,9 @@ class EnetClientTest {
         reliableSeq: Int = 1,
         mtu: Int = 1024,
     ): ByteArray {
-        val w = EnetProtocol.Writer(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.VERIFY_CONNECT_LEN)
+        val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.VERIFY_CONNECT_LEN)
         hostHeader(w, sentTime = 50)
-        EnetProtocol.commandHeader(
+        commandHeader(
             w,
             EnetProtocol.COMMAND_VERIFY_CONNECT or EnetProtocol.FLAG_ACKNOWLEDGE,
             EnetProtocol.SYSTEM_CHANNEL,
@@ -67,9 +67,9 @@ class EnetClientTest {
         channelId: Int,
         reliableSeq: Int,
     ): ByteArray {
-        val w = EnetProtocol.Writer(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.ACKNOWLEDGE_LEN)
+        val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.ACKNOWLEDGE_LEN)
         hostHeader(w, sentTime = 60)
-        EnetProtocol.commandHeader(w, EnetProtocol.COMMAND_ACKNOWLEDGE, channelId, reliableSeq)
+        commandHeader(w, EnetProtocol.COMMAND_ACKNOWLEDGE, channelId, reliableSeq)
         w.u16(reliableSeq)
         w.u16(0)
         return w.toByteArray()
@@ -79,9 +79,9 @@ class EnetClientTest {
         reliableSeq: Int,
         payload: ByteArray,
     ): ByteArray {
-        val w = EnetProtocol.Writer(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.SEND_RELIABLE_HEADER_LEN + payload.size)
+        val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.SEND_RELIABLE_HEADER_LEN + payload.size)
         hostHeader(w, sentTime = 70)
-        EnetProtocol.commandHeader(
+        commandHeader(
             w,
             EnetProtocol.COMMAND_SEND_RELIABLE or EnetProtocol.FLAG_ACKNOWLEDGE,
             EnetClient.DATA_CHANNEL,
@@ -242,9 +242,9 @@ class EnetClientTest {
         val client = newClient()
         client.connect()
         client.onDatagram(verifyConnectDatagram())
-        val w = EnetProtocol.Writer(EnetProtocol.NO_SENT_TIME_HEADER_LEN + EnetProtocol.PING_LEN)
+        val w = EnetWriter(EnetProtocol.NO_SENT_TIME_HEADER_LEN + EnetProtocol.PING_LEN)
         w.u16(0) // no sent-time flag
-        EnetProtocol.commandHeader(w, EnetProtocol.COMMAND_PING or EnetProtocol.FLAG_ACKNOWLEDGE, EnetProtocol.SYSTEM_CHANNEL, 3)
+        commandHeader(w, EnetProtocol.COMMAND_PING or EnetProtocol.FLAG_ACKNOWLEDGE, EnetProtocol.SYSTEM_CHANNEL, 3)
         assertTrue(client.onDatagram(w.toByteArray()).isEmpty())
     }
 
@@ -265,7 +265,7 @@ class EnetClientTest {
         assertEquals(EnetProtocol.COMMAND_ACKNOWLEDGE, ack.command)
         assertEquals(EnetProtocol.SYSTEM_CHANNEL, ack.channelId)
         assertEquals(2, ack.reliableSeq)
-        assertEquals(0, client.unknownCommands)
+        assertEquals(0, client.stats.unknownCommands)
     }
 
     @Test
@@ -275,7 +275,7 @@ class EnetClientTest {
         client.onDatagram(verifyConnectDatagram())
         val acks = client.onDatagram(throttleConfigureDatagram(reliableSeq = 3))
         assertEquals(EnetProtocol.COMMAND_ACKNOWLEDGE, firstCommand(acks.single()).command)
-        assertEquals(0, client.unknownCommands)
+        assertEquals(0, client.stats.unknownCommands)
     }
 
     @Test
@@ -286,10 +286,10 @@ class EnetClientTest {
         client.connect()
         client.onDatagram(verifyConnectDatagram())
         client.sendReliable("input".toByteArray())
-        val w = EnetProtocol.Writer(HEADER_AND_TWO_COMMANDS)
+        val w = EnetWriter(HEADER_AND_TWO_COMMANDS)
         hostHeader(w, sentTime = 80)
         bandwidthLimitCommand(w, reliableSeq = 2)
-        EnetProtocol.commandHeader(w, EnetProtocol.COMMAND_ACKNOWLEDGE, EnetClient.DATA_CHANNEL, 1)
+        commandHeader(w, EnetProtocol.COMMAND_ACKNOWLEDGE, EnetClient.DATA_CHANNEL, 1)
         w.u16(1)
         w.u16(0)
 
@@ -310,16 +310,16 @@ class EnetClientTest {
         client.sendReliable("input".toByteArray())
         val payload = "discarded".toByteArray()
         val w =
-            EnetProtocol.Writer(
+            EnetWriter(
                 EnetProtocol.FULL_HEADER_LEN + EnetProtocol.SEND_UNRELIABLE_HEADER_LEN + payload.size +
                     EnetProtocol.ACKNOWLEDGE_LEN,
             )
         hostHeader(w, sentTime = 90)
-        EnetProtocol.commandHeader(w, EnetProtocol.COMMAND_SEND_UNRELIABLE, EnetClient.DATA_CHANNEL, 5)
+        commandHeader(w, EnetProtocol.COMMAND_SEND_UNRELIABLE, EnetClient.DATA_CHANNEL, 5)
         w.u16(1) // unreliableSequenceNumber
         w.u16(payload.size)
         w.bytes(payload)
-        EnetProtocol.commandHeader(w, EnetProtocol.COMMAND_ACKNOWLEDGE, EnetClient.DATA_CHANNEL, 1)
+        commandHeader(w, EnetProtocol.COMMAND_ACKNOWLEDGE, EnetClient.DATA_CHANNEL, 1)
         w.u16(1)
         w.u16(0)
 
@@ -376,25 +376,398 @@ class EnetClientTest {
         assertTrue(client.disconnectReason.orEmpty().contains("stopped acknowledging"))
     }
 
-    @Test
-    fun `an acknowledgement clears the give-up clock`() {
+    /**
+     * Where a peer that never acknowledges is given up on, on the shared test clock: the
+     * clock is left where it started, so the next client runs through the same instants.
+     */
+    private fun silentPeerGiveUpTime(): Long {
+        val origin = clock
+        val silent = connectedClientWithOneUnackedSend()
+        while (silent.state == EnetClient.State.CONNECTED) {
+            clock += TICK_MS
+            silent.tick()
+        }
+        val giveUpAt = clock
+        clock = origin
+        return giveUpAt
+    }
+
+    private fun connectedClientWithOneUnackedSend(): EnetClient {
         val client = newClient()
         client.connect()
         client.onDatagram(verifyConnectDatagram())
         client.sendReliable("first".toByteArray())
-        repeat(BEFORE_MINIMUM_TICKS) {
+        return client
+    }
+
+    private fun tickUntil(
+        client: EnetClient,
+        until: Long,
+    ) {
+        while (clock < until) {
             clock += TICK_MS
             client.tick()
         }
-        client.onDatagram(ackDatagram(EnetClient.DATA_CHANNEL, reliableSeq = 1))
-        client.sendReliable("second".toByteArray())
-        // The clock restarts from that acknowledgement, so the same wait again
-        // is survivable.
-        repeat(BEFORE_MINIMUM_TICKS) {
-            clock += TICK_MS
-            client.tick()
-        }
+    }
+
+    @Test
+    fun `an acknowledgement restarts the give-up clock for the commands still unacknowledged`() {
+        val giveUpAt = silentPeerGiveUpTime()
+        val client = connectedClientWithOneUnackedSend()
+        tickUntil(client, giveUpAt - TICK_MS)
         assertEquals(EnetClient.State.CONNECTED, client.state)
+
+        client.sendReliable("probe".toByteArray())
+        client.onDatagram(ackDatagram(EnetClient.DATA_CHANNEL, reliableSeq = PROBE_SEQ))
+        tickUntil(client, giveUpAt)
+
+        assertEquals(EnetClient.State.CONNECTED, client.state)
+    }
+
+    // --- the peer ending the session, and our own teardown after it ---
+
+    @Test
+    fun `a peer DISCONNECT ends the session`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        client.onDatagram(disconnectDatagram())
+        assertEquals(EnetClient.State.DISCONNECTED, client.state)
+        assertEquals("peer sent DISCONNECT", client.disconnectReason)
+        assertNull(client.sendReliable("late".toByteArray()))
+    }
+
+    @Test
+    fun `disconnect after the peer already left sends nothing and keeps the peer's reason`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        client.onDatagram(disconnectDatagram())
+        assertNull(client.disconnect())
+        assertEquals("peer sent DISCONNECT", client.disconnectReason)
+    }
+
+    @Test
+    fun `disconnect twice sends one DISCONNECT`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        assertEquals(EnetProtocol.COMMAND_DISCONNECT, firstCommand(client.disconnect()!!).command)
+        assertNull(client.disconnect())
+        assertEquals("local teardown", client.disconnectReason)
+    }
+
+    @Test
+    fun `connect clears the reason a previous session ended with`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        client.onDatagram(disconnectDatagram())
+        client.connect()
+        assertEquals(EnetClient.State.CONNECTING, client.state)
+        assertNull(client.disconnectReason)
+    }
+
+    // --- malformed datagrams: counted or ignored, never over-read ---
+
+    @Test
+    fun `an unknown command is counted and stops the walk`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        client.sendReliable("input".toByteArray())
+        val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.COMMAND_HEADER_LEN + EnetProtocol.ACKNOWLEDGE_LEN)
+        hostHeader(w, sentTime = 80)
+        commandHeader(w, EnetProtocol.COMMAND_COUNT, EnetProtocol.SYSTEM_CHANNEL, 4)
+        commandHeader(w, EnetProtocol.COMMAND_ACKNOWLEDGE, EnetClient.DATA_CHANNEL, 1)
+        w.u16(1)
+        w.u16(0)
+
+        val acks = client.onDatagram(w.toByteArray())
+
+        assertEquals(1, client.stats.unknownCommands)
+        assertTrue(acks.isEmpty())
+        // The acknowledgement behind the unknown command was never read, so the send is still pending.
+        clock += 10_000
+        assertTrue(client.tick().any { firstCommand(it).command == EnetProtocol.COMMAND_SEND_RELIABLE })
+    }
+
+    @Test
+    fun `command number zero is unknown too`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.COMMAND_HEADER_LEN)
+        hostHeader(w, sentTime = 80)
+        commandHeader(w, EnetProtocol.COMMAND_NONE, EnetProtocol.SYSTEM_CHANNEL, 4)
+        client.onDatagram(w.toByteArray())
+        assertEquals(1, client.stats.unknownCommands)
+    }
+
+    @Test
+    fun `a truncated command body stops the walk without an ack`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        val bodyBytesPresent = 4
+        val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.COMMAND_HEADER_LEN + bodyBytesPresent)
+        hostHeader(w, sentTime = 80)
+        commandHeader(
+            w,
+            EnetProtocol.COMMAND_BANDWIDTH_LIMIT or EnetProtocol.FLAG_ACKNOWLEDGE,
+            EnetProtocol.SYSTEM_CHANNEL,
+            2,
+        )
+        w.u32(0)
+
+        val acksBefore = client.stats.acksSent
+        val acks = client.onDatagram(w.toByteArray())
+
+        assertTrue(acks.isEmpty())
+        assertEquals(acksBefore, client.stats.acksSent)
+        assertEquals(0, client.stats.unknownCommands)
+    }
+
+    @Test
+    fun `a reliable send with a lying dataLength is dropped`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        val bytesPresent = "abc".toByteArray()
+        val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.SEND_RELIABLE_HEADER_LEN + bytesPresent.size)
+        hostHeader(w, sentTime = 70)
+        commandHeader(
+            w,
+            EnetProtocol.COMMAND_SEND_RELIABLE or EnetProtocol.FLAG_ACKNOWLEDGE,
+            EnetClient.DATA_CHANNEL,
+            1,
+        )
+        w.u16(LYING_DATA_LENGTH)
+        w.bytes(bytesPresent)
+
+        val acks = client.onDatagram(w.toByteArray())
+
+        assertTrue(client.received.isEmpty())
+        assertTrue(acks.isEmpty())
+    }
+
+    @Test
+    fun `a compressed datagram is ignored`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.PING_LEN)
+        w.u16(EnetProtocol.HEADER_FLAG_SENT_TIME or EnetProtocol.HEADER_FLAG_COMPRESSED)
+        w.u16(50)
+        commandHeader(w, EnetProtocol.COMMAND_PING or EnetProtocol.FLAG_ACKNOWLEDGE, EnetProtocol.SYSTEM_CHANNEL, 7)
+        val acksBefore = client.stats.acksSent
+        assertTrue(client.onDatagram(w.toByteArray()).isEmpty())
+        assertEquals(acksBefore, client.stats.acksSent)
+    }
+
+    @Test
+    fun `a header cut before its sent time is ignored`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        val flagsOnly = EnetWriter(EnetProtocol.NO_SENT_TIME_HEADER_LEN).u16(EnetProtocol.HEADER_FLAG_SENT_TIME)
+        assertTrue(client.onDatagram(flagsOnly.toByteArray()).isEmpty())
+    }
+
+    @Test
+    fun `a fragment's payload is skipped so a following ack still parses`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        client.sendReliable("input".toByteArray())
+        val fragmentPayload = "half of something".toByteArray()
+        val w =
+            EnetWriter(
+                EnetProtocol.FULL_HEADER_LEN + EnetProtocol.SEND_FRAGMENT_HEADER_LEN + fragmentPayload.size +
+                    EnetProtocol.ACKNOWLEDGE_LEN,
+            )
+        hostHeader(w, sentTime = 90)
+        commandHeader(
+            w,
+            EnetProtocol.COMMAND_SEND_FRAGMENT or EnetProtocol.FLAG_ACKNOWLEDGE,
+            EnetClient.DATA_CHANNEL,
+            5,
+        )
+        w.u16(5) // startSequenceNumber
+        w.u16(fragmentPayload.size)
+        w.u32(2) // fragmentCount
+        w.u32(0) // fragmentNumber
+        w.u32(fragmentPayload.size * 2) // totalLength
+        w.u32(0) // fragmentOffset
+        w.bytes(fragmentPayload)
+        commandHeader(w, EnetProtocol.COMMAND_ACKNOWLEDGE, EnetClient.DATA_CHANNEL, 1)
+        w.u16(1)
+        w.u16(0)
+
+        val acks = client.onDatagram(w.toByteArray())
+
+        assertEquals(1, acks.size)
+        assertTrue(client.received.isEmpty())
+        clock += 10_000
+        assertTrue(client.tick().none { firstCommand(it).command == EnetProtocol.COMMAND_SEND_RELIABLE })
+    }
+
+    // --- the in-order gate on the 16-bit reliable sequence space ---
+
+    @Test
+    fun `reliable delivery survives the sequence wrap`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        val acrossTheWrap = intArrayOf(0x7FFF, 0xFFFE, 0xFFFF, 0x0000, 0x0001)
+        for (seq in acrossTheWrap) {
+            client.onDatagram(sendReliableDatagram(reliableSeq = seq, payload = "seq $seq".toByteArray()))
+        }
+        assertEquals(acrossTheWrap.map { "seq $it" }, client.received.map { String(it) })
+    }
+
+    @Test
+    fun `an older reliable seq is acked but not delivered`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        client.onDatagram(sendReliableDatagram(reliableSeq = 2, payload = "two".toByteArray()))
+        client.received.clear()
+        val acks = client.onDatagram(sendReliableDatagram(reliableSeq = 1, payload = "one".toByteArray()))
+        assertEquals(EnetProtocol.COMMAND_ACKNOWLEDGE, firstCommand(acks.single()).command)
+        assertTrue(client.received.isEmpty())
+    }
+
+    // --- ping timing ---
+
+    @Test
+    fun `no ping while the peer is still talking`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        clock += EnetProtocol.PING_INTERVAL_MS + 1
+        client.onDatagram(pingDatagram(reliableSeq = 2, sentTime = 0x0100))
+        assertTrue(client.tick().none { firstCommand(it).command == EnetProtocol.COMMAND_PING })
+    }
+
+    @Test
+    fun `no ping before the handshake completes`() {
+        val client = newClient()
+        client.connect()
+        clock += EnetProtocol.PING_INTERVAL_MS + 1
+        assertTrue(client.tick().none { firstCommand(it).command == EnetProtocol.COMMAND_PING })
+    }
+
+    @Test
+    fun `a ping is not repeated inside one interval`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        clock += EnetProtocol.PING_INTERVAL_MS + 1
+        assertTrue(client.tick().any { firstCommand(it).command == EnetProtocol.COMMAND_PING })
+        clock += 1
+        assertTrue(client.tick().none { firstCommand(it).command == EnetProtocol.COMMAND_PING })
+    }
+
+    // --- round-trip sampling and the retransmit timeout it drives ---
+
+    @Test
+    fun `roundTripMs is null until the first ack then smooths toward each sample`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        assertNull(client.roundTripMs)
+
+        client.sendReliable("one".toByteArray())
+        clock += FIRST_SAMPLE_MS
+        client.onDatagram(ackDatagram(EnetClient.DATA_CHANNEL, reliableSeq = 1))
+        assertEquals(FIRST_SAMPLE_MS, client.roundTripMs)
+
+        client.sendReliable("two".toByteArray())
+        clock += SLOWER_SAMPLE_MS
+        client.onDatagram(ackDatagram(EnetClient.DATA_CHANNEL, reliableSeq = 2))
+        assertEquals(SMOOTHED_UP_MS, client.roundTripMs)
+
+        client.sendReliable("three".toByteArray())
+        clock += FASTER_SAMPLE_MS
+        client.onDatagram(ackDatagram(EnetClient.DATA_CHANNEL, reliableSeq = 3))
+        assertEquals(SMOOTHED_DOWN_MS, client.roundTripMs)
+    }
+
+    @Test
+    fun `an ack in the same millisecond samples one millisecond, never zero`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        client.sendReliable("one".toByteArray())
+        client.onDatagram(ackDatagram(EnetClient.DATA_CHANNEL, reliableSeq = 1))
+        assertEquals(1L, client.roundTripMs)
+    }
+
+    @Test
+    fun `an ack for an unknown seq still samples the echoed time and restarts the give-up clock`() {
+        val giveUpAt = silentPeerGiveUpTime()
+        val client = connectedClientWithOneUnackedSend()
+        tickUntil(client, giveUpAt - TICK_MS)
+        assertEquals(EnetClient.State.CONNECTED, client.state)
+
+        client.onDatagram(ackDatagram(EnetClient.DATA_CHANNEL, reliableSeq = UNKNOWN_SEQ))
+        assertTrue(client.roundTripMs != null)
+        tickUntil(client, giveUpAt)
+
+        assertEquals(EnetClient.State.CONNECTED, client.state)
+    }
+
+    @Test
+    fun `the retransmit timeout is capped at six seconds however slow the link`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        client.sendReliable("slow".toByteArray())
+        clock += EnetProtocol.TIMEOUT_MAXIMUM_MS
+        client.onDatagram(ackDatagram(EnetClient.DATA_CHANNEL, reliableSeq = 1))
+        assertEquals(EnetProtocol.TIMEOUT_MAXIMUM_MS.toLong(), client.roundTripMs)
+
+        client.sendReliable("next".toByteArray())
+        clock += RTO_CAP_MS - 1
+        assertTrue(client.tick().none { firstCommand(it).command == EnetProtocol.COMMAND_SEND_RELIABLE })
+        clock += 1
+        assertTrue(client.tick().any { firstCommand(it).command == EnetProtocol.COMMAND_SEND_RELIABLE })
+    }
+
+    @Test
+    fun `retransmits and acksSent count what went out`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        assertEquals(1, client.stats.acksSent)
+        client.sendReliable("input".toByteArray())
+        clock += 600
+        client.tick()
+        assertEquals(1, client.stats.retransmits)
+        client.onDatagram(pingDatagram(reliableSeq = 2, sentTime = 0x0100))
+        assertEquals(2, client.stats.acksSent)
+    }
+
+    @Test
+    fun `the CONNECT header carries no session id before VERIFY_CONNECT`() {
+        val client = newClient()
+        val header = ByteBuffer.wrap(client.connect()).order(ByteOrder.BIG_ENDIAN)
+        val peerFieldOfConnect = header.short.toInt() and 0xFFFF
+        assertEquals(EnetProtocol.HEADER_FLAG_SENT_TIME or EnetProtocol.MAXIMUM_PEER_ID, peerFieldOfConnect)
+    }
+
+    private fun disconnectDatagram(): ByteArray {
+        val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.DISCONNECT_LEN)
+        hostHeader(w, sentTime = 95)
+        commandHeader(
+            w,
+            EnetProtocol.COMMAND_DISCONNECT or EnetProtocol.FLAG_UNSEQUENCED,
+            EnetProtocol.SYSTEM_CHANNEL,
+            0,
+        )
+        w.u32(0)
+        return w.toByteArray()
     }
 
     private fun sentTimeOf(datagram: ByteArray): Int {
@@ -407,9 +780,9 @@ class EnetClientTest {
         reliableSeq: Int,
         sentTime: Int,
     ): ByteArray {
-        val w = EnetProtocol.Writer(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.PING_LEN)
+        val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.PING_LEN)
         hostHeader(w, sentTime)
-        EnetProtocol.commandHeader(
+        commandHeader(
             w,
             EnetProtocol.COMMAND_PING or EnetProtocol.FLAG_ACKNOWLEDGE,
             EnetProtocol.SYSTEM_CHANNEL,
@@ -419,10 +792,10 @@ class EnetClientTest {
     }
 
     private fun bandwidthLimitCommand(
-        w: EnetProtocol.Writer,
+        w: EnetWriter,
         reliableSeq: Int,
     ) {
-        EnetProtocol.commandHeader(
+        commandHeader(
             w,
             EnetProtocol.COMMAND_BANDWIDTH_LIMIT or EnetProtocol.FLAG_ACKNOWLEDGE,
             EnetProtocol.SYSTEM_CHANNEL,
@@ -433,16 +806,16 @@ class EnetClientTest {
     }
 
     private fun bandwidthLimitDatagram(reliableSeq: Int): ByteArray {
-        val w = EnetProtocol.Writer(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.BANDWIDTH_LIMIT_LEN)
+        val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.BANDWIDTH_LIMIT_LEN)
         hostHeader(w, sentTime = 80)
         bandwidthLimitCommand(w, reliableSeq)
         return w.toByteArray()
     }
 
     private fun throttleConfigureDatagram(reliableSeq: Int): ByteArray {
-        val w = EnetProtocol.Writer(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.THROTTLE_CONFIGURE_LEN)
+        val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.THROTTLE_CONFIGURE_LEN)
         hostHeader(w, sentTime = 85)
-        EnetProtocol.commandHeader(
+        commandHeader(
             w,
             EnetProtocol.COMMAND_THROTTLE_CONFIGURE or EnetProtocol.FLAG_ACKNOWLEDGE,
             EnetProtocol.SYSTEM_CHANNEL,
@@ -462,10 +835,28 @@ class EnetClientTest {
         const val TALKATIVE_ROUNDS = 60
 
         const val TICK_MS = 100L
-        const val BEFORE_MINIMUM_TICKS = 40 // 4.0 s
+
+        // "first" is seq 1 on the data channel, so the probe sent after it is seq 2.
+        const val PROBE_SEQ = 2
 
         // Past the 5.5 s at which the old fixed retransmit budget expired, and
         // past the 6.4 s at which a live host was ending the session.
         const val BEFORE_GIVING_UP_MS = 6_500L
+
+        const val LYING_DATA_LENGTH = 100
+        const val UNKNOWN_SEQ = 99
+
+        // cgutman/enet enet_protocol_handle_acknowledge (the fork Wolf and Sunshine build): the first
+        // sample is taken as-is, then each later sample moves the estimate an eighth of the way
+        // toward itself, rounded up: 100 + (100 + 7) / 8 = 113, then 113 - (103 + 7) / 8 = 100.
+        // Upstream lsalzman/enet truncates and would give 112.
+        const val FIRST_SAMPLE_MS = 100L
+        const val SLOWER_SAMPLE_MS = 200L
+        const val SMOOTHED_UP_MS = 113L
+        const val FASTER_SAMPLE_MS = 10L
+        const val SMOOTHED_DOWN_MS = 100L
+
+        // protocol.c caps a command's retransmission timeout at a fifth of the peer's maximum timeout.
+        const val RTO_CAP_MS = 6_000L
     }
 }

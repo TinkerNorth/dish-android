@@ -37,27 +37,28 @@ class NetworkStateObserver
         val wifiDrops: StateFlow<Int> = _wifiDrops.asStateFlow()
 
         private fun publish(next: NetworkState) {
-            if (state.value == NetworkState.WIFI && next != NetworkState.WIFI) _wifiDrops.value = _wifiDrops.value + 1
+            _wifiDrops.value = wifiDropsAfter(state.value, next, _wifiDrops.value)
             setState(next)
         }
 
-        private val callback =
-            object : ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: Network) {
-                    publish(currentState())
-                }
-
-                override fun onLost(network: Network) {
-                    publish(currentState())
-                }
-
-                override fun onCapabilitiesChanged(
-                    network: Network,
-                    capabilities: NetworkCapabilities,
-                ) {
-                    publish(currentState())
-                }
+        private inner class NetworkStateCallback : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                publish(currentState())
             }
+
+            override fun onLost(network: Network) {
+                publish(currentState())
+            }
+
+            override fun onCapabilitiesChanged(
+                network: Network,
+                capabilities: NetworkCapabilities,
+            ) {
+                publish(currentState())
+            }
+        }
+
+        private val callback = NetworkStateCallback()
 
         init {
             publish(currentState())
@@ -85,12 +86,37 @@ class NetworkStateObserver
         private fun currentState(): NetworkState {
             val active = cm.activeNetwork ?: return NetworkState.NONE
             val caps = cm.getNetworkCapabilities(active) ?: return NetworkState.NONE
-            return when {
-                !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) -> NetworkState.NONE
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> NetworkState.WIFI
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> NetworkState.WIFI
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> NetworkState.CELLULAR
-                else -> NetworkState.NONE
-            }
+            return networkStateOf(
+                hasInternet = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET),
+                wifi = caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI),
+                ethernet = caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET),
+                cellular = caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR),
+            )
         }
     }
+
+// What the active network reads as for the LAN banners: ethernet is as good as Wi-Fi, and a
+// network without internet is no network.
+internal fun networkStateOf(
+    hasInternet: Boolean,
+    wifi: Boolean,
+    ethernet: Boolean,
+    cellular: Boolean,
+): NetworkState =
+    when {
+        !hasInternet -> NetworkState.NONE
+        wifi -> NetworkState.WIFI
+        ethernet -> NetworkState.WIFI
+        cellular -> NetworkState.CELLULAR
+        else -> NetworkState.NONE
+    }
+
+// The drop counter moves only on the edge that leaves Wi-Fi.
+internal fun wifiDropsAfter(
+    prev: NetworkState,
+    next: NetworkState,
+    drops: Int,
+): Int {
+    val leftWifi = prev == NetworkState.WIFI && next != NetworkState.WIFI
+    return if (leftWifi) drops + 1 else drops
+}

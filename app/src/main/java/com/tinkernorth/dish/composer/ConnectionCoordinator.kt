@@ -9,6 +9,7 @@ import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.connection.ConnectIntent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.store.ControllerTypeStore
 import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SlotBindingStore
@@ -54,6 +55,9 @@ class ConnectionCoordinator
     ) {
         val bindings: StateFlow<Map<String, String>> = bindingStore.state
         val satTypes: StateFlow<Map<Pair<String, String>, Int>> = typeStore.state
+
+        // The live Moonlight sessions by host id; each one's pads are what its host was told about.
+        val moonlightSessions: StateFlow<Map<String, MoonlightConnection>> get() = moonlight.connections
 
         val connections: StateFlow<List<ConnectionSummary>> = composer.state
 
@@ -111,10 +115,6 @@ class ConnectionCoordinator
             typeStore.clear(connId, slotId)
         }
 
-        // Forget a remembered connection and its local state. Unbind its slots (which drops their
-        // per-slot types), clear any orphaned type rows, then forget the backing host. Clearing the
-        // whole connection here is what stops a dead connection id leaking controller-type entries;
-        // it is done on forget, not on a transient disconnect, so a brief drop keeps the user's pick.
         fun forgetConnection(connectionId: String) {
             bindingStore.slotsFor(connectionId).toList().forEach(::unbind)
             typeStore.clearConnection(connectionId)

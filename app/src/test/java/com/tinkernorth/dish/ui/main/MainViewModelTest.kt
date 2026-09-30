@@ -10,14 +10,23 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.CapabilitySet
+import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.core.net.DishProtocol
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.model.capabilitySetOf
+import com.tinkernorth.dish.core.net.DISH_PROTOCOL_CURRENT
+import com.tinkernorth.dish.core.net.DishProtocolCompat
+import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
+import com.tinkernorth.dish.core.net.moonlight.NINTENDO
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
+import com.tinkernorth.dish.core.net.moonlight.XBOX
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
+import com.tinkernorth.dish.source.connection.ConnectionError
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
+import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.sensor.BatteryValidator
@@ -42,8 +51,10 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -76,6 +87,7 @@ class MainViewModelTest {
     private val usbControllersFlow = MutableStateFlow<Map<Int, UsbController>>(emptyMap())
     private val capabilityStateFlow = MutableStateFlow<Map<String, SlotCapabilities>>(emptyMap())
     private val satelliteEvents = MutableSharedFlow<ConnectionEvent>(extraBufferCapacity = 8)
+    private val moonlightSessions = MutableStateFlow<Map<String, MoonlightConnection>>(emptyMap())
 
     @Before
     fun setUp() {
@@ -99,6 +111,7 @@ class MainViewModelTest {
         every { usbGamepadManager.controllers } returns usbControllersFlow
         every { hub.connections } returns connectionsFlow
         every { hub.bindings } returns bindingsFlow
+        every { hub.moonlightSessions } returns moonlightSessions
         every { gamepadRegistry.devices } returns devicesFlow
         every { gamepadRegistry.frameworkCapsFor(any(), any()) } returns null
         every { satellite.events } returns satelliteEvents
@@ -243,10 +256,10 @@ class MainViewModelTest {
 
     private fun capsAvailable(vararg features: Feature): SlotCapabilities =
         SlotCapabilities(
-            controller = CapabilitySet.of(*features),
-            transport = CapabilitySet.of(*features),
-            type = CapabilitySet.of(*features),
-            host = CapabilitySet.of(*features),
+            controller = capabilitySetOf(*features),
+            transport = capabilitySetOf(*features),
+            type = capabilitySetOf(*features),
+            host = capabilitySetOf(*features),
             userEnabled = CapabilitySet.EMPTY,
             runtimeDown = CapabilitySet.EMPTY,
         )
@@ -255,12 +268,12 @@ class MainViewModelTest {
     fun `host compat projects each satellite's protocol verdict for the update chips`() =
         runTest(dispatcher) {
             hostFeaturesStore.noteProtocolVersion("satellite:old", 1)
-            hostFeaturesStore.noteProtocolVersion("satellite:current", DishProtocol.CURRENT)
+            hostFeaturesStore.noteProtocolVersion("satellite:current", DISH_PROTOCOL_CURRENT)
             dispatcher.scheduler.runCurrent()
 
             val compat = vm.uiState.value.hostCompat
-            assertEquals(DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE, compat["satellite:old"])
-            assertEquals(DishProtocol.Compat.CURRENT, compat["satellite:current"])
+            assertEquals(DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE, compat["satellite:old"])
+            assertEquals(DishProtocolCompat.CURRENT, compat["satellite:current"])
         }
 
     @Test
@@ -441,10 +454,10 @@ class MainViewModelTest {
     @Test
     fun `gamepadSkinFor maps a moonlight Xbox pick to the Xbox skin despite the id collision`() =
         runTest(dispatcher) {
-            bindToKind(ConnectionKind.MOONLIGHT, mapOf(VIRTUAL_SLOT_ID to MoonlightEmulatedType.XBOX))
+            bindToKind(ConnectionKind.MOONLIGHT, mapOf(VIRTUAL_SLOT_ID to XBOX))
             assertEquals(GamepadSkin.Xbox, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
 
-            bindToKind(ConnectionKind.MOONLIGHT, mapOf(VIRTUAL_SLOT_ID to MoonlightEmulatedType.NINTENDO))
+            bindToKind(ConnectionKind.MOONLIGHT, mapOf(VIRTUAL_SLOT_ID to NINTENDO))
             assertEquals(GamepadSkin.Switch, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
         }
 
@@ -454,23 +467,61 @@ class MainViewModelTest {
             every {
                 capabilityComposer.capabilityForCandidate(
                     VIRTUAL_SLOT_ID,
-                    MoonlightEmulatedType.XBOX,
+                    XBOX,
                     ConnectionKind.MOONLIGHT,
                     "c:1",
                 )
-            } returns SlotCapabilities.NONE.copy(controller = CapabilitySet.of(Feature.MOTION))
+            } returns SlotCapabilities.NONE.copy(controller = capabilitySetOf(Feature.MOTION))
             bindToKind(ConnectionKind.MOONLIGHT, emptyMap())
             assertEquals(GamepadSkin.PlayStation, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
 
             every {
                 capabilityComposer.capabilityForCandidate(
                     VIRTUAL_SLOT_ID,
-                    MoonlightEmulatedType.XBOX,
+                    XBOX,
                     ConnectionKind.MOONLIGHT,
                     "c:1",
                 )
             } returns SlotCapabilities.NONE
             assertEquals(GamepadSkin.Xbox, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+        }
+
+    // The Moonlight session on host c:1, holding [slotId]'s pad as [heldType].
+    private fun holdPadAs(
+        slotId: String,
+        heldType: Int,
+    ) {
+        val host = MoonlightHost(name = "PC", address = "10.0.0.5", uniqueId = "abc")
+        val session = MoonlightConnection("c:1", host, TestScope(dispatcher), dispatcher)
+        session.acquirePad(slotId, heldType, capabilities = HELD_PAD_CAPS, supportedButtons = HELD_PAD_BUTTONS)
+        moonlightSessions.value = mapOf("c:1" to session)
+    }
+
+    @Test
+    fun `gamepadSkinFor shows a held moonlight pad as the type its host was told, not a newer pick`() =
+        runTest(dispatcher) {
+            bindToKind(ConnectionKind.MOONLIGHT, mapOf(VIRTUAL_SLOT_ID to NINTENDO))
+            holdPadAs(VIRTUAL_SLOT_ID, PLAYSTATION)
+            assertEquals(GamepadSkin.PlayStation, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+        }
+
+    @Test
+    fun `gamepadSkinFor keeps a held moonlight Auto pad as announced after its source gains motion`() =
+        runTest(dispatcher) {
+            every {
+                capabilityComposer.capabilityForCandidate(VIRTUAL_SLOT_ID, XBOX, ConnectionKind.MOONLIGHT, "c:1")
+            } returns SlotCapabilities.NONE.copy(controller = capabilitySetOf(Feature.MOTION))
+            bindToKind(ConnectionKind.MOONLIGHT, emptyMap())
+            holdPadAs(VIRTUAL_SLOT_ID, XBOX)
+            assertEquals(GamepadSkin.Xbox, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+        }
+
+    @Test
+    fun `gamepadSkinFor resolves a moonlight slot the session holds no pad for from its pick`() =
+        runTest(dispatcher) {
+            bindToKind(ConnectionKind.MOONLIGHT, mapOf(VIRTUAL_SLOT_ID to NINTENDO))
+            holdPadAs("9", PLAYSTATION)
+            assertEquals(GamepadSkin.Switch, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
         }
 
     @Test
@@ -764,4 +815,135 @@ class MainViewModelTest {
                     ?.restoring,
             )
         }
+
+    private fun collectEvents(): Pair<MutableList<MainEvent>, kotlinx.coroutines.Job> {
+        val events = mutableListOf<MainEvent>()
+        val job = kotlinx.coroutines.CoroutineScope(dispatcher).launch { vm.events.collect { events += it } }
+        dispatcher.scheduler.runCurrent()
+        return events to job
+    }
+
+    @Test
+    fun `a pairing required event becomes a pairing dialog keyed by the stable id`() =
+        runTest(dispatcher) {
+            val (events, job) = collectEvents()
+            val server = DiscoveredServer(name = "PC", ip = "10.0.0.2", machineId = "m-1")
+
+            satelliteEvents.emit(ConnectionEvent.PairingRequired(server))
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(listOf(MainEvent.ShowPairingDialog(satelliteConnectionIdFor(server))), events)
+            job.cancel()
+        }
+
+    @Test
+    fun `a connection error becomes a connection-error event`() =
+        runTest(dispatcher) {
+            val (events, job) = collectEvents()
+
+            satelliteEvents.emit(ConnectionEvent.Error(ConnectionError.ServerUnreachable))
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(listOf(MainEvent.ShowConnectionError(ConnectionError.ServerUnreachable)), events)
+            job.cancel()
+        }
+
+    @Test
+    fun `setInputPath for a known pad sets the model's path choice`() {
+        devicesFlow.value = mapOf(60 to routed(60, 0x045E, 0x028E))
+
+        vm.setInputPath("60", PathChoice.Direct)
+
+        verify { usbGamepadManager.setPathChoice(0x045E, 0x028E, PathChoice.Direct) }
+    }
+
+    @Test
+    fun `setInputPath for the virtual slot does nothing`() {
+        vm.setInputPath(VIRTUAL_SLOT_ID, PathChoice.Direct)
+
+        verify(exactly = 0) { usbGamepadManager.setPathChoice(any(), any(), any()) }
+    }
+
+    @Test
+    fun `setInputPath for a device the registry does not know does nothing`() {
+        vm.setInputPath("77", PathChoice.Standard)
+
+        verify(exactly = 0) { usbGamepadManager.setPathChoice(any(), any(), any()) }
+    }
+
+    @Test
+    fun `a claimed pad shows the standard caps it had when routed`() =
+        runTest(dispatcher) {
+            every { gamepadRegistry.frameworkCapsFor(1, 2) } returns
+                PhysicalGamepadRegistry.FrameworkCaps(hasGyro = true, hasRumble = true)
+            devicesFlow.value = mapOf(-1000 to synthetic(-1000, 1, 2))
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(
+                PathCapabilities(rumble = true, motion = true),
+                vm.uiState.value.pathCards["-1000"]
+                    ?.standard,
+            )
+        }
+
+    @Test
+    fun `a claimed pad never seen routed shows no standard caps`() =
+        runTest(dispatcher) {
+            devicesFlow.value = mapOf(-1000 to synthetic(-1000, 1, 2))
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(
+                PathCapabilities(rumble = false, motion = false),
+                vm.uiState.value.pathCards["-1000"]
+                    ?.standard,
+            )
+        }
+
+    @Test
+    fun `a routed pad reads its standard caps off the live device`() =
+        runTest(dispatcher) {
+            devicesFlow.value = mapOf(60 to routed(60, 1, 2).copy(hasRumble = true, hasGyro = false))
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(
+                PathCapabilities(rumble = true, motion = false),
+                vm.uiState.value.pathCards["60"]
+                    ?.standard,
+            )
+        }
+
+    @Test
+    fun `a held synthetic reports no direct poll rate`() =
+        runTest(dispatcher) {
+            val live = synthetic(-1000, 1, 2, pollRateHz = 1000)
+
+            devicesFlow.value = mapOf(-1000 to live.copy(transitioning = true))
+            dispatcher.scheduler.runCurrent()
+            assertEquals(
+                0,
+                vm.uiState.value.pathCards["-1000"]
+                    ?.directPollHz,
+            )
+
+            devicesFlow.value = mapOf(-1000 to live.copy(restoreStuck = true))
+            dispatcher.scheduler.runCurrent()
+            assertEquals(
+                0,
+                vm.uiState.value.pathCards["-1000"]
+                    ?.directPollHz,
+            )
+
+            devicesFlow.value = mapOf(-1000 to live)
+            dispatcher.scheduler.runCurrent()
+            assertEquals(
+                1000,
+                vm.uiState.value.pathCards["-1000"]
+                    ?.directPollHz,
+            )
+        }
+
+    private companion object {
+        const val HELD_PAD_CAPS = 0x03
+        const val HELD_PAD_BUTTONS = 0xFFFF
+    }
 }

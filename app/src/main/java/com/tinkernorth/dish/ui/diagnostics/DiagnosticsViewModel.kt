@@ -16,6 +16,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -57,6 +58,13 @@ class DiagnosticsViewModel
             }
         }
 
+        // The latency card reads the probe's state and the overview's rows together, so the screen
+        // renders one emission instead of caching two.
+        data class LatencyPanelUi(
+            val ui: LatencyUi,
+            val rows: LatencyRows,
+        )
+
         // WhileSubscribed ties the probe to the screen: the collector lives inside
         // repeatOnLifecycle(STARTED), so leaving the screen stops the fast pings.
         @OptIn(ExperimentalCoroutinesApi::class)
@@ -83,6 +91,10 @@ class DiagnosticsViewModel
                     val hosts = hostDiags(w, sources::touchpadMode)
                     Overview(controllers, hosts, w.radios, latencyRows(controllers, hosts))
                 }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), Overview.EMPTY)
+
+        val latencyPanel: StateFlow<LatencyPanelUi> =
+            combine(latency, overview) { ui, overview -> LatencyPanelUi(ui, overview.latencyRows) }
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), LatencyPanelUi(LatencyUi.Off, Overview.EMPTY.latencyRows))
 
         val events: StateFlow<List<DiagnosticsLogEntry>> = diagnosticsLog.state
 

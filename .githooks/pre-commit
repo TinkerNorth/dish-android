@@ -5,7 +5,8 @@
 #   1. clang-format (autofix) on staged JNI C/C++ files.
 #   2. Translation completeness when any values*/strings.xml is staged.
 #      Mirrors the MissingTranslation lint check that CI runs via
-#      ./gradlew lint, but ~30× faster (Python, no Gradle warmup).
+#      ./gradlew lintGithubDebug lintPlayDebug, but ~30× faster (Python,
+#      no Gradle warmup).
 #
 # Both tools gracefully skip if their binary is missing so devs who haven't
 # yet run setup-hooks.sh or installed the tool aren't blocked locally. CI

@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+private const val EVENT_BUFFER = 4
+
 // Stage 2 Bluetooth controller (design 2C). Pairing happens in the system
 // Bluetooth settings, so this screen only gates on the runtime permission and
 // lists the controllers actually CONNECTED right now (read from the gamepad
@@ -52,7 +54,7 @@ class SetupBluetoothControllerViewModel
         private val _state = MutableStateFlow(State())
         val state: StateFlow<State> = _state.asStateFlow()
 
-        private val _events = MutableSharedFlow<Event>(extraBufferCapacity = 4)
+        private val _events = MutableSharedFlow<Event>(extraBufferCapacity = EVENT_BUFFER)
         val events: SharedFlow<Event> = _events.asSharedFlow()
 
         init {

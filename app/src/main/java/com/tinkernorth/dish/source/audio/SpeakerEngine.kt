@@ -44,7 +44,7 @@ interface SpeakerFrameSource {
 }
 
 /** Installs into the native dispatch path, which also starts the thread behind it. */
-object NativeSpeakerFrameSource : SpeakerFrameSource {
+class NativeSpeakerFrameSource : SpeakerFrameSource {
     override fun install(sink: SpeakerAudioBridge.Sink) = SpeakerAudioBridge.install(sink)
 
     override fun uninstall() = SpeakerAudioBridge.uninstall()
@@ -83,7 +83,7 @@ class SpeakerEngine
             plans: SpeakerPlayoutComposer,
             sink: AudioTrackSpeakerSink,
             scope: CoroutineScope,
-        ) : this(plans, sink, NativeSpeakerFrameSource, scope)
+        ) : this(plans, sink, NativeSpeakerFrameSource(), scope)
 
         private val _state = MutableStateFlow(SpeakerPlayoutState.Idle)
         val state: StateFlow<SpeakerPlayoutState> = _state.asStateFlow()
@@ -100,7 +100,7 @@ class SpeakerEngine
             sessionHandle: Int,
             controllerIndex: Int,
             lane: PlayoutLane = PlayoutLane.SPEAKER,
-        ): Long = droppedByRoute[SpeakerPlayoutPlan.routeKey(sessionHandle, controllerIndex, lane)]?.get() ?: 0L
+        ): Long = droppedByRoute[speakerRouteKey(sessionHandle, controllerIndex, lane)]?.get() ?: 0L
 
         private class Voice(
             val target: SpeakerTarget,
@@ -137,20 +137,45 @@ class SpeakerEngine
          * own lock, because a frame may already be inside a write.
          */
         private fun reconcile(desired: Map<Long, SpeakerTarget>) {
-            val current = voices
-            // A route change (the pad's endpoint appeared, moved or went away) is a reopen: an
-            // AudioTrack's preferred device and its width are settled when it is built.
-            val kept =
-                current.filterKeys { key ->
-                    desired[key]?.playbackDeviceId == current[key]?.target?.playbackDeviceId &&
-                        desired[key]?.deviceChannels == current[key]?.target?.deviceChannels
-                }
-            val gone = current.filterKeys { it !in kept.keys }
-            if (gone.isNotEmpty()) {
-                voices = kept
-                gone.values.forEach { it.session.close() }
-            }
+            val kept = closeVoicesWhoseEndpointMoved(desired)
+            val opened = openVoicesFor(desired, kept)
 
+            voices = opened.voices
+            if (opened.voices.isNotEmpty()) installSink() else uninstallSink()
+            _state.value = playoutStateFor(opened)
+            if (opened.refused > 0) {
+                Log.w(TAG, "${opened.refused} speaker slot(s) got no output from this device")
+            }
+        }
+
+        // A route change (the pad's endpoint appeared, moved or went away) is a reopen: an
+        // AudioTrack's preferred device and its width are settled when it is built.
+        private fun closeVoicesWhoseEndpointMoved(desired: Map<Long, SpeakerTarget>): Map<Long, Voice> {
+            val current = voices
+            val kept = current.filterKeys { key -> endpointIsUnchanged(desired[key], current[key]) }
+            val gone = current.filterKeys { it !in kept.keys }
+            if (gone.isEmpty()) return kept
+            voices = kept
+            gone.values.forEach { it.session.close() }
+            return kept
+        }
+
+        private fun endpointIsUnchanged(
+            target: SpeakerTarget?,
+            voice: Voice?,
+        ): Boolean =
+            target?.playbackDeviceId == voice?.target?.playbackDeviceId &&
+                target?.deviceChannels == voice?.target?.deviceChannels
+
+        private data class OpenedVoices(
+            val voices: Map<Long, Voice>,
+            val refused: Int,
+        )
+
+        private fun openVoicesFor(
+            desired: Map<Long, SpeakerTarget>,
+            kept: Map<Long, Voice>,
+        ): OpenedVoices {
             val open = HashMap<Long, Voice>(desired.size)
             var refused = 0
             for ((key, target) in desired) {
@@ -167,16 +192,15 @@ class SpeakerEngine
                 }
                 open[key] = Voice(target, session)
             }
-            voices = open
-            if (open.isNotEmpty()) installSink() else uninstallSink()
-            _state.value =
-                when {
-                    open.isNotEmpty() -> SpeakerPlayoutState.Playing
-                    refused > 0 -> SpeakerPlayoutState.Unavailable
-                    else -> SpeakerPlayoutState.Idle
-                }
-            if (refused > 0) Log.w(TAG, "$refused speaker slot(s) got no output from this device")
+            return OpenedVoices(open, refused)
         }
+
+        private fun playoutStateFor(opened: OpenedVoices): SpeakerPlayoutState =
+            when {
+                opened.voices.isNotEmpty() -> SpeakerPlayoutState.Playing
+                opened.refused > 0 -> SpeakerPlayoutState.Unavailable
+                else -> SpeakerPlayoutState.Idle
+            }
 
         private fun installSink() {
             if (installed) return
@@ -213,7 +237,7 @@ class SpeakerEngine
                     SpeakerAudioBridge.LANE_HAPTICS -> PlayoutLane.HAPTICS
                     else -> return
                 }
-            val key = SpeakerPlayoutPlan.routeKey(sessionHandle, controllerIndex, playoutLane)
+            val key = speakerRouteKey(sessionHandle, controllerIndex, playoutLane)
             val voice = voices[key] ?: return
             val written = voice.session.write(pcmStereo)
             if (written < pcmStereo.size) {

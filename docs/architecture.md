@@ -83,9 +83,12 @@ The Kotlin → JNI → `sendto()` chain runs at gamepad polling rate
 - No allocations per event: the JNI uses a preallocated
   `XUSB_REPORT` and a packed `Int` for HID button + hat (a `Pair`
   would burn ~6 KB/s of garbage at 250 Hz).
-- The session map's `mutex` is the only lock the send path takes,
-  and it's released before the encrypted `sendto`.
-- `IP_TOS = 0xB8` (DSCP EF) and `MSG_NOSIGNAL` stay set on every
+- The send path takes the device and slot locks, the session map's
+  briefly, and its session's send turn. A physical pad's datagram
+  takes its counter under the device and slot locks and is encrypted
+  and sent after they are released, with only the turn held, which
+  keeps the counters in order on the wire.
+- `IP_TOS = 0xB8` (DSCP EF) and `MSG_DONTWAIT` stay set on every
   send.
 
 Anything that wants to ride the hot path lives in `hotpath/` (e.g.
@@ -489,6 +492,11 @@ can't reach are still unit-testable from a host build:
 - `audio_codec.{cpp,h}`: the libopus wrapper, pinned to the two wire stream
   formats. Not header-only (it needs `<opus.h>`), but still host-buildable:
   `audio_codec_test` links the same pinned libopus the app does.
+- `bridge_connection_ids.h`: the bridge thread's Java string per bound
+  connection id, made on a bind's first report and released once the bind
+  and its queued reports are gone. JNI-free (the refs are a template
+  parameter), so `bridge_connection_ids_test` proves the one-string-per-bind
+  rule with a fake JVM.
 - `satellite_jni.cpp`: the Android-only glue. Owns sockets, libsodium,
   the session map, the rumble + Bluetooth callbacks, the speaker-audio
   dispatch thread, and the JNI registration. This file does **not** ship

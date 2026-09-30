@@ -61,8 +61,6 @@ class WakeStateController
 
         override fun apply(value: WakeState) {
             synchronized(lock) {
-                // Drop a composer emission that lands after onStop: publishing the count here would let
-                // StreamingServiceController restart the foreground service while the app is stopped.
                 if (stopped) return
                 _streamingSlotCount.value = value.streamingSlotCount
                 val keep = value.shouldKeepScreenOn
@@ -82,7 +80,7 @@ class WakeStateController
             // Keep the radio out of Wi-Fi power-save so input/rumble packets aren't delayed by PSM wakeups.
             wifiLock =
                 wifiManager
-                    .createWifiLock(wifiLockMode(), WIFI_LOCK_TAG)
+                    .createWifiLock(wifiLockMode(Build.VERSION.SDK_INT), WIFI_LOCK_TAG)
                     .apply { acquire() }
         }
 
@@ -108,10 +106,14 @@ class WakeStateController
 // and javac inlines it as this literal in either spelling.
 internal const val WIFI_MODE_FULL_HIGH_PERF_LEGACY = 3
 
-// WIFI_MODE_FULL_LOW_LATENCY disables Wi-Fi power-save for real-time traffic; HIGH_PERF is the pre-29 fallback.
-internal fun wifiLockMode(): Int =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+// The value of WifiManager.WIFI_MODE_FULL_LOW_LATENCY (API 29), a literal for the same reason: lint
+// cannot read an sdkInt parameter as the API gate the platform constant needs.
+internal const val WIFI_MODE_FULL_LOW_LATENCY_Q = 4
+
+// Low latency disables Wi-Fi power-save for real-time traffic; HIGH_PERF is the pre-29 fallback.
+internal fun wifiLockMode(sdkInt: Int): Int =
+    if (sdkInt >= Build.VERSION_CODES.Q) {
+        WIFI_MODE_FULL_LOW_LATENCY_Q
     } else {
         WIFI_MODE_FULL_HIGH_PERF_LEGACY
     }

@@ -48,21 +48,22 @@ class BluetoothConnections
             return connectedNames.any { it.equals(target, ignoreCase = true) }
         }
 
-        private val receiver =
-            object : BroadcastReceiver() {
-                override fun onReceive(
-                    received: Context?,
-                    intent: Intent?,
-                ) {
-                    val name = deviceName(intent) ?: return
-                    when (intent?.action) {
-                        BluetoothDevice.ACTION_ACL_CONNECTED -> connectedNames.add(name)
-                        BluetoothDevice.ACTION_ACL_DISCONNECTED -> connectedNames.remove(name)
-                        else -> return
-                    }
-                    onChanged?.invoke()
+        private inner class BondedDeviceReceiver : BroadcastReceiver() {
+            override fun onReceive(
+                received: Context?,
+                intent: Intent?,
+            ) {
+                val name = deviceName(intent) ?: return
+                when (intent?.action) {
+                    BluetoothDevice.ACTION_ACL_CONNECTED -> connectedNames.add(name)
+                    BluetoothDevice.ACTION_ACL_DISCONNECTED -> connectedNames.remove(name)
+                    else -> return
                 }
+                onChanged?.invoke()
             }
+        }
+
+        private val receiver = BondedDeviceReceiver()
 
         private fun deviceName(intent: Intent?): String? {
             if (context.checkBluetoothConnectPermission() != PackageManager.PERMISSION_GRANTED) return null

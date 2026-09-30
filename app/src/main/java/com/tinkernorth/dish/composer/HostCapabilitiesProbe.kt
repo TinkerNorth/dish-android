@@ -52,16 +52,17 @@ class HostCapabilitiesProbe
         private val watchers = ConcurrentHashMap<String, Job>()
 
         fun start() {
-            satellite.connections
-                .onEach { conns ->
-                    for (id in watchers.keys.toList()) {
-                        if (id !in conns) watchers.remove(id)?.cancel()
-                    }
-                    for ((id, conn) in conns) {
-                        if (watchers.containsKey(id)) continue
-                        watchers[id] = scope.launch { watch(id, conn) }
-                    }
-                }.launchIn(scope)
+            satellite.connections.onEach(::syncWatchers).launchIn(scope)
+        }
+
+        private fun syncWatchers(conns: Map<String, SatelliteConnection>) {
+            for (id in watchers.keys.toList()) {
+                if (id !in conns) watchers.remove(id)?.cancel()
+            }
+            for ((id, conn) in conns) {
+                if (watchers.containsKey(id)) continue
+                watchers[id] = scope.launch { watch(id, conn) }
+            }
         }
 
         private suspend fun watch(

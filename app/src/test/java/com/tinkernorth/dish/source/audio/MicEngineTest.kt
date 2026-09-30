@@ -146,12 +146,7 @@ class MicEngineTest {
     /** Per-slot capture endpoints, so a pad with its own microphone can be moved under the engine. */
     private val slotRoutes = ConcurrentHashMap<String, PadAudioRoute>()
 
-    private val routing =
-        object : SlotAudioRoutes {
-            override val changes get() = routeTable
-
-            override fun forSlot(slotId: String) = slotRoutes[slotId] ?: PadAudioRoute.NONE
-        }
+    private val routing = MapSlotAudioRoutes(routeTable, slotRoutes)
 
     private val connection =
         mockk<SatelliteConnection> {
@@ -193,7 +188,10 @@ class MicEngineTest {
 
     private fun await(
         what: String,
-        timeoutMs: Long = 2_000,
+        // A loaded CI runner executes both flavours' suites in parallel; 2s was enough locally
+        // and not on the runner, and this only bounds a failure, so it costs a passing run
+        // nothing.
+        timeoutMs: Long = 10_000,
         condition: () -> Boolean,
     ) {
         val deadline = System.currentTimeMillis() + timeoutMs

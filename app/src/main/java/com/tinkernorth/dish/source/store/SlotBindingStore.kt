@@ -36,21 +36,25 @@ class SlotBindingStore
             fromSlotId: String,
             toSlotId: String,
         ) {
-            setState { current ->
-                val connId = current[fromSlotId] ?: return@setState current
-                (current - fromSlotId) + (toSlotId to connId)
-            }
+            setState { withSlotMigrated(it, fromSlotId, toSlotId) }
         }
 
         fun replace(
             slotId: String,
             connectionId: String,
         ): String? {
-            var prior: String? = null
-            setState { current ->
-                prior = current[slotId]
-                current + (slotId to connectionId)
-            }
-            return prior
+            val prior = getAndSetState { current -> current + (slotId to connectionId) }
+            return prior[slotId]
         }
     }
+
+// A slot with no binding hands back the same map, so there is nothing to publish.
+internal fun withSlotMigrated(
+    bindings: Map<String, String>,
+    fromSlotId: String,
+    toSlotId: String,
+): Map<String, String> {
+    val connectionId = bindings[fromSlotId] ?: return bindings
+    val unbound = bindings - fromSlotId
+    return unbound + (toSlotId to connectionId)
+}

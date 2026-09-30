@@ -215,44 +215,44 @@ class MainUiStateTest {
     }
 
     @Test
-    fun `fromWire keeps a known level and discharging status`() {
-        val ui = BatteryUi.fromWire(64, BatteryValidator.STATUS_DISCHARGING)
+    fun `batteryUiFromWire keeps a known level and discharging status`() {
+        val ui = batteryUiFromWire(64, BatteryValidator.STATUS_DISCHARGING)
         assertEquals(64, ui?.level)
         assertFalse(ui!!.charging)
     }
 
     @Test
-    fun `fromWire marks charging full and wired states as charging`() {
-        assertTrue(BatteryUi.fromWire(50, BatteryValidator.STATUS_CHARGING)!!.charging)
-        assertTrue(BatteryUi.fromWire(100, BatteryValidator.STATUS_FULL)!!.charging)
-        assertTrue(BatteryUi.fromWire(100, BatteryValidator.STATUS_WIRED)!!.charging)
+    fun `batteryUiFromWire marks charging full and wired states as charging`() {
+        assertTrue(batteryUiFromWire(50, BatteryValidator.STATUS_CHARGING)!!.charging)
+        assertTrue(batteryUiFromWire(100, BatteryValidator.STATUS_FULL)!!.charging)
+        assertTrue(batteryUiFromWire(100, BatteryValidator.STATUS_WIRED)!!.charging)
     }
 
     @Test
-    fun `fromWire collapses the unknown-level unknown-status pair to null`() {
+    fun `batteryUiFromWire collapses the unknown-level unknown-status pair to null`() {
         assertNull(
-            BatteryUi.fromWire(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_UNKNOWN),
+            batteryUiFromWire(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_UNKNOWN),
         )
     }
 
     @Test
-    fun `fromWire keeps an unknown level when the status is known`() {
-        val ui = BatteryUi.fromWire(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_CHARGING)
+    fun `batteryUiFromWire keeps an unknown level when the status is known`() {
+        val ui = batteryUiFromWire(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_CHARGING)
         assertNull(ui?.level)
         assertTrue(ui!!.charging)
     }
 
     @Test
     fun `isLow is true only for a low non-charging battery`() {
-        assertTrue(BatteryUi.fromWire(10, BatteryValidator.STATUS_DISCHARGING)!!.isLow)
+        assertTrue(batteryUiFromWire(10, BatteryValidator.STATUS_DISCHARGING)!!.isLow)
         assertTrue(
             "the threshold itself counts as low",
-            BatteryUi.fromWire(BatteryUi.LOW_THRESHOLD, BatteryValidator.STATUS_DISCHARGING)!!.isLow,
+            batteryUiFromWire(BatteryUi.LOW_THRESHOLD, BatteryValidator.STATUS_DISCHARGING)!!.isLow,
         )
-        assertFalse(BatteryUi.fromWire(50, BatteryValidator.STATUS_DISCHARGING)!!.isLow)
-        assertFalse(BatteryUi.fromWire(5, BatteryValidator.STATUS_CHARGING)!!.isLow)
+        assertFalse(batteryUiFromWire(50, BatteryValidator.STATUS_DISCHARGING)!!.isLow)
+        assertFalse(batteryUiFromWire(5, BatteryValidator.STATUS_CHARGING)!!.isLow)
         assertFalse(
-            BatteryUi.fromWire(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_DISCHARGING)!!.isLow,
+            batteryUiFromWire(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_DISCHARGING)!!.isLow,
         )
     }
 

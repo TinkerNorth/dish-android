@@ -2,7 +2,7 @@
 
 package com.tinkernorth.dish.source.bluetooth
 
-import com.tinkernorth.dish.core.input.BluetoothGamepad.GamepadProfile
+import com.tinkernorth.dish.core.input.GamepadProfile
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
 import io.mockk.every
@@ -56,8 +56,8 @@ class BluetoothGamepadRegistryTest {
     }
 
     @Test
-    fun `idFor derives bt-mac id`() {
-        assertEquals("bt:AA:BB:CC", BluetoothGamepadRegistry.idFor("AA:BB:CC"))
+    fun `bluetoothConnectionIdFor derives bt-mac id`() {
+        assertEquals("bt:AA:BB:CC", bluetoothConnectionIdFor("AA:BB:CC"))
     }
 
     @Test
@@ -462,5 +462,43 @@ class BluetoothGamepadRegistryTest {
         driveToConnected("bt-pending-1", "AA", "Xbox")
 
         assertNull(registry.staleReasonFor("bt:AA"))
+    }
+
+    @Test
+    fun `tryAutoReconnect while an acquire is in flight does not restart the handshake`() {
+        every { store.rememberedBt() } returns
+            listOf(RememberedBt(id = "bt:AA", name = "Xbox", mac = "AA", profileName = "Xbox"))
+        registry.start("bt:AA", GamepadProfile.XBOX, autoConnectMac = "AA")
+        assertTrue(registry.state("bt:AA").autoReconnecting)
+        val before = fake.calls.size
+
+        assertEquals(GamepadProfile.XBOX, registry.tryAutoReconnect("bt:AA"))
+
+        assertEquals(before, fake.calls.size)
+    }
+
+    @Test
+    fun `reportsSent counts only reports the session accepted`() {
+        driveToConnected("bt-pending-1", "AA", "Xbox")
+        registry.sendReport("bt:AA", ByteArray(14))
+        fake.sendReportReturns = false
+
+        registry.sendReport("bt:AA", ByteArray(14))
+
+        assertEquals(1L, registry.reportsSent("bt:AA"))
+    }
+
+    @Test
+    fun `reportsSent for an unknown id is zero`() {
+        assertEquals(0L, registry.reportsSent("bt:GHOST"))
+    }
+
+    @Test
+    fun `a report dropped before the session counts nothing`() {
+        registry.start("bt-pending-1", GamepadProfile.XBOX)
+
+        registry.sendReport("bt-pending-1", ByteArray(14))
+
+        assertEquals(0L, registry.reportsSent("bt-pending-1"))
     }
 }

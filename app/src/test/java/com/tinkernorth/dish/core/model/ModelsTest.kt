@@ -125,4 +125,27 @@ class ModelsTest {
         assertEquals(3, json.decodeFromString(CatalogDto.serializer(), """$base,"catalogVersion":3}""").catalogVersion)
         assertEquals(1, json.decodeFromString(CatalogDto.serializer(), "$base}").catalogVersion) // absent ⇒ legacy
     }
+
+    @Test
+    fun `slotIsLive is true for ok and replugFailed only`() {
+        assertEquals(true, ControllerApplyDto(result = ControllerApplyDto.APPLY_OK).slotIsLive)
+        assertEquals(true, ControllerApplyDto(result = ControllerApplyDto.APPLY_REPLUG_FAILED).slotIsLive)
+        assertFalse(ControllerApplyDto(result = "plugFailed").slotIsLive)
+        assertFalse(ControllerApplyDto(result = "").slotIsLive)
+    }
+
+    @Test
+    fun `only the ok result reads as ok`() {
+        assertEquals(true, ControllerApplyDto(result = ControllerApplyDto.APPLY_OK).ok)
+        assertFalse(ControllerApplyDto(result = ControllerApplyDto.APPLY_REPLUG_FAILED).ok)
+    }
+
+    @Test
+    fun `an unknown 401 code is not read as terminal`() {
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val otherCode = json.decodeFromString(SessionResponse.serializer(), """{"error":"unauthorized","code":"RATE_LIMITED"}""")
+        val noCode = json.decodeFromString(SessionResponse.serializer(), """{"error":"unauthorized"}""")
+        assertFalse(otherCode.unauthorized)
+        assertFalse(noCode.unauthorized)
+    }
 }

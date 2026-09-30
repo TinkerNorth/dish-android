@@ -57,11 +57,16 @@ fun AppCompatActivity.attachGamepadHost(
 fun AppCompatActivity.applyDishSystemBars(root: View) {
     val barStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
     enableEdgeToEdge(statusBarStyle = barStyle, navigationBarStyle = barStyle)
-    ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
-        val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-        v.updatePadding(bars.left, bars.top, bars.right, bars.bottom)
-        insets
-    }
+    ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets -> padRootForSystemBars(v, insets) }
+}
+
+private fun padRootForSystemBars(
+    v: View,
+    insets: WindowInsetsCompat,
+): WindowInsetsCompat {
+    val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+    v.updatePadding(bars.left, bars.top, bars.right, bars.bottom)
+    return insets
 }
 
 // Pre-34 has no CLOSE override; the OPEN-only fallback is fine since the platform close cut is

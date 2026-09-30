@@ -12,11 +12,15 @@ import io.mockk.unmockkStatic
 import io.mockk.verify
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.security.cert.Certificate
 import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
+import javax.net.ssl.SSLSession
 
 // Exercises the real TOFU trust decision end to end (leaf cert -> fingerprint ->
 // pin/match/mismatch) against a real pin repo, with only the certificate mocked.
@@ -147,5 +151,64 @@ class TofuTrustManagerTest {
         verify(exactly = 0) { Log.e(any<String>(), any<String>()) }
         assertEquals(64, pins.pinnedFingerprint("a")?.length)
         assertEquals(64, pins.pinnedFingerprint("b")?.length)
+    }
+
+    // ── The session verifier: this handshake's verdict, not the store's ──────────────────────
+
+    private fun sessionWith(der: ByteArray): SSLSession {
+        val cert = mockk<X509Certificate>()
+        every { cert.encoded } returns der
+        val session = mockk<SSLSession>()
+        every { session.peerCertificates } returns arrayOf<Certificate>(cert)
+        return session
+    }
+
+    @Test
+    fun `the verifier holds the session to the certificate the handshake accepted`() {
+        val manager = TofuTrustManager(sat, pinRepo())
+        manager.checkServerTrusted(chainWith(byteArrayOf(1, 2, 3)), "ECDHE_ECDSA")
+
+        assertTrue(manager.accepted(sessionWith(byteArrayOf(1, 2, 3))))
+        assertFalse(manager.accepted(sessionWith(byteArrayOf(9, 9, 9))))
+    }
+
+    @Test
+    fun `a pin dropped after the handshake does not fail the session`() {
+        // A Forget drops the pin while the unpair it sent is on the wire. The verifier used to read
+        // the store again and refuse the session it had just pinned, so the unpair never reached
+        // the satellite and the satellite kept a paired ghost row.
+        val pins = pinRepo()
+        val manager = TofuTrustManager(sat, pins)
+        manager.checkServerTrusted(chainWith(byteArrayOf(1, 2, 3)), "ECDHE_ECDSA")
+
+        pins.forget(sat)
+
+        assertTrue(manager.accepted(sessionWith(byteArrayOf(1, 2, 3))))
+    }
+
+    @Test
+    fun `before a handshake, and after a refused one, the verifier accepts nothing`() {
+        val pins = pinRepo()
+        pins.pin(sat, "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81")
+        val manager = TofuTrustManager(sat, pins)
+        assertFalse("nothing was accepted yet, pinned or not", manager.accepted(sessionWith(byteArrayOf(1, 2, 3))))
+
+        assertThrows(CertificateException::class.java) {
+            manager.checkServerTrusted(chainWith(byteArrayOf(9, 9, 9)), "ECDHE_ECDSA")
+        }
+
+        assertFalse(manager.accepted(sessionWith(byteArrayOf(9, 9, 9))))
+        assertFalse(manager.accepted(sessionWith(byteArrayOf(1, 2, 3))))
+    }
+
+    @Test
+    fun `a session without peer certificates, or none at all, is never the accepted one`() {
+        val manager = TofuTrustManager(sat, pinRepo())
+        manager.checkServerTrusted(chainWith(byteArrayOf(1, 2, 3)), "ECDHE_ECDSA")
+        val bare = mockk<SSLSession>()
+        every { bare.peerCertificates } returns emptyArray()
+
+        assertFalse(manager.accepted(bare))
+        assertFalse(manager.accepted(null))
     }
 }

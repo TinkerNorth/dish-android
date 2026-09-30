@@ -5,6 +5,7 @@ package com.tinkernorth.dish.ui.setup
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.model.capabilitySetOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -62,7 +63,7 @@ class DestinationFlowsTest {
 
     @Test
     fun `a bluetooth-shaped potential lists the pad and nothing back`() {
-        val bt = CapabilitySet.of(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS)
+        val bt = capabilitySetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS)
         assertEquals(listOf(R.string.setup_cfg_flow_controller), destinationGetFlows(bt).map { it.label })
         assertTrue(destinationSendFlows(bt).isEmpty())
     }
@@ -70,7 +71,7 @@ class DestinationFlowsTest {
     @Test
     fun `a moonlight-shaped potential carries battery up and trigger rumble back but no LED writes`() {
         val moonlight =
-            CapabilitySet.of(
+            capabilitySetOf(
                 Feature.GAMEPAD,
                 Feature.ANALOG_TRIGGERS,
                 Feature.MOTION,
@@ -96,11 +97,11 @@ class DestinationFlowsTest {
     @Test
     fun `a destination that carries only one audio direction says only that`() {
         // The two are independent on the wire, so the chips must not imply a pair.
-        val micOnly = CapabilitySet.of(Feature.GAMEPAD, Feature.MIC)
+        val micOnly = capabilitySetOf(Feature.GAMEPAD, Feature.MIC)
         assertTrue(R.string.setup_cap_mic in destinationGetFlows(micOnly).map { it.label })
         assertTrue(destinationSendFlows(micOnly).isEmpty())
 
-        val speakerOnly = CapabilitySet.of(Feature.GAMEPAD, Feature.SPEAKER)
+        val speakerOnly = capabilitySetOf(Feature.GAMEPAD, Feature.SPEAKER)
         assertFalse(R.string.setup_cap_mic in destinationGetFlows(speakerOnly).map { it.label })
         assertEquals(listOf(R.string.setup_cap_speaker), destinationSendFlows(speakerOnly).map { it.label })
     }

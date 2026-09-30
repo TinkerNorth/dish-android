@@ -5,11 +5,17 @@ package com.tinkernorth.dish.source.update
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.core.update.ASSET_URL_PREFIX
+import com.tinkernorth.dish.core.update.BACKOFF_BASE_MS
+import com.tinkernorth.dish.core.update.FUTURE_SKEW_ESCAPE_MS
+import com.tinkernorth.dish.core.update.MANUAL_MIN_GAP_MS
+import com.tinkernorth.dish.core.update.PERIODIC_INTERVAL_MS
+import com.tinkernorth.dish.core.update.RECONNECT_CHECK_DELAY_MS
+import com.tinkernorth.dish.core.update.STARTUP_DELAY_MS
 import com.tinkernorth.dish.core.update.UpdateAsset
 import com.tinkernorth.dish.core.update.UpdateError
-import com.tinkernorth.dish.core.update.UpdateMachine
 import com.tinkernorth.dish.core.update.UpdateManifest
 import com.tinkernorth.dish.core.update.UpdatePhase
+import com.tinkernorth.dish.core.update.jitteredDelayMs
 import com.tinkernorth.dish.repository.mapBackedPrefs
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,10 +44,13 @@ class UpdateCoordinatorTest {
         }
     }
 
-    private val owner =
-        object : LifecycleOwner {
-            override val lifecycle: Lifecycle get() = error("not used by the coordinator")
-        }
+    // The coordinator takes an owner but never reads its lifecycle; the error says so rather
+    // than handing over a registry that would quietly make a missed read pass.
+    private class UnusedOwner : LifecycleOwner {
+        override val lifecycle: Lifecycle get() = error("not used by the coordinator")
+    }
+
+    private val owner = UnusedOwner()
 
     private val notes = "https://github.com/TinkerNorth/dish-android/releases/tag/2.1.0"
 
@@ -97,7 +106,7 @@ class UpdateCoordinatorTest {
             val rig = rig()
             rig.gateway.replies.add(manifest())
             rig.coordinator.onStart(owner)
-            advanceTimeBy(UpdateMachine.STARTUP_DELAY_MS - 1)
+            advanceTimeBy(STARTUP_DELAY_MS - 1)
             runCurrent()
             assertEquals(0, rig.gateway.fetches)
             advanceTimeBy(1)
@@ -107,7 +116,7 @@ class UpdateCoordinatorTest {
             assertEquals(UpdateNoticePhase.Available, rig.coordinator.status.value.phase)
             assertEquals("2.1.0", rig.coordinator.status.value.availableVersion)
             assertEquals(notes, rig.coordinator.status.value.downloadUrl)
-            assertEquals(EPOCH_MS + UpdateMachine.STARTUP_DELAY_MS, rig.store.lastCheckMs())
+            assertEquals(EPOCH_MS + STARTUP_DELAY_MS, rig.store.lastCheckMs())
         }
 
     @Test
@@ -115,10 +124,10 @@ class UpdateCoordinatorTest {
         runTest {
             val rig = rig(lastCheckMs = EPOCH_MS - 10 * 60 * 1000)
             rig.coordinator.onStart(owner)
-            advanceTimeBy(UpdateMachine.STARTUP_DELAY_MS + 1)
+            advanceTimeBy(STARTUP_DELAY_MS + 1)
             runCurrent()
             assertEquals(0, rig.gateway.fetches)
-            advanceTimeBy(UpdateMachine.PERIODIC_INTERVAL_MS)
+            advanceTimeBy(PERIODIC_INTERVAL_MS)
             runCurrent()
             assertEquals(1, rig.gateway.fetches)
         }
@@ -126,9 +135,9 @@ class UpdateCoordinatorTest {
     @Test
     fun `a last-check time from the future is a moved clock, not a recent check`() =
         runTest {
-            val rig = rig(lastCheckMs = EPOCH_MS + 2 * UpdateMachine.FUTURE_SKEW_ESCAPE_MS)
+            val rig = rig(lastCheckMs = EPOCH_MS + 2 * FUTURE_SKEW_ESCAPE_MS)
             rig.coordinator.onStart(owner)
-            advanceTimeBy(UpdateMachine.STARTUP_DELAY_MS + 1)
+            advanceTimeBy(STARTUP_DELAY_MS + 1)
             runCurrent()
             assertEquals(1, rig.gateway.fetches)
         }
@@ -149,7 +158,7 @@ class UpdateCoordinatorTest {
             rig.coordinator.setChecksEnabled(true)
             runCurrent()
             assertEquals(UpdatePhase.Idle, rig.coordinator.machineStatus.value.phase)
-            advanceTimeBy(UpdateMachine.STARTUP_DELAY_MS + 1)
+            advanceTimeBy(STARTUP_DELAY_MS + 1)
             runCurrent()
             assertEquals(1, rig.gateway.fetches)
         }
@@ -162,11 +171,11 @@ class UpdateCoordinatorTest {
             rig.coordinator.checkNow()
             runCurrent()
             assertEquals(1, rig.gateway.fetches)
-            advanceTimeBy(UpdateMachine.MANUAL_MIN_GAP_MS / 2)
+            advanceTimeBy(MANUAL_MIN_GAP_MS / 2)
             rig.coordinator.checkNow()
             runCurrent()
             assertEquals(1, rig.gateway.fetches)
-            advanceTimeBy(UpdateMachine.MANUAL_MIN_GAP_MS / 2 + 1)
+            advanceTimeBy(MANUAL_MIN_GAP_MS / 2 + 1)
             rig.coordinator.checkNow()
             runCurrent()
             assertEquals(2, rig.gateway.fetches)
@@ -179,7 +188,7 @@ class UpdateCoordinatorTest {
             rig.gateway.replies.add(manifest())
             rig.gateway.replies.add(manifest())
             rig.coordinator.onStart(owner)
-            advanceTimeBy(UpdateMachine.STARTUP_DELAY_MS + 1)
+            advanceTimeBy(STARTUP_DELAY_MS + 1)
             runCurrent()
             assertEquals(UpdateNoticePhase.Available, rig.coordinator.status.value.phase)
 
@@ -188,7 +197,7 @@ class UpdateCoordinatorTest {
             assertEquals(UpdateNoticePhase.UpToDate, rig.coordinator.status.value.phase)
             assertEquals("2.1.0", rig.store.state.value.skippedVersion)
 
-            advanceTimeBy(UpdateMachine.PERIODIC_INTERVAL_MS + 1)
+            advanceTimeBy(PERIODIC_INTERVAL_MS + 1)
             runCurrent()
             assertEquals(2, rig.gateway.fetches)
             assertEquals(UpdateNoticePhase.UpToDate, rig.coordinator.status.value.phase)
@@ -200,7 +209,7 @@ class UpdateCoordinatorTest {
             val rig = rig(currentVersion = "1.0.0")
             rig.gateway.replies.add(manifest(minimum = "2.0.0"))
             rig.coordinator.onStart(owner)
-            advanceTimeBy(UpdateMachine.STARTUP_DELAY_MS + 1)
+            advanceTimeBy(STARTUP_DELAY_MS + 1)
             runCurrent()
             assertTrue(rig.coordinator.status.value.required)
 
@@ -217,12 +226,12 @@ class UpdateCoordinatorTest {
             rig.coordinator.onStart(owner)
             // Land exactly on the startup tick: the retry timer is armed at
             // that instant, so the ladder below is measured from it.
-            advanceTimeBy(UpdateMachine.STARTUP_DELAY_MS)
+            advanceTimeBy(STARTUP_DELAY_MS)
             runCurrent()
             assertEquals(1, rig.gateway.fetches)
             assertEquals(UpdateNoticePhase.Failed, rig.coordinator.status.value.phase)
 
-            val firstRetry = UpdateMachine.jitteredDelayMs(UpdateMachine.BACKOFF_BASE_MS, 1.0)
+            val firstRetry = jitteredDelayMs(BACKOFF_BASE_MS, 1.0)
             advanceTimeBy(firstRetry - 1)
             runCurrent()
             assertEquals(1, rig.gateway.fetches)
@@ -230,7 +239,7 @@ class UpdateCoordinatorTest {
             runCurrent()
             assertEquals(2, rig.gateway.fetches)
 
-            val secondRetry = UpdateMachine.jitteredDelayMs(2 * UpdateMachine.BACKOFF_BASE_MS, 1.0)
+            val secondRetry = jitteredDelayMs(2 * BACKOFF_BASE_MS, 1.0)
             advanceTimeBy(secondRetry - 1)
             runCurrent()
             assertEquals(2, rig.gateway.fetches)
@@ -244,14 +253,14 @@ class UpdateCoordinatorTest {
         runTest {
             val rig = rig()
             rig.coordinator.onStart(owner)
-            advanceTimeBy(UpdateMachine.STARTUP_DELAY_MS / 2)
+            advanceTimeBy(STARTUP_DELAY_MS / 2)
             rig.coordinator.onStop(owner)
             advanceTimeBy(60L * 60 * 1000)
             runCurrent()
             assertEquals(0, rig.gateway.fetches)
 
             rig.coordinator.onStart(owner)
-            advanceTimeBy(UpdateMachine.STARTUP_DELAY_MS + 1)
+            advanceTimeBy(STARTUP_DELAY_MS + 1)
             runCurrent()
             assertEquals(1, rig.gateway.fetches)
         }
@@ -261,7 +270,7 @@ class UpdateCoordinatorTest {
         runTest {
             val rig = rig(online = false)
             rig.coordinator.onStart(owner)
-            advanceTimeBy(UpdateMachine.STARTUP_DELAY_MS + 1)
+            advanceTimeBy(STARTUP_DELAY_MS + 1)
             runCurrent()
             assertEquals(0, rig.gateway.fetches)
             assertEquals(UpdatePhase.Failed, rig.coordinator.machineStatus.value.phase)
@@ -269,7 +278,7 @@ class UpdateCoordinatorTest {
 
             rig.online.value = true
             runCurrent()
-            advanceTimeBy(UpdateMachine.RECONNECT_CHECK_DELAY_MS + 1)
+            advanceTimeBy(RECONNECT_CHECK_DELAY_MS + 1)
             runCurrent()
             assertEquals(1, rig.gateway.fetches)
             assertFalse(rig.coordinator.machineStatus.value.phase == UpdatePhase.Checking)

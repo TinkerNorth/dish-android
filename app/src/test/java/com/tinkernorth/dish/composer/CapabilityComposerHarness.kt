@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.composer
 
+import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.CatalogDto
 import com.tinkernorth.dish.core.model.HostFeatureSet
@@ -9,6 +10,7 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.audio.PadAudioRoute
 import com.tinkernorth.dish.source.audio.PadAudioRoutes
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
 import com.tinkernorth.dish.source.store.MouseSurfaceStore
 import com.tinkernorth.dish.source.store.SatelliteHostFacts
@@ -20,9 +22,9 @@ import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 
-// The harness CapabilityComposerTest and CapabilityComposerPadAudioTest share: the
-// summary/device builders and the fully mocked composer factory. Top level so the
-// two suites stay under the class-size gate without duplicating any of it.
+// The harness the CapabilityComposer suites share (every one but the lightbar suite, which
+// builds its own): the summary/device builders and the fully mocked composer factory. Top
+// level so each suite stays under the class-size gate without duplicating any of it.
 
 internal fun summary(
     id: String,
@@ -74,6 +76,8 @@ internal data class StoreStates(
         MutableStateFlow(emptyMap()),
     val hostRuntime: MutableStateFlow<Map<String, SatelliteHostRuntime>> = MutableStateFlow(emptyMap()),
     val satTypes: MutableStateFlow<Map<Pair<String, String>, Int>> = MutableStateFlow(emptyMap()),
+    // The Moonlight sessions, keyed by host id: the pads each has acquired are what it announced.
+    val moonlightConnections: MutableStateFlow<Map<String, MoonlightConnection>> = MutableStateFlow(emptyMap()),
     // Default no cached catalog: the type layer falls back to BundledCatalog. Tests that
     // exercise the catalog-driven path pass a cachedCatalog explicitly.
     val cachedCatalog: CatalogDto? = null,
@@ -112,6 +116,7 @@ internal fun composerFor(
             every { this@mockk.bindings } returns bindings
             every { this@mockk.connections } returns connections
             every { satTypes } returns stores.satTypes
+            every { moonlightSessions } returns stores.moonlightConnections
         }
     val native: PhysicalInputNative =
         mockk {
@@ -135,7 +140,7 @@ internal fun composerFor(
         mockk {
             every { state } returns stores.padAudioRoutes
             every { routeFor(any(), any()) } answers {
-                stores.padAudioRoutes.value[PadAudioRoutes.key(firstArg(), secondArg())] ?: PadAudioRoute.NONE
+                stores.padAudioRoutes.value[vidPidKey(firstArg(), secondArg())] ?: PadAudioRoute.NONE
             }
         }
     val mouseSurfaceStore: MouseSurfaceStore =

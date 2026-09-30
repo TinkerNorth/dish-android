@@ -9,7 +9,6 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import androidx.annotation.StringRes
 import androidx.core.view.MenuItemCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -22,22 +21,26 @@ import com.tinkernorth.dish.core.input.hidToXusb
 import com.tinkernorth.dish.core.input.withMicMute
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.core.net.moonlight.MoonlightControlProtocol
+import com.tinkernorth.dish.core.net.moonlight.BTN_TOUCHPAD
 import com.tinkernorth.dish.databinding.ActivityGamepadOverlayBinding
-import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
+import com.tinkernorth.dish.source.sensor.MotionRateLimiter
 import com.tinkernorth.dish.source.sensor.MotionStreamState
 import com.tinkernorth.dish.source.sensor.PhoneBatterySource
 import com.tinkernorth.dish.source.sensor.PhoneMotionSource
 import com.tinkernorth.dish.source.store.MicMuteStore
-import com.tinkernorth.dish.ui.common.GamepadSkin
+import com.tinkernorth.dish.source.store.VirtualPadFeedback
 import com.tinkernorth.dish.ui.common.GamepadTouchView
 import com.tinkernorth.dish.ui.common.ResendPacer
+import com.tinkernorth.dish.ui.common.TouchpadReportBuffer
 import com.tinkernorth.dish.ui.common.TouchpadSurfaceView
+import com.tinkernorth.dish.ui.common.gamepadSkinFromName
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.paintConnectionMenuItem
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.common.showConnectionDialog
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -71,6 +74,10 @@ class GamepadOverlayActivity :
 
     @Volatile private var lastReportedTrackpad: TouchpadSurfaceView.TouchpadState? = null
 
+    // The trackpad's wire frame, one per sending thread.
+    private val uiTrackpadReport = TouchpadReportBuffer()
+    private val resendTrackpadReport = TouchpadReportBuffer()
+
     // Mute is STATE on the wire, so every frame carries it, including the resend loop's: hence a
     // volatile snapshot rather than a store read on the send path.
     @Volatile private var micMuted = false
@@ -93,7 +100,7 @@ class GamepadOverlayActivity :
         installBaseScaffolding()
 
         binding.gamepadTouchView.listener = this
-        binding.gamepadTouchView.skin = GamepadSkin.fromName(intent.getStringExtra(EXTRA_GAMEPAD_SKIN))
+        binding.gamepadTouchView.skin = gamepadSkinFromName(intent.getStringExtra(EXTRA_GAMEPAD_SKIN))
         setupDishToolbar(binding.overlayToolbar)
         binding.overlayToolbar.setTitle(R.string.overlay_title_gamepad)
         installRateReadout(
@@ -107,54 +114,64 @@ class GamepadOverlayActivity :
         batterySource = PhoneBatterySource(applicationContext)
         repaintFrom(currentMotionPaint())
 
+        observeMotionPaint()
+        observeVirtualFeedback()
+        observeMicMute()
+    }
+
+    private fun observeMotionPaint() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 try {
-                    combine(
-                        hub.connections.map { conns -> conns.firstOrNull { it.id == connectionId } },
-                        capabilityComposer.state.map {
-                            it[VIRTUAL_SLOT_ID] ?: SlotCapabilities.NONE
-                        },
-                        motionSource.state,
-                    ) { summary, capability, sourceState ->
-                        OverlayMotionPaint(summary, capability, sourceState)
-                    }.distinctUntilChanged().collect { paint ->
-                        applyMotionGate(paint.capability, paint.summary)
-                        repaintFrom(paint)
-                    }
+                    overlayMotionPaint().collect { paint -> repaint(paint) }
                 } finally {
-                    // Stop on collector cancellation (STOP / activity destroy)
-                    // so a backgrounded overlay never leaks sensor listeners.
+                    // Stop on collector cancellation (STOP / activity destroy) so a backgrounded
+                    // overlay never leaks sensor listeners.
                     motionSource.stop()
                 }
             }
         }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                // Host-driven feedback painted onto the skin: lightbar colour,
-                // player LEDs, adaptive-trigger accents.
-                virtualFeedback.state.collect { fb ->
-                    binding.gamepadTouchView.lightbarColor = fb.lightbarColor
-                    binding.gamepadTouchView.playerLedMask = fb.playerLedMask
-                    binding.gamepadTouchView.leftTriggerEffect = fb.leftTriggerEffect
-                    binding.gamepadTouchView.rightTriggerEffect = fb.rightTriggerEffect
-                    binding.gamepadTouchView.micMuteLedState = fb.micLedState
-                }
-            }
-        }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                // The mute state itself, which is what rides the wire, gates capture, and owns
-                // the mute pill's face. It lives in the store rather than in the view because
-                // the pad's own button (and the app-wide mic chip) writes the same state, and
-                // because the microphone must keep obeying it after the overlay is gone.
-                micMute.state.collect {
-                    val muted = it[VIRTUAL_SLOT_ID] ?: MicMuteStore.DEFAULT_MUTED
-                    micMuted = muted
-                    binding.gamepadTouchView.micMuted = muted
-                }
-            }
-        }
+    }
+
+    private fun overlayMotionPaint(): Flow<OverlayMotionPaint> =
+        combine(
+            hub.connections.map { conns -> conns.firstOrNull { it.id == connectionId } },
+            capabilityComposer.state.map { it[VIRTUAL_SLOT_ID] ?: SlotCapabilities.NONE },
+            motionSource.state,
+        ) { summary, capability, sourceState -> OverlayMotionPaint(summary, capability, sourceState) }
+            .distinctUntilChanged()
+
+    private fun repaint(paint: OverlayMotionPaint) {
+        applyMotionGate(paint.capability, paint.summary)
+        repaintFrom(paint)
+    }
+
+    // Host-driven feedback painted onto the skin: lightbar colour, player LEDs, adaptive-trigger
+    // accents.
+    private fun observeVirtualFeedback() {
+        observeWhileStarted(virtualFeedback.state) { fb -> showVirtualFeedback(fb) }
+    }
+
+    private fun showVirtualFeedback(fb: VirtualPadFeedback) {
+        binding.gamepadTouchView.lightbarColor = fb.lightbarColor
+        binding.gamepadTouchView.playerLedMask = fb.playerLedMask
+        binding.gamepadTouchView.leftTriggerEffect = fb.leftTriggerEffect
+        binding.gamepadTouchView.rightTriggerEffect = fb.rightTriggerEffect
+        binding.gamepadTouchView.micMuteLedState = fb.micLedState
+    }
+
+    // The mute state itself, which is what rides the wire, gates capture, and owns the mute pill's
+    // face. It lives in the store rather than in the view because the pad's own button (and the
+    // app-wide mic chip) writes the same state, and because the microphone must keep obeying it
+    // after the overlay is gone.
+    private fun observeMicMute() {
+        observeWhileStarted(micMute.state) { muted -> showMicMuted(muted[VIRTUAL_SLOT_ID]) }
+    }
+
+    private fun showMicMuted(muted: Boolean?) {
+        val isMuted = muted ?: MicMuteStore.DEFAULT_MUTED
+        micMuted = isMuted
+        binding.gamepadTouchView.micMuted = isMuted
     }
 
     // Resend-thread-only (single-threaded Handler dispatcher).
@@ -184,7 +201,7 @@ class GamepadOverlayActivity :
         lastReportedTrackpad?.let { touch ->
             val changed = touch != lastResentTrackpadSnapshot
             if (changed) lastResentTrackpadSnapshot = touch.copy()
-            if (trackpadResendPacer.resendDue(changed)) sendSatelliteTrackpadReport(touch)
+            if (trackpadResendPacer.resendDue(changed)) sendSatelliteTrackpadReport(touch, resendTrackpadReport)
         }
     }
 
@@ -225,38 +242,35 @@ class GamepadOverlayActivity :
             sourceState = motionSource.state.value,
         )
 
-    // Start/stop the IMU listener so the sensor never runs while the slot is
-    // ineligible for motion. Link-liveness is read from the summary, not the
-    // capability model, so a reconnect re-arms the gate.
+    // Start/stop the IMU listener only on an edge, so the sensor never runs while the slot is
+    // ineligible for motion and never restarts while it is.
     private fun applyMotionGate(
         capability: SlotCapabilities,
         summary: ConnectionSummary?,
     ) {
-        // Motion carries to a Satellite (always) and to a Moonlight host (the
-        // connection drops samples until MOTION_EVENT asks); a Bluetooth-bound
-        // slot must not spin the phone IMU.
-        val effective =
-            capability.inputOk(Feature.MOTION) &&
-                capability.userWants(Feature.MOTION) &&
-                (summary?.kind == ConnectionKind.SATELLITE || summary?.kind == ConnectionKind.MOONLIGHT) &&
-                summary.live.isLiveLink()
-        if (effective && !motionSource.isStreaming) {
-            motionSource.start { sample, deltaUs ->
-                inputRateStore.recordMotionSample(VIRTUAL_SLOT_ID)
-                telemetrySink()?.sendMotion(
-                    VIRTUAL_SLOT_ID,
-                    sample.gyroX,
-                    sample.gyroY,
-                    sample.gyroZ,
-                    sample.accelX,
-                    sample.accelY,
-                    sample.accelZ,
-                    deltaUs,
-                )
-            }
-        } else if (!effective && motionSource.isStreaming) {
+        val open = motionGateOpen(capability, summary)
+        if (open && !motionSource.isStreaming) {
+            motionSource.start(::forwardVirtualMotion)
+        } else if (!open && motionSource.isStreaming) {
             motionSource.stop()
         }
+    }
+
+    private fun forwardVirtualMotion(
+        sample: MotionRateLimiter.MotionSample,
+        deltaUs: Int,
+    ) {
+        inputRateStore.recordMotionSample(VIRTUAL_SLOT_ID)
+        telemetrySink()?.sendMotion(
+            VIRTUAL_SLOT_ID,
+            sample.gyroX,
+            sample.gyroY,
+            sample.gyroZ,
+            sample.accelX,
+            sample.accelY,
+            sample.accelZ,
+            deltaUs,
+        )
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -288,22 +302,19 @@ class GamepadOverlayActivity :
         paintMenu(paint)
     }
 
-    // The trackpad zone appears only when the emulated type really carries one, and does
-    // only what the wire can deliver: a satellite gets the full touch stream once the
-    // descriptor declares a mode, a Moonlight host gets CONTROLLER_TOUCH events (and the
-    // click via the button flags), and everything else hides it.
+    // The click rides the button flags on every wire, so the zone is either the full touch
+    // stream or nothing.
     private fun trackpadModeFor(
         summary: ConnectionSummary?,
         capability: SlotCapabilities,
-    ): GamepadTouchView.TrackpadMode =
-        when {
-            !capability.typeOk(Feature.TOUCHPAD) -> GamepadTouchView.TrackpadMode.NONE
-            summary?.kind == ConnectionKind.SATELLITE &&
-                capabilityComposer.touchpadWireMode(VIRTUAL_SLOT_ID) != TouchpadModeValue.OFF ->
-                GamepadTouchView.TrackpadMode.TOUCH
-            summary?.kind == ConnectionKind.MOONLIGHT -> GamepadTouchView.TrackpadMode.TOUCH
-            else -> GamepadTouchView.TrackpadMode.NONE
-        }
+    ): GamepadTouchView.TrackpadMode {
+        val shown =
+            trackpadShownFor(
+                kind = summary?.kind,
+                typeHasTouchpad = capability.typeOk(Feature.TOUCHPAD),
+            ) { capabilityComposer.touchpadWireMode(VIRTUAL_SLOT_ID) }
+        return if (shown) GamepadTouchView.TrackpadMode.TOUCH else GamepadTouchView.TrackpadMode.NONE
+    }
 
     private fun paintMenu(paint: OverlayMotionPaint) {
         val menu = optionsMenu ?: return
@@ -326,24 +337,14 @@ class GamepadOverlayActivity :
     private fun motionStateOf(paint: OverlayMotionPaint): MotionIndicatorState =
         motionIndicatorFor(paint.summary, paint.capability, paint.sourceState)
 
-    // The readout's motion entry shows a rate (or the pending glyph) in the states where motion
-    // is user-facing on, and Off in the muted indicator states. STALLED/PAUSED count as on: no
-    // samples flow there, so the entry reads pending rather than a misleading Off.
-    private fun paintMotionOn(paint: OverlayMotionPaint?): Boolean =
-        when (paint?.let(::motionStateOf)) {
-            MotionIndicatorState.STREAMING,
-            MotionIndicatorState.STALLED,
-            MotionIndicatorState.PAUSED,
-            -> true
-            else -> false
-        }
+    private fun paintMotionOn(paint: OverlayMotionPaint?): Boolean = motionReadoutOn(paint?.let(::motionStateOf))
 
     private fun showMotionDialog() {
         val state = currentMotionState ?: currentPaint.value?.let(::motionStateOf) ?: return
         val message =
             buildString {
                 append(getString(state.labelRes))
-                detailResFor(state)?.let { append("\n\n").append(getString(it)) }
+                motionDetailRes(state)?.let { append("\n\n").append(getString(it)) }
             }
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.overlay_dialog_motion_title)
@@ -351,18 +352,6 @@ class GamepadOverlayActivity :
             .setPositiveButton(R.string.action_close, null)
             .show()
     }
-
-    @StringRes
-    private fun detailResFor(state: MotionIndicatorState): Int? =
-        when (state) {
-            MotionIndicatorState.UNAVAILABLE -> R.string.motion_unavailable_detail
-            MotionIndicatorState.NOT_FORWARDED -> R.string.motion_not_forwarded_detail
-            MotionIndicatorState.STALLED -> R.string.motion_stalled_detail
-            MotionIndicatorState.USER_DISABLED -> R.string.motion_user_disabled_detail
-            MotionIndicatorState.NO_HOST_SINK -> R.string.motion_no_host_sink_detail
-            MotionIndicatorState.BACKEND_BROKEN -> R.string.motion_backend_broken_detail
-            else -> null
-        }
 
     override fun onGamepadStateChanged(state: GamepadTouchView.GamepadState) {
         inputRateStore.recordScreenSample()
@@ -374,24 +363,28 @@ class GamepadOverlayActivity :
         val summary = hub.summary(connectionId) ?: return
         if (!summary.live.isLiveLink()) return
         when (summary.kind) {
-            ConnectionKind.BLUETOOTH -> {
-                val report =
-                    btRegistry.buildReport(
-                        connectionId,
-                        state.buttons,
-                        state.hatSwitch,
-                        state.leftX,
-                        state.leftY,
-                        state.rightX,
-                        state.rightY,
-                        state.leftTrigger,
-                        state.rightTrigger,
-                    ) ?: return
-                btRegistry.sendReport(connectionId, report)
-            }
+            ConnectionKind.BLUETOOTH -> sendBluetoothReport(state)
             ConnectionKind.SATELLITE -> sendSatelliteReport(state)
             ConnectionKind.MOONLIGHT -> sendMoonlightReport(state)
         }
+    }
+
+    // A null report means the persona has no descriptor yet, which is a link that is up but not
+    // ready; dropping the frame is right, the next one carries the same state.
+    private fun sendBluetoothReport(state: GamepadTouchView.GamepadState) {
+        val report =
+            btRegistry.buildReport(
+                connectionId,
+                state.buttons,
+                state.hatSwitch,
+                state.leftX,
+                state.leftY,
+                state.rightX,
+                state.rightY,
+                state.leftTrigger,
+                state.rightTrigger,
+            ) ?: return
+        btRegistry.sendReport(connectionId, report)
     }
 
     // Moonlight's low-16 button flags share XInput's bit layout, so the XUSB
@@ -400,7 +393,7 @@ class GamepadOverlayActivity :
     private fun sendMoonlightReport(state: GamepadTouchView.GamepadState) {
         var buttons = hidToXusb(state.buttons, state.hatSwitch)
         if (state.buttons and GamepadTouchView.BTN_TOUCHPAD_CLICK != 0) {
-            buttons = buttons or MoonlightControlProtocol.BTN_TOUCHPAD
+            buttons = buttons or BTN_TOUCHPAD
         }
         val conn = moonlight.get(connectionId) ?: return
         val pad = conn.padFor(VIRTUAL_SLOT_ID) ?: return
@@ -419,19 +412,20 @@ class GamepadOverlayActivity :
     override fun onTrackpadStateChanged(state: TouchpadSurfaceView.TouchpadState) {
         inputRateStore.recordScreenSample()
         lastReportedTrackpad = state
-        val summary = hub.summary(connectionId) ?: return
-        if (!summary.live.isLiveLink()) return
-        when (summary.kind) {
-            ConnectionKind.SATELLITE -> sendSatelliteTrackpadReport(state)
+        when (pointerRouteFor(hub.summary(connectionId))) {
+            PointerRoute.SATELLITE -> sendSatelliteTrackpadReport(state, uiTrackpadReport)
             // Same frame, translated to CONTROLLER_TOUCH events by the connection;
             // the click stays on the pad report's button flags.
-            ConnectionKind.MOONLIGHT -> moonlight.get(connectionId)?.let { sendTrackpadReport(it, state) }
-            ConnectionKind.BLUETOOTH -> Unit
+            PointerRoute.MOONLIGHT -> moonlight.get(connectionId)?.let { sendTrackpadReport(it, state, uiTrackpadReport) }
+            PointerRoute.NONE -> Unit
         }
     }
 
-    private fun sendSatelliteTrackpadReport(state: TouchpadSurfaceView.TouchpadState) {
-        satellite.get(connectionId)?.let { sendTrackpadReport(it, state) }
+    private fun sendSatelliteTrackpadReport(
+        state: TouchpadSurfaceView.TouchpadState,
+        buffer: TouchpadReportBuffer,
+    ) {
+        satellite.get(connectionId)?.let { sendTrackpadReport(it, state, buffer) }
     }
 
     // The virtual slot's telemetry destination: whichever manager holds this
@@ -442,8 +436,9 @@ class GamepadOverlayActivity :
     private fun sendTrackpadReport(
         sink: com.tinkernorth.dish.source.connection.TelemetrySink,
         state: TouchpadSurfaceView.TouchpadState,
+        buffer: TouchpadReportBuffer,
     ) {
-        sink.sendTouchpad(VIRTUAL_SLOT_ID, state.toReport(buttonPressed = state.buttonPressed))
+        sink.sendTouchpad(VIRTUAL_SLOT_ID, buffer.reportOf(state, buttonPressed = state.buttonPressed))
     }
 
     /**
@@ -457,9 +452,9 @@ class GamepadOverlayActivity :
      */
     private fun applyMicMuteEdge(state: GamepadTouchView.GamepadState) {
         val down = state.buttons and GamepadTouchView.BTN_MIC_MUTE != 0
-        if (down == micMuteDown) return
+        val edge = pressEdge(wasDown = micMuteDown, isDown = down)
         micMuteDown = down
-        if (!down) return
+        if (edge != PressEdge.DOWN) return
         // The volatile snapshot is written here as well as in the collector so the very frame
         // that carried the press already carries the new state on the wire.
         micMuted = micMute.toggle(VIRTUAL_SLOT_ID)
