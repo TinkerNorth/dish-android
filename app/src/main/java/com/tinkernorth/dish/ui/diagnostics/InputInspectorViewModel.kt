@@ -189,10 +189,10 @@ class InputInspectorViewModel
         fun cycleLightbar() {
             viewModelScope.launch {
                 for ((r, g, b) in LIGHTBAR_CYCLE) {
-                    feedback.dispatchLightbarToSlot(slotId, r, g, b)
+                    feedback.testLightbar(slotId, r, g, b)
                     delay(CYCLE_STEP_MS)
                 }
-                feedback.dispatchLightbarToSlot(slotId, 0, 0, 0)
+                feedback.endLightbarTest(slotId)
             }
         }
 

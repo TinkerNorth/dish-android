@@ -78,8 +78,9 @@ class FrameworkLightGateway
                 get() = shownArgb != OFF_ARGB
         }
 
-        // The last color a pad's host sent, kept across its bar's release: a satellite and a
-        // Moonlight host send a color only when it changes, so nothing else would light it again.
+        // The last color a pad's host sent (never a bench color), kept across its bar's release: a
+        // host sends a color when the game changes it, and a satellite repeats it only when a new
+        // session first reaches the phone.
         private class HostColor(
             override val deviceId: Int,
             var argb: Int,
@@ -108,6 +109,25 @@ class FrameworkLightGateway
             synchronized(lock) {
                 rememberHostColor(deviceId, argb)
                 showColor(deviceId, argb)
+            }
+        }
+
+        /** Show a color on [deviceId]'s light bar without taking it for the host's: the bench. */
+        fun paint(
+            deviceId: Int,
+            r: Int,
+            g: Int,
+            b: Int,
+        ) {
+            val argb = opaqueArgb(r, g, b)
+            synchronized(lock) { showColor(deviceId, argb) }
+        }
+
+        /** After the bench: show [deviceId]'s host color again, or turn the bar off when no host set one. */
+        fun showHostColor(deviceId: Int) {
+            synchronized(lock) {
+                val hostColor = hostColors.recordOf(deviceId)
+                if (hostColor == null) bars.recordOf(deviceId)?.let(::releaseBar) else showColor(deviceId, hostColor.argb)
             }
         }
 

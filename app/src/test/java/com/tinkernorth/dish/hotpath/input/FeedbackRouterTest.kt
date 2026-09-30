@@ -257,6 +257,38 @@ class FeedbackRouterTest {
         verify(exactly = 1) { native.sendUsbTriggerRumble(-1000, 100, 200) }
     }
 
+    // ---- the inspector's light bar bench ----
+
+    @Test
+    fun `the bench paints a framework pad's light bar without it counting as the host's`() {
+        router().testLightbar("9", 1, 2, 3)
+
+        verify(exactly = 1) { frameworkLights.paint(9, 1, 2, 3) }
+        verify(exactly = 0) { frameworkLights.setColor(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `the bench drives a Direct pad's light bar`() {
+        router().testLightbar("-1000", 1, 2, 3)
+
+        verify(exactly = 1) { native.sendUsbLightbar(-1000, 1, 2, 3) }
+    }
+
+    @Test
+    fun `ending the bench shows a framework pad's host color again`() {
+        router().endLightbarTest("9")
+
+        verify(exactly = 1) { frameworkLights.showHostColor(9) }
+        verify(exactly = 0) { frameworkLights.setColor(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `ending the bench turns a Direct pad's light bar off, since the phone keeps no host color for it`() {
+        router().endLightbarTest("-1000")
+
+        verify(exactly = 1) { native.sendUsbLightbar(-1000, 0, 0, 0) }
+    }
+
     @Test
     fun `slot-addressed feedback reaches a Direct-claimed pad without a session`() {
         val r = router()

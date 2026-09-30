@@ -450,6 +450,42 @@ class FrameworkLightGatewayTest {
         assertEquals(BLUE_ARGB, lightbars.barColorOf(SECOND_PAD))
     }
 
+    // ---- the inspector bench paints a bar without speaking for its host ----
+
+    @Test
+    fun `a bench color is not remembered as the host's`() {
+        lightbars.withBar += FIRST_PAD
+        hostSends(FIRST_PAD, RED_ARGB)
+        gateway.paint(FIRST_PAD, 0x00, 0xFF, 0x00)
+        gateway.release(FIRST_PAD)
+
+        gateway.restore(FIRST_PAD)
+
+        assertEquals(RED_ARGB, lightbars.barColorOf(FIRST_PAD))
+    }
+
+    @Test
+    fun `ending a bench test shows the host's color again`() {
+        lightbars.withBar += FIRST_PAD
+        hostSends(FIRST_PAD, RED_ARGB)
+        gateway.paint(FIRST_PAD, 0x00, 0xFF, 0x00)
+
+        gateway.showHostColor(FIRST_PAD)
+
+        assertEquals(RED_ARGB, lightbars.barColorOf(FIRST_PAD))
+    }
+
+    @Test
+    fun `ending a bench test on a pad no host colored gives its bar back dark`() {
+        lightbars.withBar += FIRST_PAD
+        gateway.paint(FIRST_PAD, 0x00, 0xFF, 0x00)
+
+        gateway.showHostColor(FIRST_PAD)
+
+        assertEquals(OFF_ARGB, lightbars.barColorOf(FIRST_PAD))
+        assertEquals(1, lightbars.handles.getValue(FIRST_PAD).closes)
+    }
+
     @Test
     fun `a repeated color allocates nothing`() {
         val cycles = freshAppInstanceOf(RepeatedColorCycles::class.java)

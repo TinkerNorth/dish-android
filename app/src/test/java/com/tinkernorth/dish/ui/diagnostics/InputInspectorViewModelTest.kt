@@ -241,6 +241,24 @@ class InputInspectorViewModelTest {
         }
 
     @Test
+    fun `a light bar bench cycle paints through the bench and ends by handing the bar back`() =
+        runTest(dispatcher) {
+            val vm = viewModel()
+            vm.cycleLightbar()
+            dispatcher.scheduler.runCurrent()
+            advanceTimeBy(LIGHTBAR_CYCLE_MS + 1)
+            dispatcher.scheduler.runCurrent()
+
+            verifyOrder {
+                feedback.testLightbar(SLOT_ID, 0xFF, 0x00, 0x00)
+                feedback.testLightbar(SLOT_ID, 0x00, 0xFF, 0x00)
+                feedback.testLightbar(SLOT_ID, 0x00, 0x00, 0xFF)
+                feedback.endLightbarTest(SLOT_ID)
+            }
+            verify(exactly = 0) { feedback.dispatchLightbarToSlot(any(), any(), any(), any()) }
+        }
+
+    @Test
     fun `a drift note for a controller with facts is keyed by its model`() =
         runTest(dispatcher) {
             val vm = viewModel()
@@ -287,5 +305,8 @@ class InputInspectorViewModelTest {
         const val MIC_TEST_MS = 8000L
         const val TEST_BUZZ_MS = 400L
         const val TONE_MS = 1000L
+
+        // The bench's three colors, one 400 ms step each.
+        const val LIGHTBAR_CYCLE_MS = 3 * 400L
     }
 }

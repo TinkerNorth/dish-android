@@ -109,6 +109,31 @@ class FeedbackRouter
             actuateLightbar(classifyTarget(slotId), r, g, b)
         }
 
+        /** The bench's light bar: the same actuation, never taken for the host's color. */
+        fun testLightbar(
+            slotId: String,
+            r: Int,
+            g: Int,
+            b: Int,
+        ) {
+            when (val target = classifyTarget(slotId)) {
+                is RumbleTarget.DirectUsb -> native.sendUsbLightbar(target.deviceId, r, g, b)
+                is RumbleTarget.Framework -> frameworkLights.paint(target.deviceId, r, g, b)
+                else -> Unit
+            }
+        }
+
+        // A framework pad gets its host's color back. The phone keeps no host color for a Direct
+        // pad, so the bench turns that bar off.
+        fun endLightbarTest(slotId: String) {
+            when (val target = classifyTarget(slotId)) {
+                is RumbleTarget.DirectUsb ->
+                    native.sendUsbLightbar(target.deviceId, LIGHTBAR_CHANNEL_OFF, LIGHTBAR_CHANNEL_OFF, LIGHTBAR_CHANNEL_OFF)
+                is RumbleTarget.Framework -> frameworkLights.showHostColor(target.deviceId)
+                else -> Unit
+            }
+        }
+
         fun dispatchTriggerEffectsToSlot(
             slotId: String,
             blocks: ByteArray,
@@ -253,6 +278,8 @@ class FeedbackRouter
             private const val TRIGGER_RUMBLE_HOLD_MS = 1500
 
             private const val TRIGGER_RUMBLE_STOP = 0
+
+            private const val LIGHTBAR_CHANNEL_OFF = 0
         }
     }
 
