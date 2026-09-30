@@ -8,7 +8,7 @@ import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
-import com.tinkernorth.dish.core.jni.PhysicalSlotNative
+import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
@@ -219,6 +219,7 @@ class PhysicalSlotBindingObserver
         private val bt: BluetoothGamepadRegistry,
         private val moonlight: com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager,
         private val frameworkLights: FrameworkLightGateway,
+        private val native: PhysicalInputNative,
         private val scope: CoroutineScope,
     ) : DefaultLifecycleObserver {
         private data class BindingState(
@@ -228,24 +229,34 @@ class PhysicalSlotBindingObserver
         )
 
         private var job: Job? = null
+
+        // A push runs on the app scope's threads while a stop runs on the main thread, and a push
+        // has no suspension point for a cancel to land on. Both hold [lock]: a push under way
+        // finishes before the teardown, and one that reaches the lock after it finds [stopped].
+        private val lock = Any()
+        private var stopped = false
         private var lastBoundDeviceIds: Set<Int> = emptySet()
         private var lastAppliedBinds: Map<Int, BindOp> = emptyMap()
 
         override fun onStart(owner: LifecycleOwner) {
             if (job != null) return
+            synchronized(lock) { stopped = false }
             job = stream().onEach(::push).launchIn(scope)
         }
 
         override fun onStop(owner: LifecycleOwner) {
+            synchronized(lock) {
+                stopped = true
+                native.clearAllPhysicalSlots()
+                // A framework light bar the app opened is given back here too: physical-slot
+                // streaming ends when the last activity stops, so a bar left mid-color would
+                // otherwise hold the last game color with nothing driving it.
+                frameworkLights.releaseAll()
+                lastBoundDeviceIds = emptySet()
+                lastAppliedBinds = emptyMap()
+            }
             job?.cancel()
             job = null
-            PhysicalSlotNative.clearAllPhysicalSlots()
-            // A framework light bar the app opened is given back here too: physical-slot streaming
-            // ends when the last activity stops, so a bar left mid-color would otherwise hold the
-            // last game color with nothing driving it.
-            frameworkLights.releaseAll()
-            lastBoundDeviceIds = emptySet()
-            lastAppliedBinds = emptyMap()
         }
 
         @OptIn(ExperimentalCoroutinesApi::class)
@@ -287,13 +298,16 @@ class PhysicalSlotBindingObserver
                 }.associate { it.slotId to it.number }
 
         private fun push(state: BindingState) {
-            val ops = reconcile(state)
-            // A satellite re-bind re-runs syncSlotBaseline, which flickers every held input to
-            // neutral, and push() fires on every upstream re-emit: see BindOpDedupeTest.
-            val deduped = dedupeBindOps(ops, lastAppliedBinds)
-            for (op in deduped.ops) execute(op)
-            lastAppliedBinds = deduped.applied
-            lastBoundDeviceIds = state.devices.keys
+            synchronized(lock) {
+                if (stopped) return
+                val ops = reconcile(state)
+                // A satellite re-bind re-runs syncSlotBaseline, which flickers every held input to
+                // neutral, and push() fires on every upstream re-emit: see BindOpDedupeTest.
+                val deduped = dedupeBindOps(ops, lastAppliedBinds)
+                for (op in deduped.ops) execute(op)
+                lastAppliedBinds = deduped.applied
+                lastBoundDeviceIds = state.devices.keys
+            }
         }
 
         private fun reconcile(state: BindingState): List<BindOp> {
@@ -313,14 +327,14 @@ class PhysicalSlotBindingObserver
 
         private fun execute(op: BindOp) {
             when (op) {
-                is BindOp.Unbind -> PhysicalSlotNative.unbindPhysicalSlot(op.deviceId)
-                is BindOp.Forget -> PhysicalSlotNative.forgetPhysicalDevice(op.deviceId)
+                is BindOp.Unbind -> native.unbindPhysicalSlot(op.deviceId)
+                is BindOp.Forget -> native.forgetPhysicalDevice(op.deviceId)
                 is BindOp.ReleaseHubBinding -> hub.unbind(op.deviceId.toString())
                 is BindOp.BindSatellite ->
-                    PhysicalSlotNative.bindPhysicalSlotSatellite(op.deviceId, op.handle, op.controllerIndex)
-                is BindOp.BindBluetooth -> PhysicalSlotNative.bindPhysicalSlotBluetooth(op.deviceId, op.connectionId)
+                    native.bindPhysicalSlotSatellite(op.deviceId, op.handle, op.controllerIndex)
+                is BindOp.BindBluetooth -> native.bindPhysicalSlotBluetooth(op.deviceId, op.connectionId)
                 is BindOp.BindMoonlight ->
-                    PhysicalSlotNative.bindPhysicalSlotMoonlight(op.deviceId, op.connectionId, op.controllerNumber)
+                    native.bindPhysicalSlotMoonlight(op.deviceId, op.connectionId, op.controllerNumber)
             }
             frameworkLights.follow(op)
         }
