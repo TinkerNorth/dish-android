@@ -13,6 +13,13 @@ data class FrameworkLight(
     val rgb: Boolean,
 )
 
+// The host binding a light bar color arrived under: the connection, and the controller on it (a
+// satellite's controller index, a Moonlight pad's number).
+data class LightSource(
+    val connectionId: String,
+    val controller: Int,
+)
+
 private const val CHANNEL_MASK = 0xFF
 private const val RED_SHIFT = 16
 private const val GREEN_SHIFT = 8

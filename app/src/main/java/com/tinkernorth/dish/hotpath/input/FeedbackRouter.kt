@@ -6,6 +6,7 @@ import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.lights.FrameworkLightGateway
+import com.tinkernorth.dish.source.lights.LightSource
 import com.tinkernorth.dish.source.store.FeedbackActivityStore
 import com.tinkernorth.dish.source.store.FeedbackKind
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
@@ -53,9 +54,11 @@ class FeedbackRouter
             g: Int,
             b: Int,
         ) {
-            val target = resolveTarget(sessionHandle, controllerIndex)
+            val connections = connectionSnapshots()
+            val target = resolveRumble(connections, sessionHandle, controllerIndex)
             noteHost(target, FeedbackKind.LIGHTBAR)
-            actuateLightbar(target, r, g, b)
+            val connectionId = connectionForHandle(connections, sessionHandle)?.connectionId.orEmpty()
+            actuateLightbar(target, LightSource(connectionId, controllerIndex), r, g, b)
         }
 
         fun dispatchTriggerEffects(
@@ -102,11 +105,12 @@ class FeedbackRouter
         /** Slot-addressed entry points: the Moonlight path and the inspector's test bench already know the slot. */
         fun dispatchLightbarToSlot(
             slotId: String,
+            source: LightSource,
             r: Int,
             g: Int,
             b: Int,
         ) {
-            actuateLightbar(classifyTarget(slotId), r, g, b)
+            actuateLightbar(classifyTarget(slotId), source, r, g, b)
         }
 
         /** The bench's light bar: the same actuation, never taken for the host's color. */
@@ -204,13 +208,14 @@ class FeedbackRouter
 
         private fun actuateLightbar(
             target: RumbleTarget,
+            source: LightSource,
             r: Int,
             g: Int,
             b: Int,
         ) {
             when (target) {
                 is RumbleTarget.DirectUsb -> native.sendUsbLightbar(target.deviceId, r, g, b)
-                is RumbleTarget.Framework -> frameworkLights.setColor(target.deviceId, r, g, b)
+                is RumbleTarget.Framework -> frameworkLights.setColor(target.deviceId, source, r, g, b)
                 RumbleTarget.Phone -> virtualFeedback.setLightbar(r, g, b)
                 RumbleTarget.None -> Unit
             }
@@ -256,17 +261,17 @@ class FeedbackRouter
         private fun resolveTarget(
             sessionHandle: Int,
             controllerIndex: Int,
-        ): RumbleTarget {
-            val snapshot =
-                satellite.connections.value.values.map { conn ->
-                    RumbleConnectionSnapshot(
-                        handle = conn.handle,
-                        connected = conn.state.value == SatelliteSessionState.Live,
-                        slots = conn.slots.value,
-                    )
-                }
-            return resolveRumble(snapshot, sessionHandle, controllerIndex)
-        }
+        ): RumbleTarget = resolveRumble(connectionSnapshots(), sessionHandle, controllerIndex)
+
+        private fun connectionSnapshots(): List<RumbleConnectionSnapshot> =
+            satellite.connections.value.values.map { conn ->
+                RumbleConnectionSnapshot(
+                    connectionId = conn.id,
+                    handle = conn.handle,
+                    connected = conn.state.value == SatelliteSessionState.Live,
+                    slots = conn.slots.value,
+                )
+            }
 
         companion object {
             // Wire order of MSG_TRIGGER_EFFECTS blocks: left (0..10), right (11..21);

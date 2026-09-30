@@ -7,6 +7,7 @@ import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.lights.FrameworkLightGateway
+import com.tinkernorth.dish.source.lights.LightSource
 import com.tinkernorth.dish.source.store.FeedbackActivityStore
 import com.tinkernorth.dish.source.store.FeedbackKind
 import com.tinkernorth.dish.source.store.MIC_LED_OFF
@@ -23,6 +24,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+
+private const val CONNECTION_ID = "c"
+private val MOONLIGHT_PAD = LightSource("moonlight:pc", 0)
 
 /**
  * The router's one job: land feedback on what the slot can actuate — a
@@ -49,6 +53,7 @@ class FeedbackRouterTest {
         controllerIndex: Int = 0,
     ): SatelliteConnectionManager {
         val conn = mockk<SatelliteConnection>()
+        every { conn.id } returns CONNECTION_ID
         every { conn.handle } returns handle
         every { conn.state } returns MutableStateFlow(SatelliteSessionState.Live)
         every { conn.slots } returns
@@ -56,7 +61,7 @@ class FeedbackRouterTest {
                 mapOf(slotId to SatelliteConnection.SlotBinding(controllerIndex = controllerIndex, controllerType = 2, registered = true)),
             )
         val manager = mockk<SatelliteConnectionManager>()
-        every { manager.connections } returns MutableStateFlow(mapOf("c" to conn))
+        every { manager.connections } returns MutableStateFlow(mapOf(CONNECTION_ID to conn))
         return manager
     }
 
@@ -160,7 +165,7 @@ class FeedbackRouterTest {
     fun `a framework pad's lightbar reaches the framework light gateway, not the USB writer or the skin`() {
         router(managerWith(handle = 7, slotId = "9"))
             .dispatchLightbar(7, 0, 1, 2, 3)
-        verify(exactly = 1) { frameworkLights.setColor(9, 1, 2, 3) }
+        verify(exactly = 1) { frameworkLights.setColor(9, LightSource(CONNECTION_ID, 0), 1, 2, 3) }
         verify(exactly = 0) { native.sendUsbLightbar(any(), any(), any(), any()) }
         assertEquals(null, store.state.value.lightbarColor)
     }
@@ -176,15 +181,15 @@ class FeedbackRouterTest {
         verify(exactly = 0) { native.sendUsbTriggerEffects(any(), any()) }
         verify(exactly = 0) { native.sendUsbPlayerLeds(any(), any()) }
         verify(exactly = 0) { native.sendUsbMicMuteLed(any(), any()) }
-        verify(exactly = 0) { frameworkLights.setColor(any(), any(), any(), any()) }
+        verify(exactly = 0) { frameworkLights.setColor(any(), any(), any(), any(), any()) }
     }
 
     @Test
     fun `the slot-addressed lightbar reaches the framework gateway for a framework pad`() {
         // The Moonlight path and the diagnostics bench come in slot-addressed; a framework slot id
         // must land on the gateway the same way the session-addressed satellite path does.
-        router().dispatchLightbarToSlot("9", 5, 6, 7)
-        verify(exactly = 1) { frameworkLights.setColor(9, 5, 6, 7) }
+        router().dispatchLightbarToSlot("9", MOONLIGHT_PAD, 5, 6, 7)
+        verify(exactly = 1) { frameworkLights.setColor(9, MOONLIGHT_PAD, 5, 6, 7) }
         verify(exactly = 0) { native.sendUsbLightbar(any(), any(), any(), any()) }
     }
 
@@ -200,7 +205,7 @@ class FeedbackRouterTest {
     fun `moonlight slot-addressed dispatch actuates Direct pads and the virtual sinks`() {
         val r = router()
         r.dispatchTriggerRumbleToSlot("-1000", 100, 200)
-        r.dispatchLightbarToSlot("-1000", 5, 6, 7)
+        r.dispatchLightbarToSlot("-1000", MOONLIGHT_PAD, 5, 6, 7)
         verify(exactly = 1) { native.sendUsbTriggerRumble(-1000, 100, 200) }
         verify(exactly = 1) { native.sendUsbLightbar(-1000, 5, 6, 7) }
 
@@ -208,7 +213,7 @@ class FeedbackRouterTest {
         // rules apply there); the lightbar paints the skin.
         r.dispatchTriggerRumbleToSlot(VIRTUAL_SLOT_ID, 300, 400)
         verify(exactly = 1) { rumble.dispatchToSlot(VIRTUAL_SLOT_ID, 300, 400, any()) }
-        r.dispatchLightbarToSlot(VIRTUAL_SLOT_ID, 9, 8, 7)
+        r.dispatchLightbarToSlot(VIRTUAL_SLOT_ID, MOONLIGHT_PAD, 9, 8, 7)
         assertEquals(0xFF090807.toInt(), store.state.value.lightbarColor)
 
         // Framework: nothing reachable.
@@ -264,7 +269,7 @@ class FeedbackRouterTest {
         router().testLightbar("9", 1, 2, 3)
 
         verify(exactly = 1) { frameworkLights.paint(9, 1, 2, 3) }
-        verify(exactly = 0) { frameworkLights.setColor(any(), any(), any(), any()) }
+        verify(exactly = 0) { frameworkLights.setColor(any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -279,7 +284,7 @@ class FeedbackRouterTest {
         router().endLightbarTest("9")
 
         verify(exactly = 1) { frameworkLights.showHostColor(9) }
-        verify(exactly = 0) { frameworkLights.setColor(any(), any(), any(), any()) }
+        verify(exactly = 0) { frameworkLights.setColor(any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -363,7 +368,7 @@ class FeedbackRouterTest {
     @Test
     fun `slot-addressed feedback is not counted as host activity`() {
         val r = router()
-        r.dispatchLightbarToSlot("-1000", 1, 2, 3)
+        r.dispatchLightbarToSlot("-1000", MOONLIGHT_PAD, 1, 2, 3)
         r.dispatchTriggerEffectsToSlot("-1000", ByteArray(22))
         r.dispatchPlayerLedsToSlot("-1000", 0x1F)
         r.dispatchMicLedToSlot("-1000", MIC_LED_ON)

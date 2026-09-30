@@ -23,6 +23,7 @@ import com.tinkernorth.dish.hotpath.input.RumbleRouter
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightPadRequest
+import com.tinkernorth.dish.source.lights.LightSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -139,7 +140,13 @@ class MoonlightSessionController
                 is MoonlightEvent.RumbleTriggers ->
                     feedback.dispatchTriggerRumbleToSlot(slotId, event.left, event.right)
                 is MoonlightEvent.RgbLed ->
-                    feedback.dispatchLightbarToSlot(slotId, event.red, event.green, event.blue)
+                    feedback.dispatchLightbarToSlot(
+                        slotId,
+                        LightSource(conn.id, controllerNumber),
+                        event.red,
+                        event.green,
+                        event.blue,
+                    )
             }
         }
 

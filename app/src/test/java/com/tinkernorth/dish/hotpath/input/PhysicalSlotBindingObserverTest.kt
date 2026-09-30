@@ -141,7 +141,7 @@ class PhysicalSlotBindingObserverTest {
                 BindOp.Unbind(7),
                 BindOp.Forget(7),
                 BindOp.ReleaseHubBinding(7),
-                BindOp.BindSatellite(deviceId = 5, handle = 9, controllerIndex = 0),
+                BindOp.BindSatellite(deviceId = 5, connectionId = "sat:a", handle = 9, controllerIndex = 0),
             ),
             ops,
         )
@@ -164,7 +164,7 @@ class PhysicalSlotBindingObserverTest {
                 summaries = listOf(satSummary("sat:a")),
                 slotInfo = mapOf("sat:a" to SatelliteSlotSnapshot(handle = 9, slots = mapOf("5" to slot(2)))),
             )
-        assertEquals(listOf(BindOp.BindSatellite(deviceId = 5, handle = 9, controllerIndex = 2)), ops)
+        assertEquals(listOf(BindOp.BindSatellite(deviceId = 5, connectionId = "sat:a", handle = 9, controllerIndex = 2)), ops)
     }
 
     @Test
@@ -244,7 +244,7 @@ class PhysicalSlotBindingObserverTest {
                 summaries = listOf(satSummary("sat:a", live = LinkState.Unstable)),
                 slotInfo = mapOf("sat:a" to SatelliteSlotSnapshot(handle = 9, slots = mapOf("5" to slot(2)))),
             )
-        assertEquals(listOf(BindOp.BindSatellite(deviceId = 5, handle = 9, controllerIndex = 2)), ops)
+        assertEquals(listOf(BindOp.BindSatellite(deviceId = 5, connectionId = "sat:a", handle = 9, controllerIndex = 2)), ops)
     }
 
     @Test
@@ -397,7 +397,7 @@ class PhysicalSlotBindingObserverTest {
                 BindOp.Unbind(7),
                 BindOp.Forget(7),
                 BindOp.ReleaseHubBinding(7),
-                BindOp.BindSatellite(deviceId = 5, handle = 9, controllerIndex = 0),
+                BindOp.BindSatellite(deviceId = 5, connectionId = "sat:a", handle = 9, controllerIndex = 0),
             ),
             ops,
         )
@@ -413,6 +413,6 @@ class PhysicalSlotBindingObserverTest {
                 summaries = listOf(satSummary("sat:a")),
                 slotInfo = mapOf("sat:a" to SatelliteSlotSnapshot(handle = 9, slots = mapOf("5" to slot(0)))),
             )
-        assertEquals(listOf(BindOp.BindSatellite(deviceId = 5, handle = 9, controllerIndex = 0)), ops)
+        assertEquals(listOf(BindOp.BindSatellite(deviceId = 5, connectionId = "sat:a", handle = 9, controllerIndex = 0)), ops)
     }
 }

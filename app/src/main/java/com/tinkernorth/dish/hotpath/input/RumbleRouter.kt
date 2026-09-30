@@ -145,6 +145,7 @@ class RumbleRouter
             val snapshot =
                 satellite.connections.value.values.map { conn ->
                     RumbleConnectionSnapshot(
+                        connectionId = conn.id,
                         handle = conn.handle,
                         connected = conn.state.value == SatelliteSessionState.Live,
                         slots = conn.slots.value,
@@ -289,22 +290,30 @@ class RumbleRouter
 
 // Flat, immutable view of one connection captured once per dispatch so resolveRumble stays pure.
 data class RumbleConnectionSnapshot(
+    val connectionId: String,
     val handle: Int,
     val connected: Boolean,
     val slots: Map<String, SatelliteConnection.SlotBinding>,
 )
 
-// Pure target resolver. Collision rule: a connected match wins over a non-connected one with the
-// same handle so a stale session can't steal a live controller's rumble; among equally-connected
-// matches the first wins (deterministic over the snapshot order).
+// The connection a session handle names. Collision rule: a connected match wins over a
+// non-connected one with the same handle so a stale session can't steal a live controller's
+// feedback; among equally-connected matches the first wins (deterministic over the snapshot order).
+fun connectionForHandle(
+    connections: List<RumbleConnectionSnapshot>,
+    sessionHandle: Int,
+): RumbleConnectionSnapshot? {
+    if (sessionHandle < 0) return null
+    val matches = connections.filter { it.handle == sessionHandle }
+    return matches.firstOrNull { it.connected } ?: matches.firstOrNull()
+}
+
 fun resolveRumble(
     connections: List<RumbleConnectionSnapshot>,
     sessionHandle: Int,
     controllerIndex: Int,
 ): RumbleTarget {
-    if (sessionHandle < 0) return RumbleTarget.None
-    val matches = connections.filter { it.handle == sessionHandle }
-    val conn = matches.firstOrNull { it.connected } ?: matches.firstOrNull() ?: return RumbleTarget.None
+    val conn = connectionForHandle(connections, sessionHandle) ?: return RumbleTarget.None
     val slotId = resolveSlotId(conn.slots, controllerIndex) ?: return RumbleTarget.None
     return classifyTarget(slotId)
 }

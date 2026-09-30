@@ -22,6 +22,7 @@ import com.tinkernorth.dish.hotpath.input.RumbleRouter
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightPadRequest
+import com.tinkernorth.dish.source.lights.LightSource
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -571,8 +572,8 @@ class MoonlightSessionControllerTest {
 
             verify(exactly = 1) { feedback.dispatchTriggerRumbleToSlot("pad-a", 1234, 4321) }
             verify(exactly = 0) { feedback.dispatchTriggerRumbleToSlot("pad-b", any(), any()) }
-            verify(exactly = 1) { feedback.dispatchLightbarToSlot("pad-b", 10, 20, 30) }
-            verify(exactly = 0) { feedback.dispatchLightbarToSlot("pad-a", any(), any(), any()) }
+            verify(exactly = 1) { feedback.dispatchLightbarToSlot("pad-b", LightSource(conn.id, 1), 10, 20, 30) }
+            verify(exactly = 0) { feedback.dispatchLightbarToSlot("pad-a", any(), any(), any(), any()) }
         }
 
     @Test
@@ -636,7 +637,7 @@ class MoonlightSessionControllerTest {
 
             verify(exactly = 0) { rumble.dispatchToSlot(any(), any(), any(), any()) }
             verify(exactly = 0) { feedback.dispatchTriggerRumbleToSlot(any(), any(), any()) }
-            verify(exactly = 0) { feedback.dispatchLightbarToSlot(any(), any(), any(), any()) }
+            verify(exactly = 0) { feedback.dispatchLightbarToSlot(any(), any(), any(), any(), any()) }
         }
 
     @Test

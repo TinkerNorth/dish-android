@@ -14,6 +14,7 @@ import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightSessionState
 import com.tinkernorth.dish.source.lights.FrameworkLightGateway
+import com.tinkernorth.dish.source.lights.LightSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -34,6 +35,7 @@ sealed interface BindOp {
 
     data class BindSatellite(
         override val deviceId: Int,
+        val connectionId: String,
         val handle: Int,
         val controllerIndex: Int,
     ) : BindOp
@@ -133,7 +135,7 @@ private fun bindOpFor(
     if (cid == null || summary == null || !linkStreams) return BindOp.Unbind(id)
     val slotId = id.toString()
     return when (summary.kind) {
-        ConnectionKind.SATELLITE -> satelliteBindOp(id, live.satellites[cid]?.let { it to it.slots[slotId] })
+        ConnectionKind.SATELLITE -> satelliteBindOp(id, cid, live.satellites[cid]?.let { it to it.slots[slotId] })
         // The summary's Connected is a composer-snapshot read; re-check the registry's live
         // connected state (as the satellite branch re-checks handle/registered) before binding.
         ConnectionKind.BLUETOOTH -> if (cid in live.btConnectedIds) BindOp.BindBluetooth(id, cid) else BindOp.Unbind(id)
@@ -151,11 +153,12 @@ private fun bindOpFor(
 // A satellite bind needs a session with a live handle and a slot the satellite has registered.
 private fun satelliteBindOp(
     id: Int,
+    connectionId: String,
     session: Pair<SatelliteSlotSnapshot, SatelliteConnection.SlotBinding?>?,
 ): BindOp {
     val (sat, info) = session ?: return BindOp.Unbind(id)
     if (sat.handle < 0 || info == null || !info.registered) return BindOp.Unbind(id)
-    return BindOp.BindSatellite(id, sat.handle, info.controllerIndex)
+    return BindOp.BindSatellite(id, connectionId, sat.handle, info.controllerIndex)
 }
 
 // The ops reconcileSlots wants applied, paired with the bind-per-device map after applying them, so
@@ -324,13 +327,18 @@ class PhysicalSlotBindingObserver
     }
 
 // A pad's framework light bar follows its slot: dark while the slot is not streaming (unbound, host
-// gone, or the device departed), and its host's last color again once it is bound, since no host
-// re-sends an unchanged one. Each is a no-op for a pad the gateway never lit.
+// gone, or the device departed), and once bound, keyed to the host binding it is bound under. Each
+// is a no-op for a pad the gateway never lit.
 internal fun FrameworkLightGateway.follow(op: BindOp) {
     when (op) {
-        is BindOp.BindSatellite, is BindOp.BindBluetooth, is BindOp.BindMoonlight -> restore(op.deviceId)
+        is BindOp.BindSatellite -> boundTo(op.deviceId, LightSource(op.connectionId, op.controllerIndex))
+        is BindOp.BindBluetooth -> boundTo(op.deviceId, LightSource(op.connectionId, BLUETOOTH_PAD))
+        is BindOp.BindMoonlight -> boundTo(op.deviceId, LightSource(op.connectionId, op.controllerNumber))
         is BindOp.Unbind -> release(op.deviceId)
         is BindOp.Forget -> forget(op.deviceId)
         is BindOp.ReleaseHubBinding -> Unit
     }
 }
+
+// A Bluetooth connection carries one pad, and its host sends no light bar color.
+private const val BLUETOOTH_PAD = 0

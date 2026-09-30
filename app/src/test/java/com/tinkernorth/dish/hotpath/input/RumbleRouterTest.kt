@@ -127,7 +127,7 @@ class RumbleRouterTest {
         handle: Int,
         connected: Boolean = true,
         slots: Map<String, SatelliteConnection.SlotBinding> = emptyMap(),
-    ) = RumbleConnectionSnapshot(handle = handle, connected = connected, slots = slots)
+    ) = RumbleConnectionSnapshot(connectionId = "c$handle", handle = handle, connected = connected, slots = slots)
 
     @Test
     fun `resolveRumble routes to the framework slot bound at the controller index`() {
@@ -217,6 +217,7 @@ class RumbleRouterTest {
             }
         private val connection =
             mockk<SatelliteConnection> {
+                every { id } returns "a"
                 every { handle } returns 7
                 every { state } returns MutableStateFlow(SatelliteSessionState.Live)
                 every { slots } returns

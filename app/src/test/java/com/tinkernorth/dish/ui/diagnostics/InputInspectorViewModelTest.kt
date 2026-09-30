@@ -255,7 +255,7 @@ class InputInspectorViewModelTest {
                 feedback.testLightbar(SLOT_ID, 0x00, 0x00, 0xFF)
                 feedback.endLightbarTest(SLOT_ID)
             }
-            verify(exactly = 0) { feedback.dispatchLightbarToSlot(any(), any(), any(), any()) }
+            verify(exactly = 0) { feedback.dispatchLightbarToSlot(any(), any(), any(), any(), any()) }
         }
 
     @Test

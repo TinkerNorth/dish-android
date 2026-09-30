@@ -78,13 +78,26 @@ class FrameworkLightGateway
                 get() = shownArgb != OFF_ARGB
         }
 
-        // The last color a pad's host sent (never a bench color), kept across its bar's release: a
-        // host sends a color when the game changes it, and a satellite repeats it only when a new
-        // session first reaches the phone.
+        // The last color a pad's host sent (never a bench color) and the host binding it came in
+        // under. It is kept across the bar's release for that binding's return, since a host sends a
+        // color when the game changes it and a satellite repeats it only when a new session first
+        // reaches the phone; a bind to anything else forgets it. [showing] is false while released.
         private class HostColor(
             override val deviceId: Int,
             var argb: Int,
-        ) : PadRecord
+            var source: LightSource,
+        ) : PadRecord {
+            var showing = true
+
+            fun remember(
+                argb: Int,
+                source: LightSource,
+            ) {
+                this.argb = argb
+                this.source = source
+                showing = true
+            }
+        }
 
         // A few pads each. Touched from the feedback receive threads and the lifecycle hooks, always
         // under [lock], so a pad's open / write / close can never interleave with itself.
@@ -93,12 +106,13 @@ class FrameworkLightGateway
         private val lock = Any()
 
         /**
-         * Paint [deviceId]'s light bar the given color, and keep it as the color to [restore]. A no-op
-         * for a device with no drivable light bar; redundant colors are dropped so an unchanged frame
-         * never reaches the input service.
+         * Paint [deviceId]'s light bar the color its host [source] sent, and keep it for [boundTo]. A
+         * no-op for a device with no drivable light bar; redundant colors are dropped so an unchanged
+         * frame never reaches the input service.
          */
         fun setColor(
             deviceId: Int,
+            source: LightSource,
             r: Int,
             g: Int,
             b: Int,
@@ -107,7 +121,7 @@ class FrameworkLightGateway
             // channel), so full opacity is what makes the requested color land at full strength.
             val argb = opaqueArgb(r, g, b)
             synchronized(lock) {
-                rememberHostColor(deviceId, argb)
+                rememberHostColor(deviceId, argb, source)
                 showColor(deviceId, argb)
             }
         }
@@ -123,19 +137,28 @@ class FrameworkLightGateway
             synchronized(lock) { showColor(deviceId, argb) }
         }
 
-        /** After the bench: show [deviceId]'s host color again, or turn the bar off when no host set one. */
+        /** After the bench: show [deviceId]'s host color again, or turn the bar off when no host has it. */
         fun showHostColor(deviceId: Int) {
             synchronized(lock) {
                 val hostColor = hostColors.recordOf(deviceId)
-                if (hostColor == null) bars.recordOf(deviceId)?.let(::releaseBar) else showColor(deviceId, hostColor.argb)
+                val hostHasTheBar = hostColor != null && hostColor.showing
+                if (hostHasTheBar) showColor(deviceId, hostColor.argb) else bars.recordOf(deviceId)?.let(::releaseBar)
             }
         }
 
-        /** Show [deviceId]'s last host color again, now that its slot is bound again. */
-        fun restore(deviceId: Int) {
+        /**
+         * [deviceId]'s slot is bound to [source]: the color that binding last sent shows again. A
+         * color another binding sent is forgotten and the bar turned off, since the host bound now
+         * never asked for it.
+         */
+        fun boundTo(
+            deviceId: Int,
+            source: LightSource,
+        ) {
             synchronized(lock) {
                 val hostColor = hostColors.recordOf(deviceId) ?: return
-                showColor(deviceId, hostColor.argb)
+                val sameBinding = hostColor.source == source
+                if (sameBinding) showAgain(hostColor) else displace(hostColor)
             }
         }
 
@@ -154,15 +177,19 @@ class FrameworkLightGateway
          * otherwise kept for its next color until [releaseAll] or [forget]. Idempotent.
          */
         fun release(deviceId: Int) {
-            synchronized(lock) { bars.recordOf(deviceId)?.let(::releaseBar) }
+            synchronized(lock) {
+                hostColors.recordOf(deviceId)?.showing = false
+                bars.recordOf(deviceId)?.let(::releaseBar)
+            }
         }
 
         /**
          * Release every light bar, e.g. when physical-slot streaming stops process-wide. Each pad's
-         * host color is kept for [restore].
+         * host color is kept for [boundTo].
          */
         fun releaseAll() {
             synchronized(lock) {
+                hostColors.forEach { it.showing = false }
                 // Every bar goes dark before any is closed, so no close finds a lit one to repaint.
                 bars.toList().forEach(::turnOff)
                 bars.forEach { it.session.close() }
@@ -181,9 +208,20 @@ class FrameworkLightGateway
         private fun rememberHostColor(
             deviceId: Int,
             argb: Int,
+            source: LightSource,
         ) {
             val hostColor = hostColors.recordOf(deviceId)
-            if (hostColor == null) hostColors += HostColor(deviceId, argb) else hostColor.argb = argb
+            if (hostColor == null) hostColors += HostColor(deviceId, argb, source) else hostColor.remember(argb, source)
+        }
+
+        private fun showAgain(hostColor: HostColor) {
+            hostColor.showing = true
+            showColor(hostColor.deviceId, hostColor.argb)
+        }
+
+        private fun displace(hostColor: HostColor) {
+            hostColors.remove(hostColor)
+            bars.recordOf(hostColor.deviceId)?.let(::releaseBar)
         }
 
         private fun showColor(
