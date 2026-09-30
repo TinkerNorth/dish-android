@@ -1,16 +1,16 @@
 [versions]
 activity = "1.13.0"
-navigation = "2.10.1"
+navigation = "2.10.2"
 agp = "9.4.1"
 # Kotlin is held at 2.4.10 although 2.4.20 is out: CodeQL's Kotlin extractor refuses to
 # build anything newer ("Kotlin version 2.4.20 is too recent. CodeQL currently supports
 # versions below 2.4.20"), so taking the upgrade takes the java-kotlin analysis red. Take
 # 2.4.20 once a CodeQL release supports it.
-kotlin = "2.4.10"
-ksp = "2.3.11"
+kotlin = "2.4.20"
+ksp = "2.3.12"
 serialization = "1.11.0"
 hilt = "2.60.1"
-coreKtx = "1.19.0"
+coreKtx = "1.19.1"
 junit = "4.13.2"
 junitVersion = "1.3.0"
 espressoCore = "3.7.0"
