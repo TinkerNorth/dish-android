@@ -1535,6 +1535,26 @@ bool parsePsCalibration(const uint8_t* buf, const size_t len, PsImuCalib& out) {
     return true;
 }
 
+// hid-playstation: feature version 2.21 brought the DualSense its revised classic-rumble mode; the
+// DualSense Edge shipped with it.
+constexpr size_t kDs5FeatureVersionOffset = 44;
+constexpr uint16_t kDs5FeatureVersionVibrationV2 = 0x0215;
+constexpr uint16_t kDualSenseEdgePid = 0x0DF2;
+
+bool parseDs5FirmwareInfo(const uint8_t* buf, const size_t len, Ds5FirmwareInfo& out) {
+    out = Ds5FirmwareInfo{};
+    if (len != DS5_FIRMWARE_INFO_REPORT_BYTES) return false;
+    if (buf[0] != DS5_FIRMWARE_INFO_REPORT_ID) return false;
+    out.valid = true;
+    out.featureVersion = static_cast<uint16_t>(rdLe16(buf, (int)kDs5FeatureVersionOffset));
+    return true;
+}
+
+bool ds5UsesVibrationV2(const uint16_t productId, const Ds5FirmwareInfo& info) {
+    if (productId == kDualSenseEdgePid) return true;
+    return info.valid && info.featureVersion >= kDs5FeatureVersionVibrationV2;
+}
+
 bool decodeReport(const Parser p, const uint8_t* buf, const size_t len, DeviceState& s,
                   ParserState* sticks) {
     switch (p) {
@@ -1743,7 +1763,8 @@ constexpr size_t kDs4LightbarByte = 6;
 constexpr uint8_t kDs5OutputReportId = 0x02;
 constexpr size_t kDs5OutputReportLen = 63;
 constexpr size_t kDs5ValidFlag0Byte = 1;
-constexpr uint8_t kDs5ValidFlag0Motors = 0x01;
+constexpr uint8_t kDs5ValidFlag0CompatibleVibration = 0x01;
+constexpr uint8_t kDs5ValidFlag0HapticsSelect = 0x02;
 constexpr uint8_t kDs5ValidFlag0TriggerRight = 0x04;
 constexpr uint8_t kDs5ValidFlag0TriggerLeft = 0x08;
 constexpr size_t kDs5ValidFlag1Byte = 2;
@@ -1760,6 +1781,7 @@ constexpr size_t kDs5TriggerRightOffset = 11;
 constexpr size_t kDs5TriggerLeftOffset = 22;
 constexpr size_t kDs5ValidFlag2Byte = 39;
 constexpr uint8_t kDs5ValidFlag2LightbarSetup = 0x02;
+constexpr uint8_t kDs5ValidFlag2CompatibleVibration2 = 0x04;
 constexpr size_t kDs5LightbarSetupByte = 42;
 // LIGHTBAR_SETUP light-out stops the firmware's own blue glow so the host colour shows; a one-time
 // handoff, as hid-playstation does at probe.
@@ -1844,13 +1866,19 @@ size_t buildDs4Rumble(const uint16_t strong, const uint16_t weak, uint8_t* out,
     return n;
 }
 
-size_t buildDs5Rumble(const uint16_t strong, const uint16_t weak, uint8_t* out,
-                      const size_t outCap) {
+// hid-playstation's rumble write: HAPTICS_SELECT moves the actuators from audio haptics to classic
+// rumble, and the mode flag the pad's firmware takes turns the motor bytes on.
+size_t buildDs5Rumble(const FeedbackState& st, uint8_t* out, const size_t outCap) {
     const size_t n = startZeroedReport(kDs5OutputReportId, kDs5OutputReportLen, out, outCap);
     if (n == 0) return 0;
-    out[kDs5ValidFlag0Byte] = kDs5ValidFlag0Motors;
-    out[kDs5WeakMotorByte] = highByte(weak);
-    out[kDs5StrongMotorByte] = highByte(strong);
+    out[kDs5ValidFlag0Byte] = kDs5ValidFlag0HapticsSelect;
+    if (st.ds5VibrationV2) {
+        out[kDs5ValidFlag2Byte] = kDs5ValidFlag2CompatibleVibration2;
+    } else {
+        out[kDs5ValidFlag0Byte] |= kDs5ValidFlag0CompatibleVibration;
+    }
+    out[kDs5WeakMotorByte] = highByte(st.weak);
+    out[kDs5StrongMotorByte] = highByte(st.strong);
     return n;
 }
 
@@ -1932,26 +1960,10 @@ size_t buildSwitchPlayerLeds(const uint8_t ledMask, const uint8_t seq, uint8_t* 
 
 size_t buildRumbleReport(const Parser p, const uint16_t strong, const uint16_t weak,
                          const uint8_t seq, uint8_t* out, const size_t outCap) {
-    switch (p) {
-    case Parser::XINPUT_360:
-        return buildX360Rumble(strong, weak, out, outCap);
-    case Parser::XINPUT_360_WIRELESS:
-        return buildX360WirelessRumble(strong, weak, out, outCap);
-    case Parser::XBOX_ONE_GIP:
-        return buildGipRumble(seq, 0, 0, strong, weak, out, outCap);
-    case Parser::DUALSHOCK4:
-        return buildDs4Rumble(strong, weak, out, outCap);
-    case Parser::DUALSENSE:
-        return buildDs5Rumble(strong, weak, out, outCap);
-    case Parser::SWITCH_PRO_USB:
-        return buildSwitchRumble(strong, weak, seq, out, outCap);
-    case Parser::STEAM_CONTROLLER:
-    case Parser::STADIA:
-    case Parser::GENERIC_HID_GAMEPAD:
-    case Parser::NONE:
-        return 0;
-    }
-    return 0;
+    FeedbackState fresh;
+    fresh.strong = strong;
+    fresh.weak = weak;
+    return buildMergedRumbleReport(p, fresh, seq, out, outCap);
 }
 
 bool parserHasLightbar(const Parser p) { return p == Parser::DUALSHOCK4 || p == Parser::DUALSENSE; }
@@ -1971,23 +1983,27 @@ bool parserHasMicMuteLed(const Parser p) { return p == Parser::DUALSENSE; }
 size_t buildMergedRumbleReport(const Parser p, FeedbackState& st, const uint8_t seq, uint8_t* out,
                                const size_t outCap) {
     switch (p) {
+    case Parser::XINPUT_360:
+        return buildX360Rumble(st.strong, st.weak, out, outCap);
+    case Parser::XINPUT_360_WIRELESS:
+        return buildX360WirelessRumble(st.strong, st.weak, out, outCap);
     case Parser::XBOX_ONE_GIP:
         return buildGipRumble(seq, st.leftTrigger, st.rightTrigger, st.strong, st.weak, out,
                               outCap);
+    case Parser::DUALSHOCK4:
+        return buildDs4Rumble(st.strong, st.weak, out, outCap);
     case Parser::DUALSENSE: {
-        const size_t n = buildDs5Rumble(st.strong, st.weak, out, outCap);
+        const size_t n = buildDs5Rumble(st, out, outCap);
         if (n != 0) reassertDs5MicMuteLed(st, out);
         return n;
     }
-    case Parser::XINPUT_360:
-    case Parser::XINPUT_360_WIRELESS:
-    case Parser::DUALSHOCK4:
     case Parser::SWITCH_PRO_USB:
+        return buildSwitchRumble(st.strong, st.weak, seq, out, outCap);
     case Parser::STEAM_CONTROLLER:
     case Parser::STADIA:
     case Parser::GENERIC_HID_GAMEPAD:
     case Parser::NONE:
-        return buildRumbleReport(p, st.strong, st.weak, seq, out, outCap);
+        return 0;
     }
     return 0;
 }
@@ -2184,14 +2200,6 @@ void runTeardown(const int fd, const int interfaceNumber, const Parser p) {
         sendFeatureReport(fd, interfaceNumber, buf, n);
     }
     logInfo("Steam Controller restored to stand-alone mode");
-}
-
-bool runRumble(const int fd, const uint8_t epOut, const Parser p, const uint16_t strong,
-               const uint16_t weak, const uint8_t seq) {
-    if (epOut == 0) return false;
-    uint8_t buf[kOutReportMaxBytes];
-    const size_t n = buildRumbleReport(p, strong, weak, seq, buf, sizeof(buf));
-    return writeOutReport(fd, epOut, buf, n);
 }
 
 bool runMergedRumble(const int fd, const uint8_t epOut, const Parser p, FeedbackState& st,

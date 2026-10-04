@@ -189,6 +189,8 @@ struct FeedbackState {
     uint16_t leftTrigger = 0;
     uint16_t rightTrigger = 0;
     bool ds5LightbarSetupSent = false;
+    // hid-playstation's use_vibration_v2, set at attach from the firmware-info report.
+    bool ds5VibrationV2 = false;
     // Last lamp state the host asked for, and whether it ever asked. Every DS5 report we build
     // starts from a fresh memset, so the lamp is re-asserted from here on all of them: a report
     // that flags a field the firmware then finds zeroed is exactly how a lamp gets stomped by an
@@ -231,9 +233,7 @@ bool runInit(int fd, int interfaceNumber, uint8_t epOut, InitKind init);
 // Undoes runInit's device-side changes. No-op for families that never changed the device.
 void runTeardown(int fd, int interfaceNumber, Parser p);
 
-bool runRumble(int fd, uint8_t epOut, Parser p, uint16_t strong, uint16_t weak, uint8_t seq);
-
-// Android write wrappers over the feedback builders, mirroring runRumble. Each refuses a device
+// Android write wrappers over the feedback builders. Each refuses a device
 // with no OUT endpoint before it builds, so a builder never records in FeedbackState a write that
 // cannot happen.
 bool runMergedRumble(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t seq);
@@ -247,7 +247,8 @@ bool runTriggerEffects(int fd, uint8_t epOut, Parser p, const FeedbackState& st,
 bool runMicMuteLed(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t state);
 
 // Pure: writes the device's rumble report into out, returns its length (0 if unsupported or out is
-// too small). Host-tested in usb_parsers_test.cpp; runRumble is the Android write wrapper.
+// too small). Host-tested in usb_parsers_test.cpp; the Android writer goes through
+// buildMergedRumbleReport, of which this is the no-state form.
 size_t buildRumbleReport(Parser p, uint16_t strong, uint16_t weak, uint8_t seq, uint8_t* out,
                          size_t outCap);
 
@@ -265,6 +266,24 @@ inline constexpr size_t PS_CALIBRATION_REPORT_BYTES = 35;
 
 // Parses a DualShock 4 / DualSense calibration feature report into per-axis gyro/accel factors.
 bool parsePsCalibration(const uint8_t* buf, size_t len, PsImuCalib& out);
+
+// The DualSense firmware-info feature report (0x20): 64 bytes, byte 0 the report id, the feature
+// ("update") version little-endian at 44..45, as hid-playstation reads it.
+inline constexpr uint8_t DS5_FIRMWARE_INFO_REPORT_ID = 0x20;
+inline constexpr size_t DS5_FIRMWARE_INFO_REPORT_BYTES = 64;
+
+struct Ds5FirmwareInfo {
+    bool valid = false;
+    uint16_t featureVersion = 0;
+};
+
+// Pure: the feature version out of a firmware-info report; false, and an invalid info, for a
+// report of another length or id.
+bool parseDs5FirmwareInfo(const uint8_t* buf, size_t len, Ds5FirmwareInfo& out);
+
+// Pure: hid-playstation's rule for the revised classic-rumble mode. Every DualSense Edge, and a
+// DualSense from feature version 2.21; a pad whose report did not read keeps the original mode.
+bool ds5UsesVibrationV2(uint16_t productId, const Ds5FirmwareInfo& info);
 
 // USB control-transfer fields the class-driver requests use (USB 2.0 §9.3, HID 1.11 §7.2), shared
 // with the descriptor and report fetches in usb_host.cpp.

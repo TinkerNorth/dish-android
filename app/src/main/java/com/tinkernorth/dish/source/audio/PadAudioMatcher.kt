@@ -44,9 +44,9 @@ data class UsbAudioEndpoint(
 // Matches a plugged pad to its own audio endpoints, conservatively.
 // There is no public API that puts a vendor:product on an [android.media.AudioDeviceInfo]: the
 // class exposes an id, a type, a product name and an address, and nothing that names the USB
-// device behind it (true through API 37). The one field both sides genuinely share is the product
-// name, which on either side is the USB device's own iProduct string descriptor, so that is what
-// this matches on.
+// device behind it (true through API 37). The one field both sides share is the product name,
+// the USB device's iProduct string: Android 16 lists it as is, Android 10 to 15 wrap it into the
+// ALSA card name (alsaCardNameFor), so an endpoint is a pad's under either spelling.
 // Because it is only a name, every ambiguity resolves to "no route", never to a guess:
 // - The pad must actually carry a USB Audio Class interface. A name alone would let an unrelated
 // USB audio dongle lend its endpoints to a pad that has none.
@@ -59,6 +59,15 @@ data class UsbAudioEndpoint(
 
 /** The DualSense's own render endpoint: speaker pair then haptic pair. */
 const val HAPTIC_ENDPOINT_CHANNELS = 4
+
+// What Android 10 to 15 call a USB sound card: the ALSA card name, "<driver> - <shortname>",
+// where snd-usb-audio's driver string is "USB-Audio" and the shortname is the iProduct string cut
+// to the 31 bytes of snd_card.shortname and trimmed. Android 16 names it by the product string.
+private const val ALSA_USB_AUDIO_DRIVER = "USB-Audio"
+private const val ALSA_SHORTNAME_MAX_CHARS = 31
+
+internal fun alsaCardNameFor(productName: String): String =
+    "$ALSA_USB_AUDIO_DRIVER - ${productName.take(ALSA_SHORTNAME_MAX_CHARS).trimEnd()}"
 
 fun resolvePadAudioRoutes(
     pads: List<UsbAudioPad>,
@@ -84,31 +93,48 @@ fun explainPadAudio(
     endpoints: List<UsbAudioEndpoint>,
 ): Map<Int, PadAudioFacts> {
     val named = endpoints.filter { !it.productName.isNullOrBlank() }.distinctBy { it.deviceId }
-    val sinksByName = named.filter { it.sink }.groupBy { it.productName!!.trim() }
-    val sourcesByName = named.filter { it.source }.groupBy { it.productName!!.trim() }
-    val seen = named.map { it.productName!!.trim() }.distinct()
-    val padsByName =
-        pads
-            .filter { it.hasAudioFunction && !it.productName.isNullOrBlank() }
-            .groupBy { it.productName!!.trim() }
-    val out = HashMap<Int, PadAudioFacts>()
-    for (pad in pads) {
-        val name = pad.productName?.trim()
-        val reason =
-            when {
-                !pad.hasAudioFunction || name.isNullOrBlank() -> PadAudioReason.NO_AUDIO_FUNCTION
-                padsByName.getValue(name).size > 1 -> PadAudioReason.PAD_NAME_SHARED
-                else -> null
-            }
-        out[vidPidKey(pad.vendorId, pad.productId)] =
-            if (reason != null) {
-                PadAudioFacts(reason, PadAudioRoute.NONE, seen)
-            } else {
-                matchedFacts(pad, sinksByName[name].orEmpty(), sourcesByName[name].orEmpty(), seen)
-            }
-    }
-    return out
+    val world =
+        EndpointWorld(
+            sinksByName = named.filter { it.sink }.groupBy { it.productName!!.trim() },
+            sourcesByName = named.filter { it.source }.groupBy { it.productName!!.trim() },
+            seen = named.map { it.productName!!.trim() }.distinct(),
+            padsByName =
+                pads
+                    .filter { it.hasAudioFunction && !it.productName.isNullOrBlank() }
+                    .groupBy { it.productName!!.trim() },
+        )
+    return pads.associate { pad -> vidPidKey(pad.vendorId, pad.productId) to factsFor(pad, world) }
 }
+
+// The two lists the platform has, indexed by trimmed name once per resolve.
+private data class EndpointWorld(
+    val sinksByName: Map<String, List<UsbAudioEndpoint>>,
+    val sourcesByName: Map<String, List<UsbAudioEndpoint>>,
+    val seen: List<String>,
+    val padsByName: Map<String, List<UsbAudioPad>>,
+)
+
+private fun factsFor(
+    pad: UsbAudioPad,
+    world: EndpointWorld,
+): PadAudioFacts {
+    val name = pad.productName?.trim()
+    if (!pad.hasAudioFunction || name.isNullOrBlank()) {
+        return PadAudioFacts(PadAudioReason.NO_AUDIO_FUNCTION, PadAudioRoute.NONE, world.seen)
+    }
+    val padNameIsShared = world.padsByName.getValue(name).size > 1
+    if (padNameIsShared) {
+        return PadAudioFacts(PadAudioReason.PAD_NAME_SHARED, PadAudioRoute.NONE, world.seen)
+    }
+    val spellings = platformNamesFor(name)
+    val sinks = spellings.flatMap { world.sinksByName[it].orEmpty() }
+    val sources = spellings.flatMap { world.sourcesByName[it].orEmpty() }
+    return matchedFacts(pad, sinks, sources, world.seen)
+}
+
+// The spellings under which Android lists one pad's sound card: the product string itself
+// (Android 16) or the ALSA card name built from it (Android 10 to 15).
+private fun platformNamesFor(name: String): List<String> = listOf(name, alsaCardNameFor(name))
 
 private fun matchedFacts(
     pad: UsbAudioPad,

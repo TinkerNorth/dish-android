@@ -418,23 +418,39 @@ void fetchHidLayout(int fd, int interfaceNumber, usbhid::HidLayout& out) {
     usbhid::parseReportDescriptor(desc, (size_t)n, out);
 }
 
+// One HID GET_REPORT of a feature report over the claimed interface: the bytes read, or -1.
+int readFeatureReport(int fd, int interfaceNumber, uint8_t reportId, uint8_t* buf, size_t cap) {
+    struct usbdevfs_ctrltransfer ct = {};
+    ct.bRequestType = usbparsers::USB_REQUEST_TYPE_IN_CLASS_INTERFACE;
+    ct.bRequest = usbparsers::USB_REQUEST_GET_REPORT;
+    ct.wValue = (uint16_t)((usbparsers::HID_REPORT_TYPE_FEATURE << 8) | reportId);
+    ct.wIndex = (uint16_t)interfaceNumber;
+    ct.wLength = (uint16_t)cap;
+    ct.timeout = usbparsers::USB_CONTROL_TIMEOUT_MS;
+    ct.data = buf;
+    return ioctl(fd, USBDEVFS_CONTROL, &ct);
+}
+
 // Reads the DS4/DualSense calibration feature report so the IMU can be scaled; best-effort, a
 // failed read leaves the calibration invalid and motion stays off.
 void fetchPsCalibration(int fd, int interfaceNumber, uint8_t reportId,
                         usbparsers::PsImuCalib& out) {
     if (interfaceNumber < 0) return;
     uint8_t buf[64];
-    struct usbdevfs_ctrltransfer ct = {};
-    ct.bRequestType = usbparsers::USB_REQUEST_TYPE_IN_CLASS_INTERFACE;
-    ct.bRequest = usbparsers::USB_REQUEST_GET_REPORT;
-    ct.wValue = (uint16_t)((usbparsers::HID_REPORT_TYPE_FEATURE << 8) | reportId);
-    ct.wIndex = (uint16_t)interfaceNumber;
-    ct.wLength = sizeof(buf);
-    ct.timeout = usbparsers::USB_CONTROL_TIMEOUT_MS;
-    ct.data = buf;
-    int n = ioctl(fd, USBDEVFS_CONTROL, &ct);
+    const int n = readFeatureReport(fd, interfaceNumber, reportId, buf, sizeof(buf));
     if (n < 0 || static_cast<size_t>(n) < usbparsers::PS_CALIBRATION_REPORT_BYTES) return;
     usbparsers::parsePsCalibration(buf, (size_t)n, out);
+}
+
+// Reads the DualSense firmware-info report that picks its rumble mode; best-effort, an unread
+// report leaves the pad on the original mode.
+void fetchDs5FirmwareInfo(int fd, int interfaceNumber, usbparsers::Ds5FirmwareInfo& out) {
+    if (interfaceNumber < 0) return;
+    uint8_t buf[usbparsers::DS5_FIRMWARE_INFO_REPORT_BYTES];
+    const int n = readFeatureReport(fd, interfaceNumber, usbparsers::DS5_FIRMWARE_INFO_REPORT_ID,
+                                    buf, sizeof(buf));
+    if (n < 0) return;
+    usbparsers::parseDs5FirmwareInfo(buf, (size_t)n, out);
 }
 
 } // namespace
@@ -510,6 +526,12 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
         fetchPsCalibration(fd, interfaceNumber, 0x02, ctx->stickRange.psImu);
     } else if (parser == usbparsers::Parser::DUALSENSE) {
         fetchPsCalibration(fd, interfaceNumber, 0x05, ctx->stickRange.psImu);
+        usbparsers::Ds5FirmwareInfo firmware;
+        fetchDs5FirmwareInfo(fd, interfaceNumber, firmware);
+        ctx->feedback.ds5VibrationV2 = usbparsers::ds5UsesVibrationV2(pid, firmware);
+        LOGI("attach %04X:%04X: DualSense feature version %04X (%s), rumble mode %s", vid, pid,
+             firmware.featureVersion, firmware.valid ? "read" : "unread",
+             ctx->feedback.ds5VibrationV2 ? "v2" : "v1");
     }
 
     {
