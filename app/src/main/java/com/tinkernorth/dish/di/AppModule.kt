@@ -36,8 +36,6 @@ annotation class IoDispatcher
 object AppModule {
     // SupervisorJob + handler: one composer's combine throwing must not silently
     // kill its collection or cancel siblings.
-    // The satellite pairing keys are sealed under a keystore key on a device; the fake the
-    // repository's tests use seals in the clear.
     @Provides
     @Singleton
     fun provideSecretSealer(): SecretSealer = KeystoreSecretSealer()

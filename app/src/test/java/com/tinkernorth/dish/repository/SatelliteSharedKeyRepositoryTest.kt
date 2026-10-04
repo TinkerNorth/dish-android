@@ -70,8 +70,6 @@ class SatelliteSharedKeyRepositoryTest {
         assertEquals("preserved", store["satellite_list"])
     }
 
-    // ── The key never reaches the prefs file in the clear ────────────────────────────────
-
     @Test
     fun `a stored key is sealed, never the key itself`() {
         val (repo, store) = repoOver()
@@ -99,9 +97,6 @@ class SatelliteSharedKeyRepositoryTest {
 
     @Test
     fun `a sealed key that no longer opens reads as absent and is dropped`() {
-        // The keystore key behind the sealer is gone (a device restore): nothing will ever open
-        // the value again, so the satellite reads as one to pair afresh rather than as one whose
-        // key is wrong.
         val (writer, store) = repoOver()
         writer.put("satellite:mid:a", "DEADBEEF")
         val (repo, _) = repoOver(store, ReversingSealer(refusing = true))

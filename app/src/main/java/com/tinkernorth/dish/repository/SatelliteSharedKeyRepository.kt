@@ -13,8 +13,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 // Per-key storage (vs. one JSON list) so forget is a single prefs edit; per-key writes are atomic.
-// Every key is sealed before it reaches the prefs file, which anything with the app's files can
-// read. A key an older build wrote in the clear is read once as it is and sealed on that read.
+// Sealed before it reaches the prefs file, which anything with the app's files can read.
 @Singleton
 class SatelliteSharedKeyRepository
     @Inject
@@ -54,9 +53,6 @@ class SatelliteSharedKeyRepository
 
         private fun sealed(keyHex: String): String = SEALED_PREFIX + bytesToHex(sealer.seal(keyHex.toByteArray(Charsets.US_ASCII)))
 
-        // The key a stored value holds, or null when it holds none: a sealed value that will not
-        // open is dropped, since nothing will ever read it again, and the satellite reads as one
-        // to pair afresh.
         private fun opened(
             pref: String,
             stored: String?,

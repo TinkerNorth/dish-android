@@ -135,9 +135,7 @@ class MoonlightSessionUiTest {
         assertEquals(0, picked.noteRes())
     }
 
-    // A pick the host no longer lists used to be launched and refused on every retry, then swapped
-    // for the host's first app, which the user never chose. It is named instead, with the picker
-    // under it and no row checked, and nothing starts until the user picks again.
+    // A pick the host no longer lists used to be swapped for the host's first app, which the user never chose.
     @Test
     fun `M10 a pick the host no longer lists is named over the picker and starts nothing`() {
         val apps = listOf(MoonlightAppUi("1", "Desktop"), MoonlightAppUi("2", "Steam Big Picture"))
@@ -147,15 +145,12 @@ class MoonlightSessionUiTest {
         assertEquals(R.string.ml_apps_removed_body, removed.bodyRes)
         assertEquals(rendered(R.string.ml_apps_removed_title, "Removed"), removed.title("PC", strings))
         assertEquals(rendered(R.string.ml_apps_removed_body, "PC"), removed.body("PC", strings))
-        // The pick stays: the default-app note would promise the first app, which is exactly what is not started.
         assertEquals(0, removed.noteRes())
         assertEquals(emptyList<MoonlightAction>(), removed.actions())
 
-        // A pick remembered without its title is named by its id rather than by nothing.
         val unnamed = ui(apps = MoonlightApps.Ready(apps), selectedAppId = "9")
         assertEquals("9", (unnamed as MoonlightSessionUi.NewSession).removedPick)
 
-        // A pick the host lists is not "removed", whatever title travels with it.
         val listed = ui(apps = MoonlightApps.Ready(apps), selectedAppId = "2", selectedAppName = "Steam Big Picture")
         assertEquals(MoonlightSessionUi.NewSession(apps, "2"), listed)
     }

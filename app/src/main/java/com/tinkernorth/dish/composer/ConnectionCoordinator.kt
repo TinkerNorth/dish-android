@@ -112,16 +112,14 @@ class ConnectionCoordinator
 
         fun unbind(slotId: String) {
             val connId = bindingStore.connectionFor(slotId) ?: return
-            // A pad the user takes off its Moonlight host is not put back on it. A pad that left is
-            // released by the binding observer once the registry has dropped it, so it has no
-            // descriptor here and stays remembered for when it returns.
+            // A departed pad has no descriptor here (the registry dropped it before the observer
+            // released the slot), so only the user's unbind reaches the memory.
             if (connId.startsWith(MoonlightHost.ID_PREFIX)) descriptorOf(slotId)?.let(moonlight::forgetBinding)
             bindingStore.unbind(slotId)
             typeStore.clear(connId, slotId)
         }
 
         fun forgetConnection(connectionId: String) {
-            // Every pad remembered for a Moonlight host goes with the host (moonlight.forget).
             bindingStore.slotsFor(connectionId).toList().forEach(::unbind)
             typeStore.clearConnection(connectionId)
             hostFacts.features.clearConnection(connectionId)
@@ -184,10 +182,8 @@ class ConnectionCoordinator
             rememberBinding(slotId, connectionId, connectionId, type)
         }
 
-        // A Moonlight binding is kept by pad (MoonlightConnectionManager.rememberBinding), so the pad
-        // is put back on its host when it appears again (MoonlightBindingRestoreController). It is
-        // written before the binding store emits and dropped before an unbind emits, so a restore
-        // derived from the emission never races the change it follows.
+        // Written before the binding store emits and dropped before an unbind emits: a restore
+        // derived from the emission (MoonlightBindingRestoreController) must not race the change.
         private fun rememberBinding(
             slotId: String,
             priorConnId: String?,
@@ -198,14 +194,10 @@ class ConnectionCoordinator
             when {
                 connectionId.startsWith(MoonlightHost.ID_PREFIX) ->
                     moonlight.rememberBinding(descriptor, connectionId, controllerType)
-                // Moved off its Moonlight host by the user: that host is no longer where the pad goes.
                 priorConnId?.startsWith(MoonlightHost.ID_PREFIX) == true -> moonlight.forgetBinding(descriptor)
             }
         }
 
-        // The identity of the pad in [slotId], for a pad the registry knows now. The on-screen
-        // controller has none, and neither has a pad that has left: nothing is remembered for the
-        // first, and the second keeps what was.
         private fun descriptorOf(slotId: String): String? {
             val deviceId = slotId.toIntOrNull() ?: return null
             return gamepadRegistry.devices.value[deviceId]

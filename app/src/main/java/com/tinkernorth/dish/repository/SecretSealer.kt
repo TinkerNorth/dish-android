@@ -11,11 +11,7 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/**
- * Seals a secret for a store that anything with the app's files can read, and opens it again.
- * The satellite pairing keys live behind this; the Moonlight identity does not need it, since
- * the keystore holds that private key itself.
- */
+/** Seals a secret for a store that anything with the app's files can read, and opens it again. */
 interface SecretSealer {
     fun seal(plain: ByteArray): ByteArray
 
@@ -24,10 +20,8 @@ interface SecretSealer {
 }
 
 /**
- * AES-GCM under a key the Android keystore generates and never exports: the sealed bytes are
- * only readable on this device by this app, which is what a pairing key on a shared or backed-up
- * phone needs. The IV rides in front of the ciphertext. Exercised on device only, like the
- * keystore-held Moonlight identity; the repository over it is unit-tested through a fake.
+ * AES-GCM under a keystore key that never leaves the device; the 12-byte IV rides in front of the
+ * ciphertext. Exercised on device only (KeystoreSecretSealerTest), like the Moonlight identity.
  */
 class KeystoreSecretSealer : SecretSealer {
     private val key: SecretKey by lazy { loadOrCreateKey() }

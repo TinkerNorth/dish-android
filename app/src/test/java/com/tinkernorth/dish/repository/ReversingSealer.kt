@@ -2,9 +2,7 @@
 
 package com.tinkernorth.dish.repository
 
-// Seals by reversing the bytes: a sealed value differs from its plain one, opens back to it, and
-// a value that was never sealed by anything (see [refusing]) reads as unopenable, which is what
-// the repository has to survive when the keystore key behind the real sealer is gone.
+// Reverses the bytes; with [refusing] set, open() refuses, as a sealer whose keystore key is gone does.
 internal class ReversingSealer(
     private val refusing: Boolean = false,
 ) : SecretSealer {

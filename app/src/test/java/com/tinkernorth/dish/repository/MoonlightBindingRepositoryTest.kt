@@ -17,8 +17,7 @@ import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 
-// Beyond the keyed contract: durability across a fresh repository over the same prefs, the wire
-// names the desktops share, the per-host read, and the corrupt-decode fallback with its breadcrumb.
+// Beyond the keyed contract, mirroring RememberedMoonlightRepositoryTest.
 class MoonlightBindingRepositoryTest {
     private val json = Json { ignoreUnknownKeys = true }
     private val pc =
@@ -47,8 +46,6 @@ class MoonlightBindingRepositoryTest {
         assertEquals(pc, again.get(pc.descriptor))
     }
 
-    // The desktops keep their list under this key (dish-windows SettingsKeys); the prefs file is
-    // the one the host list already lives in.
     @Test
     fun `the list is one JSON array under the key the desktops use, in the connection store prefs`() {
         val (ctx, store) = mapBackedPrefs()

@@ -113,7 +113,6 @@ data class MoonlightSessionInput(
     val phase: MoonlightPhase = MoonlightPhase.Idle,
     val failure: MoonlightFailure? = null,
     val selectedAppId: String? = null,
-    // The pick's title as it was remembered, for naming a pick the host no longer lists.
     val selectedAppName: String? = null,
 )
 
@@ -177,9 +176,7 @@ sealed interface MoonlightSessionUi {
         override val bodyRes: Int = R.string.ml_apps_loading
     }
 
-    // `removedPick` names a pick the host no longer lists: the rows are still the picker, and
-    // the title says why none of them is checked. The pick itself stays remembered until the
-    // user chooses again, so nothing starts an app they never chose.
+    // `removedPick` names a pick the host no longer lists; the rows stay the picker, none checked.
     data class NewSession(
         val apps: List<MoonlightAppUi>,
         val selectedAppId: String?,
@@ -314,8 +311,6 @@ private fun appsUi(input: MoonlightSessionInput): MoonlightSessionUi? {
     }
 }
 
-// The pick is the user's word and the list is the host's. A pick the host no longer lists is
-// named rather than swapped for the host's first app; the id stands in where no title was kept.
 private fun MoonlightSessionInput.removedPick(apps: List<MoonlightAppUi>): String? {
     val pick = selectedAppId ?: return null
     if (apps.any { it.id == pick }) return null

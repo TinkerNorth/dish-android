@@ -628,10 +628,6 @@ class MoonlightConnectionManager
             }
             val remembered = store.get(host.id)
             val pick = remembered?.lastAppId?.takeIf { it.isNotEmpty() }
-            // The host's list is its own word on what it can start. A pick it no longer lists is not
-            // launched, and not replaced either: the pick stays, and the card shows the picker with
-            // the reason, where a launch of the host's first app would have started something the
-            // user never chose.
             val pickRemoved = pick != null && probe.appsFetched && probe.apps.none { it.id == pick }
             if (pickRemoved) {
                 Log.w(TAG, "not launching $pick on ${host.address}: the host no longer lists it")
@@ -1058,7 +1054,6 @@ class MoonlightConnectionManager
                     Log.i(TAG, "forgetting ${host?.address ?: id}")
                     releaseSessionFor(id, host)
                     store.remove(id)
-                    // A standing binding is an intent to drive THIS host; it goes with the host.
                     bindings.forHost(id).forEach { bindings.remove(it.descriptor) }
                     gateway.forgetPin(id)
                     hostFacts.forget(id)
@@ -1178,12 +1173,7 @@ class MoonlightConnectionManager
         /** The remembered last-launched app title for [hostId], or empty. */
         fun rememberedAppName(hostId: String): String = store.get(hostId)?.lastAppName.orEmpty()
 
-        /**
-         * The standing binding of the pad with [descriptor]: the host it drives and the type it sends,
-         * kept across restarts so the pad goes back on its host when it appears again
-         * (MoonlightBindingRestoreController). The binding hub writes and drops it, which is what keeps
-         * a pad's departure apart from the user's unbind; a host forgotten takes its bindings with it.
-         */
+        /** The standing binding of the pad with [descriptor], kept across restarts; the binding hub writes and drops it. */
         fun rememberBinding(
             descriptor: String,
             hostId: String,

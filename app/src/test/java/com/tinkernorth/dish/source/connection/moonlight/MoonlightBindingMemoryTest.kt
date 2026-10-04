@@ -21,8 +21,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 
-// What a restart keeps about a pad's Moonlight binding lives with the manager, as the host records
-// do: the hub writes it through here, and a host forgotten takes its bindings with it.
+// The binding memory lives with the manager, as the host records do.
 @OptIn(ExperimentalCoroutinesApi::class)
 class MoonlightBindingMemoryTest {
     private val dispatcher = StandardTestDispatcher()

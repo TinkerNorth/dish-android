@@ -13,8 +13,7 @@ import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// One pad's standing Moonlight binding. Keyed by the pad's descriptor (InputDevice.descriptor),
-// which survives the reconnects and restarts that hand the pad a new device id.
+// Keyed by InputDevice.descriptor, which survives the reconnects and restarts that change the id.
 @Serializable
 data class RememberedBinding(
     val descriptor: String,
@@ -23,10 +22,8 @@ data class RememberedBinding(
 )
 
 /**
- * The Moonlight bindings the user has made, kept across restarts so a pad goes back on the host it
- * was bound to when it appears again. The desktops keep the same list under the same key
- * (dish-windows MoonlightHostRepository); here a pad is named by its descriptor because its device
- * id is not stable. A JSON list in the shared connection_store prefs, like the host list.
+ * The Moonlight bindings kept across restarts, by pad: the same JSON list under the same key as the
+ * desktops' (dish-windows MoonlightHostRepository), in the shared connection_store prefs.
  */
 @Singleton
 class MoonlightBindingRepository

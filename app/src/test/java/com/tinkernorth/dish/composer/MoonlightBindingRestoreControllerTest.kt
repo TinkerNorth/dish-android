@@ -18,8 +18,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-// A pad goes back on the Moonlight host it was bound to once it is here again. The rule is the pure
-// planner; the controller is the rule on the live flows.
+// The rule is the pure planner; the controller is the rule on the live flows.
 @OptIn(ExperimentalCoroutinesApi::class)
 class MoonlightBindingRestoreControllerTest {
     private val dispatcher = StandardTestDispatcher()
@@ -65,8 +64,6 @@ class MoonlightBindingRestoreControllerTest {
 
     private val nothing = emptyList<BindingRestore>()
 
-    // --- the rule ---
-
     @Test
     fun `a present unbound pad remembered for a known host is put back with its type`() {
         assertEquals(listOf(BindingRestore("7", pc.id, CONTROLLER_TYPE_PLAYSTATION)), plan(pad(7)))
@@ -84,7 +81,6 @@ class MoonlightBindingRestoreControllerTest {
         assertEquals(nothing, plan(pad(7), hostIds = emptySet()))
     }
 
-    // A bind now would be undone by the departure, or moved by the claim.
     @Test
     fun `a pad on its way out or mid-claim is left to the change that follows it`() {
         assertEquals(nothing, plan(pad(7, disconnectingTimeLeftSec = 3)))
@@ -95,8 +91,6 @@ class MoonlightBindingRestoreControllerTest {
     fun `only the remembered pads among those present are put back`() {
         assertEquals(listOf(BindingRestore("7", pc.id, CONTROLLER_TYPE_PLAYSTATION)), plan(pad(9, descriptor = "usb:045e:02ea:2"), pad(7)))
     }
-
-    // --- the rule on the live flows ---
 
     @Test
     fun `a remembered pad present at start is bound back to its host`() =
@@ -140,7 +134,6 @@ class MoonlightBindingRestoreControllerTest {
             verify(exactly = 0) { hub.bind(any(), any(), any()) }
         }
 
-    // The controller contract: nothing seen before a stop is trusted after it.
     @Test
     fun `a pad that arrived while stopped is bound on the next start`() =
         runTest(dispatcher) {

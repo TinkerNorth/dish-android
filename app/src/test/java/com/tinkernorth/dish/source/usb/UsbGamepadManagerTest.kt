@@ -204,8 +204,6 @@ class UsbGamepadManagerTest {
         verify { registry.addUsbSynthetic(-1000, "Pad", any(), any(), vid, pid) }
     }
 
-    // A binding remembered for the pad is keyed by the framework twin's descriptor, so the claim
-    // that replaces the twin has to answer to the same name.
     @Test
     fun `a claim carries its framework twin's descriptor`() {
         val conn = mockConn()

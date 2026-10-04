@@ -332,9 +332,7 @@ class MoonlightSessionFailureTest {
         }
 
     // A pick the host has since removed was launched, refused, and launched again on every retry,
-    // behind a refusal that hid the picker it could be changed in. Starting the host's first app
-    // instead started something the user never chose: nothing is launched, the pick stays for the
-    // card to name, and the picker is offered with the reason.
+    // behind a refusal that hid the picker it could be changed in.
     @Test
     fun `a session on a host that no longer lists the picked app launches nothing and keeps the pick`() =
         runTest(dispatcher) {
@@ -351,12 +349,10 @@ class MoonlightSessionFailureTest {
             assertTrue("the pick is the user's to change, not the probe's", kept.none { it.lastAppId != "9" })
             val refusal = seen.filterIsInstance<MoonlightConnectionEvent.Error>().map { it.error }.single()
             assertEquals(MoonlightError.AppRemoved(hostName = remembered.name, appName = "Removed"), refusal)
-            // Refused before anything started, so the binding is back where a new pick can start it.
             assertEquals(MoonlightSessionState.Idle, manager.get(remembered.id)?.state?.value)
             collector.cancel()
         }
 
-    // The host's list could not be read, so it said nothing about the pick: the host decides.
     @Test
     fun `a pick is launched when the host's app list cannot be read`() =
         runTest(dispatcher) {

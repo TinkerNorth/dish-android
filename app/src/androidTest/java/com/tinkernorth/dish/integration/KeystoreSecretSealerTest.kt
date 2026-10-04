@@ -11,8 +11,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 
-// The keystore-held sealer, which no JVM test can drive: the key it wraps the satellite pairing
-// keys under exists only on a device.
+// The keystore-held sealer, which no JVM test can drive.
 @RunWith(AndroidJUnit4::class)
 class KeystoreSecretSealerTest {
     private val key = ByteArray(32) { it.toByte() }

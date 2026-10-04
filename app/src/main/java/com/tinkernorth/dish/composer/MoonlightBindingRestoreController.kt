@@ -13,17 +13,13 @@ import kotlinx.coroutines.flow.combine
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// One pad to put back on its host: the slot it holds now, and the binding it was remembered with.
 data class BindingRestore(
     val slotId: String,
     val hostId: String,
     val controllerType: Int,
 )
 
-// Which present pads go back on a Moonlight host. A pad goes back when it is here with an identity,
-// is bound to nothing, and was remembered for a host that is still remembered. A pad on its way out
-// (disconnect countdown) or mid-claim is left to the change that follows it: a bind now would be
-// undone by its departure, or moved by the claim. Pure, so the rule is testable without the stores.
+// Which present pads go back on a Moonlight host; pure, so the rule is tested without the stores.
 fun planMoonlightBindingRestore(
     devices: Collection<PhysicalGamepadRegistry.Device>,
     bindings: Map<String, String>,
@@ -41,13 +37,9 @@ fun planMoonlightBindingRestore(
 }
 
 /**
- * Puts a pad back on the Moonlight host it was bound to once it is here again: the app restarted
- * under it, or it reconnected under a new device id. Windows reattaches the same way when the pad
- * appears. The memory is written and dropped by [ConnectionCoordinator] through the manager, which
- * is what keeps a departure apart from the user's unbind. Runs on the process lifecycle like the
- * binding observer
- * and derives from the world on every (re)start, so a pad that arrived while the app was stopped
- * is bound on the next start.
+ * Puts a pad back on the Moonlight host it was bound to once it is present again, as Windows does
+ * when the pad appears. Derives from the world on every (re)start, per the AbstractController
+ * contract, so a pad that arrived while the app was stopped is bound on the next start.
  */
 @Singleton
 class MoonlightBindingRestoreController

@@ -1218,8 +1218,6 @@ class ConnectionCoordinatorTest {
         assertEquals(CONTROLLER_TYPE_PLAYSTATION, hub.satTypes.value["s:1" to "slot-A"])
     }
 
-    // --- what a Moonlight binding leaves behind for the next start: the manager keeps it by pad ---
-
     private fun padPresent(
         id: Int,
         descriptor: String,
@@ -1314,7 +1312,6 @@ class ConnectionCoordinatorTest {
         verify(exactly = 0) { moonlight.rememberBinding(any(), any(), any()) }
     }
 
-    // The pads not here are the manager's to forget with the host (MoonlightBindingMemoryTest).
     @Test
     fun `forgetting a Moonlight host unbinds its pads and leaves another host's alone`() {
         padPresent(42, "usb:054c:0ce6:1")
