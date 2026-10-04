@@ -8,6 +8,7 @@ import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.bluetooth.BluetoothLinkType
 import com.tinkernorth.dish.source.store.stickHistoryKeyFor
 import com.tinkernorth.dish.ui.main.BatteryUi
@@ -138,6 +139,7 @@ internal fun padFacts(
         directTiming = pads.deviceLatency[device.id],
         frameworkTiming = pads.frameworkTiming[device.id],
         stickHistory = pads.stickHistory[stickHistoryKeyFor(device.vendorId, device.productId, device.name)],
+        audio = if (device.transport == Transport.Usb) pads.audio[endpointKey] else null,
     )
 }
 

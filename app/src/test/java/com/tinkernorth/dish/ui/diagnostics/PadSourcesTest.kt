@@ -6,6 +6,7 @@ package com.tinkernorth.dish.ui.diagnostics
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
+import com.tinkernorth.dish.source.audio.PadAudioFactsStore
 import com.tinkernorth.dish.source.bluetooth.BluetoothLinkType
 import com.tinkernorth.dish.source.bluetooth.BluetoothPadLinkReader
 import com.tinkernorth.dish.source.inputrate.FrameworkInputTimingStore
@@ -45,7 +46,16 @@ class PadSourcesTest {
     private val timing = mockk<FrameworkInputTimingStore> { every { summary(any()) } returns null }
     private val bluetoothLink = mockk<BluetoothPadLinkReader> { every { linkType(any()) } returns BluetoothLinkType.CLASSIC }
     private val stickHistory = mockk<StickTestHistoryStore> { every { state } returns history }
-    private val sources = PadSources(registry, native, timing, bluetoothLink, stickHistory, Json { ignoreUnknownKeys = true })
+    private val sources =
+        PadSources(
+            registry,
+            native,
+            timing,
+            bluetoothLink,
+            stickHistory,
+            PadAudioFactsStore(),
+            Json { ignoreUnknownKeys = true },
+        )
 
     private fun direct(id: Int) = PhysicalGamepadRegistry.Device(id = id, name = "DualSense", isUsbSynthetic = true)
 
