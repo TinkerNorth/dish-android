@@ -16,7 +16,7 @@ class ConnectionStoreEndpointRefreshTest {
         return ConnectionStore(
             RememberedSatelliteRepository(ctx, json),
             RememberedBtRepository(ctx, json),
-            SatelliteSharedKeyRepository(ctx),
+            SatelliteSharedKeyRepository(ctx, ReversingSealer()),
             SatellitePinRepository(ctx),
         )
     }
