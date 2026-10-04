@@ -90,6 +90,7 @@ class ConnectionCoordinator
             // carries the reasoning.
             if (connectionId.startsWith(MoonlightHost.ID_PREFIX)) moonlight.rememberInterest(connectionId)
             val priorConnId = bindingStore.connectionFor(slotId)
+            rememberBinding(slotId, priorConnId, connectionId, controllerType)
 
             // Android HID Device profile allows only one active host; release prior slot first.
             val isBt = store.rememberedBt().any { it.id == connectionId }
@@ -111,6 +112,9 @@ class ConnectionCoordinator
 
         fun unbind(slotId: String) {
             val connId = bindingStore.connectionFor(slotId) ?: return
+            // A departed pad has no descriptor here (the registry dropped it before the observer
+            // released the slot), so only the user's unbind reaches the memory.
+            if (connId.startsWith(MoonlightHost.ID_PREFIX)) descriptorOf(slotId)?.let(moonlight::forgetBinding)
             bindingStore.unbind(slotId)
             typeStore.clear(connId, slotId)
         }
@@ -175,6 +179,30 @@ class ConnectionCoordinator
         ) {
             if (typeStore.typeFor(connectionId, slotId) == type) return
             typeStore.setType(connectionId, slotId, type)
+            rememberBinding(slotId, connectionId, connectionId, type)
+        }
+
+        // Written before the binding store emits and dropped before an unbind emits: a restore
+        // derived from the emission (MoonlightBindingRestoreController) must not race the change.
+        private fun rememberBinding(
+            slotId: String,
+            priorConnId: String?,
+            connectionId: String,
+            controllerType: Int,
+        ) {
+            val descriptor = descriptorOf(slotId) ?: return
+            when {
+                connectionId.startsWith(MoonlightHost.ID_PREFIX) ->
+                    moonlight.rememberBinding(descriptor, connectionId, controllerType)
+                priorConnId?.startsWith(MoonlightHost.ID_PREFIX) == true -> moonlight.forgetBinding(descriptor)
+            }
+        }
+
+        private fun descriptorOf(slotId: String): String? {
+            val deviceId = slotId.toIntOrNull() ?: return null
+            return gamepadRegistry.devices.value[deviceId]
+                ?.descriptor
+                ?.takeIf { it.isNotEmpty() }
         }
 
         fun boundConnection(slotId: String): ConnectionSummary? =

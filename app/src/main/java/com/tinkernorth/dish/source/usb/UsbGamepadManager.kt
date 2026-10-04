@@ -439,6 +439,7 @@ class UsbGamepadManager
             registry.addUsbSynthetic(
                 deviceId = synthetic,
                 name = friendlyName(device),
+                descriptor = routedFrameworkId?.let { registry.devices.value[it]?.descriptor }.orEmpty(),
                 hasGyro = native.modelHasImu(device.vendorId, device.productId),
                 pollRateHz = computeUsbPollRateHz(epIn.interval, epIn.maxPacketSize),
                 vendorId = device.vendorId,

@@ -68,6 +68,7 @@ internal fun moonlightErrorText(
     when (error) {
         is MoonlightError.NoHostAnswered -> strings.format(R.string.ml_error_no_host_answered, error.address)
         is MoonlightError.NoAppsAvailable -> strings.format(R.string.ml_error_no_apps, error.hostName)
+        is MoonlightError.AppRemoved -> strings.format(R.string.ml_error_app_removed, error.appName, error.hostName)
     }
 
 internal fun appCloseRequestedText(

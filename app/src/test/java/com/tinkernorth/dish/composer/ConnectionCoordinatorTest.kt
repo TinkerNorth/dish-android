@@ -1217,4 +1217,114 @@ class ConnectionCoordinatorTest {
         assertEquals(mapOf("slot-A" to "s:1"), hub.bindings.value)
         assertEquals(CONTROLLER_TYPE_PLAYSTATION, hub.satTypes.value["s:1" to "slot-A"])
     }
+
+    private fun padPresent(
+        id: Int,
+        descriptor: String,
+    ) {
+        registryDevicesFlow.value =
+            registryDevicesFlow.value +
+            (
+                id to
+                    com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+                        .Device(id = id, name = "Pad", descriptor = descriptor)
+            )
+    }
+
+    @Test
+    fun `binding a pad to a Moonlight host remembers the pad by its descriptor with its type`() {
+        padPresent(42, "usb:054c:0ce6:1")
+        val hub = buildHub()
+
+        assertTrue(hub.bind("42", "moonlight:10.0.0.5", CONTROLLER_TYPE_PLAYSTATION))
+
+        verify(exactly = 1) { moonlight.rememberBinding("usb:054c:0ce6:1", "moonlight:10.0.0.5", CONTROLLER_TYPE_PLAYSTATION) }
+    }
+
+    @Test
+    fun `a type picked for a bound Moonlight pad travels into what is remembered`() {
+        padPresent(42, "usb:054c:0ce6:1")
+        val hub = buildHub()
+        hub.bind("42", "moonlight:10.0.0.5", CONTROLLER_TYPE_XBOX)
+
+        hub.bind("42", "moonlight:10.0.0.5", CONTROLLER_TYPE_DUALSENSE)
+        verify(exactly = 1) { moonlight.rememberBinding("usb:054c:0ce6:1", "moonlight:10.0.0.5", CONTROLLER_TYPE_DUALSENSE) }
+
+        hub.setSatelliteControllerType("moonlight:10.0.0.5", "42", CONTROLLER_TYPE_PLAYSTATION)
+        verify(exactly = 1) { moonlight.rememberBinding("usb:054c:0ce6:1", "moonlight:10.0.0.5", CONTROLLER_TYPE_PLAYSTATION) }
+    }
+
+    @Test
+    fun `unbinding a pad that is here forgets its Moonlight host`() {
+        padPresent(42, "usb:054c:0ce6:1")
+        val hub = buildHub()
+        hub.bind("42", "moonlight:10.0.0.5", CONTROLLER_TYPE_XBOX)
+
+        hub.unbind("42")
+
+        verify(exactly = 1) { moonlight.forgetBinding("usb:054c:0ce6:1") }
+    }
+
+    // The binding observer releases a departed pad's slot: that is the pad leaving, not the user.
+    @Test
+    fun `releasing the slot of a pad that left keeps it remembered for its return`() {
+        padPresent(42, "usb:054c:0ce6:1")
+        val hub = buildHub()
+        hub.bind("42", "moonlight:10.0.0.5", CONTROLLER_TYPE_XBOX)
+        registryDevicesFlow.value = emptyMap()
+
+        hub.unbind("42")
+
+        assertNull(hub.bindings.value["42"])
+        verify(exactly = 0) { moonlight.forgetBinding(any()) }
+    }
+
+    @Test
+    fun `moving a pad from its Moonlight host to a satellite forgets the host`() {
+        padPresent(42, "usb:054c:0ce6:1")
+        val hub = buildHub()
+        hub.bind("42", "moonlight:10.0.0.5", CONTROLLER_TYPE_XBOX)
+
+        hub.bind("42", "sat:1", CONTROLLER_TYPE_XBOX)
+
+        verify(exactly = 1) { moonlight.forgetBinding("usb:054c:0ce6:1") }
+        assertEquals("sat:1", hub.bindings.value["42"])
+    }
+
+    @Test
+    fun `binding a pad to a satellite remembers nothing`() {
+        padPresent(42, "usb:054c:0ce6:1")
+        val hub = buildHub()
+
+        hub.bind("42", "sat:1", CONTROLLER_TYPE_XBOX)
+
+        verify(exactly = 0) { moonlight.rememberBinding(any(), any(), any()) }
+    }
+
+    @Test
+    fun `a slot with no pad identity is not remembered`() {
+        padPresent(42, "")
+        val hub = buildHub()
+
+        hub.bind("virtual", "moonlight:10.0.0.5", CONTROLLER_TYPE_XBOX)
+        hub.bind("42", "moonlight:10.0.0.5", CONTROLLER_TYPE_XBOX)
+
+        verify(exactly = 0) { moonlight.rememberBinding(any(), any(), any()) }
+    }
+
+    @Test
+    fun `forgetting a Moonlight host unbinds its pads and leaves another host's alone`() {
+        padPresent(42, "usb:054c:0ce6:1")
+        padPresent(43, "usb:045e:02ea:2")
+        val hub = buildHub()
+        hub.bind("42", "moonlight:10.0.0.5", CONTROLLER_TYPE_XBOX)
+        hub.bind("43", "moonlight:10.0.0.9", CONTROLLER_TYPE_XBOX)
+
+        hub.forgetConnection("moonlight:10.0.0.5")
+
+        verify(exactly = 1) { moonlight.forgetBinding("usb:054c:0ce6:1") }
+        verify(exactly = 0) { moonlight.forgetBinding("usb:045e:02ea:2") }
+        verify { moonlight.forget("moonlight:10.0.0.5") }
+        assertEquals("moonlight:10.0.0.9", hub.bindings.value["43"])
+    }
 }

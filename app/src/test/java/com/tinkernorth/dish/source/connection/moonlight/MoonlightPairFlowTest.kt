@@ -190,6 +190,7 @@ class MoonlightPairFlowTest {
                 gateway = gateway,
                 identity = CLIENT,
                 store = store,
+                bindings = mockk(relaxed = true),
             )
     }
 
@@ -605,6 +606,7 @@ class MoonlightPairFlowTest {
             gateway = gateway,
             identity = CLIENT,
             store = store,
+            bindings = mockk(relaxed = true),
         )
 
     // Everything the manager says, recorded inside the emit that says it, with each PIN carried on

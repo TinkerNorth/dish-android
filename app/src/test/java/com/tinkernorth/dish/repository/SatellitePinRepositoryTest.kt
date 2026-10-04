@@ -62,7 +62,7 @@ class SatellitePinRepositoryTest {
         val (ctx, store) = mapBackedPrefs()
         SatellitePinRepository(ctx).pin("satellite:mid:a", "CAFE")
 
-        val keys = SatelliteSharedKeyRepository(mapBackedPrefs(store).first)
+        val keys = SatelliteSharedKeyRepository(mapBackedPrefs(store).first, ReversingSealer())
         assertNull("cert pin must not surface as a shared key", keys.get("satellite:mid:a"))
         assertNotNull(SatellitePinRepository(mapBackedPrefs(store).first).pinnedFingerprint("satellite:mid:a"))
     }

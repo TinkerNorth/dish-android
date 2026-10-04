@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 // Copyright (C) 2026 Dish contributors.
 
-package com.tinkernorth.dish.source.sensor
+package com.tinkernorth.dish.integration
 
 import android.os.Handler
 import android.os.Process
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.tinkernorth.dish.source.sensor.HandlerThreadSensorDispatch
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith

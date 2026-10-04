@@ -7,6 +7,8 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import com.tinkernorth.dish.core.input.GamepadProfile
+import com.tinkernorth.dish.repository.KeystoreSecretSealer
+import com.tinkernorth.dish.repository.SecretSealer
 import com.tinkernorth.dish.source.bluetooth.AndroidHidProxyClient
 import com.tinkernorth.dish.source.bluetooth.BluetoothDeviceScanner
 import com.tinkernorth.dish.source.bluetooth.BluetoothHidSession
@@ -34,6 +36,10 @@ annotation class IoDispatcher
 object AppModule {
     // SupervisorJob + handler: one composer's combine throwing must not silently
     // kill its collection or cancel siblings.
+    @Provides
+    @Singleton
+    fun provideSecretSealer(): SecretSealer = KeystoreSecretSealer()
+
     @Provides
     @Singleton
     fun provideApplicationScope(): CoroutineScope {
