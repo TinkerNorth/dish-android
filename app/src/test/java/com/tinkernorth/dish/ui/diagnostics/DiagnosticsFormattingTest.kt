@@ -10,6 +10,9 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.hotpath.input.Transport
+import com.tinkernorth.dish.source.audio.PadAudioFacts
+import com.tinkernorth.dish.source.audio.PadAudioReason
+import com.tinkernorth.dish.source.audio.PadAudioRoute
 import io.mockk.MockKAnswerScope
 import io.mockk.every
 import io.mockk.mockk
@@ -23,6 +26,9 @@ class DiagnosticsFormattingTest {
     private val resources =
         mockk<Resources> {
             every { getQuantityString(R.plurals.diagnostics_last_pings, any<Int>(), any<Int>()) } answers { "${secondArg<Int>()} pings" }
+            every { getQuantityString(R.plurals.diagnostics_pad_audio_channels, any<Int>(), any<Int>()) } answers {
+                "${secondArg<Int>()} ch"
+            }
         }
 
     // getString's format arguments arrive as one array, so the answers index into it.
@@ -34,6 +40,7 @@ class DiagnosticsFormattingTest {
             every { getString(R.string.diagnostics_joined, *anyVararg()) } answers { "${formatArg(0)} · ${formatArg(1)}" }
             every { getString(R.string.diagnostics_hz, *anyVararg()) } answers { "${formatArg(0)} Hz" }
             every { getString(R.string.diagnostics_ms_whole, *anyVararg()) } answers { "${formatArg(0)} ms" }
+            every { getString(R.string.diagnostics_pad_audio_no_endpoint, *anyVararg()) } answers { "none named; seen ${formatArg(0)}" }
             every { getString(R.string.diagnostics_ms_approx_window, *anyVararg()) } answers {
                 "~${formatArg(0)} ms over ${formatArg(1)}"
             }
@@ -137,5 +144,35 @@ class DiagnosticsFormattingTest {
     fun `a latency row with nothing measured reads unknown`() {
         val row = HostLatencyRow(label = "PC", kind = ConnectionKind.SATELLITE, oneWayMs = null, samples = 0, controlRttMs = null)
         assertEquals("PC · s${R.string.diagnostics_unknown}", context.hostLatencyValue(row))
+    }
+
+    @Test
+    fun `a routed pad lists what it got, an unrouted one says why`() {
+        val routed =
+            PadAudioRoute(
+                microphone = true,
+                speaker = true,
+                captureDeviceId = 12,
+                playbackDeviceId = 11,
+                haptics = true,
+                playbackChannels = 4,
+            )
+        val parts = listOf(R.string.setup_cap_mic, R.string.setup_cap_speaker, R.string.setup_cap_haptics)
+        assertEquals(
+            parts.joinToString(" · ") { "s$it" } + " · 4 ch",
+            context.padAudioValue(PadAudioFacts(PadAudioReason.ROUTED, routed, emptyList())),
+        )
+        assertEquals(
+            "none named; seen USB Audio Dongle, Headset",
+            context.padAudioValue(PadAudioFacts(PadAudioReason.NO_ENDPOINT, PadAudioRoute.NONE, listOf("USB Audio Dongle", "Headset"))),
+        )
+        assertEquals(
+            "none named; seen s${R.string.diagnostics_none}",
+            context.padAudioValue(PadAudioFacts(PadAudioReason.NO_ENDPOINT, PadAudioRoute.NONE, emptyList())),
+        )
+        assertEquals(
+            "s${R.string.diagnostics_pad_audio_name_shared}",
+            context.padAudioValue(PadAudioFacts(PadAudioReason.PAD_NAME_SHARED, PadAudioRoute.NONE, emptyList())),
+        )
     }
 }

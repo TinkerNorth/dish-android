@@ -671,6 +671,16 @@
     </plurals>
     <string name="diagnostics_endpoint">Punto final</string>
     <string name="diagnostics_endpoint_value">%1$d Hz · %2$s · intervalo %3$d</string>
+    <string name="diagnostics_pad_audio">Audio del mando</string>
+    <string name="diagnostics_pad_audio_no_function">este mando no tiene función de audio USB</string>
+    <string name="diagnostics_pad_audio_name_shared">dos mandos comparten el mismo nombre, así que ninguno se enruta</string>
+    <string name="diagnostics_pad_audio_no_endpoint">Android no lista ningún dispositivo de audio con su nombre (dispositivos de audio USB vistos: %1$s)</string>
+    <string name="diagnostics_pad_audio_endpoint_shared">Android lista más de un dispositivo de audio con su nombre, así que no se enruta</string>
+    <plurals name="diagnostics_pad_audio_channels">
+        <item quantity="one">%1$d canal</item>
+        <item quantity="many">%1$d canales</item>
+        <item quantity="other">%1$d canales</item>
+    </plurals>
     <plurals name="diagnostics_bytes">
         <item quantity="one">%1$d byte</item>
         <item quantity="many">%1$d bytes</item>

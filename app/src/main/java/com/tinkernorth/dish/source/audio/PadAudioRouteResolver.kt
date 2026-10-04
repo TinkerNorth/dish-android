@@ -39,6 +39,7 @@ class PadAudioRouteResolver
     constructor(
         @ApplicationContext private val context: Context,
         private val routes: PadAudioRoutes,
+        private val facts: PadAudioFactsStore,
         private val native: PhysicalInputNative,
     ) {
         private val audioManager: AudioManager? =
@@ -74,7 +75,9 @@ class PadAudioRouteResolver
 
         /** Re-read both lists and republish. Cheap, and the only writer of the table. */
         fun resolve() {
-            routes.publishRoutes(resolvePadAudioRoutes(attachedPads(), usbEndpoints()))
+            val explained = explainPadAudio(attachedPads(), usbEndpoints())
+            routes.publishRoutes(routesOf(explained))
+            facts.publish(explained)
         }
 
         private fun attachedPads(): List<UsbAudioPad> {

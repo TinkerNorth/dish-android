@@ -671,6 +671,16 @@
     </plurals>
     <string name="diagnostics_endpoint">Endpoint</string>
     <string name="diagnostics_endpoint_value">%1$d Hz · %2$s · intervalo %3$d</string>
+    <string name="diagnostics_pad_audio">Áudio do controle</string>
+    <string name="diagnostics_pad_audio_no_function">este controle não tem função de áudio USB</string>
+    <string name="diagnostics_pad_audio_name_shared">dois controles têm o mesmo nome, então nenhum é roteado</string>
+    <string name="diagnostics_pad_audio_no_endpoint">O Android não lista nenhum dispositivo de áudio com o nome dele (dispositivos de áudio USB vistos: %1$s)</string>
+    <string name="diagnostics_pad_audio_endpoint_shared">O Android lista mais de um dispositivo de áudio com o nome dele, então ele não é roteado</string>
+    <plurals name="diagnostics_pad_audio_channels">
+        <item quantity="one">%1$d canal</item>
+        <item quantity="many">%1$d canais</item>
+        <item quantity="other">%1$d canais</item>
+    </plurals>
     <plurals name="diagnostics_bytes">
         <item quantity="one">%1$d byte</item>
         <item quantity="many">%1$d bytes</item>

@@ -670,6 +670,16 @@
     </plurals>
     <string name="diagnostics_endpoint">Point de terminaison</string>
     <string name="diagnostics_endpoint_value">%1$d Hz · %2$s · intervalle %3$d</string>
+    <string name="diagnostics_pad_audio">Audio de la manette</string>
+    <string name="diagnostics_pad_audio_no_function">aucune fonction audio USB sur cette manette</string>
+    <string name="diagnostics_pad_audio_name_shared">deux manettes portent le même nom, donc aucune n\'est routée</string>
+    <string name="diagnostics_pad_audio_no_endpoint">Android ne liste aucun périphérique audio à son nom (périphériques audio USB vus : %1$s)</string>
+    <string name="diagnostics_pad_audio_endpoint_shared">Android liste plus d\'un périphérique audio à son nom, donc elle n\'est pas routée</string>
+    <plurals name="diagnostics_pad_audio_channels">
+        <item quantity="one">%1$d canal</item>
+        <item quantity="many">%1$d canaux</item>
+        <item quantity="other">%1$d canaux</item>
+    </plurals>
     <plurals name="diagnostics_bytes">
         <item quantity="one">%1$d octet</item>
         <item quantity="many">%1$d octets</item>

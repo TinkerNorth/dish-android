@@ -72,6 +72,7 @@ internal fun Context.padDeviceLines(
         lines += diagKv(R.string.diagnostics_init, direct.init.ifBlank { getString(R.string.diagnostics_none) })
     }
     facts.endpoint?.let { lines += diagKv(R.string.diagnostics_endpoint, endpointValue(it)) }
+    facts.audio?.let { lines += diagKv(R.string.diagnostics_pad_audio, padAudioValue(it)) }
     if (diag.isUsbSynthetic) {
         val status = facts.direct?.lastUrbStatus ?: 0
         val count = facts.urbErrors.toString()

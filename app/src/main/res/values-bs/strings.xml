@@ -670,6 +670,16 @@
     </plurals>
     <string name="diagnostics_endpoint">Krajnja tačka</string>
     <string name="diagnostics_endpoint_value">%1$d Hz · %2$s · interval %3$d</string>
+    <string name="diagnostics_pad_audio">Zvuk kontrolera</string>
+    <string name="diagnostics_pad_audio_no_function">ovaj kontroler nema USB audio funkciju</string>
+    <string name="diagnostics_pad_audio_name_shared">dva kontrolera dijele isto ime, pa nijedan nije usmjeren</string>
+    <string name="diagnostics_pad_audio_no_endpoint">Android ne navodi nijedan audio uređaj s njegovim imenom (viđeni USB audio uređaji: %1$s)</string>
+    <string name="diagnostics_pad_audio_endpoint_shared">Android navodi više od jednog audio uređaja pod njegovim imenom, pa nije usmjeren</string>
+    <plurals name="diagnostics_pad_audio_channels">
+        <item quantity="one">%1$d kanal</item>
+        <item quantity="few">%1$d kanala</item>
+        <item quantity="other">%1$d kanala</item>
+    </plurals>
     <plurals name="diagnostics_bytes">
         <item quantity="one">%1$d bajt</item>
         <item quantity="few">%1$d bajta</item>

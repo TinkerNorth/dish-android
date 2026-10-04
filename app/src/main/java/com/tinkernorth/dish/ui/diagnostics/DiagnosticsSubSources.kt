@@ -8,6 +8,8 @@ import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
+import com.tinkernorth.dish.source.audio.PadAudioFacts
+import com.tinkernorth.dish.source.audio.PadAudioFactsStore
 import com.tinkernorth.dish.source.audio.SpeakerEngine
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.bluetooth.BluetoothLinkType
@@ -74,6 +76,7 @@ class PadSources
         private val timing: FrameworkInputTimingStore,
         private val bluetoothLink: BluetoothPadLinkReader,
         private val stickHistory: StickTestHistoryStore,
+        private val audioFacts: PadAudioFactsStore,
         private val json: Json,
     ) {
         private val linkTypes = ConcurrentHashMap<Int, BluetoothLinkType>()
@@ -92,11 +95,14 @@ class PadSources
         )
 
         internal fun flow(ticks: Flow<Unit>): Flow<PadWorld> =
-            combine(ticks, registry.devices, stickHistory.state) { _, devices, history -> padWorldFor(devices, history) }
+            combine(ticks, registry.devices, stickHistory.state, audioFacts.state) { _, devices, history, audio ->
+                padWorldFor(devices, history, audio)
+            }
 
         private fun padWorldFor(
             devices: Map<Int, PhysicalGamepadRegistry.Device>,
             history: Map<String, StickTestRecord>,
+            audio: Map<Int, PadAudioFacts>,
         ): PadWorld {
             val direct = directPadFacts(devices.filterValues { it.isUsbSynthetic }.keys)
             val framework = frameworkPadFacts(devices.filterValues { !it.isUsbSynthetic })
@@ -109,6 +115,7 @@ class PadSources
                 frameworkTiming = framework.timing,
                 btLinkTypes = framework.linkTypes,
                 stickHistory = history,
+                audio = audio,
             )
         }
 
