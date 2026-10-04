@@ -146,6 +146,12 @@ sealed interface MoonlightError {
     ) : MoonlightError
 }
 
+
+    /** The picked app is no longer on the host's list, so nothing was launched. */
+    data class AppRemoved(
+        val hostName: String,
+        val appName: String,
+    ) : MoonlightError
 /** What a host's session must do next, pulled out of the converge for testability. */
 internal enum class MoonlightConverge { OPEN, ANNOUNCE, WAIT, RELEASE, CANCEL }
 
@@ -379,21 +385,6 @@ class MoonlightConnectionManager
             if (isTheFirstAnswer) store.put(record.copy(uniqueId = info.uniqueId))
         }
 
-        // The host's app list is its own word on what it can start. A pick it no longer lists would be
-        // refused on every attempt, behind a refusal that hides the picker it could be changed in, so it
-        // is forgotten, and the host's first app starts, as the card promises for a host with no pick.
-        private fun forgetAPickTheHostDropped(
-            hostId: String,
-            listed: List<MoonlightApp>,
-        ) {
-            val record = store.get(hostId) ?: return
-            val pick = record.lastAppId
-            val theHostDroppedIt = pick.isNotEmpty() && listed.none { it.id == pick }
-            if (!theHostDroppedIt) return
-            Log.i(TAG, "$hostId no longer lists app $pick; forgetting it as the pick")
-            store.put(record.copy(lastAppId = "", lastAppName = ""))
-        }
-
         // Plain HTTP answers any caller, paired or not, and names the machine behind the address.
         private fun plainServerInfo(host: MoonlightHost): ServerInfo? =
             serverInfoIn(gateway.getHttp(serverInfoHttp(host.address, host.httpPort, deviceId)))
@@ -468,7 +459,6 @@ class MoonlightConnectionManager
             }
             val apps = runCatching { fetchAppList(host) }.getOrNull()
             if (forgottenSince(host.id, epoch)) return FORGOTTEN
-            apps?.let { forgetAPickTheHostDropped(host.id, it) }
             markVerified(host.id)
             return MoonlightProbe(
                 trust = MoonlightTrustState.PAIRED,
@@ -634,7 +624,20 @@ class MoonlightConnectionManager
                 return
             }
             val remembered = store.get(host.id)
-            val appId = remembered?.lastAppId?.takeIf { it.isNotEmpty() } ?: probe.apps.firstOrNull()?.id
+            val pick = remembered?.lastAppId?.takeIf { it.isNotEmpty() }
+            // The host's list is its own word on what it can start. A pick it no longer lists is not
+            // launched, and not replaced either: the pick stays, and the card shows the picker with
+            // the reason, where a launch of the host's first app would have started something the
+            // user never chose.
+            val pickRemoved = pick != null && probe.appsFetched && probe.apps.none { it.id == pick }
+            if (pickRemoved) {
+                Log.w(TAG, "not launching $pick on ${host.address}: the host no longer lists it")
+                conn.markDisconnected()
+                val appName = remembered.lastAppName.ifEmpty { pick }
+                _events.emit(MoonlightConnectionEvent.Error(MoonlightError.AppRemoved(host.name, appName)))
+                return
+            }
+            val appId = pick ?: probe.apps.firstOrNull()?.id
             if (appId == null) {
                 conn.markDisconnected()
                 _events.emit(MoonlightConnectionEvent.Error(MoonlightError.NoAppsAvailable(host.name)))

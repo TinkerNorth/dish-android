@@ -29,6 +29,7 @@ fun MoonlightSessionUi.title(
     when {
         titleRes == 0 -> null
         this is MoonlightSessionUi.Joining -> strings.format(titleRes, appName?.takeIf { it.isNotBlank() } ?: hostLabel)
+        this is MoonlightSessionUi.NewSession && removedPick != null -> strings.format(titleRes, removedPick)
         this is MoonlightSessionUi.Refused && hostMessage.isNotBlank() -> strings.format(titleRes, hostLabel, hostMessage)
         else -> strings.format(titleRes, hostLabel)
     }

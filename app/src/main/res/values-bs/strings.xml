@@ -180,6 +180,8 @@
     <string name="ml_apps_empty_body">%1$s još nema podešenih aplikacija. Dodajte jednu na hostu ili dodajte kontroler pa će Dish pokrenuti ono što host prvo navede.</string>
     <string name="ml_apps_failed_title">Nije moguće pročitati listu aplikacija sa %1$s</string>
     <string name="ml_apps_failed_body">Dish će pokrenuti ono što host prvo navede. Pokušajte ponovo kada %1$s bude dostupan.</string>
+    <string name="ml_apps_removed_title">%1$s više nije na ovom hostu</string>
+    <string name="ml_apps_removed_body">Aplikacija koju ste odabrali uklonjena je s hosta %1$s. Odaberite drugu za pokretanje.</string>
     <string name="ml_full_title">%1$s je pun</string>
     <string name="ml_full_body">Sesija nosi najviše četiri kontrolera, a %1$s ih već ima četiri. Odvežite jedan da napravite mjesta.</string>
     <string name="ml_busy_other_title">Drugi uređaj koristi %1$s</string>
@@ -342,6 +344,7 @@
     <string name="conn_error_title_apply_failed">Kontroler nije postavljen na %1$s</string>
     <string name="ml_error_no_host_answered">Nijedan Moonlight host nije odgovorio na %1$s.</string>
     <string name="ml_error_no_apps">Nema dostupnih aplikacija na %1$s.</string>
+    <string name="ml_error_app_removed">%1$s više nije na %2$s. Odaberite drugu aplikaciju.</string>
     <string name="ml_notice_app_close_requested">Poslan je zahtjev da %1$s zatvori pokrenutu aplikaciju.</string>
 
     <!-- Dinamičko prazno stanje liste satelita. -->

@@ -532,18 +532,18 @@ class MoonlightTrustFlowTest {
             assertEquals("Desktop", manager.rememberedAppName(host.id))
         }
 
-    // The host's app list is its own word on what it can start. A pick it no longer lists was
-    // refused on every attempt, and the refusal hid the picker that could have changed it; the
-    // card's promise for a host with no pick is its first app, and that is what such a pick is.
+    // The host's app list is its own word on what it can start, and a pick it no longer lists is
+    // the card's to name: the probe leaves it, and the launch refuses it with the picker offered.
+    // Forgetting it here would have started the host's first app, which the user never chose.
     @Test
-    fun `an app the host no longer lists is forgotten as the pick when the host is asked`() =
+    fun `an app the host no longer lists stays the pick when the host is asked`() =
         runTest(dispatcher) {
             store.put(RememberedMoonlight(id = host.id, name = "PC", address = host.address, lastAppId = "9", lastAppName = "Removed"))
 
             manager.probe(host)
 
-            assertEquals("", rows.getValue(host.id).lastAppId)
-            assertEquals("", rows.getValue(host.id).lastAppName)
+            assertEquals("9", rows.getValue(host.id).lastAppId)
+            assertEquals("Removed", rows.getValue(host.id).lastAppName)
         }
 
     @Test
