@@ -204,4 +204,43 @@ class PadAudioMatcherTest {
         assertTrue(ds4.getValue(ds4v2).speaker)
         assertFalse(ds4.getValue(ds4v2).haptics)
     }
+
+    @Test
+    fun `a pad without a USB audio interface is explained as having none`() {
+        val facts = explainPadAudio(listOf(pad(audio = false)), listOf(sink(11)))[ds5]!!
+        assertEquals(PadAudioReason.NO_AUDIO_FUNCTION, facts.reason)
+        assertEquals(PadAudioRoute.NONE, facts.route)
+    }
+
+    @Test
+    fun `two pads sharing one name are explained as unroutable by name`() {
+        val facts = explainPadAudio(listOf(pad(), pad(productId = DS4V2_PID)), listOf(sink(11)))
+        assertEquals(PadAudioReason.PAD_NAME_SHARED, facts[ds5]!!.reason)
+        assertEquals(PadAudioReason.PAD_NAME_SHARED, facts[ds4v2]!!.reason)
+    }
+
+    @Test
+    fun `a pad with no endpoint of its name lists the names the platform did show`() {
+        val facts = explainPadAudio(listOf(pad()), listOf(sink(11, name = "USB Audio Dongle")))[ds5]!!
+        assertEquals(PadAudioReason.NO_ENDPOINT, facts.reason)
+        assertEquals(listOf("USB Audio Dongle"), facts.endpointNames)
+    }
+
+    @Test
+    fun `two endpoints under its name in one direction and none in the other read as shared`() {
+        val facts = explainPadAudio(listOf(pad()), listOf(sink(11), sink(13)))[ds5]!!
+        assertEquals(PadAudioReason.ENDPOINT_NAME_SHARED, facts.reason)
+    }
+
+    @Test
+    fun `a routed pad explains the route it got, and the routes are that subset`() {
+        val pads = listOf(pad(), pad(productId = DS4V2_PID, productName = "Other"))
+        val endpoints = listOf(sink(11, channelCounts = listOf(2, 4)), source(12))
+        val facts = explainPadAudio(pads, endpoints)
+        assertEquals(PadAudioReason.ROUTED, facts[ds5]!!.reason)
+        assertTrue(facts[ds5]!!.route.haptics)
+        assertEquals(PadAudioReason.NO_ENDPOINT, facts[ds4v2]!!.reason)
+        assertEquals(mapOf(ds5 to facts[ds5]!!.route), routesOf(facts))
+        assertEquals(routesOf(facts), resolvePadAudioRoutes(pads, endpoints))
+    }
 }

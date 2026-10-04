@@ -11,6 +11,7 @@ import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.audio.MicCapturePlan
+import com.tinkernorth.dish.source.audio.PadAudioFacts
 import com.tinkernorth.dish.source.audio.SpeakerTarget
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.bluetooth.BluetoothLinkType
@@ -127,6 +128,7 @@ data class PadFacts(
     val directTiming: DeviceLatency?,
     val frameworkTiming: FrameworkTimingSummary?,
     val stickHistory: StickTestRecord?,
+    val audio: PadAudioFacts? = null,
 )
 
 data class BoundHostDiag(
@@ -236,6 +238,7 @@ internal data class PadWorld(
     val frameworkTiming: Map<Int, FrameworkTimingSummary> = emptyMap(),
     val btLinkTypes: Map<Int, BluetoothLinkType> = emptyMap(),
     val stickHistory: Map<String, StickTestRecord> = emptyMap(),
+    val audio: Map<Int, PadAudioFacts> = emptyMap(),
 )
 
 internal data class LinkWorld(

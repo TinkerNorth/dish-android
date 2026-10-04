@@ -654,6 +654,15 @@
     </plurals>
     <string name="diagnostics_endpoint">Endpoint</string>
     <string name="diagnostics_endpoint_value">%1$d Hz · %2$s · interval %3$d</string>
+    <string name="diagnostics_pad_audio">Controller audio</string>
+    <string name="diagnostics_pad_audio_no_function">no USB audio function on this controller</string>
+    <string name="diagnostics_pad_audio_name_shared">two controllers share one name, so neither is routed</string>
+    <string name="diagnostics_pad_audio_no_endpoint">Android lists no audio device named after it (USB audio devices seen: %1$s)</string>
+    <string name="diagnostics_pad_audio_endpoint_shared">Android lists more than one audio device under its name, so it is not routed</string>
+    <plurals name="diagnostics_pad_audio_channels">
+        <item quantity="one">%1$d channel</item>
+        <item quantity="other">%1$d channels</item>
+    </plurals>
     <plurals name="diagnostics_bytes">
         <item quantity="one">%1$d byte</item>
         <item quantity="other">%1$d bytes</item>

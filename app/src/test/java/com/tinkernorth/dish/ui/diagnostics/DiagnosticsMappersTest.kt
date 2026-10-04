@@ -5,11 +5,15 @@ package com.tinkernorth.dish.ui.diagnostics
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
+import com.tinkernorth.dish.source.audio.PadAudioFacts
+import com.tinkernorth.dish.source.audio.PadAudioReason
+import com.tinkernorth.dish.source.audio.PadAudioRoute
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.source.sensor.BatteryValidator
@@ -270,5 +274,14 @@ class DiagnosticsMappersTest {
         assertTrue(streamingOn(activeBitmap = 0b101, controllerIndex = 2))
         assertFalse(streamingOn(activeBitmap = 0b101, controllerIndex = 1))
         assertFalse(streamingOn(activeBitmap = -1, controllerIndex = 0))
+    }
+
+    @Test
+    fun `a USB pad carries the audio facts under its vendor and product, a Bluetooth one none`() {
+        val facts = PadAudioFacts(PadAudioReason.NO_ENDPOINT, PadAudioRoute.NONE, listOf("USB Audio Dongle"))
+        val w = world().copy(pads = PadWorld(audio = mapOf(vidPidKey(0x054C, 0x0CE6) to facts)))
+        assertEquals(facts, padFacts(device(1, "DualSense"), w).audio)
+        assertNull(padFacts(device(2, "DualSense", transport = Transport.Bluetooth), w).audio)
+        assertNull(padFacts(device(3, "Pro Controller", vid = NINTENDO_VID, pid = 0x2009), w).audio)
     }
 }

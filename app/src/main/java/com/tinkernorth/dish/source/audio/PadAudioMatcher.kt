@@ -63,42 +63,77 @@ const val HAPTIC_ENDPOINT_CHANNELS = 4
 fun resolvePadAudioRoutes(
     pads: List<UsbAudioPad>,
     endpoints: List<UsbAudioEndpoint>,
-): Map<Int, PadAudioRoute> {
+): Map<Int, PadAudioRoute> = routesOf(explainPadAudio(pads, endpoints))
+
+/** Why a pad has the route it has. [ROUTED] is the only reason that carries a route. */
+enum class PadAudioReason { NO_AUDIO_FUNCTION, PAD_NAME_SHARED, NO_ENDPOINT, ENDPOINT_NAME_SHARED, ROUTED }
+
+data class PadAudioFacts(
+    val reason: PadAudioReason,
+    val route: PadAudioRoute,
+    // Every USB audio product name the platform listed, so a pad that matched nothing shows
+    // what it was compared against.
+    val endpointNames: List<String>,
+)
+
+fun routesOf(facts: Map<Int, PadAudioFacts>): Map<Int, PadAudioRoute> =
+    facts.filterValues { it.reason == PadAudioReason.ROUTED }.mapValues { it.value.route }
+
+fun explainPadAudio(
+    pads: List<UsbAudioPad>,
+    endpoints: List<UsbAudioEndpoint>,
+): Map<Int, PadAudioFacts> {
+    val named = endpoints.filter { !it.productName.isNullOrBlank() }.distinctBy { it.deviceId }
+    val sinksByName = named.filter { it.sink }.groupBy { it.productName!!.trim() }
+    val sourcesByName = named.filter { it.source }.groupBy { it.productName!!.trim() }
+    val seen = named.map { it.productName!!.trim() }.distinct()
     val padsByName =
         pads
             .filter { it.hasAudioFunction && !it.productName.isNullOrBlank() }
             .groupBy { it.productName!!.trim() }
-    val sinks = uniqueByName(endpoints.filter { it.sink })
-    val sources = uniqueByName(endpoints.filter { it.source })
-
-    val out = HashMap<Int, PadAudioRoute>()
-    for ((name, candidates) in padsByName) {
-        val pad = candidates.singleOrNull() ?: continue
-        val sink = sinks[name]
-        val source = sources[name]
-        if (sink == null && source == null) continue
-        // The widest count the platform offers, so a pad that lists both stereo
-        // and quad opens at quad and keeps its lane pairs apart.
-        val playbackChannels = sink?.channelCounts?.maxOrNull() ?: 0
+    val out = HashMap<Int, PadAudioFacts>()
+    for (pad in pads) {
+        val name = pad.productName?.trim()
+        val reason =
+            when {
+                !pad.hasAudioFunction || name.isNullOrBlank() -> PadAudioReason.NO_AUDIO_FUNCTION
+                padsByName.getValue(name).size > 1 -> PadAudioReason.PAD_NAME_SHARED
+                else -> null
+            }
         out[vidPidKey(pad.vendorId, pad.productId)] =
-            PadAudioRoute(
-                microphone = source != null,
-                speaker = sink != null,
-                captureDeviceId = source?.deviceId ?: NO_AUDIO_DEVICE,
-                playbackDeviceId = sink?.deviceId ?: NO_AUDIO_DEVICE,
-                haptics = sink != null && pad.hasHapticLanes && playbackChannels >= HAPTIC_ENDPOINT_CHANNELS,
-                playbackChannels = playbackChannels,
-            )
+            if (reason != null) {
+                PadAudioFacts(reason, PadAudioRoute.NONE, seen)
+            } else {
+                matchedFacts(pad, sinksByName[name].orEmpty(), sourcesByName[name].orEmpty(), seen)
+            }
     }
     return out
 }
 
-// Named endpoints only, and only where the name picks out one of them. Duplicate ids are
-// folded first: some platforms hand the same endpoint back in more than one query.
-private fun uniqueByName(endpoints: List<UsbAudioEndpoint>): Map<String, UsbAudioEndpoint> =
-    endpoints
-        .filter { !it.productName.isNullOrBlank() }
-        .distinctBy { it.deviceId }
-        .groupBy { it.productName!!.trim() }
-        .mapNotNull { (name, matches) -> matches.singleOrNull()?.let { name to it } }
-        .toMap()
+private fun matchedFacts(
+    pad: UsbAudioPad,
+    sinks: List<UsbAudioEndpoint>,
+    sources: List<UsbAudioEndpoint>,
+    seen: List<String>,
+): PadAudioFacts {
+    val sink = sinks.singleOrNull()
+    val source = sources.singleOrNull()
+    if (sink == null && source == null) {
+        val shared = sinks.size > 1 || sources.size > 1
+        val reason = if (shared) PadAudioReason.ENDPOINT_NAME_SHARED else PadAudioReason.NO_ENDPOINT
+        return PadAudioFacts(reason, PadAudioRoute.NONE, seen)
+    }
+    // The widest count the platform offers, so a pad that lists both stereo and quad opens at
+    // quad and keeps its lane pairs apart.
+    val playbackChannels = sink?.channelCounts?.maxOrNull() ?: 0
+    val route =
+        PadAudioRoute(
+            microphone = source != null,
+            speaker = sink != null,
+            captureDeviceId = source?.deviceId ?: NO_AUDIO_DEVICE,
+            playbackDeviceId = sink?.deviceId ?: NO_AUDIO_DEVICE,
+            haptics = sink != null && pad.hasHapticLanes && playbackChannels >= HAPTIC_ENDPOINT_CHANNELS,
+            playbackChannels = playbackChannels,
+        )
+    return PadAudioFacts(PadAudioReason.ROUTED, route, seen)
+}
