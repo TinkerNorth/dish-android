@@ -540,6 +540,7 @@ class ConfigureBindingsViewModel
                 phase = phase,
                 failure = if (full) MoonlightFailure.HostFull else null,
                 selectedAppId = moonlight.rememberedAppId(hostId).takeIf { it.isNotEmpty() },
+                selectedAppName = moonlight.rememberedAppName(hostId).takeIf { it.isNotEmpty() },
             )
         }
 
@@ -559,7 +560,7 @@ class ConfigureBindingsViewModel
             val hostId = _ui.value.draft?.hostId ?: return
             moonlight.rememberApp(hostId, app.id, app.title)
             _ui.update { state ->
-                state.copy(moonlight = state.moonlight?.copy(selectedAppId = app.id))
+                state.copy(moonlight = state.moonlight?.copy(selectedAppId = app.id, selectedAppName = app.title))
             }
         }
 

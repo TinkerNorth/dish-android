@@ -15,7 +15,7 @@ class ConnectionStoreIdentityTest {
         val (ctx, _) = mapBackedPrefs()
         val satellites = RememberedSatelliteRepository(ctx, json)
         val bt = RememberedBtRepository(ctx, json)
-        val keys = SatelliteSharedKeyRepository(ctx)
+        val keys = SatelliteSharedKeyRepository(ctx, ReversingSealer())
         return ConnectionStore(satellites, bt, keys, SatellitePinRepository(ctx))
     }
 

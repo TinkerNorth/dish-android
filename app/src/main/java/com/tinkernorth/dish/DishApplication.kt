@@ -13,6 +13,7 @@ import com.tinkernorth.dish.composer.CrashReportingController
 import com.tinkernorth.dish.composer.DiagnosticsLogRecorder
 import com.tinkernorth.dish.composer.HostCapabilitiesProbe
 import com.tinkernorth.dish.composer.LinkHistoryRecorder
+import com.tinkernorth.dish.composer.MoonlightBindingRestoreController
 import com.tinkernorth.dish.composer.MoonlightSessionController
 import com.tinkernorth.dish.composer.SlotTopologyController
 import com.tinkernorth.dish.composer.StreamingServiceController
@@ -98,6 +99,8 @@ class DishApplication : Application() {
     @Inject lateinit var slotTopologyController: SlotTopologyController
 
     @Inject lateinit var moonlightSessionController: MoonlightSessionController
+
+    @Inject lateinit var moonlightBindingRestoreController: MoonlightBindingRestoreController
 
     @Inject lateinit var crashReportingController: CrashReportingController
 
@@ -212,6 +215,7 @@ class DishApplication : Application() {
         lifecycle.addObserver(connectionForegroundObserver)
         lifecycle.addObserver(slotTopologyController)
         lifecycle.addObserver(moonlightSessionController)
+        lifecycle.addObserver(moonlightBindingRestoreController)
     }
 
     // The installs here are process-scoped so bindings survive the MainActivity →

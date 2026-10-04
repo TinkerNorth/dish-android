@@ -37,6 +37,8 @@ import com.tinkernorth.dish.core.net.moonlight.serverInfoHttp
 import com.tinkernorth.dish.core.net.moonlight.serverInfoHttps
 import com.tinkernorth.dish.core.net.moonlight.trustedOf
 import com.tinkernorth.dish.di.IoDispatcher
+import com.tinkernorth.dish.repository.MoonlightBindingRepository
+import com.tinkernorth.dish.repository.RememberedBinding
 import com.tinkernorth.dish.repository.RememberedMoonlightRepository
 import com.tinkernorth.dish.source.store.MoonlightHostFactsStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -143,6 +145,12 @@ sealed interface MoonlightError {
 
     data class NoAppsAvailable(
         val hostName: String,
+    ) : MoonlightError
+
+    /** The picked app is no longer on the host's list, so nothing was launched. */
+    data class AppRemoved(
+        val hostName: String,
+        val appName: String,
     ) : MoonlightError
 }
 
@@ -254,6 +262,7 @@ class MoonlightConnectionManager
         private val gateway: MoonlightHttpGateway,
         private val identity: MoonlightIdentity,
         private val store: RememberedMoonlightRepository,
+        private val bindings: MoonlightBindingRepository,
         private val hostFacts: MoonlightHostFactsStore = MoonlightHostFactsStore(),
     ) {
         private val _connections = MutableStateFlow<Map<String, MoonlightConnection>>(emptyMap())
@@ -379,21 +388,6 @@ class MoonlightConnectionManager
             if (isTheFirstAnswer) store.put(record.copy(uniqueId = info.uniqueId))
         }
 
-        // The host's app list is its own word on what it can start. A pick it no longer lists would be
-        // refused on every attempt, behind a refusal that hides the picker it could be changed in, so it
-        // is forgotten, and the host's first app starts, as the card promises for a host with no pick.
-        private fun forgetAPickTheHostDropped(
-            hostId: String,
-            listed: List<MoonlightApp>,
-        ) {
-            val record = store.get(hostId) ?: return
-            val pick = record.lastAppId
-            val theHostDroppedIt = pick.isNotEmpty() && listed.none { it.id == pick }
-            if (!theHostDroppedIt) return
-            Log.i(TAG, "$hostId no longer lists app $pick; forgetting it as the pick")
-            store.put(record.copy(lastAppId = "", lastAppName = ""))
-        }
-
         // Plain HTTP answers any caller, paired or not, and names the machine behind the address.
         private fun plainServerInfo(host: MoonlightHost): ServerInfo? =
             serverInfoIn(gateway.getHttp(serverInfoHttp(host.address, host.httpPort, deviceId)))
@@ -468,7 +462,6 @@ class MoonlightConnectionManager
             }
             val apps = runCatching { fetchAppList(host) }.getOrNull()
             if (forgottenSince(host.id, epoch)) return FORGOTTEN
-            apps?.let { forgetAPickTheHostDropped(host.id, it) }
             markVerified(host.id)
             return MoonlightProbe(
                 trust = MoonlightTrustState.PAIRED,
@@ -634,7 +627,16 @@ class MoonlightConnectionManager
                 return
             }
             val remembered = store.get(host.id)
-            val appId = remembered?.lastAppId?.takeIf { it.isNotEmpty() } ?: probe.apps.firstOrNull()?.id
+            val pick = remembered?.lastAppId?.takeIf { it.isNotEmpty() }
+            val pickRemoved = pick != null && probe.appsFetched && probe.apps.none { it.id == pick }
+            if (pickRemoved) {
+                Log.w(TAG, "not launching $pick on ${host.address}: the host no longer lists it")
+                conn.markDisconnected()
+                val appName = remembered.lastAppName.ifEmpty { pick }
+                _events.emit(MoonlightConnectionEvent.Error(MoonlightError.AppRemoved(host.name, appName)))
+                return
+            }
+            val appId = pick ?: probe.apps.firstOrNull()?.id
             if (appId == null) {
                 conn.markDisconnected()
                 _events.emit(MoonlightConnectionEvent.Error(MoonlightError.NoAppsAvailable(host.name)))
@@ -1052,6 +1054,7 @@ class MoonlightConnectionManager
                     Log.i(TAG, "forgetting ${host?.address ?: id}")
                     releaseSessionFor(id, host)
                     store.remove(id)
+                    bindings.forHost(id).forEach { bindings.remove(it.descriptor) }
                     gateway.forgetPin(id)
                     hostFacts.forget(id)
                     _connections.updateAndGet { it - id }
@@ -1169,6 +1172,19 @@ class MoonlightConnectionManager
 
         /** The remembered last-launched app title for [hostId], or empty. */
         fun rememberedAppName(hostId: String): String = store.get(hostId)?.lastAppName.orEmpty()
+
+        /** The standing binding of the pad with [descriptor], kept across restarts; the binding hub writes and drops it. */
+        fun rememberBinding(
+            descriptor: String,
+            hostId: String,
+            controllerType: Int,
+        ) {
+            bindings.put(RememberedBinding(descriptor, hostId, controllerType))
+        }
+
+        fun forgetBinding(descriptor: String) = bindings.remove(descriptor)
+
+        val rememberedBindings: List<RememberedBinding> get() = bindings.all()
 
         fun rememberedHost(hostId: String): MoonlightHost? = hostFor(hostId)
 

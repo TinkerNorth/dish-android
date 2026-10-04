@@ -181,6 +181,8 @@
     <string name="ml_apps_empty_body">%1$s n\'a encore aucune appli configurée. Ajoutez-en une sur l\'hôte, ou ajoutez la manette et Dish lancera ce que l\'hôte liste en premier.</string>
     <string name="ml_apps_failed_title">Impossible de lire la liste des applis de %1$s</string>
     <string name="ml_apps_failed_body">Dish lancera ce que l\'hôte liste en premier. Réessayez quand %1$s sera joignable.</string>
+    <string name="ml_apps_removed_title">%1$s n\'est plus sur cet hôte</string>
+    <string name="ml_apps_removed_body">L\'application choisie a été retirée de %1$s. Choisissez-en une autre pour démarrer.</string>
     <string name="ml_full_title">%1$s est complet</string>
     <string name="ml_full_body">Une session porte quatre manettes au maximum, et %1$s en a déjà quatre. Déliez-en une pour faire de la place.</string>
     <string name="ml_busy_other_title">Un autre appareil utilise %1$s</string>
@@ -344,6 +346,7 @@
     <string name="conn_error_title_apply_failed">Manette non configurée sur %1$s</string>
     <string name="ml_error_no_host_answered">Aucun hôte Moonlight n\'a répondu à %1$s.</string>
     <string name="ml_error_no_apps">Aucune appli disponible sur %1$s.</string>
+    <string name="ml_error_app_removed">%1$s n\'est plus sur %2$s. Choisissez une autre application.</string>
     <string name="ml_notice_app_close_requested">Demande envoyée à %1$s pour fermer l\'appli en cours.</string>
 
     <!-- État vide dynamique de la liste satellite. -->

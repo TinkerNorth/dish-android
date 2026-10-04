@@ -182,6 +182,8 @@
     <string name="ml_apps_empty_body">%1$s aún no tiene apps configuradas. Añade una en el host, o añade el mando y Dish iniciará lo primero que liste el host.</string>
     <string name="ml_apps_failed_title">No se pudo leer la lista de apps de %1$s</string>
     <string name="ml_apps_failed_body">Dish iniciará lo primero que liste el host. Reinténtalo cuando %1$s esté accesible.</string>
+    <string name="ml_apps_removed_title">%1$s ya no está en este host</string>
+    <string name="ml_apps_removed_body">La app que elegiste se quitó de %1$s. Elige otra para empezar.</string>
     <string name="ml_full_title">%1$s está lleno</string>
     <string name="ml_full_body">Una sesión admite cuatro mandos como máximo, y %1$s ya tiene cuatro. Desvincula uno para hacer sitio.</string>
     <string name="ml_busy_other_title">Otro dispositivo está usando %1$s</string>
@@ -345,6 +347,7 @@
     <string name="conn_error_title_apply_failed">Mando no configurado en %1$s</string>
     <string name="ml_error_no_host_answered">Ningún host Moonlight respondió en %1$s.</string>
     <string name="ml_error_no_apps">No hay apps disponibles en %1$s.</string>
+    <string name="ml_error_app_removed">%1$s ya no está en %2$s. Elige otra app.</string>
     <string name="ml_notice_app_close_requested">Se pidió a %1$s que cierre la app que está ejecutando.</string>
 
     <!-- Estado vacío dinámico para la lista de satélites. -->

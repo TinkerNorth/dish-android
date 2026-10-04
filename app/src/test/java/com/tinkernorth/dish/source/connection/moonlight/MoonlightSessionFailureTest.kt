@@ -97,6 +97,7 @@ class MoonlightSessionFailureTest {
                 gateway = gateway,
                 identity = mockk<MoonlightIdentity>(relaxed = true),
                 store = store,
+                bindings = mockk(relaxed = true),
             )
     }
 
@@ -333,15 +334,34 @@ class MoonlightSessionFailureTest {
     // A pick the host has since removed was launched, refused, and launched again on every retry,
     // behind a refusal that hid the picker it could be changed in.
     @Test
-    fun `a session on a host that no longer lists the picked app starts the first app the host lists`() =
+    fun `a session on a host that no longer lists the picked app launches nothing and keeps the pick`() =
         runTest(dispatcher) {
+            val kept = mutableListOf<RememberedMoonlight>()
             rememberAs(remembered.copy(lastAppId = "9", lastAppName = "Removed"))
+            every { store.put(capture(kept)) } answers { }
             every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply(twoApps)
+            val seen = mutableListOf<MoonlightConnectionEvent>()
+            val collector = collectEvents(seen)
 
             bindOnePad()
 
-            verify(exactly = 0) { gateway.getHttps(match { it.contains("/launch") && it.contains("appid=9") }, any()) }
-            verify(exactly = 1) { gateway.getHttps(match { it.contains("/launch") && it.contains("appid=1") }, any()) }
+            verify(exactly = 0) { gateway.getHttps(match { it.contains("/launch") }, any()) }
+            assertTrue("the pick is the user's to change, not the probe's", kept.none { it.lastAppId != "9" })
+            val refusal = seen.filterIsInstance<MoonlightConnectionEvent.Error>().map { it.error }.single()
+            assertEquals(MoonlightError.AppRemoved(hostName = remembered.name, appName = "Removed"), refusal)
+            assertEquals(MoonlightSessionState.Idle, manager.get(remembered.id)?.state?.value)
+            collector.cancel()
+        }
+
+    @Test
+    fun `a pick is launched when the host's app list cannot be read`() =
+        runTest(dispatcher) {
+            rememberAs(remembered.copy(lastAppId = "9", lastAppName = "Kept"))
+            every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns MoonlightHttpGateway.Reply(status = 401, body = "")
+
+            bindOnePad()
+
+            verify(exactly = 1) { gateway.getHttps(match { it.contains("/launch") && it.contains("appid=9") }, any()) }
         }
 
     // The record as a store holds it, so what the probe writes is what the launch after it reads.

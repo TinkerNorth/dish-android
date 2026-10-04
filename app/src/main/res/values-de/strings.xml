@@ -179,6 +179,8 @@
     <string name="ml_apps_empty_body">%1$s hat noch keine Apps eingerichtet. Richte eine auf dem Host ein oder füge den Controller hinzu; Dish startet dann, was der Host zuerst auflistet.</string>
     <string name="ml_apps_failed_title">App-Liste von %1$s nicht lesbar</string>
     <string name="ml_apps_failed_body">Dish startet, was der Host zuerst auflistet. Versuche es erneut, sobald %1$s erreichbar ist.</string>
+    <string name="ml_apps_removed_title">%1$s ist auf diesem Host nicht mehr vorhanden</string>
+    <string name="ml_apps_removed_body">Die gewählte App wurde von %1$s entfernt. Wähle eine andere, um zu starten.</string>
     <string name="ml_full_title">%1$s ist voll</string>
     <string name="ml_full_body">Eine Sitzung trägt höchstens vier Controller, und %1$s hat bereits vier. Löse eine Verknüpfung, um Platz zu schaffen.</string>
     <string name="ml_busy_other_title">Ein anderes Gerät nutzt %1$s</string>
@@ -341,6 +343,7 @@
     <string name="conn_error_title_apply_failed">Controller auf %1$s nicht eingerichtet</string>
     <string name="ml_error_no_host_answered">Unter %1$s hat kein Moonlight-Host geantwortet.</string>
     <string name="ml_error_no_apps">Auf %1$s sind keine Apps verfügbar.</string>
+    <string name="ml_error_app_removed">%1$s ist auf %2$s nicht mehr vorhanden. Wähle eine andere App.</string>
     <string name="ml_notice_app_close_requested">%1$s wurde gebeten, die laufende App zu schließen.</string>
 
     <!-- Dynamischer Leer­zustand für die Satellitenliste. -->

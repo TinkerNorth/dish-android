@@ -101,6 +101,7 @@ class MoonlightForgetRaceTest {
                 gateway = gateway,
                 identity = mockk<MoonlightIdentity>(relaxed = true),
                 store = store,
+                bindings = mockk(relaxed = true),
                 hostFacts = facts,
             )
         rows[host.id] = RememberedMoonlight(id = host.id, name = "PC", address = host.address, paired = true)

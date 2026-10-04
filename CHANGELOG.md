@@ -9,8 +9,25 @@ computer. Those lines say "update Satellite too".
 
 ## [Unreleased]
 
+### Added
+
+- **A controller goes back on its Moonlight host after a restart.** A pad bound
+  to a Moonlight host is remembered by its own identity, with the host and the
+  controller type, and bound again when it appears, after a restart or a
+  reconnect, the way the Windows app reattaches. Unbinding it forgets that;
+  unplugging it does not, and forgetting the host takes its bindings with it.
+
+### Changed
+
+- **A Moonlight app the host removed is named, not replaced.** Dish used to
+  forget the pick and start whatever the host listed first. The pick stays,
+  nothing starts, and the binding card names the app with the picker under it.
+
 ### Fixed
 
+- **The satellite pairing key is sealed in the Android Keystore**, as the
+  Moonlight key already was. A key an older build stored in the clear is read
+  as it is and sealed on that read.
 - **Cancelling a Moonlight pairing cancels it.** A PIN typed after Cancel
   still paired the host, saved it and showed "Paired". Cancel now ends the
   pairing at once, even while Dish is still asking the host who it is, and

@@ -121,6 +121,7 @@ class MoonlightPadDepartureTest {
                 gateway = gateway,
                 identity = mockk<MoonlightIdentity>(relaxed = true),
                 store = store,
+                bindings = mockk(relaxed = true),
             )
 
         val hub = mockk<ConnectionCoordinator>(relaxed = true)

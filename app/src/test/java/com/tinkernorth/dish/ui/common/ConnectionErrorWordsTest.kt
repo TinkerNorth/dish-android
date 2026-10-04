@@ -40,6 +40,7 @@ private val EVERY_MOONLIGHT_ERROR: List<MoonlightError> =
     listOf(
         MoonlightError.NoHostAnswered(ADDRESS),
         MoonlightError.NoAppsAvailable(SERVER),
+        MoonlightError.AppRemoved(SERVER, "Steam"),
     )
 
 // Every locale the app ships: lint fails the build on a string missing from any of them.
@@ -178,6 +179,14 @@ class ConnectionErrorWordsTest {
         assertEquals(
             Lookup(R.string.ml_error_no_apps, listOf(SERVER)),
             lookupOf { moonlightErrorText(MoonlightError.NoAppsAvailable(SERVER), it) },
+        )
+    }
+
+    @Test
+    fun `a pick a Moonlight host no longer lists names the app and then the host`() {
+        assertEquals(
+            Lookup(R.string.ml_error_app_removed, listOf("Steam", SERVER)),
+            lookupOf { moonlightErrorText(MoonlightError.AppRemoved(SERVER, "Steam"), it) },
         )
     }
 

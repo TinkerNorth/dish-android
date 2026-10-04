@@ -224,6 +224,8 @@
     <string name="ml_apps_empty_body">%1$s has no apps set up yet. Add one on the host, or add the controller and Dish will start whatever the host lists first.</string>
     <string name="ml_apps_failed_title">Could not read the app list from %1$s</string>
     <string name="ml_apps_failed_body">Dish will start whatever the host lists first. Retry once %1$s is reachable.</string>
+    <string name="ml_apps_removed_title">%1$s is no longer on this host</string>
+    <string name="ml_apps_removed_body">The app you picked was removed from %1$s. Pick another one to start.</string>
 
     <string name="ml_full_title">%1$s is full</string>
     <string name="ml_full_body">A session carries four controllers at most, and %1$s already has four. Unbind one to make room.</string>
@@ -390,6 +392,7 @@
     <string name="conn_error_title_apply_failed">Controller not set up on %1$s</string>
     <string name="ml_error_no_host_answered">No Moonlight host answered at %1$s.</string>
     <string name="ml_error_no_apps">No apps available on %1$s.</string>
+    <string name="ml_error_app_removed">%1$s is no longer on %2$s. Pick another app.</string>
     <string name="ml_notice_app_close_requested">Asked %1$s to close the app it is running.</string>
 
     <!-- Dynamic empty state for the satellites list. -->
