@@ -97,6 +97,7 @@ class MoonlightSessionFailureTest {
                 gateway = gateway,
                 identity = mockk<MoonlightIdentity>(relaxed = true),
                 store = store,
+                bindings = mockk(relaxed = true),
             )
     }
 
@@ -337,13 +338,13 @@ class MoonlightSessionFailureTest {
     @Test
     fun `a session on a host that no longer lists the picked app launches nothing and keeps the pick`() =
         runTest(dispatcher) {
-            rememberAs(remembered.copy(lastAppId = "9", lastAppName = "Removed"))
             val kept = mutableListOf<RememberedMoonlight>()
-            every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply(twoApps)
+            rememberAs(remembered.copy(lastAppId = "9", lastAppName = "Removed"))
             every { store.put(capture(kept)) } answers { }
-
+            every { gateway.getHttps(match { it.contains("/applist") }, any()) } returns reply(twoApps)
             val seen = mutableListOf<MoonlightConnectionEvent>()
             val collector = collectEvents(seen)
+
             bindOnePad()
 
             verify(exactly = 0) { gateway.getHttps(match { it.contains("/launch") }, any()) }

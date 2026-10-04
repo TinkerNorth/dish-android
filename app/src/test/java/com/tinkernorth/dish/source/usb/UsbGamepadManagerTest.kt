@@ -204,6 +204,22 @@ class UsbGamepadManagerTest {
         verify { registry.addUsbSynthetic(-1000, "Pad", any(), any(), vid, pid) }
     }
 
+    // A binding remembered for the pad is keyed by the framework twin's descriptor, so the claim
+    // that replaces the twin has to answer to the same name.
+    @Test
+    fun `a claim carries its framework twin's descriptor`() {
+        val conn = mockConn()
+        every { usbManager.openDevice(device) } returns conn
+        every { conn.claimInterface(any(), true) } returns true
+        every { native.attachUsbDevice(any(), any(), any(), any()) } returns -1000
+        registryDevices.value = mapOf(7 to frameworkPad(7).copy(descriptor = "usb:054c:0ce6:1"))
+        val m = buildManager()
+
+        m.tryDirectMode(vid, pid)
+
+        verify { registry.addUsbSynthetic(-1000, "Pad", any(), any(), vid, pid, descriptor = "usb:054c:0ce6:1") }
+    }
+
     private fun claimTo(syntheticId: Int): UsbGamepadManager {
         val conn = mockConn()
         every { usbManager.openDevice(device) } returns conn

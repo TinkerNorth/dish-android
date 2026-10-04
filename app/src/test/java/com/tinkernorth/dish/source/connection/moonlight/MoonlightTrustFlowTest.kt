@@ -132,6 +132,7 @@ class MoonlightTrustFlowTest {
             gateway = gateway,
             identity = mockk<MoonlightIdentity>(relaxed = true),
             store = store,
+            bindings = mockk(relaxed = true),
             hostFacts = facts,
         )
 

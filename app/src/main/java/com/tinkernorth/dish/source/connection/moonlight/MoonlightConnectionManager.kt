@@ -37,6 +37,8 @@ import com.tinkernorth.dish.core.net.moonlight.serverInfoHttp
 import com.tinkernorth.dish.core.net.moonlight.serverInfoHttps
 import com.tinkernorth.dish.core.net.moonlight.trustedOf
 import com.tinkernorth.dish.di.IoDispatcher
+import com.tinkernorth.dish.repository.MoonlightBindingRepository
+import com.tinkernorth.dish.repository.RememberedBinding
 import com.tinkernorth.dish.repository.RememberedMoonlightRepository
 import com.tinkernorth.dish.source.store.MoonlightHostFactsStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -144,14 +146,14 @@ sealed interface MoonlightError {
     data class NoAppsAvailable(
         val hostName: String,
     ) : MoonlightError
-}
-
 
     /** The picked app is no longer on the host's list, so nothing was launched. */
     data class AppRemoved(
         val hostName: String,
         val appName: String,
     ) : MoonlightError
+}
+
 /** What a host's session must do next, pulled out of the converge for testability. */
 internal enum class MoonlightConverge { OPEN, ANNOUNCE, WAIT, RELEASE, CANCEL }
 
@@ -260,6 +262,7 @@ class MoonlightConnectionManager
         private val gateway: MoonlightHttpGateway,
         private val identity: MoonlightIdentity,
         private val store: RememberedMoonlightRepository,
+        private val bindings: MoonlightBindingRepository,
         private val hostFacts: MoonlightHostFactsStore = MoonlightHostFactsStore(),
     ) {
         private val _connections = MutableStateFlow<Map<String, MoonlightConnection>>(emptyMap())
@@ -1055,6 +1058,8 @@ class MoonlightConnectionManager
                     Log.i(TAG, "forgetting ${host?.address ?: id}")
                     releaseSessionFor(id, host)
                     store.remove(id)
+                    // A standing binding is an intent to drive THIS host; it goes with the host.
+                    bindings.forHost(id).forEach { bindings.remove(it.descriptor) }
                     gateway.forgetPin(id)
                     hostFacts.forget(id)
                     _connections.updateAndGet { it - id }
@@ -1172,6 +1177,24 @@ class MoonlightConnectionManager
 
         /** The remembered last-launched app title for [hostId], or empty. */
         fun rememberedAppName(hostId: String): String = store.get(hostId)?.lastAppName.orEmpty()
+
+        /**
+         * The standing binding of the pad with [descriptor]: the host it drives and the type it sends,
+         * kept across restarts so the pad goes back on its host when it appears again
+         * (MoonlightBindingRestoreController). The binding hub writes and drops it, which is what keeps
+         * a pad's departure apart from the user's unbind; a host forgotten takes its bindings with it.
+         */
+        fun rememberBinding(
+            descriptor: String,
+            hostId: String,
+            controllerType: Int,
+        ) {
+            bindings.put(RememberedBinding(descriptor, hostId, controllerType))
+        }
+
+        fun forgetBinding(descriptor: String) = bindings.remove(descriptor)
+
+        val rememberedBindings: List<RememberedBinding> get() = bindings.all()
 
         fun rememberedHost(hostId: String): MoonlightHost? = hostFor(hostId)
 

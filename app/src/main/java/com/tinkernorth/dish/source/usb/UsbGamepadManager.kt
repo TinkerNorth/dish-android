@@ -439,6 +439,9 @@ class UsbGamepadManager
             registry.addUsbSynthetic(
                 deviceId = synthetic,
                 name = friendlyName(device),
+                // The claim replaces the framework twin; a binding remembered for the pad is keyed
+                // by the twin's identity, so the synthetic carries it.
+                descriptor = routedFrameworkId?.let { registry.devices.value[it]?.descriptor }.orEmpty(),
                 hasGyro = native.modelHasImu(device.vendorId, device.productId),
                 pollRateHz = computeUsbPollRateHz(epIn.interval, epIn.maxPacketSize),
                 vendorId = device.vendorId,

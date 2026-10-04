@@ -56,6 +56,7 @@ class MoonlightHostAddressIdsTest {
             gateway = MoonlightHttpGateway(mockk<MoonlightIdentity>(relaxed = true), pins),
             identity = mockk<MoonlightIdentity>(relaxed = true),
             store = store,
+            bindings = mockk(relaxed = true),
         )
     }
 

@@ -73,6 +73,10 @@ class PhysicalGamepadRegistry
         data class Device(
             val id: Int,
             val name: String,
+            // The pad's identity across reconnects and restarts (InputDevice.descriptor), which the
+            // device id is not: a binding remembered for the pad is keyed by this. A Direct claim
+            // carries its framework twin's; empty where the framework has none.
+            val descriptor: String = "",
             val disconnectingTimeLeftSec: Int? = null,
             val hasGyro: Boolean = false,
             val hasRumble: Boolean = false,
@@ -247,6 +251,7 @@ class PhysicalGamepadRegistry
             return Device(
                 id = deviceId,
                 name = dev.name,
+                descriptor = dev.descriptor.orEmpty(),
                 hasGyro = hasGyro,
                 hasRumble = hasRumble,
                 hasLightbar = hasLightbar,
@@ -565,6 +570,8 @@ class PhysicalGamepadRegistry
             }
         }
 
+        // `descriptor` is the framework twin's, so a binding remembered for the pad follows the
+        // claim; empty for a claim with no twin on file.
         fun addUsbSynthetic(
             deviceId: Int,
             name: String,
@@ -572,6 +579,7 @@ class PhysicalGamepadRegistry
             pollRateHz: Int,
             vendorId: Int,
             productId: Int,
+            descriptor: String = "",
         ) {
             _devices.update { map ->
                 map +
@@ -580,6 +588,7 @@ class PhysicalGamepadRegistry
                             Device(
                                 id = deviceId,
                                 name = name,
+                                descriptor = descriptor,
                                 hasGyro = hasGyro,
                                 isUsbSynthetic = true,
                                 pollRateHz = pollRateHz,
