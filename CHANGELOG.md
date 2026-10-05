@@ -7,100 +7,41 @@ computer. Those lines say "update Satellite too".
 
 ---
 
-## [Unreleased]
+## [2.3.0] - 2026-10-04
+
+Controller fixes, mostly for the DualSense, and a smoother Moonlight setup.
 
 ### Added
 
-- **A controller goes back on its Moonlight host after a restart.** A pad bound
-  to a Moonlight host is remembered by its own identity, with the host and the
-  controller type, and bound again when it appears, after a restart or a
-  reconnect, the way the Windows app reattaches. Unbinding it forgets that;
-  unplugging it does not, and forgetting the host takes its bindings with it.
+- **Your controller stays paired to its Moonlight host.** Restart the app or
+  reconnect and it picks up where it left off.
+- **Diagnostics now says why a controller's mic or speaker is off**, so you can
+  see at a glance whether it is Android, the host or the cable.
 
 ### Changed
 
-- **A Moonlight app the host removed is named, not replaced.** Dish used to
-  forget the pick and start whatever the host listed first. The pick stays,
-  nothing starts, and the binding card names the app with the picker under it.
+- **If a game disappears from your Moonlight host, Dish tells you** instead of
+  quietly launching whatever is first in the list.
 
 ### Fixed
 
-- **A DualSense or DualShock 4 plugged into an Android 10 to 15 device can
-  lend its microphone.** Those releases list a controller's sound card as
-  "USB-Audio - Wireless Controller" while the controller calls itself
-  "Wireless Controller", and Dish accepted only the second spelling, so the
-  Microphone and Speaker rows of the capability table read as off for every
-  such pad. Dish now knows both spellings. The speaker still reads off on
-  Android 14 and newer: Android hides a PlayStation controller's speaker on
-  purpose, so that plugging one in does not take over the device's sound,
-  and Dish cannot route to an output Android does not list.
-- **Rumble on a DualSense in USB direct mode asks the pad the way its own
-  driver does.** Dish set only the "compatible vibration" flag. The Linux
-  driver and SDL also switch the pad from audio haptics to classic rumble in
-  the same report and, from firmware feature version 2.21, use the revised
-  rumble mode. Dish now reads the pad's firmware report once when it is
-  claimed and writes the same flags.
-- **The satellite pairing key is sealed in the Android Keystore**, as the
-  Moonlight key already was. A key an older build stored in the clear is read
-  as it is and sealed on that read.
-- **Cancelling a Moonlight pairing cancels it.** A PIN typed after Cancel
-  still paired the host, saved it and showed "Paired". Cancel now ends the
-  pairing at once, even while Dish is still asking the host who it is, and
-  records, shows and pairs nothing. A pairing the host never confirms in its
-  last step fails and says which step, instead of being saved as paired, and
-  that last step trusts only the certificate the earlier steps proved: the
-  pinned certificate changes only once the pairing is recorded.
-- **Forgetting a Moonlight host while Dish is still asking it about itself,
-  or while its session is starting, leaves it forgotten.** A late answer
-  used to verify the host again or write its record back. The same holds
-  while a pairing runs: a PIN typed after the host was forgotten, or a host
-  answering that it already trusts this phone, no longer brings it back.
-- **The PIN dialog's Back cancels the pairing**, like its Cancel button,
-  instead of leaving the pairing waiting for the PIN behind a closed
-  dialog, and the dialog is closed with the screen and reopened by the
-  rebuilt one.
-- **A host saved by an older build keeps its trusted certificate** when its
-  record is moved under its address on the first start, even where a scan
-  had left a stray certificate at that address.
-- **A Moonlight host is one host, however Dish found it.** A host found by a
-  scan and the same host added by its address were filed under different
-  ids, with two records and two pins for one machine, and a rebuilt machine
-  behind a scanned host read as "trust lost" instead of "replaced". Every
-  host is now filed under its address, as the Windows and Linux apps do,
-  records an older build saved are folded together on the first start, and
-  a rebuilt machine reads as replaced.
-- **After "Pair again", the first session no longer writes the old identity
-  back**, which made the host read as replaced again until Dish restarted.
-- **Pairing from the hosts screen survives turning the phone.** The new,
-  faster Cancel also fired when the screen was rebuilt for a rotation.
-- **A Moonlight host that refuses a session without giving a reason** no
-  longer leaves the card reading "refused the session:" with nothing after
-  the colon.
-- **An app removed on the Moonlight host stops being the pick.** Every
-  launch was refused, and Retry launched the same app again, until you left
-  and re-entered the screen. The next launch now starts the host's first
-  app and the picker comes back. An app the host renamed under a new id
-  counts as removed; a list Dish could not read leaves the pick alone.
-- **Forgetting a Moonlight host forgets what it last said about itself**,
-  so a new host at the same address cannot show the old one's diagnostics.
-- **After you quit the host's app, Dish asks the host again once the quit
-  has gone out**, not while it may still be on its way.
-- **Light bars on Standard and Bluetooth pads.** Update Satellite too. The
-  bar went dark after Dish came back from the background and stayed dark
-  until the game changed colour; releasing one pad's bar could paint
-  another pad's colour onto it; a pad bound to a different host could show
-  the previous host's colour; the input inspector's colour test was kept as
-  if the host had sent it; and a released bar could keep its light session
-  open after the pad was gone. Each pad's last host colour now comes back
-  when the pad is bound again under the same host, a released bar stays
-  dark instead of taking a neighbour's colour, and Satellite re-sends the
-  current colour when Dish reconnects.
-- **A pad whose rumble is switched off gets no trigger rumble from a
-  Moonlight host**, and a Direct pad's trigger motors stop when the host
-  stops refreshing them, as the main motors already did.
-- **The heartbeat and the motion-sensor threads run at the same priority as
-  the other input senders**, so a busy phone cannot let one of them hold up
-  a pad's input.
+- **DualSense and DualShock 4 mics work over USB on Android 10 to 15.** Dish
+  was looking for the controller's audio under the wrong name. The speaker
+  stays off on Android 14 and newer: Android hides it on purpose, so a
+  plugged-in controller never takes over your tablet's sound.
+- **DualSense rumble in USB Direct mode.** Dish now asks the controller for
+  rumble the way the official drivers do, and uses the newer rumble mode on
+  recent firmware.
+- **Moonlight pairing is cleaner.** Cancel really cancels, Back cancels too,
+  turning your phone mid-pairing no longer breaks it, and a host found twice
+  is one host, not two.
+- **Light bars behave on Standard and Bluetooth controllers.** They come back
+  after Dish was in the background and never borrow another controller's
+  colour. Update Satellite too.
+- **Rumble off means trigger rumble off too**, and a Direct controller's
+  trigger motors stop when the host stops asking.
+- Smaller things: pairing keys live in Android's secure keystore, a saved host
+  keeps its trust after an update, and input stays smooth on a busy phone.
 
 ## [2.2.0] - 2026-09-21
 

@@ -1,0 +1,7 @@
+Dish 2.3.0: ispravke za DualSense i urednije Moonlight uparivanje.
+
+• Mikrofon DualSensea i DualShocka 4 radi preko USB-a na Androidu 10 do 15.
+• Vibracija DualSensea u USB Brzom načinu traži se kao kod službenih upravljačkih programa.
+• Dijagnostika kaže zašto su mikrofon ili zvučnik kontrolera isključeni.
+• Kontroleri ostaju upareni sa svojim Moonlight hostom i nakon ponovnog pokretanja.
+• Svjetlosne trake na Standard i Bluetooth kontrolerima rade ispravno. Ažurirajte i Satellite.
