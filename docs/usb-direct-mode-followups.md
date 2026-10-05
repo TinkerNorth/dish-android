@@ -115,7 +115,7 @@ counter handling, and sources are in `docs/rumble.md`.
   generic-HID parser has none either. Both stay silent rather than guess.
 - Trigger-motor haptics on GIP pads need the wire-format change in `docs/rumble.md` FR-2.
 
-**Where:** `app/src/main/cpp/usb_parsers.cpp` (`runRumble`, `switchEncodeMotor`, `runInit`),
+**Where:** `app/src/main/cpp/usb_parsers.cpp` (`runMergedRumble`, `switchEncodeMotor`, `runInit`),
 `app/src/main/cpp/usb_host.cpp` (`sendRumble`, `DeviceCtx`), `app/src/main/cpp/satellite_jni.cpp`
 (`sendUsbRumble` JNI), `UsbDirectNative.kt` / `PhysicalInputNative.kt`,
 `app/src/main/java/.../hotpath/input/RumbleRouter.kt`.
