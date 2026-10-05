@@ -1,0 +1,7 @@
+Dish 2.3.0: DualSense-Korrekturen und saubereres Moonlight-Pairing.
+
+• Mikrofon von DualSense und DualShock 4 geht per USB auf Android 10 bis 15.
+• DualSense-Rumble im USB-Direkt-Modus wird wie von den offiziellen Treibern angefordert.
+• Die Diagnose sagt, warum Mikrofon oder Lautsprecher aus sind.
+• Controller bleiben nach einem Neustart mit ihrem Moonlight-Host verbunden.
+• Leuchtleisten an Standard- und Bluetooth-Controllern stimmen wieder. Aktualisiere auch Satellite.

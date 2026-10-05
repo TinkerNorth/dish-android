@@ -1,0 +1,7 @@
+Dish 2.3.0: DualSense fixes and cleaner Moonlight pairing.
+
+• DualSense and DualShock 4 mics work over USB on Android 10 to 15.
+• DualSense rumble in USB Direct mode works the way the official drivers ask for it.
+• Diagnostics says why a controller's mic or speaker is off.
+• Controllers stay paired to their Moonlight host across restarts.
+• Light bars on Standard and Bluetooth controllers behave. Update Satellite too.
