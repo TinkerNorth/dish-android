@@ -1,0 +1,7 @@
+Dish 2.3.0: correcciones para DualSense y emparejamiento Moonlight más limpio.
+
+• El micro de DualSense y DualShock 4 funciona por USB en Android 10 a 15.
+• La vibración del DualSense en modo USB Directo se pide como lo hacen los drivers oficiales.
+• Diagnóstico explica por qué el micro o el altavoz están apagados.
+• Los mandos siguen emparejados a su host de Moonlight tras reiniciar.
+• Las barras de luz de mandos Estándar y Bluetooth se comportan bien. Actualiza también Satellite.
