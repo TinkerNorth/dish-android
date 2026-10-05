@@ -20,6 +20,12 @@ Controller fixes, mostly for the DualSense, and a smoother Moonlight setup.
 
 ### Changed
 
+- **The dish faces its signal.** The dish glyph aimed up and to the left while
+  the signal arcs sat at the upper right. The reflector now points at the
+  signal in every state glyph and in the app mark, so the launcher icon, the
+  themed icon, the notification icon and the Play listing's icon read the
+  same way.
+
 - **If a game disappears from your Moonlight host, Dish tells you** instead of
   quietly launching whatever is first in the list.
 

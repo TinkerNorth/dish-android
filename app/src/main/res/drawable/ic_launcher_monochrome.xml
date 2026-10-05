@@ -24,11 +24,11 @@
         <path
             android:fillColor="#FF000000"
             android:pathData="M30,42 H34 V56 H30 Z" />
-        <!-- reflector group, tilted -28° around (32,28) -->
+        <!-- reflector group, tilted 28° around (32,28) -->
         <group
             android:pivotX="32"
             android:pivotY="28"
-            android:rotation="-28">
+            android:rotation="28">
             <!-- outer dish -->
             <path
                 android:fillColor="#FF000000"
