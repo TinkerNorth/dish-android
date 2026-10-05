@@ -169,9 +169,13 @@ class PadAudioMatcherTest {
         const val DS4V2_PID = 0x09CC
         const val OTHER_VID = 0x057E
         const val OTHER_PID = 0x2009
+        const val EDGE_PID = 0x0DF2
 
         // The iProduct string a DualSense and a DualShock 4 both report.
         const val SONY_PAD_NAME = "Wireless Controller"
+
+        // What Android 10 to 15 call the same pad's sound card.
+        const val ALSA_CARD_NAME = "USB-Audio - Wireless Controller"
     }
 
     // ---- protocol 3: the haptic route ----
@@ -242,5 +246,50 @@ class PadAudioMatcherTest {
         assertEquals(PadAudioReason.NO_ENDPOINT, facts[ds4v2]!!.reason)
         assertEquals(mapOf(ds5 to facts[ds5]!!.route), routesOf(facts))
         assertEquals(routesOf(facts), resolvePadAudioRoutes(pads, endpoints))
+    }
+
+    // ---- the names Android gives a USB sound card ----
+
+    @Test
+    fun `an endpoint named after the ALSA card, as Android 10 to 15 name it, routes to the pad`() {
+        val endpoints = listOf(sink(11, name = ALSA_CARD_NAME), source(12, name = ALSA_CARD_NAME))
+        val route = resolvePadAudioRoutes(listOf(pad()), endpoints).getValue(ds5)
+        assertTrue(route.microphone)
+        assertTrue(route.speaker)
+        assertEquals(12, route.captureDeviceId)
+        assertEquals(11, route.playbackDeviceId)
+    }
+
+    @Test
+    fun `a product string longer than the kernel keeps is matched by its truncated card name`() {
+        val longName = "DualSense Edge Wireless Controller"
+        val truncatedCard = "USB-Audio - DualSense Edge Wireless Control"
+        val edge = pad(productId = EDGE_PID, productName = longName, hapticLanes = true)
+        val routes = resolvePadAudioRoutes(listOf(edge), listOf(sink(11, name = truncatedCard)))
+        assertEquals(11, routes.getValue(vidPidKey(DS5_VID, EDGE_PID)).playbackDeviceId)
+    }
+
+    @Test
+    fun `the card name of a different product does not name this pad`() {
+        val dock = "USB-Audio - Wireless Controller Dock"
+        val facts = explainPadAudio(listOf(pad()), listOf(sink(11, name = dock))).getValue(ds5)
+        assertEquals(PadAudioReason.NO_ENDPOINT, facts.reason)
+        assertEquals(listOf(dock), facts.endpointNames)
+    }
+
+    @Test
+    fun `both spellings of one pad's name count toward the one-endpoint-per-direction rule`() {
+        val facts = explainPadAudio(listOf(pad()), listOf(sink(11), sink(13, name = ALSA_CARD_NAME))).getValue(ds5)
+        assertEquals(PadAudioReason.ENDPOINT_NAME_SHARED, facts.reason)
+    }
+
+    @Test
+    fun `the card name is the driver, a dash and the product string cut to the kernel's 31 bytes, trimmed`() {
+        assertEquals("USB-Audio - Wireless Controller", alsaCardNameFor("Wireless Controller"))
+        val edge = "DualSense Edge Wireless Controller"
+        assertEquals("USB-Audio - DualSense Edge Wireless Control", alsaCardNameFor(edge))
+        val thirtyChars = "Wireless Controller With A Lon"
+        assertEquals(30, thirtyChars.length)
+        assertEquals("USB-Audio - $thirtyChars", alsaCardNameFor("$thirtyChars Name"))
     }
 }

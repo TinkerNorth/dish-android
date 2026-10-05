@@ -120,7 +120,7 @@ the delivery toggle and stop rules keep applying.
 
 ## USB-direct rumble output reports
 
-A claimed pad is driven by `usbparsers::runRumble`, which writes a
+A claimed pad is driven by `usbparsers::runMergedRumble`, which writes a
 device-specific report to the interrupt OUT endpoint. Magnitudes are
 the wire strong (large/low-frequency, left) and weak (small/high-
 frequency, right), 0..65535. Layouts follow the Linux kernel drivers:
@@ -136,9 +136,15 @@ frequency, right), 0..65535. Layouts follow the Linux kernel drivers:
 - **DualShock 4** (`DUALSHOCK4`, hid-playstation): 32-byte report `0x05`,
   `valid_flag0 = 0x01`, `motor_right` at byte 4, `motor_left` at byte 5.
   No CRC over USB.
-- **DualSense** (`DUALSENSE`, hid-playstation): 63-byte report `0x02`,
-  `valid_flag0 = 0x01` (compatible vibration), `motor_right` at byte 3,
-  `motor_left` at byte 4. No CRC over USB.
+- **DualSense** (`DUALSENSE`, hid-playstation): 63-byte report `0x02`.
+  `valid_flag0` carries `HAPTICS_SELECT` (0x02, classic rumble in place
+  of audio haptics) plus the mode flag the pad's firmware takes:
+  `COMPATIBLE_VIBRATION` (0x01) on the original firmware, or
+  `COMPATIBLE_VIBRATION2` (0x04 in `valid_flag2`, byte 39) from feature
+  version 2.21 and on every DualSense Edge. The feature version is read
+  once at attach from feature report `0x20` (bytes 44..45); an unread
+  report keeps the original mode. `motor_right` at byte 3, `motor_left`
+  at byte 4. No CRC over USB.
 - **Switch Pro** (`SWITCH_PRO_USB`, hid-nintendo): 10-byte rumble-only
   report `0x10 <counter&0x0F> <left 4B> <right 4B>`. Each side is HD-
   rumble encoded at the neutral frequency from a coarse amplitude table.

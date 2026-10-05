@@ -25,6 +25,21 @@ computer. Those lines say "update Satellite too".
 
 ### Fixed
 
+- **A DualSense or DualShock 4 plugged into an Android 10 to 15 device can
+  lend its microphone.** Those releases list a controller's sound card as
+  "USB-Audio - Wireless Controller" while the controller calls itself
+  "Wireless Controller", and Dish accepted only the second spelling, so the
+  Microphone and Speaker rows of the capability table read as off for every
+  such pad. Dish now knows both spellings. The speaker still reads off on
+  Android 14 and newer: Android hides a PlayStation controller's speaker on
+  purpose, so that plugging one in does not take over the device's sound,
+  and Dish cannot route to an output Android does not list.
+- **Rumble on a DualSense in USB direct mode asks the pad the way its own
+  driver does.** Dish set only the "compatible vibration" flag. The Linux
+  driver and SDL also switch the pad from audio haptics to classic rumble in
+  the same report and, from firmware feature version 2.21, use the revised
+  rumble mode. Dish now reads the pad's firmware report once when it is
+  claimed and writes the same flags.
 - **The satellite pairing key is sealed in the Android Keystore**, as the
   Moonlight key already was. A key an older build stored in the clear is read
   as it is and sealed on that read.

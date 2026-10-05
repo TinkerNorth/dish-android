@@ -460,7 +460,7 @@ phone: the on-screen pad drives the phone vibrator, a framework gamepad
 drives its own `InputDevice` vibrator, and a claimed USB-direct pad
 gets a device-specific report written to its USB OUT endpoint
 (`UsbDirectNative.sendUsbRumble` to `usbhost::sendRumble` to
-`usbparsers::runRumble`). Routing is strict: a pad with no usable
+`usbparsers::runMergedRumble`). Routing is strict: a pad with no usable
 actuator stays silent rather than buzzing the phone. Slot-kind routing,
 magnitude/duration mapping, the USB report layouts, and the satellite
 feature requests are in [`rumble.md`](rumble.md).

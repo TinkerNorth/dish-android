@@ -199,9 +199,10 @@ TEST(Rumble, DualSenseBytes) {
     size_t n = buildRumbleReport(Parser::DUALSENSE, 0xAA00, 0x5500, 0, out, sizeof(out));
     ASSERT_EQ(63u, n);
     EXPECT_EQ(0x02, out[0]);
-    EXPECT_EQ(0x01, out[1]);
+    EXPECT_EQ(0x02 | 0x01, out[1]) << "no firmware read: the original mode";
     EXPECT_EQ(0x55, out[3]);
     EXPECT_EQ(0xAA, out[4]);
+    EXPECT_EQ(0x00, out[39]);
 }
 
 TEST(Rumble, SwitchProNeutralWhenZero) {
@@ -242,6 +243,76 @@ TEST(Rumble, TooSmallBufferReturnsZero) {
     EXPECT_EQ(0u, buildRumbleReport(Parser::DUALSENSE, 0xFFFF, 0xFFFF, 0, out, sizeof(out)));
 }
 
+// ---- DualSense rumble mode (hid-playstation's rules) ----
+
+TEST(Rumble, DualSenseSelectsClassicHapticsBeforeDrivingTheMotors) {
+    usbparsers::FeedbackState st;
+    st.strong = 0xAA00;
+    st.weak = 0x5500;
+    uint8_t out[64];
+    ASSERT_EQ(63u, usbparsers::buildMergedRumbleReport(Parser::DUALSENSE, st, 0, out, sizeof(out)));
+    EXPECT_EQ(0x02, out[0]);
+    EXPECT_EQ(0x02 | 0x01, out[1]) << "HAPTICS_SELECT + COMPATIBLE_VIBRATION";
+    EXPECT_EQ(0x55, out[3]);
+    EXPECT_EQ(0xAA, out[4]);
+    EXPECT_EQ(0x00, out[39]) << "no COMPATIBLE_VIBRATION2 on original firmware";
+}
+
+TEST(Rumble, DualSenseOnRevisedFirmwareTakesTheSecondVibrationMode) {
+    usbparsers::FeedbackState st;
+    st.ds5VibrationV2 = true;
+    st.strong = 0xAA00;
+    st.weak = 0x5500;
+    uint8_t out[64];
+    ASSERT_EQ(63u, usbparsers::buildMergedRumbleReport(Parser::DUALSENSE, st, 0, out, sizeof(out)));
+    EXPECT_EQ(0x02, out[1]) << "HAPTICS_SELECT alone in valid_flag0";
+    EXPECT_EQ(0x04, out[39]) << "COMPATIBLE_VIBRATION2 in valid_flag2";
+    EXPECT_EQ(0x55, out[3]);
+    EXPECT_EQ(0xAA, out[4]);
+}
+
+constexpr uint16_t kDualSensePid = 0x0CE6;
+constexpr uint16_t kDualSenseEdgePid = 0x0DF2;
+
+TEST(Firmware, DualSenseFeatureVersionIsReadFromReport0x20) {
+    uint8_t buf[usbparsers::DS5_FIRMWARE_INFO_REPORT_BYTES] = {};
+    buf[0] = usbparsers::DS5_FIRMWARE_INFO_REPORT_ID;
+    buf[44] = 0x15;
+    buf[45] = 0x02;
+    usbparsers::Ds5FirmwareInfo info;
+    ASSERT_TRUE(usbparsers::parseDs5FirmwareInfo(buf, sizeof(buf), info));
+    EXPECT_TRUE(info.valid);
+    EXPECT_EQ(0x0215, info.featureVersion);
+}
+
+TEST(Firmware, DualSenseFirmwareInfoOfAnotherLengthOrIdIsNotRead) {
+    uint8_t buf[usbparsers::DS5_FIRMWARE_INFO_REPORT_BYTES] = {};
+    buf[0] = usbparsers::DS5_FIRMWARE_INFO_REPORT_ID;
+    buf[44] = 0x24;
+    buf[45] = 0x02;
+    usbparsers::Ds5FirmwareInfo info;
+    EXPECT_FALSE(usbparsers::parseDs5FirmwareInfo(buf, sizeof(buf) - 1, info));
+    EXPECT_FALSE(info.valid);
+    buf[0] = 0x05;
+    EXPECT_FALSE(usbparsers::parseDs5FirmwareInfo(buf, sizeof(buf), info));
+    EXPECT_FALSE(info.valid);
+}
+
+TEST(Firmware, TheSecondVibrationModeFollowsHidPlaystation) {
+    const usbparsers::Ds5FirmwareInfo unread;
+    usbparsers::Ds5FirmwareInfo revised;
+    revised.valid = true;
+    revised.featureVersion = 0x0215;
+    usbparsers::Ds5FirmwareInfo original;
+    original.valid = true;
+    original.featureVersion = 0x0214;
+    EXPECT_TRUE(usbparsers::ds5UsesVibrationV2(kDualSensePid, revised));
+    EXPECT_FALSE(usbparsers::ds5UsesVibrationV2(kDualSensePid, original));
+    EXPECT_FALSE(usbparsers::ds5UsesVibrationV2(kDualSensePid, unread));
+    EXPECT_TRUE(usbparsers::ds5UsesVibrationV2(kDualSenseEdgePid, unread));
+    EXPECT_TRUE(usbparsers::ds5UsesVibrationV2(kDualSenseEdgePid, original));
+}
+
 TEST(Feedback, MergedGipRumbleCarriesAllFourMotors) {
     usbparsers::FeedbackState st;
     st.strong = 0xFFFF;
@@ -263,7 +334,7 @@ TEST(Feedback, MergedGipRumbleCarriesAllFourMotors) {
     EXPECT_EQ(0x40, out[9]);
 }
 
-TEST(Feedback, MergedRumbleFallsBackToPlainBuilderElsewhere) {
+TEST(Feedback, MergedRumbleOffGipIgnoresTheTriggerLevels) {
     usbparsers::FeedbackState st;
     st.strong = 0xAA00;
     st.weak = 0x5500;
@@ -464,7 +535,7 @@ TEST(MicMuteLed, EveryOtherDualSenseReportReassertsTheLamp) {
     st.strong = 0x8000;
     st.weak = 0x4000;
     ASSERT_EQ(63u, usbparsers::buildMergedRumbleReport(Parser::DUALSENSE, st, 0, out, sizeof(out)));
-    EXPECT_EQ(0x01, out[1]) << "the motor claim is untouched";
+    EXPECT_EQ(0x02 | 0x01, out[1]) << "the motor claims are untouched";
     EXPECT_EQ(0x01 | 0x02, out[2]);
     EXPECT_EQ(usbparsers::MIC_MUTE_LED_ON, out[9]);
     EXPECT_EQ(0x40, out[3]);
