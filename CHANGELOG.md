@@ -7,6 +7,19 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [2.3.1] - 2026-10-12
+
+A new app icon.
+
+### Changed
+
+- **The dish faces its signal.** The dish glyph aimed up and to the left while
+  the signal arcs sat at the upper right. The reflector now points at the
+  signal in every state glyph and in the app mark, so the launcher icon, the
+  themed icon, the notification icon and the Play listing's icon read the
+  same way.
+- Updated libraries under the hood.
+
 ## [2.3.0] - 2026-10-04
 
 Controller fixes, mostly for the DualSense, and a smoother Moonlight setup.
@@ -19,12 +32,6 @@ Controller fixes, mostly for the DualSense, and a smoother Moonlight setup.
   see at a glance whether it is Android, the host or the cable.
 
 ### Changed
-
-- **The dish faces its signal.** The dish glyph aimed up and to the left while
-  the signal arcs sat at the upper right. The reflector now points at the
-  signal in every state glyph and in the app mark, so the launcher icon, the
-  themed icon, the notification icon and the Play listing's icon read the
-  same way.
 
 - **If a game disappears from your Moonlight host, Dish tells you** instead of
   quietly launching whatever is first in the list.

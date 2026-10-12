@@ -1,0 +1,4 @@
+Dish 2.3.1: a new app icon.
+
+• The dish in the icon now faces its signal, on your home screen and in notifications.
+• Updated libraries under the hood.

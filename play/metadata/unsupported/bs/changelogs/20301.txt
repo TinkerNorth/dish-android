@@ -1,0 +1,4 @@
+Dish 2.3.1: nova ikona aplikacije.
+
+• Antena na ikoni sada gleda prema svom signalu, na početnom ekranu i u obavještenjima.
+• Ažurirane biblioteke u pozadini.
