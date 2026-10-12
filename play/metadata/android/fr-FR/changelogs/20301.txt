@@ -1,0 +1,4 @@
+Dish 2.3.1 : une nouvelle icône.
+
+• La parabole de l'icône fait désormais face à son signal, sur l'écran d'accueil et dans les notifications.
+• Bibliothèques mises à jour en coulisses.

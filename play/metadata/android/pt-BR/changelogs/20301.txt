@@ -1,0 +1,4 @@
+Dish 2.3.1: um ícone novo para o app.
+
+• A parabólica do ícone agora aponta para o sinal, na tela inicial e nas notificações.
+• Bibliotecas atualizadas por baixo dos panos.

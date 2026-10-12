@@ -1,0 +1,4 @@
+Dish 2.3.1: ein neues App-Symbol.
+
+• Die Schüssel im Symbol zeigt jetzt auf ihr Signal, auf dem Startbildschirm und in Benachrichtigungen.
+• Aktualisierte Bibliotheken unter der Haube.
