@@ -193,12 +193,12 @@ class SatelliteHostFeaturesStoreTest {
 
     @Test
     fun `an unchanged audio verdict hands back the same map`() {
-        assertSame(settledAudio, withControllerAudio(settledAudio, "sat-A", mic = true, speaker = false))
+        assertSame(settledAudio, withControllerAudio(settledAudio, "sat-A", mic = true, speaker = false, hapticAudio = false))
     }
 
     @Test
     fun `an audio verdict that moves only the mic builds a new map`() {
-        val next = withControllerAudio(settledAudio, "sat-A", mic = false, speaker = false)
+        val next = withControllerAudio(settledAudio, "sat-A", mic = false, speaker = false, hapticAudio = false)
 
         assertNotSame(settledAudio, next)
         assertEquals(features.copy(controllerMic = false, controllerSpeaker = false), next["sat-A"])
@@ -206,17 +206,25 @@ class SatelliteHostFeaturesStoreTest {
 
     @Test
     fun `an audio verdict that moves only the speaker builds a new map`() {
-        val next = withControllerAudio(settledAudio, "sat-A", mic = true, speaker = true)
+        val next = withControllerAudio(settledAudio, "sat-A", mic = true, speaker = true, hapticAudio = false)
 
         assertNotSame(settledAudio, next)
         assertEquals(features.copy(controllerMic = true, controllerSpeaker = true), next["sat-A"])
     }
 
     @Test
+    fun `an audio verdict that moves only the haptics lane builds a new map`() {
+        val next = withControllerAudio(settledAudio, "sat-A", mic = true, speaker = false, hapticAudio = true)
+
+        assertNotSame(settledAudio, next)
+        assertEquals(features.copy(controllerMic = true, controllerSpeaker = false, controllerHapticAudio = true), next["sat-A"])
+    }
+
+    @Test
     fun `a silent verdict for an unknown host hands back the same map`() {
         val empty = emptyMap<String, HostFeatureSet>()
 
-        assertSame(empty, withControllerAudio(empty, "sat-A", mic = false, speaker = false))
+        assertSame(empty, withControllerAudio(empty, "sat-A", mic = false, speaker = false, hapticAudio = false))
     }
 
     @Test
