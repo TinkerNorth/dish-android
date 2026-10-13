@@ -1,0 +1,4 @@
+Dish 2.3.2: two fixes from crash reports.
+
+• Moonlight hosts work again on devices where Dish crashed as soon as it checked its pairing (Shield TV and Retroid Pocket among them).
+• Plugging in, waking or changing a controller no longer freezes the app.
