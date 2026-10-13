@@ -43,14 +43,15 @@ class SatelliteHostFeaturesStore
             setState { withProtocolVersion(it, connectionId, protocolVersion) }
         }
 
-        // Merged like noteProtocolVersion, and both directions ride one write because one document
-        // reports both: two writes would publish a host with the mic moved and the speaker not.
+        // Merged like noteProtocolVersion, and all three lanes ride one write because one document
+        // reports them: two writes would publish a host with the mic moved and the speaker not.
         fun noteControllerAudio(
             connectionId: String,
             mic: Boolean,
             speaker: Boolean,
+            hapticAudio: Boolean,
         ) {
-            setState { withControllerAudio(it, connectionId, mic, speaker) }
+            setState { withControllerAudio(it, connectionId, mic, speaker, hapticAudio) }
         }
 
         fun clearConnection(connectionId: String) {
@@ -58,7 +59,8 @@ class SatelliteHostFeaturesStore
         }
     }
 
-// A host the store already holds keeps the audio verdict its capabilities probe read.
+// A host the store already holds keeps the audio verdict its capabilities probe read, the
+// haptics lane included: the catalog has no field for any of the three.
 internal fun withCatalogFeatures(
     features: Map<String, HostFeatureSet>,
     connectionId: String,
@@ -69,7 +71,11 @@ internal fun withCatalogFeatures(
         if (prior == null) {
             catalog
         } else {
-            catalog.copy(controllerMic = prior.controllerMic, controllerSpeaker = prior.controllerSpeaker)
+            catalog.copy(
+                controllerMic = prior.controllerMic,
+                controllerSpeaker = prior.controllerSpeaker,
+                controllerHapticAudio = prior.controllerHapticAudio,
+            )
         }
     return features + (connectionId to merged)
 }
@@ -87,15 +93,18 @@ internal fun withProtocolVersion(
     return features + (connectionId to base.copy(protocolVersion = protocolVersion))
 }
 
-// The same rule for the audio verdict, read as a pair: moving either direction is a change.
+// The same rule for the audio verdict, read as one: moving any lane is a change.
 internal fun withControllerAudio(
     features: Map<String, HostFeatureSet>,
     connectionId: String,
     mic: Boolean,
     speaker: Boolean,
+    hapticAudio: Boolean,
 ): Map<String, HostFeatureSet> {
     val base = features[connectionId] ?: HostFeatureSet.SATELLITE_DEFAULT
-    val isUnchanged = base.controllerMic == mic && base.controllerSpeaker == speaker
+    val isUnchanged =
+        base.controllerMic == mic && base.controllerSpeaker == speaker && base.controllerHapticAudio == hapticAudio
     if (isUnchanged) return features
-    return features + (connectionId to base.copy(controllerMic = mic, controllerSpeaker = speaker))
+    val moved = base.copy(controllerMic = mic, controllerSpeaker = speaker, controllerHapticAudio = hapticAudio)
+    return features + (connectionId to moved)
 }

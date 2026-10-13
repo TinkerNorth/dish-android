@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.core.net.moonlight
 
+import com.tinkernorth.dish.core.input.WBUTTON_MIC_MUTE
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
@@ -76,11 +77,13 @@ class MoonlightEmulatedTypeTest {
         )
     }
 
+    // The base set is XUSB's low 16 less 0x0800, the satellite's mic-mute bit, which is no
+    // Moonlight button; the touchpad flag joins it on the capability alone.
     @Test
     fun `the touchpad click button flag rides on the touchpad capability alone`() {
-        assertEquals(0xFFFF, supportedButtons(0x03))
+        assertEquals(0xFFFF and WBUTTON_MIC_MUTE.inv(), supportedButtons(0x03))
         assertEquals(
-            0xFFFF or BTN_TOUCHPAD,
+            (0xFFFF and WBUTTON_MIC_MUTE.inv()) or BTN_TOUCHPAD,
             supportedButtons(0x03 or CAP_TOUCHPAD),
         )
     }

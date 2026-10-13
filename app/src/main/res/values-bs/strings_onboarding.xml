@@ -53,7 +53,7 @@
     <string name="help_a_open_source">Da. Dish (Android, Linux, Mac) i Satellite su svi objavljeni pod LGPL-3.0, izvorni kod na GitHub-u na github.com/TinkerNorth. Pull request-ovi su dobrodošli.</string>
 
     <string name="help_q_privacy">Šta Dish prikuplja?</string>
-    <string name="help_a_privacy">Skoro ništa. Dish ne šalje sadržaj igre ni unos kontrolera nigdje. Taj saobraćaj ostaje na vašoj lokalnoj mreži između telefona i PC-a. Anonimni izvještaji o padovima su opcionalni (Postavke → Dijagnostika). Za potpunu listu pogledajte politiku privatnosti.</string>
+    <string name="help_a_privacy">Skoro ništa. Dish ne šalje sadržaj igre ni unos kontrolera nigdje. Taj saobraćaj ostaje na vašoj lokalnoj mreži između telefona i PC-a. Anonimni izvještaji o padovima su podrazumijevano uključeni i mogu se isključiti (Postavke → Dijagnostika). Za potpunu listu pogledajte politiku privatnosti.</string>
 
     <string name="help_view_privacy_policy">Politika privatnosti</string>
     <string name="help_view_github">Pogledaj izvorni kod na GitHub-u</string>

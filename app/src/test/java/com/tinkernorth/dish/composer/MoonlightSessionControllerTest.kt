@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.lifecycle.LifecycleOwner
+import com.tinkernorth.dish.core.input.WBUTTON_MIC_MUTE
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
@@ -159,7 +160,7 @@ class MoonlightSessionControllerTest {
             val pad = desired.captured.getValue("moonlight:pc").single()
             assertEquals(XBOX, pad.emulatedType)
             assertEquals(0x03, pad.capabilities)
-            assertEquals(0xFFFF, pad.supportedButtons)
+            assertEquals(0xFFFF and WBUTTON_MIC_MUTE.inv(), pad.supportedButtons)
         }
 
     @Test
