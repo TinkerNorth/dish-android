@@ -51,7 +51,7 @@ class SatelliteHostFeaturesStoreTest {
     fun `noteControllerAudio merges into an entry a catalog read already owns`() {
         // Catalog first, probe second: setIfAbsent would have dropped the verdict.
         store.setFeatures("sat-A", features)
-        store.noteControllerAudio("sat-A", mic = true, speaker = true)
+        store.noteControllerAudio("sat-A", mic = true, speaker = true, hapticAudio = false)
 
         assertEquals(features.copy(controllerMic = true, controllerSpeaker = true), store.featuresFor("sat-A"))
     }
@@ -61,10 +61,33 @@ class SatelliteHostFeaturesStoreTest {
         // The host gates the two wires apart, so a speaker-only host has to arrive that way
         // rather than as a single verdict rounded up to both.
         store.setFeatures("sat-A", features)
-        store.noteControllerAudio("sat-A", mic = false, speaker = true)
+        store.noteControllerAudio("sat-A", mic = false, speaker = true, hapticAudio = false)
 
         assertEquals(false, store.featuresFor("sat-A")?.controllerMic)
         assertEquals(true, store.featuresFor("sat-A")?.controllerSpeaker)
+    }
+
+    @Test
+    fun `noteControllerAudio lands the haptics lane beside the two directions`() {
+        // The DualSense's HD haptics ride a third lane the probe reports; dropping it here is
+        // why a host that carried haptics never played them.
+        store.setFeatures("sat-A", features)
+        store.noteControllerAudio("sat-A", mic = true, speaker = true, hapticAudio = true)
+
+        assertEquals(true, store.featuresFor("sat-A")?.controllerHapticAudio)
+        store.noteControllerAudio("sat-A", mic = true, speaker = true, hapticAudio = false)
+        assertEquals(false, store.featuresFor("sat-A")?.controllerHapticAudio)
+    }
+
+    @Test
+    fun `a catalog write carries the haptics verdict forward too`() {
+        // Probe first, catalog second, in the order the Live transition races them: the catalog
+        // has no audio fields, so its write must not reset the haptics lane to false.
+        store.setIfAbsent("sat-A", features.copy(controllerHapticAudio = true))
+        store.setFeatures("sat-A", features.copy(mouseControl = false))
+
+        assertEquals(true, store.featuresFor("sat-A")?.controllerHapticAudio)
+        assertEquals(false, store.featuresFor("sat-A")?.mouseControl)
     }
 
     @Test
@@ -88,11 +111,11 @@ class SatelliteHostFeaturesStoreTest {
         // An old satellite reports no audio; the default already says so, so probing it
         // must not conjure a host entry out of nothing.
         val before = store.state.value
-        store.noteControllerAudio("sat-A", mic = false, speaker = false)
+        store.noteControllerAudio("sat-A", mic = false, speaker = false, hapticAudio = false)
         assertNull(store.featuresFor("sat-A"))
         assertSame(before, store.state.value)
 
-        store.noteControllerAudio("sat-B", mic = true, speaker = true)
+        store.noteControllerAudio("sat-B", mic = true, speaker = true, hapticAudio = false)
         assertEquals(
             HostFeatureSet.SATELLITE_DEFAULT.copy(controllerMic = true, controllerSpeaker = true),
             store.featuresFor("sat-B"),
@@ -103,17 +126,17 @@ class SatelliteHostFeaturesStoreTest {
     fun `a re-probe that moves either direction lands, one at a time`() {
         store.setFeatures("sat-A", features.copy(controllerMic = true, controllerSpeaker = false))
 
-        store.noteControllerAudio("sat-A", mic = true, speaker = true)
+        store.noteControllerAudio("sat-A", mic = true, speaker = true, hapticAudio = false)
         assertEquals(true, store.featuresFor("sat-A")?.controllerSpeaker)
 
-        store.noteControllerAudio("sat-A", mic = false, speaker = true)
+        store.noteControllerAudio("sat-A", mic = false, speaker = true, hapticAudio = false)
         assertEquals(false, store.featuresFor("sat-A")?.controllerMic)
     }
 
     @Test
     fun `a host that switches audio back off is honored`() {
         store.setFeatures("sat-A", features.copy(controllerMic = true, controllerSpeaker = true))
-        store.noteControllerAudio("sat-A", mic = false, speaker = false)
+        store.noteControllerAudio("sat-A", mic = false, speaker = false, hapticAudio = false)
         assertEquals(false, store.featuresFor("sat-A")?.controllerMic)
         assertEquals(false, store.featuresFor("sat-A")?.controllerSpeaker)
     }
@@ -122,7 +145,7 @@ class SatelliteHostFeaturesStoreTest {
     fun `the audio verdict is per connection`() {
         store.setFeatures("sat-A", features)
         store.setFeatures("sat-B", features)
-        store.noteControllerAudio("sat-A", mic = true, speaker = true)
+        store.noteControllerAudio("sat-A", mic = true, speaker = true, hapticAudio = false)
 
         assertEquals(true, store.featuresFor("sat-A")?.controllerMic)
         assertEquals(true, store.featuresFor("sat-A")?.controllerSpeaker)

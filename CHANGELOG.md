@@ -38,6 +38,19 @@ controller changes.
   screen, and on one phone the answer took long enough to trigger "Dish isn't
   responding". Those lookups now run on their own thread.
 
+## [Unreleased]
+
+- **DualSense HD haptics play again.** The host's word that it carries the
+  haptics lane was dropped on the way into the app and reset by every catalog
+  read, so the lane was never opened and the host, told the pad plays haptics,
+  never sent rumble in its place either. The lane now rides the same merge as
+  the mic and the speaker and survives a catalog write.
+- **The mic-mute bit stays off the Moonlight wire.** A DualSense claimed in
+  Direct mode sets bit 0x0800 on every muted frame; a Moonlight host has no
+  button there. The frame mask and the advertised buttons now leave it out.
+- **The onboarding help says crash reports are on by default and can be turned
+  off**, which is what the switch does; it said "opt-in".
+
 ## [2.3.1] - 2026-10-12
 
 A new app icon.

@@ -25,14 +25,14 @@ class CrashReportingController
     ) : AbstractController<Boolean>(scope) {
         override fun upstream(): Flow<Boolean> = store.state
 
-        // Process-scoped: do not cancel. Must propagate opt-in flips across activity restarts.
+        // Process-scoped: do not cancel. Must propagate the switch's flips across activity restarts.
         override fun onStop(owner: LifecycleOwner) = Unit
 
         override fun apply(value: Boolean) {
             if (FirebaseApp.getApps(context).isEmpty()) {
                 Log.i(
                     TAG,
-                    "Firebase not initialised (no google-services.json). Opt-in preference recorded but Crashlytics call skipped.",
+                    "Firebase not initialised (no google-services.json). Preference recorded but Crashlytics call skipped.",
                 )
                 return
             }
