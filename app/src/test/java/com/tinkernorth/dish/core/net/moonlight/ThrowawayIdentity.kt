@@ -4,7 +4,9 @@
 package com.tinkernorth.dish.core.net.moonlight
 
 import okhttp3.tls.HeldCertificate
+import java.math.BigInteger
 import java.security.PrivateKey
+import java.security.interfaces.RSAPrivateKey
 
 /**
  * A disposable self-signed certificate, minted per test run so that no key material is committed
@@ -25,10 +27,28 @@ internal fun throwawayIdentity(commonName: String): MoonlightIdentity = identity
 
 internal fun identityOf(held: HeldCertificate): MoonlightIdentity = HeldIdentity(held)
 
+/** [identityOf], behind a key that exports nothing, the way a key the Android keystore holds does not. */
+internal fun opaqueIdentityOf(held: HeldCertificate): MoonlightIdentity =
+    HeldIdentity(held, OpaqueRsaKey(held.keyPair.private as RSAPrivateKey))
+
 private class HeldIdentity(
     held: HeldCertificate,
+    override val privateKey: PrivateKey = held.keyPair.private,
 ) : MoonlightIdentity {
     override val certificatePem: String = held.certificatePem()
     override val certificateSignature: ByteArray = held.certificate.signature
-    override val privateKey: PrivateKey = held.keyPair.private
+}
+
+private class OpaqueRsaKey(
+    private val key: RSAPrivateKey,
+) : RSAPrivateKey {
+    override fun getAlgorithm(): String = key.algorithm
+
+    override fun getFormat(): String? = null
+
+    override fun getEncoded(): ByteArray? = null
+
+    override fun getModulus(): BigInteger = key.modulus
+
+    override fun getPrivateExponent(): BigInteger = key.privateExponent
 }

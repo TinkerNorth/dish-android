@@ -6,6 +6,8 @@ import android.content.Context
 import android.hardware.input.InputManager
 import android.hardware.usb.UsbManager
 import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
 import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
@@ -29,6 +31,7 @@ import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -61,6 +64,7 @@ class PhysicalGamepadRegistry
         private val native: PhysicalInputNative,
         private val btConnections: BluetoothConnections,
         private val sdkInt: Int,
+        listenerHandler: () -> Handler?,
     ) : InputManager.InputDeviceListener {
         @Inject
         constructor(
@@ -68,7 +72,7 @@ class PhysicalGamepadRegistry
             scope: CoroutineScope,
             native: PhysicalInputNative,
             btConnections: BluetoothConnections,
-        ) : this(context, scope, native, btConnections, Build.VERSION.SDK_INT)
+        ) : this(context, scope, native, btConnections, Build.VERSION.SDK_INT, { listenerThreadHandler() })
 
         data class Device(
             val id: Int,
@@ -135,6 +139,8 @@ class PhysicalGamepadRegistry
         private val usbManager =
             context.getSystemService(Context.USB_SERVICE) as? UsbManager
 
+        private val listenerHandler: Handler? by lazy(listenerHandler)
+
         private val _devices = MutableStateFlow<Map<Int, Device>>(emptyMap())
         val devices: StateFlow<Map<Int, Device>> = _devices.asStateFlow()
 
@@ -145,9 +151,19 @@ class PhysicalGamepadRegistry
         fun install() {
             if (installed) return
             installed = true
-            inputManager.registerInputDeviceListener(this, null)
-            syncAll()
+            inputManager.registerInputDeviceListener(this, listenerHandler)
+            onListenerThread(::syncAll)
             btConnections.start(::refreshTransports)
+        }
+
+        private fun onListenerThread(block: () -> Unit) {
+            val handler = listenerHandler ?: return block()
+            val done = CountDownLatch(1)
+            handler.post {
+                block()
+                done.countDown()
+            }
+            done.await()
         }
 
         private fun syncAll() {
@@ -652,6 +668,9 @@ class PhysicalGamepadRegistry
 
         companion object {
             private const val TAG = "PhysicalGamepadRegistry"
+            private const val LISTENER_THREAD = "dish-gamepad-registry"
+
+            private fun listenerThreadHandler(): Handler = Handler(HandlerThread(LISTENER_THREAD).apply { start() }.looper)
 
             // Covers a USB cable jiggle / re-enumeration without holding state long enough that a real removal feels stuck.
             private const val DISCONNECT_GRACE_SEC = 5
