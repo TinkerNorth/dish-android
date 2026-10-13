@@ -1,0 +1,4 @@
+Dish 2.3.2 : deux correctifs issus des rapports de plantage.
+
+• Les hôtes Moonlight fonctionnent de nouveau sur les appareils où Dish plantait dès la vérification de l'appairage (Shield TV et Retroid Pocket, entre autres).
+• Brancher, réveiller ou modifier une manette ne fige plus l'application.

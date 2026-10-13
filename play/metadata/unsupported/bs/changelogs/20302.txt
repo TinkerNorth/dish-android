@@ -1,0 +1,4 @@
+Dish 2.3.2: dvije ispravke na osnovu izvještaja o rušenju.
+
+• Moonlight hostovi ponovo rade na uređajima na kojima se Dish rušio čim provjeri uparivanje (među njima Shield TV i Retroid Pocket).
+• Priključivanje, buđenje ili promjena kontrolera više ne zamrzava aplikaciju.
