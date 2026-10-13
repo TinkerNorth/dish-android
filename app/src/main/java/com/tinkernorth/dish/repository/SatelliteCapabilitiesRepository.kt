@@ -65,6 +65,7 @@ class SatelliteCapabilitiesRepository
                 satelliteId,
                 mic = probed.controllerMic,
                 speaker = probed.controllerSpeaker,
+                hapticAudio = probed.controllerHapticAudio,
             )
             runtimeStore.setRuntime(satelliteId, SatelliteHostRuntime(motionBackendOk = caps.motion?.available != false))
             return caps

@@ -4,6 +4,7 @@
 package com.tinkernorth.dish.source.connection.moonlight
 
 import android.util.Log
+import com.tinkernorth.dish.core.input.WBUTTON_MIC_MUTE
 import com.tinkernorth.dish.core.net.moonlight.BTN_TOUCHPAD
 import com.tinkernorth.dish.core.net.moonlight.FIRST_FINGER
 import com.tinkernorth.dish.core.net.moonlight.MOTION_TYPE_ACCEL
@@ -577,9 +578,10 @@ class MoonlightConnection(
     companion object {
         private const val TAG = "MoonlightConnection"
 
-        // XUSB's low 16 plus the wire's own touchpad flag (buttonFlags2 on the wire);
-        // anything else a caller sets is not a button this client can vouch for.
-        private const val WIRE_BUTTONS_MASK = 0xFFFF or BTN_TOUCHPAD
+        // XUSB's low 16 less the satellite's mic-mute bit (0x0800 is no Moonlight button), plus
+        // the wire's own touchpad flag (buttonFlags2 on the wire); anything else a caller sets
+        // is not a button this client can vouch for.
+        private const val WIRE_BUTTONS_MASK = (0xFFFF and WBUTTON_MIC_MUTE.inv()) or BTN_TOUCHPAD
 
         // Comfortably inside every host deadline we have measured, and cheap.
         private const val MEDIA_PING_INTERVAL_MS = 500L
@@ -590,7 +592,7 @@ class MoonlightConnection(
         // Moonlight session carries four pads and no more.
         const val MAX_PADS = 4
 
-        const val SUPPORTED_BUTTONS = 0xFFFF
+        const val SUPPORTED_BUTTONS = 0xFFFF and WBUTTON_MIC_MUTE.inv()
 
         val DEFAULT_TYPE = XBOX
     }

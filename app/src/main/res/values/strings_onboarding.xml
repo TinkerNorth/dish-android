@@ -53,7 +53,7 @@
     <string name="help_a_open_source">Yes. Dish (Android, Linux, Mac) and Satellite are all released under LGPL-3.0, source on GitHub at github.com/TinkerNorth. Pull requests welcome.</string>
 
     <string name="help_q_privacy">What does Dish collect?</string>
-    <string name="help_a_privacy">Almost nothing. Dish doesn\'t send gameplay or controller input anywhere. That traffic stays on your local network between phone and PC. Anonymous crash reports are opt-in (Settings &#8594; Diagnostics). See the privacy policy for the full list.</string>
+    <string name="help_a_privacy">Almost nothing. Dish doesn\'t send gameplay or controller input anywhere. That traffic stays on your local network between phone and PC. Anonymous crash reports are on by default and can be turned off (Settings &#8594; Diagnostics). See the privacy policy for the full list.</string>
 
     <string name="help_view_privacy_policy">Privacy policy</string>
     <string name="help_view_github">View source on GitHub</string>

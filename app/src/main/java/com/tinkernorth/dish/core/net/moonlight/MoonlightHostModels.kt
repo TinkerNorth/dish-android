@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.core.net.moonlight
 
+import com.tinkernorth.dish.core.input.WBUTTON_MIC_MUTE
 import kotlinx.serialization.Serializable
 
 /**
@@ -155,4 +156,5 @@ private const val BASE_MAXIMUM =
 
 private const val PLAYSTATION_MAXIMUM = 0xFF
 
-private const val BASE_BUTTONS = 0xFFFF
+// XUSB's low 16 less the satellite's mic-mute bit, which is no Moonlight button.
+private const val BASE_BUTTONS = 0xFFFF and WBUTTON_MIC_MUTE.inv()
