@@ -12,6 +12,7 @@ import android.hardware.lights.LightsManager
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Build
+import android.os.Handler
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.view.InputDevice
@@ -68,11 +69,12 @@ class PhysicalGamepadRegistryLifecycleTest {
     private fun buildRegistry(
         scope: CoroutineScope = CoroutineScope(dispatcher),
         sdkInt: Int = Build.VERSION_CODES.N,
+        listenerHandler: Handler? = null,
     ): PhysicalGamepadRegistry {
         val ctx = mockk<Context>()
         every { ctx.getSystemService(Context.INPUT_SERVICE) } returns inputManager
         every { ctx.getSystemService(Context.USB_SERVICE) } returns usb
-        return PhysicalGamepadRegistry(ctx, scope, native, btConnections, sdkInt)
+        return PhysicalGamepadRegistry(ctx, scope, native, btConnections, sdkInt) { listenerHandler }
     }
 
     private fun frameworkPad(
@@ -169,6 +171,24 @@ class PhysicalGamepadRegistryLifecycleTest {
         registry.install()
         registry.install()
         verify(exactly = 1) { inputManager.registerInputDeviceListener(registry, null) }
+    }
+
+    @Test
+    fun `install listens on the handler it is given and runs the first enumeration there`() {
+        val handler = mockk<Handler>()
+        every { handler.post(any()) } answers {
+            firstArg<Runnable>().run()
+            true
+        }
+        every { InputDevice.getDeviceIds() } returns intArrayOf(PAD)
+        every { InputDevice.getDevice(PAD) } returns frameworkPad(PAD)
+        val registry = buildRegistry(listenerHandler = handler)
+
+        registry.install()
+
+        verify(exactly = 1) { inputManager.registerInputDeviceListener(registry, handler) }
+        verify(exactly = 1) { handler.post(any()) }
+        assertEquals(setOf(PAD), registry.devices.value.keys)
     }
 
     // ---- onInputDeviceAdded ----

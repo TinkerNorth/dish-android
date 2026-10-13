@@ -5,6 +5,7 @@ package com.tinkernorth.dish.source.connection.moonlight
 
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
 import com.tinkernorth.dish.core.net.moonlight.identityOf
+import com.tinkernorth.dish.core.net.moonlight.opaqueIdentityOf
 import com.tinkernorth.dish.core.net.moonlight.throwawayCertificate
 import com.tinkernorth.dish.repository.SatellitePinRepository
 import com.tinkernorth.dish.repository.sha256FingerprintHex
@@ -82,6 +83,17 @@ class MoonlightHttpGatewayTest {
         assertEquals(200, reply.status)
         assertEquals(BODY, reply.body)
         assertTrue(reply.ok)
+        assertEquals("CN=dish-gateway-test-client", host.awaitClientPrincipals().single())
+    }
+
+    // The dish's real key lives in the Android keystore and exports neither its bytes nor a format.
+    @Test
+    fun `presents a client certificate whose key exports no key material`() {
+        val base = start()
+
+        val reply = MoonlightHttpGateway(opaqueIdentityOf(clientHeld), pins).getHttps("$base/serverinfo?uniqueid=abc", HOST_ID)
+
+        assertEquals(200, reply.status)
         assertEquals("CN=dish-gateway-test-client", host.awaitClientPrincipals().single())
     }
 
