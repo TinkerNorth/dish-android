@@ -229,7 +229,7 @@ class SatelliteHostFeaturesStoreTest {
 
     @Test
     fun `an audio verdict for an unknown host is merged into the default`() {
-        val next = withControllerAudio(emptyMap(), "sat-A", mic = true, speaker = false)
+        val next = withControllerAudio(emptyMap(), "sat-A", mic = true, speaker = false, hapticAudio = false)
 
         assertEquals(mapOf("sat-A" to HostFeatureSet.SATELLITE_DEFAULT.copy(controllerMic = true)), next)
     }
