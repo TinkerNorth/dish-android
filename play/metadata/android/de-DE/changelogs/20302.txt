@@ -1,0 +1,4 @@
+Dish 2.3.2: zwei Korrekturen nach Absturzberichten.
+
+• Moonlight-Hosts funktionieren wieder auf Geräten, auf denen Dish beim Prüfen der Kopplung abstürzte (unter anderem Shield TV und Retroid Pocket).
+• Ein Controller, der angeschlossen, geweckt oder geändert wird, lässt die App nicht mehr einfrieren.

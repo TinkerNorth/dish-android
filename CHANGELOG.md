@@ -7,7 +7,10 @@ computer. Those lines say "update Satellite too".
 
 ---
 
-## [Unreleased]
+## [2.3.2] - 2026-10-13
+
+Two fixes from crash reports: Moonlight hosts on some devices, and a freeze when a
+controller changes.
 
 ### Fixed
 

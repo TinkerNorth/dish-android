@@ -1,0 +1,4 @@
+Dish 2.3.2: dos correcciones a partir de informes de errores.
+
+• Los hosts Moonlight vuelven a funcionar en dispositivos donde Dish se cerraba al comprobar el emparejamiento (Shield TV y Retroid Pocket, entre otros).
+• Conectar, despertar o cambiar un mando ya no congela la app.
