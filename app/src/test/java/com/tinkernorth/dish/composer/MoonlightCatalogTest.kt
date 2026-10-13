@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.composer
 
+import com.tinkernorth.dish.core.input.WBUTTON_MIC_MUTE
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.core.net.moonlight.BTN_TOUCHPAD
@@ -152,15 +153,16 @@ class MoonlightCatalogTest {
 
     // The whole chain, byte for byte: catalog -> declared bits -> the packet the host reads
     // out of its naturally aligned struct. A live Sunshine host logs these as
-    // `capabilities [0003] supportedButtonFlags [0000FFFF]` for the Xbox case.
+    // `capabilities [0003] supportedButtonFlags [0000F7FF]` for the Xbox case: XUSB's low 16
+    // less 0x0800, the satellite's mic-mute bit, which is no Moonlight button.
     @Test
     fun `each type produces its own byte-exact CONTROLLER_ARRIVAL`() {
-        assertArrival(XBOX, expectedCaps = 0x47, expectedButtons = 0xFFFF)
-        assertArrival(NINTENDO, expectedCaps = 0x47, expectedButtons = 0xFFFF)
+        assertArrival(XBOX, expectedCaps = 0x47, expectedButtons = 0xFFFF and WBUTTON_MIC_MUTE.inv())
+        assertArrival(NINTENDO, expectedCaps = 0x47, expectedButtons = 0xFFFF and WBUTTON_MIC_MUTE.inv())
         assertArrival(
             PLAYSTATION,
             expectedCaps = 0xFF,
-            expectedButtons = 0xFFFF or BTN_TOUCHPAD,
+            expectedButtons = (0xFFFF and WBUTTON_MIC_MUTE.inv()) or BTN_TOUCHPAD,
         )
     }
 
