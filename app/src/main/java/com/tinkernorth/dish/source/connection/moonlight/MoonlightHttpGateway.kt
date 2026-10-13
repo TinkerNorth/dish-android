@@ -6,7 +6,7 @@ package com.tinkernorth.dish.source.connection.moonlight
 import android.util.Log
 import com.tinkernorth.dish.core.net.TofuTrustManager
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
-import com.tinkernorth.dish.core.net.moonlight.parseMoonlightCert
+import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentityKeyManager
 import com.tinkernorth.dish.repository.SatellitePinRepository
 import com.tinkernorth.dish.repository.sha256FingerprintHex
 import java.net.Socket
@@ -16,7 +16,6 @@ import java.security.cert.X509Certificate
 import javax.inject.Inject
 import javax.inject.Singleton
 import javax.net.ssl.KeyManager
-import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
@@ -57,12 +56,11 @@ class MoonlightHttpGateway
         private val plain = MoonlightHttp11Client(TIMEOUT_MS, TIMEOUT_MS)
 
         /**
-         * The dish's client credential, resolved once: a keystore load and a
-         * KeyManagerFactory init are not cheap, and the identity behind them
-         * never changes for the life of the process. The SSLContext that
-         * presents them is deliberately not cached; see [openTls].
+         * The dish's client credential, served from the identity as it is; see
+         * [MoonlightIdentityKeyManager] for why no KeyStore sits in between. The
+         * SSLContext that presents it is deliberately not cached; see [openTls].
          */
-        private val clientCredential: Array<KeyManager> by lazy { clientKeyManagers() }
+        private val clientCredential: Array<KeyManager> = arrayOf(MoonlightIdentityKeyManager(identity))
 
         /**
          * Plaintext GET (serverinfo / pair phases 1-4).
@@ -240,26 +238,6 @@ class MoonlightHttpGateway
                 .getInstance(TrustManagerFactory.getDefaultAlgorithm())
                 .apply { init(anchors) }
                 .trustManagers
-        }
-
-        // Present the client certificate; the host authorises by it after pairing.
-        private fun clientKeyManagers(): Array<KeyManager> {
-            val keyStore =
-                KeyStore.getInstance(KeyStore.getDefaultType()).apply {
-                    load(null)
-                    setKeyEntry(
-                        "client",
-                        identity.privateKey,
-                        CharArray(0),
-                        arrayOf(
-                            parseMoonlightCert(identity.certificatePem),
-                        ),
-                    )
-                }
-            return KeyManagerFactory
-                .getInstance(KeyManagerFactory.getDefaultAlgorithm())
-                .apply { init(keyStore, CharArray(0)) }
-                .keyManagers
         }
 
         companion object {

@@ -7,6 +7,19 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Moonlight hosts answer again on devices where Dish crashed the moment it
+  checked its pairing** (seen on the Shield TV and the Retroid Pocket 4 Pro).
+  The client certificate now goes to the TLS handshake directly instead of
+  through a keystore that could not hold its key.
+- **A controller being plugged in, woken or changed no longer freezes the
+  app.** Dish asked Android about the controller on the thread that draws the
+  screen, and on one phone the answer took long enough to trigger "Dish isn't
+  responding". Those lookups now run on their own thread.
+
 ## [2.3.1] - 2026-10-12
 
 A new app icon.
