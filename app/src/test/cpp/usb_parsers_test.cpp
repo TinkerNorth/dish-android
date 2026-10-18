@@ -478,7 +478,7 @@ TEST(MicMuteLed, OnlyTheDualSenseHasTheLamp) {
     uint8_t out[64];
     for (auto p : {Parser::NONE, Parser::XINPUT_360, Parser::XBOX_ONE_GIP, Parser::DUALSHOCK4,
                    Parser::SWITCH_PRO_USB, Parser::STADIA, Parser::GENERIC_HID_GAMEPAD,
-                   Parser::XINPUT_360_WIRELESS, Parser::STEAM_CONTROLLER}) {
+                   Parser::XINPUT_360_WIRELESS, Parser::STEAM_CONTROLLER, Parser::SWITCH_N64_USB}) {
         EXPECT_EQ(0u, usbparsers::buildMicMuteLedReport(p, st, usbparsers::MIC_MUTE_LED_ON, out,
                                                         sizeof(out)))
             << usbparsers::parserName(p);
@@ -613,7 +613,7 @@ TEST(FeedbackCapability, PredicatesMatchTheBuilders) {
     for (auto p :
          {Parser::NONE, Parser::XINPUT_360, Parser::XBOX_ONE_GIP, Parser::DUALSHOCK4,
           Parser::DUALSENSE, Parser::SWITCH_PRO_USB, Parser::STADIA, Parser::GENERIC_HID_GAMEPAD,
-          Parser::XINPUT_360_WIRELESS, Parser::STEAM_CONTROLLER}) {
+          Parser::XINPUT_360_WIRELESS, Parser::STEAM_CONTROLLER, Parser::SWITCH_N64_USB}) {
         usbparsers::FeedbackState st;
         uint8_t out[64];
         uint8_t block[11] = {};
@@ -644,6 +644,7 @@ TEST(RumbleCapability, FamiliesWithBuildersReportTrue) {
     EXPECT_TRUE(parserHasRumble(Parser::DUALSHOCK4));
     EXPECT_TRUE(parserHasRumble(Parser::DUALSENSE));
     EXPECT_TRUE(parserHasRumble(Parser::SWITCH_PRO_USB));
+    EXPECT_TRUE(parserHasRumble(Parser::SWITCH_N64_USB));
 }
 
 TEST(RumbleCapability, FamiliesWithoutBuildersReportFalse) {
@@ -654,6 +655,7 @@ TEST(RumbleCapability, FamiliesWithoutBuildersReportFalse) {
 
 TEST(FrameworkRumble, SwitchProProtocolIsUnreliable) {
     EXPECT_TRUE(parserFrameworkRumbleUnreliable(Parser::SWITCH_PRO_USB));
+    EXPECT_TRUE(parserFrameworkRumbleUnreliable(Parser::SWITCH_N64_USB));
 }
 
 TEST(FrameworkRumble, OtherRumbleFamiliesAreTrusted) {
@@ -872,6 +874,7 @@ TEST(ImuCapability, PlayStationParsersHaveImu) {
     EXPECT_TRUE(parserHasImu(Parser::DUALSHOCK4));
     EXPECT_TRUE(parserHasImu(Parser::DUALSENSE));
     EXPECT_TRUE(parserHasImu(Parser::SWITCH_PRO_USB));
+    EXPECT_FALSE(parserHasImu(Parser::SWITCH_N64_USB));
     EXPECT_FALSE(parserHasImu(Parser::XINPUT_360));
 }
 
@@ -2110,6 +2113,125 @@ TEST(SwitchProDecode, WrongReportIdOrShortReportIsRejected) {
     EXPECT_FALSE(decodeReport(Parser::SWITCH_PRO_USB, tooShort.data(), tooShort.size(), s, &st));
 }
 
+TEST(SwitchN64Decode, TheOnlinePadIsAVerifiedModelOnTheSwitchHandshake) {
+    const usbparsers::Classification c = usbparsers::classifyDevice(0x057E, 0x2019, 3, 0, 0);
+    EXPECT_EQ(Parser::SWITCH_N64_USB, c.parser);
+    EXPECT_EQ(InitKind::SWITCH_PRO_HANDSHAKE, c.init);
+    EXPECT_STREQ("Nintendo N64 Online Controller", c.name);
+    EXPECT_TRUE(isVerifiedFastLane(0x057E, 0x2019));
+}
+
+TEST(SwitchN64Decode, ButtonsMapToTheirN64Roles) {
+    expectEachBitAlone(Parser::SWITCH_N64_USB, switchReport(12), 3, 0x00,
+                       {{0x04, XUSB_B}, {0x08, XUSB_A}, {0x40, XUSB_RB}});
+    expectEachBitAlone(Parser::SWITCH_N64_USB, switchReport(12), 4, 0x00,
+                       {{0x02, XUSB_START}, {0x10, XUSB_GUIDE}, {0x20, XUSB_BACK}});
+    expectEachBitAlone(Parser::SWITCH_N64_USB, switchReport(12), 5, 0x00,
+                       {{0x01, XUSB_DPAD_DOWN},
+                        {0x02, XUSB_DPAD_UP},
+                        {0x04, XUSB_DPAD_RIGHT},
+                        {0x08, XUSB_DPAD_LEFT},
+                        {0x40, XUSB_LB}});
+}
+
+TEST(SwitchN64Decode, ZAndZrAreTheDigitalTriggers) {
+    auto r = switchReport(12);
+    r[5] = 0x80;
+    const DeviceState z = decodeFresh(Parser::SWITCH_N64_USB, r);
+    EXPECT_EQ(255, z.bLT);
+    EXPECT_EQ(0, z.bRT);
+    EXPECT_EQ(0, z.wButtons);
+
+    r[5] = 0x00;
+    r[4] = 0x08;
+    const DeviceState zr = decodeFresh(Parser::SWITCH_N64_USB, r);
+    EXPECT_EQ(0, zr.bLT);
+    EXPECT_EQ(255, zr.bRT);
+    EXPECT_EQ(0, zr.wButtons);
+}
+
+TEST(SwitchN64Decode, CButtonsRailTheRightStick) {
+    auto r = switchReport(12);
+    r[3] = 0x01;
+    DeviceState s = decodeFresh(Parser::SWITCH_N64_USB, r);
+    EXPECT_EQ(32767, s.sRY);
+    EXPECT_EQ(0, s.sRX);
+    EXPECT_EQ(0, s.wButtons);
+
+    r[3] = 0x80;
+    s = decodeFresh(Parser::SWITCH_N64_USB, r);
+    EXPECT_EQ(-32767, s.sRY);
+    EXPECT_EQ(0, s.bRT);
+
+    r[3] = 0x02;
+    s = decodeFresh(Parser::SWITCH_N64_USB, r);
+    EXPECT_EQ(-32767, s.sRX);
+    EXPECT_EQ(0, s.sRY);
+
+    r[3] = 0x00;
+    r[4] = 0x01;
+    s = decodeFresh(Parser::SWITCH_N64_USB, r);
+    EXPECT_EQ(32767, s.sRX);
+    EXPECT_EQ(0, s.wButtons);
+
+    r[3] = 0x81;
+    r[4] = 0x00;
+    s = decodeFresh(Parser::SWITCH_N64_USB, r);
+    EXPECT_EQ(0, s.sRY);
+}
+
+TEST(SwitchN64Decode, OnlyTheLeftStickIsReadAndThereIsNoMotion) {
+    ParserState st;
+    auto r = switchReport(49);
+    setSwitchSticks(r, kSwitchRawMax, kSwitchCentre, kSwitchRawMax, kSwitchRawMax);
+    r[13] = 0x34;
+    r[14] = 0x12;
+    DeviceState s;
+    ASSERT_TRUE(decodeReport(Parser::SWITCH_N64_USB, r.data(), r.size(), s, &st));
+    EXPECT_GT(s.sLX, 0);
+    EXPECT_EQ(0, s.sLY);
+    EXPECT_EQ(0, s.sRX);
+    EXPECT_EQ(0, s.sRY);
+    EXPECT_FALSE(s.motionValid);
+}
+
+TEST(SwitchN64Decode, BatteryReadsLikeTheProController) {
+    auto r = switchReport(12);
+    r[2] = 0x80;
+    const DeviceState s = decodeFresh(Parser::SWITCH_N64_USB, r);
+    EXPECT_TRUE(s.batteryValid);
+    EXPECT_EQ(100, s.batteryLevel);
+}
+
+TEST(SwitchN64Decode, WrongReportIdOrShortReportIsRejected) {
+    DeviceState s;
+    ParserState st;
+    auto wrongId = switchReport(12);
+    wrongId[0] = 0x21;
+    EXPECT_FALSE(decodeReport(Parser::SWITCH_N64_USB, wrongId.data(), wrongId.size(), s, &st));
+    auto tooShort = switchReport(11);
+    EXPECT_FALSE(decodeReport(Parser::SWITCH_N64_USB, tooShort.data(), tooShort.size(), s, &st));
+}
+
+TEST(SwitchN64Feedback, SharesTheSwitchRumbleAndPlayerLedReports) {
+    uint8_t pro[16];
+    uint8_t n64[16];
+    ASSERT_EQ(10u, buildRumbleReport(Parser::SWITCH_PRO_USB, 0x8000, 0x4000, 5, pro, sizeof(pro)));
+    ASSERT_EQ(10u, buildRumbleReport(Parser::SWITCH_N64_USB, 0x8000, 0x4000, 5, n64, sizeof(n64)));
+    EXPECT_EQ(0, memcmp(pro, n64, 10));
+
+    usbparsers::FeedbackState st;
+    uint8_t proLeds[16];
+    uint8_t n64Leds[16];
+    const size_t proLen = usbparsers::buildPlayerLedsReport(Parser::SWITCH_PRO_USB, st, 0x03, 1,
+                                                            proLeds, sizeof(proLeds));
+    const size_t n64Len = usbparsers::buildPlayerLedsReport(Parser::SWITCH_N64_USB, st, 0x03, 1,
+                                                            n64Leds, sizeof(n64Leds));
+    ASSERT_NE(0u, proLen);
+    ASSERT_EQ(proLen, n64Len);
+    EXPECT_EQ(0, memcmp(proLeds, n64Leds, proLen));
+}
+
 TEST(SwitchProSticks, TwelveBitPackingUnpacksBothAxes) {
     ParserState st;
     const DeviceState s = decodeSwitchSticks(st, kSwitchRawMax, 0, kSwitchCentre, kSwitchRawMax);
@@ -2331,7 +2453,8 @@ TEST(ParserName, EveryParserHasADistinctNonEmptyName) {
                           Parser::STADIA,
                           Parser::GENERIC_HID_GAMEPAD,
                           Parser::XINPUT_360_WIRELESS,
-                          Parser::STEAM_CONTROLLER};
+                          Parser::STEAM_CONTROLLER,
+                          Parser::SWITCH_N64_USB};
     for (const Parser a : all) {
         ASSERT_NE(nullptr, usbparsers::parserName(a));
         EXPECT_GT(strlen(usbparsers::parserName(a)), 0u);

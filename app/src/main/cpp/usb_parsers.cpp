@@ -175,6 +175,8 @@ constexpr KnownDevice kKnown[] = {
      InitKind::SWITCH_PRO_HANDSHAKE},
     {0x057E, 0x2017, "Nintendo SNES Online Controller", Parser::SWITCH_PRO_USB,
      InitKind::SWITCH_PRO_HANDSHAKE},
+    {0x057E, 0x2019, "Nintendo N64 Online Controller", Parser::SWITCH_N64_USB,
+     InitKind::SWITCH_PRO_HANDSHAKE},
 
     {0x18D1, 0x9400, "Google Stadia Controller", Parser::STADIA, InitKind::NONE},
 };
@@ -487,6 +489,8 @@ const char* parserName(const Parser p) {
         return "DualSense protocol";
     case Parser::SWITCH_PRO_USB:
         return "Switch Pro protocol";
+    case Parser::SWITCH_N64_USB:
+        return "Switch N64 protocol";
     case Parser::STADIA:
         return "Stadia protocol";
     case Parser::GENERIC_HID_GAMEPAD:
@@ -511,6 +515,7 @@ bool parserHasImu(const Parser p) {
     case Parser::XBOX_ONE_GIP:
     case Parser::STADIA:
     case Parser::GENERIC_HID_GAMEPAD:
+    case Parser::SWITCH_N64_USB:
     case Parser::NONE:
         return false;
     }
@@ -525,6 +530,7 @@ bool parserHasRumble(const Parser p) {
     case Parser::DUALSHOCK4:
     case Parser::DUALSENSE:
     case Parser::SWITCH_PRO_USB:
+    case Parser::SWITCH_N64_USB:
         return true;
     // The Steam Controller has no rumble motors, only trackpad voice coils driven by pulse trains;
     // its simple-rumble command is Steam Deck firmware only.
@@ -537,7 +543,9 @@ bool parserHasRumble(const Parser p) {
     return false;
 }
 
-bool parserFrameworkRumbleUnreliable(const Parser p) { return p == Parser::SWITCH_PRO_USB; }
+bool parserFrameworkRumbleUnreliable(const Parser p) {
+    return p == Parser::SWITCH_PRO_USB || p == Parser::SWITCH_N64_USB;
+}
 
 bool parserHasTouchpad(const Parser p) { return p == Parser::DUALSHOCK4 || p == Parser::DUALSENSE; }
 
@@ -1123,15 +1131,22 @@ uint16_t decodeSwitchProButtons(const uint8_t right, const uint8_t shared, const
     return (uint16_t)(rightSide | middle | leftSide);
 }
 
-void decodeSwitchProSticks(const uint8_t* buf, ParserState& sticks, DeviceState& s) {
+bool isSwitchInputReport(const uint8_t* buf, const size_t len) {
+    return len >= kSwitchInputMinLen && buf[0] == kSwitchInputReport;
+}
+
+void decodeSwitchLeftStick(const uint8_t* buf, ParserState& sticks, DeviceState& s) {
     uint16_t lx = 0;
     uint16_t ly = 0;
-    uint16_t rx = 0;
-    uint16_t ry = 0;
     unpackTwo12Bit(buf + kSwitchLeftStickOffset, lx, ly);
-    unpackTwo12Bit(buf + kSwitchRightStickOffset, rx, ry);
     s.sLX = scaleSwitchStickAuto(lx, sticks.lx);
     s.sLY = scaleSwitchStickAuto(ly, sticks.ly);
+}
+
+void decodeSwitchRightStick(const uint8_t* buf, ParserState& sticks, DeviceState& s) {
+    uint16_t rx = 0;
+    uint16_t ry = 0;
+    unpackTwo12Bit(buf + kSwitchRightStickOffset, rx, ry);
     s.sRX = scaleSwitchStickAuto(rx, sticks.rx);
     s.sRY = scaleSwitchStickAuto(ry, sticks.ry);
 }
@@ -1206,8 +1221,7 @@ void applySwitchProMotion(const SwitchImuSum& sum, DeviceState& s) {
 }
 
 bool decodeSwitchProUsb(const uint8_t* buf, const size_t len, DeviceState& s, ParserState& sticks) {
-    if (len < kSwitchInputMinLen) return false;
-    if (buf[0] != kSwitchInputReport) return false;
+    if (!isSwitchInputReport(buf, len)) return false;
 
     const uint8_t rightByte = buf[kSwitchRightByte];
     const uint8_t sharedByte = buf[kSwitchSharedByte];
@@ -1217,12 +1231,59 @@ bool decodeSwitchProUsb(const uint8_t* buf, const size_t len, DeviceState& s, Pa
     s.bLT = (leftByte & kSwitchZlBit) ? kTriggerMax : 0;
     s.bRT = (rightByte & kSwitchZrBit) ? kTriggerMax : 0;
 
-    decodeSwitchProSticks(buf, sticks, s);
+    decodeSwitchLeftStick(buf, sticks, s);
+    decodeSwitchRightStick(buf, sticks, s);
     decodeSwitchProBattery(buf[kSwitchBatteryByte], s);
 
     const SwitchImuSum imu = sumSwitchImuFrames(buf, len);
     const bool hasMotion = imu.frames > 0;
     if (hasMotion) applySwitchProMotion(imu, s);
+    return true;
+}
+
+constexpr ButtonBit kN64RightByteBits[] = {{0x04, XUSB_B}, {0x08, XUSB_A}, {0x40, XUSB_RB}};
+constexpr ButtonBit kN64SharedByteBits[] = {
+    {0x02, XUSB_START},
+    {0x10, XUSB_GUIDE},
+    {0x20, XUSB_BACK},
+};
+constexpr ButtonBit kN64LeftByteBits[] = {
+    {0x01, XUSB_DPAD_DOWN}, {0x02, XUSB_DPAD_UP}, {0x04, XUSB_DPAD_RIGHT},
+    {0x08, XUSB_DPAD_LEFT}, {0x40, XUSB_LB},
+};
+constexpr uint8_t kN64RightCUpBit = 0x01;
+constexpr uint8_t kN64RightCLeftBit = 0x02;
+constexpr uint8_t kN64RightCDownBit = 0x80;
+constexpr uint8_t kN64SharedCRightBit = 0x01;
+constexpr uint8_t kN64SharedZrBit = 0x08;
+constexpr uint8_t kN64LeftZBit = 0x80;
+
+uint8_t n64CButtons(const uint8_t right, const uint8_t shared) {
+    uint8_t c = 0;
+    if (right & kN64RightCUpBit) c |= gamepad::N64_C_UP;
+    if (right & kN64RightCDownBit) c |= gamepad::N64_C_DOWN;
+    if (right & kN64RightCLeftBit) c |= gamepad::N64_C_LEFT;
+    if (shared & kN64SharedCRightBit) c |= gamepad::N64_C_RIGHT;
+    return c;
+}
+
+bool decodeSwitchN64Usb(const uint8_t* buf, const size_t len, DeviceState& s, ParserState& sticks) {
+    if (!isSwitchInputReport(buf, len)) return false;
+
+    const uint8_t rightByte = buf[kSwitchRightByte];
+    const uint8_t sharedByte = buf[kSwitchSharedByte];
+    const uint8_t leftByte = buf[kSwitchLeftByte];
+
+    const uint16_t rightSide = buttonsFromByte(rightByte, kN64RightByteBits);
+    const uint16_t middle = buttonsFromByte(sharedByte, kN64SharedByteBits);
+    const uint16_t leftSide = buttonsFromByte(leftByte, kN64LeftByteBits);
+    s.wButtons = (uint16_t)(rightSide | middle | leftSide);
+    s.bLT = (leftByte & kN64LeftZBit) ? kTriggerMax : 0;
+    s.bRT = (sharedByte & kN64SharedZrBit) ? kTriggerMax : 0;
+
+    decodeSwitchLeftStick(buf, sticks, s);
+    gamepad::applyCButtonStick(s, n64CButtons(rightByte, sharedByte));
+    decodeSwitchProBattery(buf[kSwitchBatteryByte], s);
     return true;
 }
 
@@ -1569,6 +1630,8 @@ bool decodeReport(const Parser p, const uint8_t* buf, const size_t len, DeviceSt
         return decodeDualSense(buf, len, s, sticks);
     case Parser::SWITCH_PRO_USB:
         return sticks != nullptr && decodeSwitchProUsb(buf, len, s, *sticks);
+    case Parser::SWITCH_N64_USB:
+        return sticks != nullptr && decodeSwitchN64Usb(buf, len, s, *sticks);
     case Parser::STADIA:
         return decodeStadia(buf, len, s);
     case Parser::STEAM_CONTROLLER:
@@ -1969,7 +2032,7 @@ size_t buildRumbleReport(const Parser p, const uint16_t strong, const uint16_t w
 bool parserHasLightbar(const Parser p) { return p == Parser::DUALSHOCK4 || p == Parser::DUALSENSE; }
 
 bool parserHasPlayerLeds(const Parser p) {
-    return p == Parser::DUALSENSE || p == Parser::SWITCH_PRO_USB;
+    return p == Parser::DUALSENSE || p == Parser::SWITCH_PRO_USB || p == Parser::SWITCH_N64_USB;
 }
 
 bool parserHasTriggerEffects(const Parser p) { return p == Parser::DUALSENSE; }
@@ -1998,6 +2061,7 @@ size_t buildMergedRumbleReport(const Parser p, FeedbackState& st, const uint8_t 
         return n;
     }
     case Parser::SWITCH_PRO_USB:
+    case Parser::SWITCH_N64_USB:
         return buildSwitchRumble(st.strong, st.weak, seq, out, outCap);
     case Parser::STEAM_CONTROLLER:
     case Parser::STADIA:
@@ -2026,6 +2090,7 @@ size_t buildPlayerLedsReport(const Parser p, const FeedbackState& st, const uint
     case Parser::DUALSENSE:
         return buildDs5PlayerLeds(st, ledMask, out, outCap);
     case Parser::SWITCH_PRO_USB:
+    case Parser::SWITCH_N64_USB:
         return buildSwitchPlayerLeds(ledMask, seq, out, outCap);
     default:
         return 0;

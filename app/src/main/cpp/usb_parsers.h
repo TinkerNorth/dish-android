@@ -23,6 +23,7 @@ enum class Parser : uint8_t {
     // Same input report as XINPUT_360, but rumble needs the wrapped wireless-receiver frame.
     XINPUT_360_WIRELESS = 8,
     STEAM_CONTROLLER = 9,
+    SWITCH_N64_USB = 10,
 };
 
 enum class InitKind : uint8_t {

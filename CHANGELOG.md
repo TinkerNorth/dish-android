@@ -7,6 +7,21 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [2.4.0] - 2026-10-18
+
+The Nintendo 64 controller for Switch Online, over USB-C and Bluetooth.
+
+### Added
+
+- **The Nintendo 64 controller for Switch Online works with Dish.** Over a
+  USB-C cable, direct mode wakes it the way it wakes the Switch Pro
+  Controller, with rumble, battery and player lights. Over Bluetooth, the
+  buttons land in the right places on phones with and without Nintendo's
+  kernel driver. On the computer, A and B stay A and B, Z and ZR are the
+  triggers, L and R the shoulders, Start is Start, Home is the guide button,
+  Capture is Back, and the four C buttons move the right stick, which is
+  where N64 emulators look for them.
+
 ## [2.3.2] - 2026-10-13
 
 Two fixes from crash reports: Moonlight hosts on some devices, and a freeze when a

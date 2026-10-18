@@ -3,7 +3,6 @@
 package com.tinkernorth.dish.ui.diagnostics
 
 import com.tinkernorth.dish.composer.ConnectionKind
-import com.tinkernorth.dish.core.input.resolveGamepadQuirk
 import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
@@ -132,7 +131,7 @@ internal fun padFacts(
         endpoint = world.radios.usb[endpointKey],
         direct = pads.deviceInfo[device.id],
         urbErrors = pads.urbErrors[device.id] ?: 0L,
-        quirkBits = if (device.isUsbSynthetic) 0 else resolveGamepadQuirk(device.vendorId, device.productId),
+        quirkBits = if (device.isUsbSynthetic) 0 else device.quirk,
         linkType = pads.btLinkTypes[device.id] ?: BluetoothLinkType.UNKNOWN,
         reportCount = pads.reportCounts[device.id] ?: 0L,
         lastInputAtMs = world.rates[device.id.toString()]?.lastInputAtMs ?: 0L,

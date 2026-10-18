@@ -1,0 +1,5 @@
+Dish 2.4.0: el mando de Nintendo 64 para Switch Online.
+
+• Conéctalo al móvil y el modo Directo lo despierta, con vibración, batería y luces de jugador.
+• Por Bluetooth, cada botón cae donde debe, con o sin el driver de kernel de Nintendo en el móvil.
+• En el ordenador, A y B siguen siendo A y B, Z y ZR son los gatillos y los botones C mueven el stick derecho, donde los emuladores de N64 los esperan.
