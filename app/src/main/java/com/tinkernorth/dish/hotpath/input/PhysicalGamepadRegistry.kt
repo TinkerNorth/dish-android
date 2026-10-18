@@ -101,6 +101,7 @@ class PhysicalGamepadRegistry
             val pollRateHz: Int = 0,
             val vendorId: Int = 0,
             val productId: Int = 0,
+            val quirk: Int = 0,
             val transport: Transport = Transport.Usb,
         ) {
             val isDisconnecting: Boolean get() = disconnectingTimeLeftSec != null
@@ -273,9 +274,17 @@ class PhysicalGamepadRegistry
                 directFailure = directFailed[vidPidKey(vid, pid)],
                 vendorId = vid,
                 productId = pid,
+                quirk = quirkFor(dev),
                 transport = resolveTransport(dev.name, vid, pid),
             )
         }
+
+        private fun quirkFor(dev: InputDevice): Int =
+            resolveGamepadQuirk(
+                dev.vendorIdOrZero(),
+                dev.productIdOrZero(),
+                reportsRxAxis = dev.getMotionRange(MotionEvent.AXIS_RX, InputDevice.SOURCE_JOYSTICK) != null,
+            )
 
         private fun touchpadSurfaceFor(
             deviceId: Int,
@@ -640,7 +649,7 @@ class PhysicalGamepadRegistry
                 dev.getMotionRange(MotionEvent.AXIS_Z, src)?.flat ?: 0f,
                 dev.getMotionRange(MotionEvent.AXIS_RZ, src)?.flat ?: 0f,
             )
-            native.setDeviceQuirk(dev.id, resolveGamepadQuirk(dev.vendorIdOrZero(), dev.productIdOrZero()))
+            native.setDeviceQuirk(dev.id, quirkFor(dev))
             logDeviceCapabilities(dev)
         }
 

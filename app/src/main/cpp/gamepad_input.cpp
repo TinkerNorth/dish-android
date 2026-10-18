@@ -90,6 +90,71 @@ constexpr KeycodeMapping SWITCH_LAYOUT_KEYCODE_MAP[] = {
     {KC_DPAD_RIGHT, XUSB_DPAD_RIGHT},
 };
 
+enum class N64Input : uint8_t {
+    A,
+    B,
+    Z,
+    L,
+    R,
+    ZR,
+    START,
+    C_UP,
+    C_DOWN,
+    C_LEFT,
+    C_RIGHT,
+    HOME,
+    CAPTURE,
+    DPAD_UP,
+    DPAD_DOWN,
+    DPAD_LEFT,
+    DPAD_RIGHT,
+};
+
+struct N64KeyMapping {
+    int32_t androidKeycode;
+    N64Input input;
+};
+
+constexpr N64KeyMapping N64_DRIVER_KEYCODE_MAP[] = {
+    {KC_BUTTON_A, N64Input::A},
+    {KC_BUTTON_B, N64Input::B},
+    {KC_BUTTON_L2, N64Input::Z},
+    {KC_BUTTON_L1, N64Input::L},
+    {KC_BUTTON_R1, N64Input::R},
+    {KC_BUTTON_R2, N64Input::ZR},
+    {KC_BUTTON_START, N64Input::START},
+    {KC_BUTTON_SELECT, N64Input::C_UP},
+    {KC_BUTTON_X, N64Input::C_DOWN},
+    {KC_BUTTON_Y, N64Input::C_LEFT},
+    {KC_BUTTON_C, N64Input::C_RIGHT},
+    {KC_BUTTON_MODE, N64Input::HOME},
+    {KC_BUTTON_Z, N64Input::CAPTURE},
+    {KC_DPAD_UP, N64Input::DPAD_UP},
+    {KC_DPAD_DOWN, N64Input::DPAD_DOWN},
+    {KC_DPAD_LEFT, N64Input::DPAD_LEFT},
+    {KC_DPAD_RIGHT, N64Input::DPAD_RIGHT},
+};
+
+constexpr N64KeyMapping N64_HID_KEYCODE_MAP[] = {
+    {KC_BUTTON_A, N64Input::B},
+    {KC_BUTTON_B, N64Input::A},
+    {KC_BUTTON_C, N64Input::C_UP},
+    {KC_BUTTON_X, N64Input::C_LEFT},
+    {KC_BUTTON_Y, N64Input::L},
+    {KC_BUTTON_Z, N64Input::R},
+    {KC_BUTTON_L1, N64Input::Z},
+    {KC_BUTTON_R1, N64Input::C_DOWN},
+    {KC_BUTTON_L2, N64Input::C_RIGHT},
+    {KC_BUTTON_R2, N64Input::START},
+    {KC_BUTTON_SELECT, N64Input::ZR},
+    {KC_BUTTON_MODE, N64Input::HOME},
+    {KC_BUTTON_THUMBL, N64Input::CAPTURE},
+    {KC_DPAD_UP, N64Input::DPAD_UP},
+    {KC_DPAD_DOWN, N64Input::DPAD_DOWN},
+    {KC_DPAD_LEFT, N64Input::DPAD_LEFT},
+    {KC_DPAD_RIGHT, N64Input::DPAD_RIGHT},
+};
+
 constexpr uint16_t NO_XUSB_BIT = 0;
 constexpr uint8_t TRIGGER_FULL = 255;
 constexpr uint8_t TRIGGER_RELEASED = 0;
@@ -136,6 +201,107 @@ bool applySwitchLayoutKey(DeviceState& s, const int32_t androidKeycode, const bo
 
     setButtonBit(s, xusbBit, down);
     return true;
+}
+
+template <size_t N>
+bool lookUpN64Input(const N64KeyMapping (&mappings)[N], const int32_t androidKeycode,
+                    N64Input& out) {
+    for (const N64KeyMapping& mapping : mappings) {
+        const bool isTheKeycode = mapping.androidKeycode == androidKeycode;
+        if (!isTheKeycode) continue;
+        out = mapping.input;
+        return true;
+    }
+    return false;
+}
+
+bool n64InputFor(const uint8_t quirk, const int32_t androidKeycode, N64Input& out) {
+    const bool usesHidOrder = (quirk & QUIRK_N64_HID_LAYOUT) != 0;
+    if (usesHidOrder) return lookUpN64Input(N64_HID_KEYCODE_MAP, androidKeycode, out);
+    return lookUpN64Input(N64_DRIVER_KEYCODE_MAP, androidKeycode, out);
+}
+
+uint16_t n64ButtonBit(const N64Input input) {
+    switch (input) {
+    case N64Input::A:
+        return XUSB_A;
+    case N64Input::B:
+        return XUSB_B;
+    case N64Input::L:
+        return XUSB_LB;
+    case N64Input::R:
+        return XUSB_RB;
+    case N64Input::START:
+        return XUSB_START;
+    case N64Input::HOME:
+        return XUSB_GUIDE;
+    case N64Input::CAPTURE:
+        return XUSB_BACK;
+    case N64Input::DPAD_UP:
+        return XUSB_DPAD_UP;
+    case N64Input::DPAD_DOWN:
+        return XUSB_DPAD_DOWN;
+    case N64Input::DPAD_LEFT:
+        return XUSB_DPAD_LEFT;
+    case N64Input::DPAD_RIGHT:
+        return XUSB_DPAD_RIGHT;
+    case N64Input::Z:
+    case N64Input::ZR:
+    case N64Input::C_UP:
+    case N64Input::C_DOWN:
+    case N64Input::C_LEFT:
+    case N64Input::C_RIGHT:
+        return NO_XUSB_BIT;
+    }
+    return NO_XUSB_BIT;
+}
+
+uint8_t n64CBit(const N64Input input) {
+    switch (input) {
+    case N64Input::C_UP:
+        return N64_C_UP;
+    case N64Input::C_DOWN:
+        return N64_C_DOWN;
+    case N64Input::C_LEFT:
+        return N64_C_LEFT;
+    case N64Input::C_RIGHT:
+        return N64_C_RIGHT;
+    default:
+        return 0;
+    }
+}
+
+void setCButton(DeviceState& s, const uint8_t cBit, const bool down) {
+    const uint8_t withBitSet = static_cast<uint8_t>(s.cButtons | cBit);
+    const uint8_t withBitCleared = static_cast<uint8_t>(s.cButtons & ~cBit);
+    s.cButtons = down ? withBitSet : withBitCleared;
+    applyCButtonStick(s, s.cButtons);
+}
+
+bool applyN64Key(DeviceState& s, const int32_t androidKeycode, const bool down) {
+    N64Input input = N64Input::A;
+    const bool isMapped = n64InputFor(s.quirk, androidKeycode, input);
+    if (!isMapped) return false;
+    if (input == N64Input::Z) {
+        setLeftTriggerFromKey(s, down);
+        return true;
+    }
+    if (input == N64Input::ZR) {
+        setRightTriggerFromKey(s, down);
+        return true;
+    }
+    const uint8_t cBit = n64CBit(input);
+    if (cBit != 0) {
+        setCButton(s, cBit, down);
+        return true;
+    }
+    setButtonBit(s, n64ButtonBit(input), down);
+    return true;
+}
+
+bool n64LayoutConsumesKey(const uint8_t quirk, const int32_t androidKeycode) {
+    N64Input input = N64Input::A;
+    return n64InputFor(quirk, androidKeycode, input);
 }
 
 bool isStandardLeftTriggerKey(const int32_t androidKeycode) {
@@ -204,7 +370,12 @@ bool switchLayoutConsumesKey(const int32_t androidKeycode) {
     return isZl || isZr || isMappedButton;
 }
 
+bool usesN64Layout(const uint8_t quirk) {
+    return (quirk & (QUIRK_N64_HID_LAYOUT | QUIRK_N64_DRIVER_LAYOUT)) != 0;
+}
+
 bool consumesKey(const int32_t androidKeycode, const uint8_t quirk) {
+    if (usesN64Layout(quirk)) return n64LayoutConsumesKey(quirk, androidKeycode);
     const bool usesSwitchLayout = (quirk & QUIRK_SWITCH_LAYOUT) != 0;
     if (usesSwitchLayout) return switchLayoutConsumesKey(androidKeycode);
     return standardLayoutConsumesKey(androidKeycode);
@@ -232,6 +403,7 @@ uint16_t applyButtonQuirk(const uint16_t xusbBit, const uint8_t quirk) {
 }
 
 bool applyKey(DeviceState& s, const int32_t androidKeycode, const bool down) {
+    if (usesN64Layout(s.quirk)) return applyN64Key(s, androidKeycode, down);
     const bool usesSwitchLayout = (s.quirk & QUIRK_SWITCH_LAYOUT) != 0;
     if (usesSwitchLayout) return applySwitchLayoutKey(s, androidKeycode, down);
     return applyStandardKey(s, androidKeycode, down);
@@ -242,8 +414,11 @@ void applyAxes(DeviceState& s, const float x, const float y, const float z, cons
                const float hatY) {
     s.sLX = scaleAxis(deadzone(x, s.flatX), AXIS_MAX);
     s.sLY = scaleAxis(deadzone(y, s.flatY), INVERTED_AXIS_MAX);
-    s.sRX = scaleAxis(deadzone(z, s.flatZ), AXIS_MAX);
-    s.sRY = scaleAxis(deadzone(rz, s.flatRZ), INVERTED_AXIS_MAX);
+    const bool rightStickIsTheCButtons = usesN64Layout(s.quirk);
+    if (!rightStickIsTheCButtons) {
+        s.sRX = scaleAxis(deadzone(z, s.flatZ), AXIS_MAX);
+        s.sRY = scaleAxis(deadzone(rz, s.flatRZ), INVERTED_AXIS_MAX);
+    }
 
     if (!s.ltFromKey) s.bLT = scaleTrigger(leftTrigger, TRIGGER_MAX);
     if (!s.rtFromKey) s.bRT = scaleTrigger(rightTrigger, TRIGGER_MAX);
@@ -259,6 +434,7 @@ void resetState(DeviceState& s) {
     s.sLX = s.sLY = s.sRX = s.sRY = 0;
     s.ltFromKey = false;
     s.rtFromKey = false;
+    s.cButtons = 0;
 }
 
 bool consumePublishIfChanged(DeviceState& s) {

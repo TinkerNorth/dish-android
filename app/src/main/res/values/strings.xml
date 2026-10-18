@@ -676,6 +676,8 @@
     <string name="diagnostics_quirk_swap_ab">A/B swapped</string>
     <string name="diagnostics_quirk_swap_xy">X/Y swapped</string>
     <string name="diagnostics_quirk_switch_layout">Switch layout</string>
+    <string name="diagnostics_quirk_n64_hid_layout">N64 layout (generic HID)</string>
+    <string name="diagnostics_quirk_n64_driver_layout">N64 layout (kernel driver)</string>
     <string name="diagnostics_reports">Reports</string>
     <string name="diagnostics_events_count">Events</string>
     <string name="diagnostics_last_input">Last input</string>

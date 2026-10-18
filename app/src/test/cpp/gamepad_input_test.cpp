@@ -1107,3 +1107,143 @@ TEST(KeyVerdict, AMappedKeyThatIsNotAnEdgeIsSwallowedWithoutApplying) {
     EXPECT_EQ(KeyVerdict::SWALLOW, keyVerdict(KC_BUTTON_L1, QUIRK_SWITCH_LAYOUT, kActionMultiple));
     EXPECT_EQ(KeyVerdict::SWALLOW, keyVerdict(KC_BUTTON_A, 0, -1));
 }
+
+TEST(N64Layout, DriverOrderMapsTheKernelNames) {
+    DeviceState s;
+    s.quirk = QUIRK_N64_DRIVER_LAYOUT;
+    EXPECT_TRUE(applyKey(s, KC_BUTTON_A, true));
+    EXPECT_EQ(XUSB_A, s.wButtons);
+    applyKey(s, KC_BUTTON_A, false);
+    applyKey(s, KC_BUTTON_B, true);
+    EXPECT_EQ(XUSB_B, s.wButtons);
+    applyKey(s, KC_BUTTON_B, false);
+    applyKey(s, KC_BUTTON_L1, true);
+    applyKey(s, KC_BUTTON_R1, true);
+    EXPECT_EQ(XUSB_LB | XUSB_RB, s.wButtons);
+    applyKey(s, KC_BUTTON_L1, false);
+    applyKey(s, KC_BUTTON_R1, false);
+    applyKey(s, KC_BUTTON_START, true);
+    applyKey(s, KC_BUTTON_MODE, true);
+    applyKey(s, KC_BUTTON_Z, true);
+    EXPECT_EQ(XUSB_START | XUSB_GUIDE | XUSB_BACK, s.wButtons);
+    applyKey(s, KC_DPAD_LEFT, true);
+    EXPECT_TRUE(s.wButtons & XUSB_DPAD_LEFT);
+}
+
+TEST(N64Layout, DriverOrderZAndZrAreTheTriggers) {
+    DeviceState s;
+    s.quirk = QUIRK_N64_DRIVER_LAYOUT;
+    EXPECT_TRUE(applyKey(s, KC_BUTTON_L2, true));
+    EXPECT_EQ(255, s.bLT);
+    EXPECT_TRUE(s.ltFromKey);
+    EXPECT_TRUE(applyKey(s, KC_BUTTON_R2, true));
+    EXPECT_EQ(255, s.bRT);
+    EXPECT_EQ(0, s.wButtons);
+    applyKey(s, KC_BUTTON_L2, false);
+    EXPECT_EQ(0, s.bLT);
+    EXPECT_EQ(255, s.bRT);
+}
+
+TEST(N64Layout, DriverOrderCButtonsRailTheRightStick) {
+    DeviceState s;
+    s.quirk = QUIRK_N64_DRIVER_LAYOUT;
+    EXPECT_TRUE(applyKey(s, KC_BUTTON_SELECT, true));
+    EXPECT_EQ(32767, s.sRY);
+    EXPECT_EQ(0, s.sRX);
+    EXPECT_EQ(0, s.wButtons);
+    applyKey(s, KC_BUTTON_X, true);
+    EXPECT_EQ(0, s.sRY);
+    applyKey(s, KC_BUTTON_SELECT, false);
+    EXPECT_EQ(-32767, s.sRY);
+    applyKey(s, KC_BUTTON_Y, true);
+    EXPECT_EQ(-32767, s.sRX);
+    applyKey(s, KC_BUTTON_Y, false);
+    applyKey(s, KC_BUTTON_C, true);
+    EXPECT_EQ(32767, s.sRX);
+    applyKey(s, KC_BUTTON_C, false);
+    applyKey(s, KC_BUTTON_X, false);
+    EXPECT_EQ(0, s.sRX);
+    EXPECT_EQ(0, s.sRY);
+    EXPECT_EQ(0, s.cButtons);
+}
+
+TEST(N64Layout, HidOrderMapsTheSimpleReportRow) {
+    DeviceState s;
+    s.quirk = QUIRK_N64_HID_LAYOUT;
+    applyKey(s, KC_BUTTON_A, true);
+    EXPECT_EQ(XUSB_B, s.wButtons);
+    applyKey(s, KC_BUTTON_A, false);
+    applyKey(s, KC_BUTTON_B, true);
+    EXPECT_EQ(XUSB_A, s.wButtons);
+    applyKey(s, KC_BUTTON_B, false);
+    applyKey(s, KC_BUTTON_Y, true);
+    applyKey(s, KC_BUTTON_Z, true);
+    EXPECT_EQ(XUSB_LB | XUSB_RB, s.wButtons);
+    applyKey(s, KC_BUTTON_Y, false);
+    applyKey(s, KC_BUTTON_Z, false);
+    applyKey(s, KC_BUTTON_R2, true);
+    applyKey(s, KC_BUTTON_MODE, true);
+    applyKey(s, KC_BUTTON_THUMBL, true);
+    EXPECT_EQ(XUSB_START | XUSB_GUIDE | XUSB_BACK, s.wButtons);
+}
+
+TEST(N64Layout, HidOrderTriggersAndCButtons) {
+    DeviceState s;
+    s.quirk = QUIRK_N64_HID_LAYOUT;
+    applyKey(s, KC_BUTTON_L1, true);
+    EXPECT_EQ(255, s.bLT);
+    applyKey(s, KC_BUTTON_SELECT, true);
+    EXPECT_EQ(255, s.bRT);
+    EXPECT_EQ(0, s.wButtons);
+    applyKey(s, KC_BUTTON_C, true);
+    EXPECT_EQ(32767, s.sRY);
+    applyKey(s, KC_BUTTON_C, false);
+    applyKey(s, KC_BUTTON_R1, true);
+    EXPECT_EQ(-32767, s.sRY);
+    applyKey(s, KC_BUTTON_R1, false);
+    applyKey(s, KC_BUTTON_X, true);
+    EXPECT_EQ(-32767, s.sRX);
+    applyKey(s, KC_BUTTON_X, false);
+    applyKey(s, KC_BUTTON_L2, true);
+    EXPECT_EQ(32767, s.sRX);
+}
+
+TEST(N64Layout, MotionEventsLeaveTheCButtonStickAlone) {
+    DeviceState s;
+    s.quirk = QUIRK_N64_DRIVER_LAYOUT;
+    applyKey(s, KC_BUTTON_C, true);
+    applyAxes(s, 0.5f, 0.f, -1.f, 1.f, 0.f, 0.f, 0.f, 0.f);
+    EXPECT_NE(0, s.sLX);
+    EXPECT_EQ(32767, s.sRX);
+    EXPECT_EQ(0, s.sRY);
+}
+
+TEST(N64Layout, UnmappedKeysPassAndNeitherOrderUsesTheSwaps) {
+    EXPECT_EQ(KeyVerdict::PASS,
+              keyVerdict(KC_BUTTON_THUMBR, QUIRK_N64_DRIVER_LAYOUT, KEY_ACTION_DOWN));
+    EXPECT_EQ(KeyVerdict::PASS, keyVerdict(KC_BUTTON_START, QUIRK_N64_HID_LAYOUT, KEY_ACTION_DOWN));
+    EXPECT_EQ(KeyVerdict::APPLY,
+              keyVerdict(KC_BUTTON_START, QUIRK_N64_DRIVER_LAYOUT, KEY_ACTION_DOWN));
+    EXPECT_EQ(KeyVerdict::APPLY,
+              keyVerdict(KC_BUTTON_THUMBL, QUIRK_N64_HID_LAYOUT, KEY_ACTION_DOWN));
+    EXPECT_EQ(KeyVerdict::PASS, keyVerdict(KC_BUTTON_1, QUIRK_N64_HID_LAYOUT, KEY_ACTION_DOWN));
+    EXPECT_EQ(KeyVerdict::SWALLOW, keyVerdict(KC_BUTTON_A, QUIRK_N64_HID_LAYOUT, kActionMultiple));
+}
+
+TEST(N64Layout, ResetClearsTheCButtons) {
+    DeviceState s;
+    s.quirk = QUIRK_N64_DRIVER_LAYOUT;
+    applyKey(s, KC_BUTTON_C, true);
+    resetState(s);
+    EXPECT_EQ(0, s.cButtons);
+    EXPECT_EQ(0, s.sRX);
+}
+
+TEST(N64Layout, QuirkBitsAreDistinctFromTheOthers) {
+    EXPECT_EQ(0x08, QUIRK_N64_HID_LAYOUT);
+    EXPECT_EQ(0x10, QUIRK_N64_DRIVER_LAYOUT);
+    EXPECT_TRUE(usesN64Layout(QUIRK_N64_HID_LAYOUT));
+    EXPECT_TRUE(usesN64Layout(QUIRK_N64_DRIVER_LAYOUT));
+    EXPECT_FALSE(usesN64Layout(QUIRK_SWITCH_LAYOUT));
+    EXPECT_FALSE(usesN64Layout(QUIRK_SWAP_AB | QUIRK_SWAP_XY));
+}

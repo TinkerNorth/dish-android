@@ -4,6 +4,8 @@ package com.tinkernorth.dish.ui.diagnostics
 
 import android.content.Context
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.core.input.QUIRK_N64_DRIVER_LAYOUT
+import com.tinkernorth.dish.core.input.QUIRK_N64_HID_LAYOUT
 import com.tinkernorth.dish.core.input.QUIRK_SWAP_AB
 import com.tinkernorth.dish.core.input.QUIRK_SWAP_XY
 import com.tinkernorth.dish.core.input.QUIRK_SWITCH_LAYOUT
@@ -56,6 +58,8 @@ internal fun Context.quirkLabel(bits: Int): String {
             if (bits and QUIRK_SWAP_AB != 0) add(getString(R.string.diagnostics_quirk_swap_ab))
             if (bits and QUIRK_SWAP_XY != 0) add(getString(R.string.diagnostics_quirk_swap_xy))
             if (bits and QUIRK_SWITCH_LAYOUT != 0) add(getString(R.string.diagnostics_quirk_switch_layout))
+            if (bits and QUIRK_N64_HID_LAYOUT != 0) add(getString(R.string.diagnostics_quirk_n64_hid_layout))
+            if (bits and QUIRK_N64_DRIVER_LAYOUT != 0) add(getString(R.string.diagnostics_quirk_n64_driver_layout))
         }
     return if (names.isEmpty()) getString(R.string.diagnostics_none) else names.joinToString(" · ")
 }

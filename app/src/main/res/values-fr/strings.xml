@@ -694,6 +694,8 @@
     <string name="diagnostics_quirk_swap_ab">A/B inversés</string>
     <string name="diagnostics_quirk_swap_xy">X/Y inversés</string>
     <string name="diagnostics_quirk_switch_layout">Disposition Switch</string>
+    <string name="diagnostics_quirk_n64_hid_layout">Disposition N64 (HID générique)</string>
+    <string name="diagnostics_quirk_n64_driver_layout">Disposition N64 (pilote du noyau)</string>
     <string name="diagnostics_reports">Rapports</string>
     <string name="diagnostics_events_count">Événements</string>
     <string name="diagnostics_last_input">Dernière entrée</string>

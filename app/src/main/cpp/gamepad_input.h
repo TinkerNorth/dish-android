@@ -91,6 +91,13 @@ constexpr int32_t KC_BUTTON_16 = 203;
 constexpr uint8_t QUIRK_SWAP_AB = 0x01;
 constexpr uint8_t QUIRK_SWAP_XY = 0x02;
 constexpr uint8_t QUIRK_SWITCH_LAYOUT = 0x04;
+constexpr uint8_t QUIRK_N64_HID_LAYOUT = 0x08;
+constexpr uint8_t QUIRK_N64_DRIVER_LAYOUT = 0x10;
+
+constexpr uint8_t N64_C_UP = 0x01;
+constexpr uint8_t N64_C_DOWN = 0x02;
+constexpr uint8_t N64_C_LEFT = 0x04;
+constexpr uint8_t N64_C_RIGHT = 0x08;
 
 struct DeviceState {
     uint16_t wButtons = 0;
@@ -107,6 +114,7 @@ struct DeviceState {
     float flatX = 0.f, flatY = 0.f, flatZ = 0.f, flatRZ = 0.f;
 
     uint8_t quirk = 0;
+    uint8_t cButtons = 0;
 
     bool motionValid = false;
     int16_t gyroX = 0, gyroY = 0, gyroZ = 0;
@@ -179,6 +187,24 @@ uint16_t keycodeToXusb(int32_t androidKeycode);
 uint16_t switchLayoutKeycodeToXusb(int32_t androidKeycode);
 
 bool switchLayoutConsumesKey(int32_t androidKeycode);
+
+bool usesN64Layout(uint8_t quirk);
+
+constexpr int16_t STICK_RAIL = 32767;
+
+constexpr int16_t stickRail(const bool positive, const bool negative) {
+    if (positive == negative) return 0;
+    return positive ? STICK_RAIL : static_cast<int16_t>(-STICK_RAIL);
+}
+
+inline void applyCButtonStick(DeviceState& s, const uint8_t cButtons) {
+    const bool up = (cButtons & N64_C_UP) != 0;
+    const bool down = (cButtons & N64_C_DOWN) != 0;
+    const bool left = (cButtons & N64_C_LEFT) != 0;
+    const bool right = (cButtons & N64_C_RIGHT) != 0;
+    s.sRX = stickRail(right, left);
+    s.sRY = stickRail(up, down);
+}
 
 // The key filter every JNI entry point shares through keyVerdict: true exactly when applyKey would
 // consume the key under this quirk. Allocation-free; the standard layout counts L2/R2 and
