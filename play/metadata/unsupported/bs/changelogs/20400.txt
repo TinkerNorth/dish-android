@@ -1,0 +1,5 @@
+Dish 2.4.0: Nintendo 64 kontroler za Switch Online.
+
+• Priključite ga na telefon i Brzi način ga budi, uz vibraciju, bateriju i svjetla igrača.
+• Preko Bluetootha svaka tipka pada gdje treba, sa ili bez Nintendovog drajvera kernela na telefonu.
+• Na računaru A i B ostaju A i B, Z i ZR su okidači, a C tipke pomjeraju desnu palicu, gdje ih N64 emulatori i očekuju.

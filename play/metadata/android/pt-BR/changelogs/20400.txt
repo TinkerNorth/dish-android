@@ -1,0 +1,5 @@
+Dish 2.4.0: o controle de Nintendo 64 para Switch Online.
+
+• Conecte-o ao celular e o modo Direto o acorda, com vibração, bateria e luzes de jogador.
+• Por Bluetooth, cada botão cai onde deve, com ou sem o driver de kernel da Nintendo no celular.
+• No computador, A e B continuam A e B, Z e ZR são os gatilhos e os botões C movem o analógico direito, onde os emuladores de N64 os esperam.

@@ -1,0 +1,5 @@
+Dish 2.4.0: the Nintendo 64 controller for Switch Online.
+
+• Plug it into your phone and Direct mode wakes it, with rumble, battery and player lights.
+• Over Bluetooth, every button lands where it should, with or without Nintendo's kernel driver on the phone.
+• On the computer, A and B stay A and B, Z and ZR are the triggers, and the C buttons move the right stick, where N64 emulators look for them.

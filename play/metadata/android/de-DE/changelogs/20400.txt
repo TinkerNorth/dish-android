@@ -1,0 +1,5 @@
+Dish 2.4.0: der Nintendo-64-Controller für Switch Online.
+
+• Am Handy angeschlossen weckt ihn der Direkt-Modus, mit Rumble, Akkustand und Spielerleuchten.
+• Per Bluetooth landet jede Taste dort, wo sie hingehört, mit und ohne Nintendos Kerneltreiber auf dem Handy.
+• Am Computer bleiben A und B A und B, Z und ZR sind die Trigger, und die C-Tasten bewegen den rechten Stick, wo N64-Emulatoren sie erwarten.

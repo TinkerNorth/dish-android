@@ -7,7 +7,9 @@ computer. Those lines say "update Satellite too".
 
 ---
 
-## [Unreleased]
+## [2.4.0] - 2026-10-18
+
+The Nintendo 64 controller for Switch Online, over USB-C and Bluetooth.
 
 ### Added
 
