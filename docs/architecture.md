@@ -299,6 +299,14 @@ The base (`architecture/abstracts/AbstractController.kt`) provides:
   `CrashReportingController` deliberately does not cancel, so the
   opt-in survives an Activity restart.
 
+The audio engines tag each collector's plans with its lifecycle generation.
+Routing, recorder joins and output opening are serialized outside the ownership
+lock; stop invalidates that generation and clears published audio resources
+without waiting for preparation. A late output is closed without becoming a
+playback target, and a microphone restart waits for its prior capture body to
+finish before opening another recorder on that route. Per-frame delivery stays
+outside both locks.
+
 Harness: `ControllerProbe` (`architecture/testing/`), the controller
 analogue of `ComposerProbe` and `StateSourceProbe`.
 

@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -76,7 +77,7 @@ class SpeakerEngine
         private val sink: SpeakerPlayoutSink,
         private val frames: SpeakerFrameSource,
         scope: CoroutineScope,
-    ) : AbstractController<SpeakerPlayoutPlan>(scope),
+    ) : AbstractController<AudioPlanEmission<SpeakerPlayoutPlan>>(scope),
         SpeakerAudioBridge.Sink {
         @Inject
         constructor(
@@ -87,6 +88,12 @@ class SpeakerEngine
 
         private val _state = MutableStateFlow(SpeakerPlayoutState.Idle)
         val state: StateFlow<SpeakerPlayoutState> = _state.asStateFlow()
+
+        // Opening may wait for hardware; stop takes only lifecycleLock, never applyLock.
+        private val lifecycleLock = Any()
+        private val applyLock = Any()
+        private var generation = 0L
+        private var stopped = false
 
         /**
          * Samples the tracks would not take. A live stream whose sink is full is one running ahead
@@ -110,43 +117,86 @@ class SpeakerEngine
         /** Read by the native dispatch thread for every frame; replaced wholesale by the collector. */
         @Volatile private var voices: Map<Long, Voice> = emptyMap()
 
-        // Whether the native sink is ours. Collector-thread only.
+        // Guarded by lifecycleLock, alongside publication of voices.
         private var installed = false
 
-        override fun upstream(): Flow<SpeakerPlayoutPlan> = plans.state
+        override fun upstream(): Flow<AudioPlanEmission<SpeakerPlayoutPlan>> {
+            val collectingGeneration = synchronized(lifecycleLock) { generation }
+            return plans.state.map { AudioPlanEmission(collectingGeneration, it) }
+        }
+
+        override fun onStarting() {
+            synchronized(lifecycleLock) {
+                generation++
+                stopped = false
+            }
+        }
 
         // Public because it IS the engine: the eligibility decision arrives here and nothing else
         // opens or closes an output.
-        public override fun apply(value: SpeakerPlayoutPlan) {
-            reconcile(value.voices)
+        fun apply(value: SpeakerPlayoutPlan) {
+            val currentGeneration = synchronized(lifecycleLock) { generation }
+            apply(AudioPlanEmission(currentGeneration, value))
+        }
+
+        override fun apply(value: AudioPlanEmission<SpeakerPlayoutPlan>) {
+            synchronized(applyLock) {
+                if (!isCurrent(value.generation)) return
+                reconcile(value)
+            }
         }
 
         override fun onStop(owner: LifecycleOwner) {
-            super.onStop(owner)
-            // Inputs keep moving while the actuator is stopped (AbstractController's contract), so
-            // playback must not: a stopped engine is a closed track.
-            reconcile(emptyMap())
+            synchronized(lifecycleLock) {
+                generation++
+                stopped = true
+                closeVoicesWhoseEndpointMoved(emptyMap())
+                uninstallSink()
+                _state.value = SpeakerPlayoutState.Idle
+            }
+            cancelCollection()
         }
 
+        private fun isCurrent(expectedGeneration: Long): Boolean =
+            synchronized(lifecycleLock) { !stopped && generation == expectedGeneration }
+
         /**
-         * Bring the open tracks to exactly [desired].
+         * Bring the open tracks to exactly the current plan.
          *
          * Order matters both ways round, the same way it does for capture: a track is published
          * before it can be written to and unpublished before it is closed, so the dispatch thread
          * never holds a reference to something being torn down. Closing still takes the session's
          * own lock, because a frame may already be inside a write.
          */
-        private fun reconcile(desired: Map<Long, SpeakerTarget>) {
-            val kept = closeVoicesWhoseEndpointMoved(desired)
-            val opened = openVoicesFor(desired, kept)
-
-            voices = opened.voices
-            if (opened.voices.isNotEmpty()) installSink() else uninstallSink()
-            _state.value = playoutStateFor(opened)
+        private fun reconcile(value: AudioPlanEmission<SpeakerPlayoutPlan>) {
+            val desired = value.plan.voices
+            val kept =
+                synchronized(lifecycleLock) {
+                    if (!isCurrent(value.generation)) return
+                    closeVoicesWhoseEndpointMoved(desired)
+                }
+            val opened = openVoicesFor(value.generation, desired, kept)
+            val accepted = publish(value.generation, opened)
+            if (!accepted) {
+                opened.created.forEach { it.close() }
+                return
+            }
             if (opened.refused > 0) {
                 Log.w(TAG, "${opened.refused} speaker slot(s) got no output from this device")
             }
         }
+
+        private fun publish(
+            expectedGeneration: Long,
+            opened: OpenedVoices,
+        ): Boolean =
+            synchronized(lifecycleLock) {
+                if (!isCurrent(expectedGeneration)) return false
+                voices = opened.voices
+                if (opened.voices.isNotEmpty()) installSink() else uninstallSink()
+                _state.value = playoutStateFor(opened)
+                true
+            }
 
         // A route change (the pad's endpoint appeared, moved or went away) is a reopen: an
         // AudioTrack's preferred device and its width are settled when it is built.
@@ -170,15 +220,19 @@ class SpeakerEngine
         private data class OpenedVoices(
             val voices: Map<Long, Voice>,
             val refused: Int,
+            val created: List<SpeakerPlayoutSession>,
         )
 
         private fun openVoicesFor(
+            expectedGeneration: Long,
             desired: Map<Long, SpeakerTarget>,
             kept: Map<Long, Voice>,
         ): OpenedVoices {
             val open = HashMap<Long, Voice>(desired.size)
+            val created = ArrayList<SpeakerPlayoutSession>()
             var refused = 0
             for ((key, target) in desired) {
+                if (!isCurrent(expectedGeneration)) break
                 val existing = kept[key]
                 if (existing != null) {
                     // Same endpoint, possibly a renamed slot: keep the track, take the new target.
@@ -190,9 +244,10 @@ class SpeakerEngine
                     refused++
                     continue
                 }
+                created += session
                 open[key] = Voice(target, session)
             }
-            return OpenedVoices(open, refused)
+            return OpenedVoices(open, refused, created)
         }
 
         private fun playoutStateFor(opened: OpenedVoices): SpeakerPlayoutState =
