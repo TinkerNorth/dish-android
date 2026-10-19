@@ -107,6 +107,14 @@ class MoonlightEventDecoderTest {
     }
 
     @Test
+    fun `decodes the GFE-era TERMINATION type as a termination too`() {
+        // A Sunshine host still sends 0x0100 where Wolf sends 0x0109.
+        val reasonBigEndian = byteArrayOf(0x00, 0x00, 0x01, 0x02)
+        val event = decodeMoonlightEvent(plaintext(CTRL_TERMINATION_LEGACY, reasonBigEndian))
+        assertEquals(MoonlightEvent.Termination(0x0102), event)
+    }
+
+    @Test
     fun `a truncated TERMINATION returns null`() {
         assertNull(decodeMoonlightEvent(plaintext(CTRL_TERMINATION, ByteArray(3))))
     }

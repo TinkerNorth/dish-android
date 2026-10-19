@@ -7,6 +7,19 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **A Moonlight host's rumble or motion request that overtakes an earlier
+  packet is no longer lost.** It now waits for the packet it overtook, the way
+  ENet's own clients do, instead of being dropped with it. The link also
+  refuses a host answer meant for another connection, ignores stale packets
+  from an earlier session on the same port, resends on ENet's own schedule,
+  ends a session with the termination type Wolf's control protocol names while
+  still reading the older one, and sends the keepalive in the form captured
+  from a real client.
+
 ## [2.4.0] - 2026-10-18
 
 The Nintendo 64 controller for Switch Online, over USB-C and Bluetooth.

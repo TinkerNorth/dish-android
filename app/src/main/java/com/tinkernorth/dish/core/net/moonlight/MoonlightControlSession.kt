@@ -34,6 +34,7 @@ class MoonlightControlSession(
     private val enetConnectData: Int,
     private val transport: Transport,
     private val nowMs: () -> Long,
+    enetRandom: () -> Int = EnetClient.DEFAULT_RANDOM,
     private val onEvent: (MoonlightEvent) -> Unit = {},
 ) : MoonlightTouchSink {
     /** The datagram plumbing under the session (a UDP socket in production). */
@@ -51,7 +52,7 @@ class MoonlightControlSession(
     var state: State = State.IDLE
         private set
 
-    private val enet = EnetClient(enetConnectData, nowMs)
+    private val enet = EnetClient(enetConnectData, nowMs, enetRandom)
     private val sealer = MoonlightHotSealer(rikey)
     private val opener = MoonlightControlPacket(rikey)
 

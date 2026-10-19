@@ -54,11 +54,9 @@ internal object EnetProtocol {
     // The system channel 0xFF carries connect/ping/disconnect; data rides channel 0.
     const val SYSTEM_CHANNEL = 0xFF
 
-    // Unsigned field widths, and the 16-bit reliable sequence space they bound.
+    // Unsigned field widths.
     const val U8_MASK = 0xFF
     const val U16_MASK = 0xFFFF
-    const val SEQ_RANGE = 0x10000
-    const val SEQ_HALF_RANGE = 0x7FFF
 
     const val PROTOCOL_MINIMUM_MTU = 576
     const val PROTOCOL_MAXIMUM_MTU = 4096
@@ -95,6 +93,17 @@ internal object EnetProtocol {
     const val TIMEOUT_LIMIT = 32
     const val TIMEOUT_MINIMUM_MS = 5000
     const val TIMEOUT_MAXIMUM_MS = 30000
+
+    // The reliable sequence windows (enet.h ENET_PEER_RELIABLE_WINDOWS, _WINDOW_SIZE and
+    // _FREE_RELIABLE_WINDOWS): the ring is sixteen windows of 4096, and a command is accepted
+    // only inside the free windows ahead of the one being delivered.
+    const val RELIABLE_WINDOWS = 16
+    const val RELIABLE_WINDOW_SIZE = 0x1000
+    const val FREE_RELIABLE_WINDOWS = 8
+
+    // The channel counts a VERIFY_CONNECT may name (protocol.h ENET_PROTOCOL_*_CHANNEL_COUNT).
+    const val PROTOCOL_MINIMUM_CHANNEL_COUNT = 1
+    const val PROTOCOL_MAXIMUM_CHANNEL_COUNT = 255
 
     data class CommandHeader(
         val command: Int,

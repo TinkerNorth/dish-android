@@ -12,7 +12,11 @@ package com.tinkernorth.dish.core.net.moonlight
 const val PACKET_TYPE_ENCRYPTED = 0x0001
 
 // Decrypted control-message types (the first u16 LE of the plaintext).
-const val CTRL_TERMINATION = 0x0100
+// TERMINATION is 0x0109 in Wolf's control.hpp, the reference this port is read
+// against; the GFE-era control-specs.adoc says 0x0100 and a host of that
+// generation still sends it, so the decoder reads both.
+const val CTRL_TERMINATION = 0x0109
+const val CTRL_TERMINATION_LEGACY = 0x0100
 const val CTRL_PERIODIC_PING = 0x0200
 const val CTRL_INPUT_DATA = 0x0206
 

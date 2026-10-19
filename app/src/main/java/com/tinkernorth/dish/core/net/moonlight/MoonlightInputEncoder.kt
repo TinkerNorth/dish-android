@@ -31,7 +31,7 @@ const val CONTROLLER_ARRIVAL_LEN = 20
 const val MOUSE_MOVE_REL_LEN = 16
 const val MOUSE_BUTTON_LEN = 13
 const val MOUSE_SCROLL_LEN = 18
-const val PERIODIC_PING_LEN = 8
+const val PERIODIC_PING_LEN = 12
 const val TERMINATION_LEN = 8
 
 // 4 control header + 8 wrapper + the packed struct bodies (control.hpp):
@@ -207,15 +207,22 @@ fun controllerBattery(
     return buf.toByteArray()
 }
 
-/** PERIODIC_PING keepalive (control-specs.adoc): header only, no body. */
+/**
+ * PERIODIC_PING keepalive, in the form Wolf captured from a real client: a
+ * four-byte word of 4 and four zero bytes behind the header. control-specs.adoc
+ * draws it with no body; the captured bytes are the ones a host has been seen
+ * to accept, and the three Dish clients send the same twelve.
+ */
 fun periodicPing(): ByteArray {
     val buf = ByteBuffer.allocate(PERIODIC_PING_LEN).order(ByteOrder.LITTLE_ENDIAN)
     buf.putShort(CTRL_PERIODIC_PING.toShort())
     buf.putShort((PERIODIC_PING_LEN - CONTROL_HEADER_LEN).toShort())
-    // Wolf's captured ping carries a 4-byte body of zeroes.
+    buf.putInt(PERIODIC_PING_WORD)
     buf.putInt(0)
     return buf.toByteArray()
 }
+
+private const val PERIODIC_PING_WORD = 4
 
 /** TERMINATION on quit: reason is big-endian (Wolf ControlTerminatePacket). */
 fun termination(): ByteArray {
