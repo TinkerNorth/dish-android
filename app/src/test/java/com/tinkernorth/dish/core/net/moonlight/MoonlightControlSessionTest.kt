@@ -75,10 +75,18 @@ class MoonlightControlSessionTest {
         }
     }
 
+    // The host addresses our peer 0 under the session its VERIFY_CONNECT assigns, with a sent time.
+    private fun hostHeader(
+        w: EnetWriter,
+        sentTime: Int,
+    ) {
+        w.u16(EnetProtocol.HEADER_FLAG_SENT_TIME or (HOST_SESSION_ID shl EnetProtocol.HEADER_SESSION_SHIFT))
+        w.u16(sentTime)
+    }
+
     private fun verifyConnectDatagram(): ByteArray {
         val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.VERIFY_CONNECT_LEN)
-        w.u16(EnetProtocol.HEADER_FLAG_SENT_TIME)
-        w.u16(10)
+        hostHeader(w, sentTime = 10)
         commandHeader(
             w,
             EnetProtocol.COMMAND_VERIFY_CONNECT or EnetProtocol.FLAG_ACKNOWLEDGE,
@@ -86,7 +94,7 @@ class MoonlightControlSessionTest {
             1,
         )
         w.u16(0x0042) // outgoingPeerID
-        w.u8(1) // incomingSessionID
+        w.u8(HOST_SESSION_ID) // incomingSessionID
         w.u8(2) // outgoingSessionID
         w.u32(1024) // mtu
         w.u32(EnetProtocol.MINIMUM_WINDOW_SIZE) // windowSize
@@ -96,7 +104,7 @@ class MoonlightControlSessionTest {
         w.u32(EnetProtocol.PACKET_THROTTLE_INTERVAL)
         w.u32(EnetProtocol.PACKET_THROTTLE_ACCELERATION)
         w.u32(EnetProtocol.PACKET_THROTTLE_DECELERATION)
-        w.u32(0) // connectID
+        w.u32(CONNECT_ID) // connectID: the one the session's injected random drew
         return w.toByteArray()
     }
 
@@ -106,8 +114,7 @@ class MoonlightControlSessionTest {
         sealed: ByteArray,
     ): ByteArray {
         val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.SEND_RELIABLE_HEADER_LEN + sealed.size)
-        w.u16(EnetProtocol.HEADER_FLAG_SENT_TIME)
-        w.u16(20)
+        hostHeader(w, sentTime = 20)
         commandHeader(w, EnetProtocol.COMMAND_SEND_RELIABLE or EnetProtocol.FLAG_ACKNOWLEDGE, 0, seq)
         w.u16(sealed.size)
         w.bytes(sealed)
@@ -118,7 +125,7 @@ class MoonlightControlSessionTest {
     fun `connect handshake reaches CONNECTED`() {
         val transport = FakeTransport()
         transport.inbound.addLast(verifyConnectDatagram())
-        val session = MoonlightControlSession(key, 0x1234, transport, { clock })
+        val session = MoonlightControlSession(key, 0x1234, transport, { clock }, enetRandom = { CONNECT_ID })
         assertEquals(MoonlightControlSession.State.IDLE, session.state)
         assertTrue(session.connect())
         assertEquals(MoonlightControlSession.State.CONNECTED, session.state)
@@ -138,7 +145,7 @@ class MoonlightControlSessionTest {
     fun `controller state is sealed and sent only when connected`() {
         val transport = FakeTransport()
         transport.inbound.addLast(verifyConnectDatagram())
-        val session = MoonlightControlSession(key, 0x1234, transport, { clock })
+        val session = MoonlightControlSession(key, 0x1234, transport, { clock }, enetRandom = { CONNECT_ID })
         session.connect()
         val before = transport.sent.size
         session.sendControllerState(0, 1, BTN_A, 0, 0, 0, 0, 0, 0)
@@ -150,7 +157,7 @@ class MoonlightControlSessionTest {
         val transport = FakeTransport()
         transport.inbound.addLast(verifyConnectDatagram())
         val events = mutableListOf<MoonlightEvent>()
-        val session = MoonlightControlSession(key, 0x1234, transport, { clock }, onEvent = { events += it })
+        val session = MoonlightControlSession(key, 0x1234, transport, { clock }, onEvent = { events += it }, enetRandom = { CONNECT_ID })
         session.connect()
 
         // The host seals a RUMBLE_DATA event with its own seq 0.
@@ -179,7 +186,7 @@ class MoonlightControlSessionTest {
     fun `stop sends termination and closes the transport`() {
         val transport = FakeTransport()
         transport.inbound.addLast(verifyConnectDatagram())
-        val session = MoonlightControlSession(key, 0x1234, transport, { clock })
+        val session = MoonlightControlSession(key, 0x1234, transport, { clock }, enetRandom = { CONNECT_ID })
         session.connect()
         session.stop()
         assertEquals(MoonlightControlSession.State.CLOSED, session.state)
@@ -191,7 +198,7 @@ class MoonlightControlSessionTest {
         onEvent: (MoonlightEvent) -> Unit = {},
     ): MoonlightControlSession {
         transport.inbound.addLast(verifyConnectDatagram())
-        val session = MoonlightControlSession(key, 0x1234, transport, { clock }, onEvent)
+        val session = MoonlightControlSession(key, 0x1234, transport, { clock }, { CONNECT_ID }, onEvent)
         assertTrue(session.connect())
         transport.sent.clear()
         return session
@@ -199,8 +206,7 @@ class MoonlightControlSessionTest {
 
     private fun hostDisconnectDatagram(): ByteArray {
         val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.DISCONNECT_LEN)
-        w.u16(EnetProtocol.HEADER_FLAG_SENT_TIME)
-        w.u16(30)
+        hostHeader(w, sentTime = 30)
         commandHeader(
             w,
             EnetProtocol.COMMAND_DISCONNECT or EnetProtocol.FLAG_UNSEQUENCED,
@@ -250,7 +256,7 @@ class MoonlightControlSessionTest {
     @Test
     fun `controller state is dropped before the handshake settles`() {
         val transport = FakeTransport()
-        val session = MoonlightControlSession(key, 0x1234, transport, { clock })
+        val session = MoonlightControlSession(key, 0x1234, transport, { clock }, enetRandom = { CONNECT_ID })
         session.sendControllerState(0, 1, BTN_A, 0, 0, 0, 0, 0, 0)
         assertTrue(transport.sent.isEmpty())
     }
@@ -268,7 +274,7 @@ class MoonlightControlSessionTest {
     @Test
     fun `cold-path sends are dropped while not connected`() {
         val transport = FakeTransport()
-        val session = MoonlightControlSession(key, 0x1234, transport, { clock })
+        val session = MoonlightControlSession(key, 0x1234, transport, { clock }, enetRandom = { CONNECT_ID })
         session.sendMouseMoveRel(1, 1)
         session.sendMouseButton(true, MOUSE_BUTTON_LEFT)
         session.sendMouseScroll(1)
@@ -361,7 +367,7 @@ class MoonlightControlSessionTest {
     @Test
     fun `pump does not ping a session that never connected`() {
         val transport = FakeTransport()
-        val session = MoonlightControlSession(key, 0x1234, transport, { clock })
+        val session = MoonlightControlSession(key, 0x1234, transport, { clock }, enetRandom = { CONNECT_ID })
         clock = PING_INTERVAL_MS * 2L
         session.pump()
         assertTrue(reliableSendsIn(transport.sent).isEmpty())
@@ -447,7 +453,7 @@ class MoonlightControlSessionTest {
     fun `a replug is dropped while not connected and spends no seq`() {
         val transport = FakeTransport()
         transport.inbound.addLast(verifyConnectDatagram())
-        val session = MoonlightControlSession(key, 0x1234, transport, { clock })
+        val session = MoonlightControlSession(key, 0x1234, transport, { clock }, enetRandom = { CONNECT_ID })
         session.sendControllerReplug(REPLUG_NUMBER, OTHER_PADS_MASK, PLAYSTATION, REPLUG_CAPS, REPLUG_BUTTONS)
         assertTrue(transport.sent.isEmpty())
         assertTrue(session.connect())
@@ -462,7 +468,7 @@ class MoonlightControlSessionTest {
     fun `a mouse send dropped before the session connects spends no seq`() {
         val transport = FakeTransport()
         transport.inbound.addLast(verifyConnectDatagram())
-        val session = MoonlightControlSession(key, 0x1234, transport, { clock })
+        val session = MoonlightControlSession(key, 0x1234, transport, { clock }, enetRandom = { CONNECT_ID })
         session.sendMouseMoveRel(MOVE_DX, MOVE_DY)
         session.sendMouseButton(true, MOUSE_BUTTON_LEFT)
         session.sendMouseScroll(WHEEL_NOTCH)
@@ -492,7 +498,7 @@ class MoonlightControlSessionTest {
     private fun bytesPerSend(send: (MoonlightControlSession) -> Unit): Long {
         val transport = CountingTransport()
         transport.inbound.addLast(verifyConnectDatagram())
-        val session = MoonlightControlSession(key, 0x1234, transport, { clock })
+        val session = MoonlightControlSession(key, 0x1234, transport, { clock }, enetRandom = { CONNECT_ID })
         assertTrue(session.connect())
         repeat(WARMUP_SENDS) { send(session) }
         val sentBefore = transport.sent
@@ -549,7 +555,7 @@ class MoonlightControlSessionTest {
     fun `a touch send dropped before the session connects spends no seq`() {
         val transport = FakeTransport()
         transport.inbound.addLast(verifyConnectDatagram())
-        val session = MoonlightControlSession(key, 0x1234, transport, { clock })
+        val session = MoonlightControlSession(key, 0x1234, transport, { clock }, enetRandom = { CONNECT_ID })
         session.sendControllerTouch(TOUCH_NUMBER, TOUCH_EVENT_DOWN, TOUCH_POINTER, TOUCH_X, TOUCH_Y, 1f)
         assertTrue(transport.sent.isEmpty())
         assertTrue(session.connect())
@@ -582,6 +588,12 @@ class MoonlightControlSessionTest {
     private companion object {
         const val CONTROL_HEADER_LEN = 4
         const val RUMBLE_BODY_LEN = 10
+
+        // What the session's injected ENet random draws, so the host fixture can echo it.
+        const val CONNECT_ID = 0x5EED
+
+        // The session the fixture's VERIFY_CONNECT assigns; the host's later datagrams carry it.
+        const val HOST_SESSION_ID = 1
         const val PING_INTERVAL_MS = 500L
         const val HANDSHAKE_STEP_MS = 300L
         const val HANDSHAKE_BUDGET_MS = 3000

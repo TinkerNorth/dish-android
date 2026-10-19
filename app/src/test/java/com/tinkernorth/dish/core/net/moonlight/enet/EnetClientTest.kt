@@ -22,16 +22,19 @@ class EnetClientTest {
 
     private fun now() = clock
 
-    private fun newClient(connectData: Int = 0x11223344) = EnetClient(connectData, ::now, random = { 0x0BADF00D })
+    private fun newClient(connectData: Int = 0x11223344) = EnetClient(connectData, ::now, random = { CONNECT_ID })
 
     // --- host-side datagram builders (the bytes a Sunshine/Wolf host would send) ---
 
     private fun hostHeader(
         w: EnetWriter,
         sentTime: Int,
+        session: Int = HOST_SESSION_ID,
+        peer: Int = 0,
     ) {
-        // Host addresses our peer 0, with the sent-time flag set.
-        w.u16(EnetProtocol.HEADER_FLAG_SENT_TIME)
+        // Host addresses our peer 0 under the session its VERIFY_CONNECT assigned, with the
+        // sent-time flag set.
+        w.u16(EnetProtocol.HEADER_FLAG_SENT_TIME or (session shl EnetProtocol.HEADER_SESSION_SHIFT) or peer)
         w.u16(sentTime)
     }
 
@@ -39,6 +42,9 @@ class EnetClientTest {
         outgoingPeerId: Int = 0x0042,
         reliableSeq: Int = 1,
         mtu: Int = 1024,
+        connectId: Int = CONNECT_ID,
+        throttleInterval: Int = EnetProtocol.PACKET_THROTTLE_INTERVAL,
+        channelCount: Int = 1,
     ): ByteArray {
         val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.VERIFY_CONNECT_LEN)
         hostHeader(w, sentTime = 50)
@@ -49,17 +55,17 @@ class EnetClientTest {
             reliableSeq,
         )
         w.u16(outgoingPeerId)
-        w.u8(0x01) // incomingSessionId
+        w.u8(HOST_SESSION_ID) // incomingSessionId
         w.u8(0x02) // outgoingSessionId
         w.u32(mtu)
         w.u32(EnetProtocol.MINIMUM_WINDOW_SIZE)
-        w.u32(1) // channelCount
+        w.u32(channelCount)
         w.u32(0) // incomingBandwidth
         w.u32(0) // outgoingBandwidth
-        w.u32(EnetProtocol.PACKET_THROTTLE_INTERVAL)
+        w.u32(throttleInterval)
         w.u32(EnetProtocol.PACKET_THROTTLE_ACCELERATION)
         w.u32(EnetProtocol.PACKET_THROTTLE_DECELERATION)
-        w.u32(0x0BADF00D) // connectID echo
+        w.u32(connectId) // connectID echo
         return w.toByteArray()
     }
 
@@ -78,9 +84,11 @@ class EnetClientTest {
     private fun sendReliableDatagram(
         reliableSeq: Int,
         payload: ByteArray,
+        session: Int = HOST_SESSION_ID,
+        peer: Int = 0,
     ): ByteArray {
         val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.SEND_RELIABLE_HEADER_LEN + payload.size)
-        hostHeader(w, sentTime = 70)
+        hostHeader(w, sentTime = 70, session = session, peer = peer)
         commandHeader(
             w,
             EnetProtocol.COMMAND_SEND_RELIABLE or EnetProtocol.FLAG_ACKNOWLEDGE,
@@ -141,6 +149,44 @@ class EnetClientTest {
     }
 
     @Test
+    fun `a VERIFY_CONNECT echoing another connect id ends the handshake unacknowledged`() {
+        val client = newClient()
+        client.connect()
+        val acks = client.onDatagram(verifyConnectDatagram(connectId = CONNECT_ID + 1))
+        assertTrue(acks.isEmpty())
+        assertEquals(EnetClient.State.DISCONNECTED, client.state)
+        assertEquals("VERIFY_CONNECT names another connection", client.disconnectReason)
+    }
+
+    @Test
+    fun `a VERIFY_CONNECT with foreign throttle parameters ends the handshake`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram(throttleInterval = EnetProtocol.PACKET_THROTTLE_INTERVAL + 1))
+        assertEquals(EnetClient.State.DISCONNECTED, client.state)
+    }
+
+    @Test
+    fun `a VERIFY_CONNECT opening no channel ends the handshake`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram(channelCount = 0))
+        assertEquals(EnetClient.State.DISCONNECTED, client.state)
+    }
+
+    @Test
+    fun `a second VERIFY_CONNECT is acknowledged but changes nothing`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        val acks = client.onDatagram(verifyConnectDatagram(outgoingPeerId = ANOTHER_PEER))
+        assertEquals(EnetProtocol.COMMAND_ACKNOWLEDGE, firstCommand(acks.single()).command)
+        assertEquals(EnetClient.State.CONNECTED, client.state)
+        // The ack's header still names the host's first id for us.
+        assertEquals(0x0042, peerIdOf(acks.single()))
+    }
+
+    @Test
     fun `reliable send is acknowledged and not retransmitted`() {
         val client = newClient()
         client.connect()
@@ -174,6 +220,26 @@ class EnetClientTest {
         assertNotEquals(sentTimeOf(original), sentTimeOf(resent))
         assertEquals((clock and 0xFFFF).toInt(), sentTimeOf(resent))
     }
+
+    @Test
+    fun `the retransmit timeout scales by the attempts before the resend`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        client.sendReliable("input".toByteArray())
+        clock += BASE_RETRANSMIT_MS
+        assertEquals("the first resend at the base timeout", 1, resendsIn(client.tick()))
+        clock += BASE_RETRANSMIT_MS - 1
+        assertEquals("the second wait is still the base, scaled by one attempt", 0, resendsIn(client.tick()))
+        clock += 1
+        assertEquals(1, resendsIn(client.tick()))
+        clock += 2 * BASE_RETRANSMIT_MS - 1
+        assertEquals("then twice the base", 0, resendsIn(client.tick()))
+        clock += 1
+        assertEquals(1, resendsIn(client.tick()))
+    }
+
+    private fun resendsIn(out: List<ByteArray>): Int = out.count { firstCommand(it).command == EnetProtocol.COMMAND_SEND_RELIABLE }
 
     @Test
     fun `host reliable send is delivered once and acked`() {
@@ -575,6 +641,26 @@ class EnetClientTest {
     }
 
     @Test
+    fun `a datagram from another session is ignored`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        val stale = sendReliableDatagram(reliableSeq = 1, payload = "stale".toByteArray(), session = FOREIGN_SESSION_ID)
+        assertTrue(client.onDatagram(stale).isEmpty())
+        assertTrue(client.received.isEmpty())
+    }
+
+    @Test
+    fun `a datagram addressed to another peer is ignored`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        val elsewhere = sendReliableDatagram(reliableSeq = 1, payload = "not ours".toByteArray(), peer = ANOTHER_PEER)
+        assertTrue(client.onDatagram(elsewhere).isEmpty())
+        assertTrue(client.received.isEmpty())
+    }
+
+    @Test
     fun `a fragment's payload is skipped so a following ack still parses`() {
         val client = newClient()
         client.connect()
@@ -619,11 +705,15 @@ class EnetClientTest {
         val client = newClient()
         client.connect()
         client.onDatagram(verifyConnectDatagram())
-        val acrossTheWrap = intArrayOf(0x7FFF, 0xFFFE, 0xFFFF, 0x0000, 0x0001)
-        for (seq in acrossTheWrap) {
-            client.onDatagram(sendReliableDatagram(reliableSeq = seq, payload = "seq $seq".toByteArray()))
+        // The whole ring in order, then the first two numbers again on the far side of the wrap.
+        for (seq in 1..EnetProtocol.U16_MASK) {
+            client.onDatagram(sendReliableDatagram(reliableSeq = seq, payload = EMPTY_PAYLOAD))
+            client.received.clear()
         }
-        assertEquals(acrossTheWrap.map { "seq $it" }, client.received.map { String(it) })
+        client.onDatagram(sendReliableDatagram(reliableSeq = 0, payload = "zero".toByteArray()))
+        client.onDatagram(sendReliableDatagram(reliableSeq = 1, payload = "one again".toByteArray()))
+        assertEquals(listOf("zero", "one again"), client.received.map { String(it) })
+        assertEquals(0, client.stats.heldOutOfOrder)
     }
 
     @Test
@@ -631,10 +721,55 @@ class EnetClientTest {
         val client = newClient()
         client.connect()
         client.onDatagram(verifyConnectDatagram())
+        client.onDatagram(sendReliableDatagram(reliableSeq = 1, payload = "one".toByteArray()))
         client.onDatagram(sendReliableDatagram(reliableSeq = 2, payload = "two".toByteArray()))
         client.received.clear()
         val acks = client.onDatagram(sendReliableDatagram(reliableSeq = 1, payload = "one".toByteArray()))
         assertEquals(EnetProtocol.COMMAND_ACKNOWLEDGE, firstCommand(acks.single()).command)
+        assertTrue(client.received.isEmpty())
+    }
+
+    @Test
+    fun `a reliable command ahead of its turn waits for the gap to fill`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        client.onDatagram(sendReliableDatagram(reliableSeq = 1, payload = "one".toByteArray()))
+        val acks = client.onDatagram(sendReliableDatagram(reliableSeq = 3, payload = "three".toByteArray()))
+        // Acknowledged, as the host needs, but three waits for two.
+        assertEquals(EnetProtocol.COMMAND_ACKNOWLEDGE, firstCommand(acks.single()).command)
+        assertEquals(listOf("one"), client.received.map { String(it) })
+        assertEquals(1, client.stats.heldOutOfOrder)
+        client.onDatagram(sendReliableDatagram(reliableSeq = 2, payload = "two".toByteArray()))
+        assertEquals(listOf("one", "two", "three"), client.received.map { String(it) })
+        // The host's retransmit of the one that waited is not delivered again.
+        client.onDatagram(sendReliableDatagram(reliableSeq = 3, payload = "three".toByteArray()))
+        assertEquals(3, client.received.size)
+    }
+
+    @Test
+    fun `a reliable command too far ahead of its turn is acked but discarded`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        val acks = client.onDatagram(sendReliableDatagram(reliableSeq = TOO_FAR_AHEAD_SEQ, payload = "far".toByteArray()))
+        assertEquals(EnetProtocol.COMMAND_ACKNOWLEDGE, firstCommand(acks.single()).command)
+        assertTrue(client.received.isEmpty())
+        assertEquals(0, client.stats.heldOutOfOrder)
+    }
+
+    @Test
+    fun `a reliable send on a channel the host never opened abandons its datagram`() {
+        val client = newClient()
+        client.connect()
+        client.onDatagram(verifyConnectDatagram())
+        val w = EnetWriter(EnetProtocol.FULL_HEADER_LEN + EnetProtocol.SEND_RELIABLE_HEADER_LEN + 1 + EnetProtocol.PING_LEN)
+        hostHeader(w, sentTime = 70)
+        commandHeader(w, EnetProtocol.COMMAND_SEND_RELIABLE or EnetProtocol.FLAG_ACKNOWLEDGE, UNOPENED_CHANNEL, 1)
+        w.u16(1)
+        w.u8(0xAA)
+        commandHeader(w, EnetProtocol.COMMAND_PING or EnetProtocol.FLAG_ACKNOWLEDGE, EnetProtocol.SYSTEM_CHANNEL, 2)
+        assertTrue(client.onDatagram(w.toByteArray()).isEmpty())
         assertTrue(client.received.isEmpty())
     }
 
@@ -776,6 +911,13 @@ class EnetClientTest {
         return buf.short.toInt() and 0xFFFF
     }
 
+    private fun peerIdOf(datagram: ByteArray): Int =
+        ByteBuffer
+            .wrap(datagram)
+            .order(ByteOrder.BIG_ENDIAN)
+            .short
+            .toInt() and EnetProtocol.MAXIMUM_PEER_ID
+
     private fun pingDatagram(
         reliableSeq: Int,
         sentTime: Int,
@@ -858,5 +1000,22 @@ class EnetClientTest {
 
         // protocol.c caps a command's retransmission timeout at a fifth of the peer's maximum timeout.
         const val RTO_CAP_MS = 6_000L
+
+        // The connect id the injected random draws, which the host fixture echoes.
+        const val CONNECT_ID = 0x0BADF00D
+
+        // The session the fixture's VERIFY_CONNECT assigns us; its later datagrams carry it.
+        const val HOST_SESSION_ID = 0x01
+        const val FOREIGN_SESSION_ID = 0x02
+        const val ANOTHER_PEER = 5
+        const val UNOPENED_CHANNEL = 3
+
+        // Before any round trip is sampled: the default estimate plus four times the floor variance of one.
+        const val BASE_RETRANSMIT_MS = 504L
+
+        // Outside the free reliable windows ahead of seq 0, so the fork discards it.
+        const val TOO_FAR_AHEAD_SEQ = 0x7FFF
+
+        val EMPTY_PAYLOAD = ByteArray(0)
     }
 }

@@ -188,13 +188,13 @@ class MoonlightInputEncoderTest {
     }
 
     @Test
-    fun `termination carries the graceful reason big-endian`() {
+    fun `termination is Wolf's 0x0109 with the graceful reason big-endian`() {
         val bytes = termination()
-        assertEquals("00010400" + "80030023", bytesToHex(bytes))
+        assertEquals("09010400" + "80030023", bytesToHex(bytes))
     }
 
     @Test
-    fun `periodic ping is header plus a zero body`() {
-        assertEquals("00020400" + "00000000", bytesToHex(periodicPing()))
+    fun `periodic ping is the twelve bytes Wolf captured from a real client`() {
+        assertEquals("00020800" + "04000000" + "00000000", bytesToHex(periodicPing()))
     }
 }

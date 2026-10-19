@@ -80,7 +80,7 @@ fun decodeMoonlightEvent(plaintext: ByteArray): MoonlightEvent? {
         EVENT_RUMBLE_TRIGGERS -> decodeTriggers(buf)
         EVENT_MOTION -> decodeMotion(buf)
         EVENT_RGB_LED -> decodeLed(buf)
-        CTRL_TERMINATION -> decodeTermination(buf)
+        CTRL_TERMINATION, CTRL_TERMINATION_LEGACY -> decodeTermination(buf)
         else -> MoonlightEvent.Unknown(type)
     }
 }
