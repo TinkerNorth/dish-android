@@ -216,7 +216,15 @@ lifecycle actuator (that is a controller).
   device id), preserving the controller index so the server-side pad
   survives without an unplug/replug.
 - `SatelliteConnectionManager` owns the connect/pair/retry lifecycle
-  and the live `SatelliteConnection` map.
+  and the live `SatelliteConnection` map. Each satellite has one REST
+  mutation queue for session PUT/DELETE and controller PUT/DELETE.
+  Session rotation starts only after acquiring that queue; queued work
+  rechecks its generation and native session handle before acting.
+  Successful controller acknowledgements record the descriptor sent,
+  then convergence reads the latest desired descriptor again. Changed
+  intent is sent even after a missing acknowledgement; an unchanged
+  failed request stops rather than retrying continuously. The queue is
+  outside the JNI input and audio paths.
 
 Rule: a coordinator may read flows and call commands, but it never
 becomes the source of truth for state another class already owns.
