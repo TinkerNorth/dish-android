@@ -172,6 +172,7 @@ class SatelliteCapabilitiesRepositoryTest {
         enabled: Boolean,
         mic: Boolean,
         speaker: Boolean,
+        hapticAudio: Boolean = false,
     ): String =
         """{"protocolVersion":2,"serverVersion":"1.8.0","maxControllers":16,""" +
             """"backend":{"id":"hidmaestro","supported":true,"available":true,"errorCode":null},""" +
@@ -181,7 +182,7 @@ class SatelliteCapabilitiesRepositoryTest {
             """"mouseControl":{"supported":true,"available":true},""" +
             """"keyboardControl":{"supported":false},""" +
             """"rumble":{"supported":true,"available":true}},""" +
-            """"controllerAudio":{"enabled":$enabled,"mic":$mic,"speaker":$speaker}}"""
+            """"controllerAudio":{"enabled":$enabled,"mic":$mic,"speaker":$speaker,"hapticAudio":$hapticAudio}}"""
 
     @Test
     fun `the controllerAudio block lands both directions`() =
@@ -194,6 +195,29 @@ class SatelliteCapabilitiesRepositoryTest {
             val host = hostFeaturesStore.featuresFor("sat-1")
             assertTrue(host?.controllerMic == true)
             assertTrue(host?.controllerSpeaker == true)
+        }
+
+    @Test
+    fun `the haptics lane lands in the store and survives the catalog's write`() =
+        runTest {
+            // Catalog first, as the Live transition often orders it: setIfAbsent is a no-op and
+            // only the audio merge can carry the lane; then a second catalog write must keep it.
+            val fromCatalog =
+                HostFeatureSet(
+                    hasCatalog = true,
+                    mouseControl = true,
+                    keyboardControl = false,
+                    rumbleReturn = true,
+                )
+            hostFeaturesStore.setFeatures("sat-1", fromCatalog)
+            coEvery { gateway.serverCapabilities(any(), any(), any()) } returns
+                HttpReply(200, bodyWithControllerAudio(enabled = true, mic = true, speaker = true, hapticAudio = true), null)
+
+            repo.refresh(server, "sat-1")
+            assertTrue(hostFeaturesStore.featuresFor("sat-1")?.controllerHapticAudio == true)
+
+            hostFeaturesStore.setFeatures("sat-1", fromCatalog)
+            assertTrue(hostFeaturesStore.featuresFor("sat-1")?.controllerHapticAudio == true)
         }
 
     @Test

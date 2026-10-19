@@ -53,7 +53,7 @@
     <string name="help_a_open_source">Oui. Dish (Android, Linux, Mac) et Satellite sont tous publiés sous LGPL-3.0, code source sur GitHub à github.com/TinkerNorth. Les pull requests sont les bienvenues.</string>
 
     <string name="help_q_privacy">Que collecte Dish ?</string>
-    <string name="help_a_privacy">Presque rien. Dish n\'envoie pas le contenu du jeu ni l\'entrée de la manette ailleurs : ce trafic reste sur votre réseau local entre le téléphone et le PC. Les rapports de plantage anonymes sont opt-in (Paramètres → Diagnostic). Voir la politique de confidentialité pour la liste complète.</string>
+    <string name="help_a_privacy">Presque rien. Dish n\'envoie pas le contenu du jeu ni l\'entrée de la manette ailleurs : ce trafic reste sur votre réseau local entre le téléphone et le PC. Les rapports de plantage anonymes sont activés par défaut et peuvent être désactivés (Paramètres → Diagnostic). Voir la politique de confidentialité pour la liste complète.</string>
 
     <string name="help_view_privacy_policy">Politique de confidentialité</string>
     <string name="help_view_github">Voir le code source sur GitHub</string>

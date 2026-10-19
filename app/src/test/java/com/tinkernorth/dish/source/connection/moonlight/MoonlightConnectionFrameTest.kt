@@ -6,6 +6,7 @@ package com.tinkernorth.dish.source.connection.moonlight
 import com.tinkernorth.dish.architecture.testing.allocatedBytesDuring
 import com.tinkernorth.dish.architecture.testing.fewestAllocatedBytesDuring
 import com.tinkernorth.dish.architecture.testing.freshAppInstanceOf
+import com.tinkernorth.dish.core.input.WBUTTON_MIC_MUTE
 import com.tinkernorth.dish.core.net.moonlight.BTN_A
 import com.tinkernorth.dish.core.net.moonlight.BTN_TOUCHPAD
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
@@ -379,6 +380,16 @@ class MoonlightConnectionFrameTest {
         val conn = liveWithPads(1)
         conn.sendControllerState(FIRST_NUMBER, NOT_A_BUTTON or BTN_A or BTN_TOUCHPAD, 0, 0, 0, 0, 0, 0)
         assertEquals(listOf(neutralFrame(FIRST_NUMBER, ONE_PAD_MASK, BTN_A or BTN_TOUCHPAD)), sent)
+    }
+
+    // The satellite's mic-mute bit lives in XUSB's one unassigned slot; a Moonlight host has no
+    // button there and a Direct-claimed DualSense sets it on every muted frame.
+    @Test
+    fun `the DualSense mic-mute bit never reaches a Moonlight host`() {
+        val conn = liveWithPads(1)
+        conn.sendControllerState(FIRST_NUMBER, WBUTTON_MIC_MUTE or BTN_A, 0, 0, 0, 0, 0, 0)
+        assertEquals(listOf(neutralFrame(FIRST_NUMBER, ONE_PAD_MASK, BTN_A)), sent)
+        assertEquals(0, MoonlightConnection.SUPPORTED_BUTTONS and WBUTTON_MIC_MUTE)
     }
 
     @Test
