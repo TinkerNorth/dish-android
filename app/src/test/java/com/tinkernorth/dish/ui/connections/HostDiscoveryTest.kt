@@ -6,12 +6,11 @@ package com.tinkernorth.dish.ui.connections
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.source.system.BluetoothPermissionState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
-// The minSdk; Fire OS 7 (Android 9); Fire OS 8 (Android 11), the last release whose discovery
-// results need a location permission; Android 12, where BLUETOOTH_SCAN can disavow location;
-// and the targetSdk.
 private const val SDK_OLDEST = 24
 private const val SDK_FIRE_OS_7 = 28
 private const val SDK_LAST_LOCATION_SCAN = 30
@@ -70,5 +69,35 @@ class HostDiscoveryTest {
     @Test
     fun `a picker that cannot scan says where a new host pairs`() {
         assertEquals(R.string.bt_scan_system_settings_note, hostDiscoveryNote(HostDiscovery.SystemSettings))
+    }
+
+    @Test
+    fun `a picker that can see discovery results scans in the app`() {
+        assertTrue(HostDiscovery.InApp.scansInApp)
+    }
+
+    @Test
+    fun `a picker missing the Nearby devices grant does not scan`() {
+        assertFalse(HostDiscovery.NeedsNearbyPermission.scansInApp)
+    }
+
+    @Test
+    fun `a picker below Android 12 does not scan, since no discovery result could reach it`() {
+        assertFalse(HostDiscovery.SystemSettings.scansInApp)
+    }
+
+    @Test
+    fun `a picker below Android 12 offers the Bluetooth settings, where a new device pairs`() {
+        assertTrue(HostDiscovery.SystemSettings.offersBluetoothSettings)
+    }
+
+    @Test
+    fun `a picker that scans by itself offers no Bluetooth settings`() {
+        assertFalse(HostDiscovery.InApp.offersBluetoothSettings)
+    }
+
+    @Test
+    fun `a picker missing the Nearby devices grant asks for the grant instead of offering the settings`() {
+        assertFalse(HostDiscovery.NeedsNearbyPermission.offersBluetoothSettings)
     }
 }

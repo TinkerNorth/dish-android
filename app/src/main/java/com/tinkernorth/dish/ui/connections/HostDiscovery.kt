@@ -10,10 +10,7 @@ import com.tinkernorth.dish.source.system.BluetoothPermissionState
 
 /** How the Bluetooth host picker finds a device the phone has not paired with yet. */
 enum class HostDiscovery {
-    /** Android 12 and newer with Nearby devices granted: the picker scans by itself. */
     InApp,
-
-    /** Android 12 and newer without the grant: paired devices only, and the note asks for it. */
     NeedsNearbyPermission,
 
     /**
@@ -22,6 +19,11 @@ enum class HostDiscovery {
      * Bluetooth settings.
      */
     SystemSettings,
+    ;
+
+    val scansInApp: Boolean get() = this == InApp
+
+    val offersBluetoothSettings: Boolean get() = this == SystemSettings
 }
 
 internal fun hostDiscoveryFor(
@@ -34,7 +36,6 @@ internal fun hostDiscoveryFor(
         else -> HostDiscovery.InApp
     }
 
-/** The picker's note for a route, or null when the picker scans by itself. */
 @StringRes
 internal fun hostDiscoveryNote(discovery: HostDiscovery): Int? =
     when (discovery) {

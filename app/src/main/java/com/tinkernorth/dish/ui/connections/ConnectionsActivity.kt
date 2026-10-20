@@ -657,8 +657,6 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         private val progress = view.findViewById<TextView>(R.id.scanProgress)
         private val empty = view.findViewById<TextView>(R.id.deviceEmpty)
         private val discovery = hostDiscoveryFor(Build.VERSION.SDK_INT, btPermissionState.state.value)
-        private val canScan = discovery == HostDiscovery.InApp
-        private val pairsInSystemSettings = discovery == HostDiscovery.SystemSettings
         private var discoverableUntilMs = initialDiscoverableUntilMs
 
         // Hosts already linked before this attempt; a newly connected id means our host arrived.
@@ -673,7 +671,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                     .setView(view)
                     .setNeutralButton(R.string.bt_wait_for_host, null)
                     .setNegativeButton(R.string.action_cancel, null)
-            if (pairsInSystemSettings) builder.setPositiveButton(R.string.bt_open_bluetooth_settings, null)
+            if (discovery.offersBluetoothSettings) builder.setPositiveButton(R.string.bt_open_bluetooth_settings, null)
             return builder
         }
 
@@ -698,11 +696,11 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         }
 
         // The neutral and positive buttons are wired after show() so they can be pressed without
-        // closing the dialog: the paired list refreshes when the user comes back from settings.
+        // closing the dialog.
         private fun onWaitDialogShown() {
             refreshWaitButton()
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener { onWaitForHostClicked() }
-            if (pairsInSystemSettings) {
+            if (discovery.offersBluetoothSettings) {
                 dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setOnClickListener { openBluetoothSettings() }
             }
         }
@@ -772,7 +770,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
         private suspend fun collectScan() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                btScanner.start(canScan)
+                btScanner.start(discovery.scansInApp)
                 try {
                     btScanner.state.collect { renderScan(it) }
                 } finally {
