@@ -295,6 +295,8 @@
     <string name="bt_device_tag_paired">Uparen</string>
     <string name="bt_device_tag_available">Dostupan</string>
     <string name="bt_scan_permission_note">Skeniranje zahtijeva dozvolu za uređaje u blizini. Upareni uređaji se prikazuju i bez nje.</string>
+    <string name="bt_scan_system_settings_note">Novi uređaj prvo uparite u Bluetooth podešavanjima. Upareni uređaji se prikazuju ovdje.</string>
+    <string name="bt_open_bluetooth_settings">Bluetooth podešavanja</string>
     <string name="notif_bt_discoverability_denied_title">Vidljivost odbijena</string>
     <string name="notif_bt_discoverability_denied_body">Vaš host ne može vidjeti ovaj telefon dok ga ne učinite vidljivim.</string>
     <string name="notif_bt_adapter_off_title">Bluetooth je isključen</string>

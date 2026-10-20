@@ -297,6 +297,8 @@
     <string name="bt_device_tag_paired">Associé</string>
     <string name="bt_device_tag_available">Disponible</string>
     <string name="bt_scan_permission_note">L\'analyse nécessite l\'autorisation Appareils à proximité. Les appareils associés s\'affichent sans elle.</string>
+    <string name="bt_scan_system_settings_note">Associez d\'abord un nouvel appareil dans les paramètres Bluetooth. Les appareils associés s\'affichent ici.</string>
+    <string name="bt_open_bluetooth_settings">Paramètres Bluetooth</string>
     <string name="notif_bt_discoverability_denied_title">Visibilité refusée</string>
     <string name="notif_bt_discoverability_denied_body">Votre hôte ne peut pas voir ce téléphone tant que vous ne l\'avez pas rendu visible.</string>
     <string name="notif_bt_adapter_off_title">Bluetooth désactivé</string>

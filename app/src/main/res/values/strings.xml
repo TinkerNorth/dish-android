@@ -62,6 +62,8 @@
     <string name="bt_device_tag_paired">Paired</string>
     <string name="bt_device_tag_available">Available</string>
     <string name="bt_scan_permission_note">Scanning needs the Nearby devices permission. Paired devices are shown without it.</string>
+    <string name="bt_scan_system_settings_note">Pair a new device in Bluetooth settings first. Paired devices are shown here.</string>
+    <string name="bt_open_bluetooth_settings">Bluetooth settings</string>
 
     <!-- Add-custom-satellite dialog (manual IP + ports). -->
     <string name="action_add_custom_satellite">Add custom satellite</string>

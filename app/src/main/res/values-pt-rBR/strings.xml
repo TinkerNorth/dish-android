@@ -298,6 +298,8 @@
     <string name="bt_device_tag_paired">Pareado</string>
     <string name="bt_device_tag_available">Disponível</string>
     <string name="bt_scan_permission_note">A busca precisa da permissão de dispositivos por perto. Dispositivos pareados aparecem sem ela.</string>
+    <string name="bt_scan_system_settings_note">Pareie primeiro um dispositivo novo nas configurações de Bluetooth. Dispositivos pareados aparecem aqui.</string>
+    <string name="bt_open_bluetooth_settings">Configurações de Bluetooth</string>
     <string name="notif_bt_discoverability_denied_title">Visibilidade recusada</string>
     <string name="notif_bt_discoverability_denied_body">Seu host não consegue ver este telefone até você torná-lo visível.</string>
     <string name="notif_bt_adapter_off_title">Bluetooth desativado</string>

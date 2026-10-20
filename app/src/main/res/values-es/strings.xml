@@ -298,6 +298,8 @@
     <string name="bt_device_tag_paired">Vinculado</string>
     <string name="bt_device_tag_available">Disponible</string>
     <string name="bt_scan_permission_note">El escaneo necesita el permiso de dispositivos cercanos. Los dispositivos vinculados se muestran sin él.</string>
+    <string name="bt_scan_system_settings_note">Vincula primero un dispositivo nuevo en los ajustes de Bluetooth. Los dispositivos vinculados se muestran aquí.</string>
+    <string name="bt_open_bluetooth_settings">Ajustes de Bluetooth</string>
     <string name="notif_bt_discoverability_denied_title">Visibilidad denegada</string>
     <string name="notif_bt_discoverability_denied_body">Tu host no puede ver este teléfono hasta que lo hagas visible.</string>
     <string name="notif_bt_adapter_off_title">Bluetooth desactivado</string>
