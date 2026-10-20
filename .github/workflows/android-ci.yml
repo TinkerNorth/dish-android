@@ -5,7 +5,7 @@ name: Android CI
 #   actions/setup-java            @ v6.0.1 → de7274f081f381c8f8158605e0321c36c376e2e6
 #   actions/setup-python          @ v7.0.0 → 5fda3b95a4ea91299a34e894583c3862153e4b97
 #   actions/upload-artifact       @ v7.0.1 → 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-#   gradle/actions/setup-gradle   @ v6.3.0 → 9c971963bec38e04b3d30dcc455b5382be2fdbfb
+#   gradle/actions/setup-gradle   @ v6.4.0 → 3f5f9adaf7d9fecd50b5935e54106014257a94e6
 #   reactivecircus/android-emulator-runner @ v2.38.0 → a421e43855164a8197daf9d8d40fe71c6996bb0d
 
 on:
@@ -79,6 +79,14 @@ jobs:
 
       - name: Build debug APKs (both distribution flavors)
         run: ./gradlew assembleGithubDebug assemblePlayDebug
+
+      - name: Each APK carries its flavor's ABIs
+        run: |
+          python scripts/check_apk_abis.py app/build/outputs/apk/github/debug/app-github-debug.apk armeabi-v7a arm64-v8a x86_64
+          python scripts/check_apk_abis.py app/build/outputs/apk/play/debug/app-play-debug.apk armeabi-v7a arm64-v8a x86_64
+
+      - name: libsodium uses 128-bit arithmetic on 64-bit ABIs only
+        run: python scripts/check_sodium_ti_mode.py app/.cxx
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -162,3 +170,36 @@ jobs:
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
           retention-days: 7
+
+  native-armv7:
+    name: C++ host tests (32-bit ARM, qemu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install the armhf cross compiler and qemu-user
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends g++-arm-linux-gnueabihf qemu-user
+
+      - name: Configure for armv7
+        run: >-
+          cmake -S app/src/test/cpp -B build/native-test-armv7
+          -DCMAKE_SYSTEM_NAME=Linux
+          -DCMAKE_SYSTEM_PROCESSOR=arm
+          -DCMAKE_C_COMPILER=arm-linux-gnueabihf-gcc
+          -DCMAKE_CXX_COMPILER=arm-linux-gnueabihf-g++
+          "-DCMAKE_CROSSCOMPILING_EMULATOR=qemu-arm;-L;/usr/arm-linux-gnueabihf"
+
+      - name: Build
+        run: cmake --build build/native-test-armv7 --parallel
+
+      - name: The test binaries are 32-bit ARM
+        run: |
+          file build/native-test-armv7/gamepad_input_test
+          file build/native-test-armv7/gamepad_input_test | grep -q 'ELF 32-bit LSB .* ARM'
+
+      - name: Run under qemu-arm
+        run: ctest --test-dir build/native-test-armv7 --output-on-failure

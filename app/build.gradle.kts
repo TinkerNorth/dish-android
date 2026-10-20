@@ -79,8 +79,10 @@ android {
         // Orchestrator wipes app data (prefs, connection store) between tests.
         testInstrumentationRunnerArguments["clearPackageData"] = "true"
 
+        // armeabi-v7a is the whole userland of the 32-bit Fire tablets and of older phones; x86_64
+        // serves emulators and Chromebooks, which lint's ChromeOsAbiSupport asks every build to keep.
         ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
         }
 
         // Gates the opt-in hot-path latency instrumentation (HotPathBenchController).
