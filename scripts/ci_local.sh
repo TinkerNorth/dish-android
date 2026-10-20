@@ -70,6 +70,7 @@ if command -v arm-linux-gnueabihf-g++ >/dev/null 2>&1 && command -v qemu-arm >/d
   cmake -S app/src/test/cpp -B build/native-test-armv7 \
     -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=arm \
     -DCMAKE_C_COMPILER=arm-linux-gnueabihf-gcc -DCMAKE_CXX_COMPILER=arm-linux-gnueabihf-g++ \
+    -DCMAKE_C_FLAGS=-mfpu=neon -DCMAKE_CXX_FLAGS=-mfpu=neon \
     "-DCMAKE_CROSSCOMPILING_EMULATOR=qemu-arm;-L;/usr/arm-linux-gnueabihf"
   cmake --build build/native-test-armv7 --parallel
   ctest --test-dir build/native-test-armv7 --output-on-failure
