@@ -17,5 +17,7 @@ fun Activity.openBluetoothSettings() {
         startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
     } catch (e: ActivityNotFoundException) {
         Log.w(TAG, "no Bluetooth settings screen on this device: ${e.message}")
+    } catch (e: SecurityException) {
+        Log.w(TAG, "the Bluetooth settings screen refused the request: ${e.message}")
     }
 }
