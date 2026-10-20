@@ -13,7 +13,6 @@ import java.io.File
  * objecting.
  */
 class LayoutResourceRulesTest {
-    // Every source set's res, the flavors' and the shared ones alike, so a new one cannot slip by.
     private val resRoots =
         File("src")
             .listFiles()

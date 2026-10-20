@@ -12,10 +12,6 @@ import androidx.core.view.isVisible
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.ui.common.DishNavigator
 
-// Every screen shares these touchpoints (with the pill in DonatePill.kt), and each shows only where
-// the flavor's TIP_OFFER asks for tips. The flavors part ways inside DonateActivity: external
-// payment rails on github, Play Billing on play, as Google Play's Payments policy requires of
-// Play-distributed apps. The amazon build asks for nothing, so its DonateActivity is never opened.
 fun AppCompatActivity.wireDonateButton() {
     val button = findViewById<View>(R.id.btnDonate) ?: return
     val asksForTips = TIP_OFFER is TipOffer.Ask

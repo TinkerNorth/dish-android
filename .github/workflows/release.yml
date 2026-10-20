@@ -143,7 +143,6 @@ jobs:
     name: Build + sign APK/AAB
     needs: [gates, required-secrets]
     runs-on: ubuntu-latest
-    # One baseline-profile run on a managed emulator, merged into all three release builds.
     timeout-minutes: 90
     outputs:
       version_code: ${{ steps.ver.outputs.code }}
@@ -233,10 +232,6 @@ jobs:
           DISH_VERSION_NAME: ${{ steps.ver.outputs.name }}
         run: ./gradlew :app:generateBaselineProfile
 
-      # Three distribution flavors: `github` ships the APK published to GitHub
-      # Releases, `play` builds the AAB uploaded to Google Play, and `amazon`
-      # builds the APK uploaded to the Amazon Appstore by hand. Only the format
-      # each channel takes is built.
       - name: Build release APKs (github, amazon) + AAB (play)
         env:
           DISH_KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}

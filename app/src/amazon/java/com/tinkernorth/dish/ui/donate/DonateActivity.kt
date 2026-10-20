@@ -8,7 +8,7 @@ import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import dagger.hilt.android.AndroidEntryPoint
 
 // The manifest and the nav graph in src/main name this screen, and NavInflater resolves every
-// destination class. TIP_OFFER is None here, so no surface opens it; a stray launch just closes.
+// destination class.
 @AndroidEntryPoint
 class DonateActivity : BaseGamepadHostActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
