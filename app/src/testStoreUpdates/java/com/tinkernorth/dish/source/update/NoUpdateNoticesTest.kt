@@ -13,7 +13,7 @@ class NoUpdateNoticesTest {
     private val disabled = UpdateNoticeStatus(phase = UpdateNoticePhase.Disabled, checksEnabled = false)
 
     @Test
-    fun `the play build reports no update support`() {
+    fun `a store build reports no update support`() {
         assertFalse(notices.supported)
     }
 

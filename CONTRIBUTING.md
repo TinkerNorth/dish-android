@@ -21,8 +21,10 @@ scripts/setup-hooks.sh
 ```
 
 The pre-commit hook runs `clang-format -i` (autofix, re-stages) on staged
-JNI C/C++ files and `scripts/check-translations.py` when a `strings.xml` is
-staged; it skips Kotlin to keep itself fast. CI runs `clang-format
+JNI C/C++ files and `scripts/check-translations.py`, which compares every
+source set's `values/` strings with that source set's own locales, when a
+strings file under any `app/src/*/res` is staged; it skips Kotlin to keep
+itself fast. CI runs `clang-format
 --dry-run --Werror` on the JNI plus `ktlintCheck`, `detekt`, and lint on
 the Kotlin tree, so anything that slips locally fails the PR.
 
@@ -82,7 +84,7 @@ app, JNI and test code alike.
   changes is a named constant, never a literal in the middle of a function.
   A type that holds no state is a set of functions, not a class. Where a
   caller needs it as a value of an interface (a `DiffUtil.ItemCallback`, the
-  no-op `UpdateNotices` of the play flavour), it is a class, constructed
+  no-op `UpdateNotices` of the store flavours), it is a class, constructed
   where it is needed, not an `object`.
 
 - **Split values into simple, named steps.** One operation per line, with
@@ -242,15 +244,21 @@ app, JNI and test code alike.
 - `app/src/test`: JVM unit tests. No Robolectric and no Hilt in this source
   set. If a test seems to need either, the logic under test is in the wrong
   place: lift it into a reducer, a mapper or a top-level function first.
-  `app/src/testGithub` and `app/src/testPlay` hold the tests of each
-  flavour's own code, under the same rules.
+  `app/src/testGithub`, `app/src/testPlay` and `app/src/testAmazon` hold
+  the tests of each flavour's own code, and `app/src/testDonate` (github and
+  play) and `app/src/testStoreUpdates` (play and amazon) the tests of the
+  code two flavours share, wired through `sourceSets` in
+  `app/build.gradle.kts`, all under the same rules.
 - `app/src/test/cpp`: googletest over the host-buildable JNI split, one
   target per layer (`gamepad_input`, `wire_encoders`, `usb_parsers`,
   `usb_hid_descriptor`, `send_counter`, `audio_jitter`, `heartbeat_thread`,
   `hotpath_latency`, `audio_codec`, `bridge_connection_ids`), run by
-  `./gradlew :app:nativeTest`.
+  `./gradlew :app:nativeTest`. CI also cross-compiles them for 32-bit ARM
+  and runs them under `qemu-arm`, so a `size_t`, `long` or pointer-width
+  assumption fails the way it would on `armeabi-v7a`.
 - `app/src/androidTest`: instrumented tests for what genuinely needs a
-  device.
+  device; `app/src/androidTestGithub` and `app/src/androidTestAmazon` hold
+  the ones about a single flavour.
 
 ### Test-driven, every flow
 
@@ -300,12 +308,26 @@ Build + style:
 
 - `android-ci.yml`, build job: `clang-format` over `app/src/main/cpp/`,
   `scripts/check_play_metadata.py`, `./gradlew ktlintCheck`,
-  `./gradlew detekt`, `./gradlew lintGithubDebug lintPlayDebug`,
-  `./gradlew testGithubDebugUnitTest testPlayDebugUnitTest`,
-  `./gradlew :app:nativeTest`, `./gradlew assembleGithubDebug
-  assemblePlayDebug` (uploads the APKs as a CI artifact).
+  `./gradlew detekt`, `./gradlew lintGithubDebug lintPlayDebug
+  lintAmazonDebug`, `./gradlew testGithubDebugUnitTest
+  testPlayDebugUnitTest testAmazonDebugUnitTest`, `./gradlew
+  :app:nativeTest`, `./gradlew assembleGithubDebug assemblePlayDebug
+  assembleAmazonDebug` (uploads the APKs as a CI artifact), then
+  `scripts/check_apk_abis.py` on each APK (its flavour's exact ABI set,
+  `armeabi-v7a` included) and `scripts/check_sodium_ti_mode.py` (libsodium's
+  128-bit arithmetic on the 64-bit ABIs only).
 - `android-ci.yml`, integration job: `connectedGithubDebugAndroidTest` over
   the `integration` package on an API 35 emulator.
+- `android-ci.yml`, native-armv7 job: the `app/src/test/cpp` targets built
+  with `g++-arm-linux-gnueabihf` and run by `ctest` under `qemu-arm`.
+- `android-ci.yml`, ARM translation job: `connectedAmazonDebugAndroidTest`
+  over the `integration` package on an API 28 x86 emulator, which runs the
+  amazon APK's `armeabi-v7a` library through ARM translation. First,
+  `scripts/ci_arm_translation_proof.sh` fails unless the device ABI list
+  names `armeabi-v7a` and no 64-bit ABI, a native bridge is set, the install
+  has `primaryCpuAbi=armeabi-v7a`, the running app maps a translator and the
+  ARM guest `liblog.so` and `libandroid.so`, and its log has no native-load
+  failure.
 
 Security gates:
 

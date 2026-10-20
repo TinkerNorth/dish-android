@@ -3,7 +3,9 @@
 # tree. Mirrors .github/workflows/android-ci.yml so a green run here means
 # a green run there. Instrumented tests need a device: they run when one is
 # attached (or a GMD is requested with --gmd), and are skipped with a notice
-# otherwise so the fast gates stay usable offline.
+# otherwise so the fast gates stay usable offline. The 32-bit ARM host tests
+# need g++-arm-linux-gnueabihf and qemu-user, and the armeabi-v7a emulator
+# lane (an API 28 x86 image's ARM translation) runs in CI only.
 #
 #   scripts/ci_local.sh              fast gates + instrumented tests if a device is attached
 #   scripts/ci_local.sh --gmd        also boot the pixel6Api34 managed device for instrumented tests
@@ -55,16 +57,37 @@ step "ktlint + detekt (all source sets incl. test + androidTest)"
 $GRADLE :app:ktlintCheck :app:detekt $GRADLE_ARGS
 
 step "Android lint"
-$GRADLE :app:lintGithubDebug :app:lintPlayDebug $GRADLE_ARGS
+$GRADLE :app:lintGithubDebug :app:lintPlayDebug :app:lintAmazonDebug $GRADLE_ARGS
 
 step "JVM unit tests"
-$GRADLE :app:testGithubDebugUnitTest :app:testPlayDebugUnitTest $GRADLE_ARGS
+$GRADLE :app:testGithubDebugUnitTest :app:testPlayDebugUnitTest :app:testAmazonDebugUnitTest $GRADLE_ARGS
 
 step "Native C++ tests"
 $GRADLE :app:nativeTest $GRADLE_ARGS
 
-step "Assemble debug APKs (github + play flavors)"
-$GRADLE :app:assembleGithubDebug :app:assemblePlayDebug $GRADLE_ARGS
+step "Native C++ tests (32-bit ARM, qemu)"
+if command -v arm-linux-gnueabihf-g++ >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1; then
+  cmake -S app/src/test/cpp -B build/native-test-armv7 \
+    -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=arm \
+    -DCMAKE_C_COMPILER=arm-linux-gnueabihf-gcc -DCMAKE_CXX_COMPILER=arm-linux-gnueabihf-g++ \
+    -DCMAKE_C_FLAGS=-mfpu=neon -DCMAKE_CXX_FLAGS=-mfpu=neon \
+    "-DCMAKE_CROSSCOMPILING_EMULATOR=qemu-arm;-L;/usr/arm-linux-gnueabihf"
+  cmake --build build/native-test-armv7 --parallel
+  ctest --test-dir build/native-test-armv7 --output-on-failure --no-tests=error
+else
+  echo "::notice:: g++-arm-linux-gnueabihf and qemu-user not installed; CI runs this lane. Skipping locally."
+fi
+
+step "Assemble debug APKs (github + play + amazon flavors)"
+$GRADLE :app:assembleGithubDebug :app:assemblePlayDebug :app:assembleAmazonDebug $GRADLE_ARGS
+
+step "Each APK carries its flavor's ABIs"
+python scripts/check_apk_abis.py app/build/outputs/apk/github/debug/app-github-debug.apk armeabi-v7a arm64-v8a x86_64
+python scripts/check_apk_abis.py app/build/outputs/apk/play/debug/app-play-debug.apk armeabi-v7a arm64-v8a x86_64
+python scripts/check_apk_abis.py app/build/outputs/apk/amazon/debug/app-amazon-debug.apk armeabi-v7a arm64-v8a x86_64
+
+step "libsodium uses 128-bit arithmetic on 64-bit ABIs only"
+python scripts/check_sodium_ti_mode.py app/.cxx
 
 if [ "$INSTRUMENTED" -eq 0 ]; then
   echo ""; echo "=== instrumented tests skipped (--no-instrumented) ==="
