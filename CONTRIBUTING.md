@@ -21,8 +21,10 @@ scripts/setup-hooks.sh
 ```
 
 The pre-commit hook runs `clang-format -i` (autofix, re-stages) on staged
-JNI C/C++ files and `scripts/check-translations.py` when a `strings.xml` is
-staged; it skips Kotlin to keep itself fast. CI runs `clang-format
+JNI C/C++ files and `scripts/check-translations.py`, which compares every
+source set's `values/` strings with that source set's own locales, when a
+strings file under any `app/src/*/res` is staged; it skips Kotlin to keep
+itself fast. CI runs `clang-format
 --dry-run --Werror` on the JNI plus `ktlintCheck`, `detekt`, and lint on
 the Kotlin tree, so anything that slips locally fails the PR.
 
@@ -320,9 +322,12 @@ Build + style:
   with `g++-arm-linux-gnueabihf` and run by `ctest` under `qemu-arm`.
 - `android-ci.yml`, ARM translation job: `connectedAmazonDebugAndroidTest`
   over the `integration` package on an API 28 x86 emulator, which runs the
-  amazon APK's `armeabi-v7a` library through ARM translation;
-  `scripts/ci_arm_translation_proof.sh` logs the device ABIs, the installed
-  `primaryCpuAbi` and the translator mapped into the app first.
+  amazon APK's `armeabi-v7a` library through ARM translation. First,
+  `scripts/ci_arm_translation_proof.sh` fails unless the device ABI list
+  names `armeabi-v7a` and no 64-bit ABI, a native bridge is set, the install
+  has `primaryCpuAbi=armeabi-v7a`, the running app maps a translator and the
+  ARM guest `liblog.so` and `libandroid.so`, and its log has no native-load
+  failure.
 
 Security gates:
 
