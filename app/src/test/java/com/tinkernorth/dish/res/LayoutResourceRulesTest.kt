@@ -13,7 +13,19 @@ import java.io.File
  * objecting.
  */
 class LayoutResourceRulesTest {
-    private val resRoots = listOf(File("src/main/res"), File("src/github/res"), File("src/play/res"))
+    // Every source set's res, the flavors' and the shared ones alike, so a new one cannot slip by.
+    private val resRoots =
+        File("src")
+            .listFiles()
+            .orEmpty()
+            .map { File(it, "res") }
+
+    @Test
+    fun `the flavor and shared resource directories are in the sweep`() {
+        val swept = resRoots.filter { it.isDirectory }.map { it.invariantSeparatorsPath }.toSet()
+
+        assertTrue("res directories swept: $swept", swept.containsAll(SWEPT_RES_DIRS))
+    }
 
     private fun layouts(): List<File> =
         resRoots
@@ -79,6 +91,8 @@ class LayoutResourceRulesTest {
             .toList()
 
     private companion object {
+        val SWEPT_RES_DIRS = setOf("src/main/res", "src/github/res", "src/play/res", "src/donate/res")
+
         val RAW_LITERALS = listOf("16dp", "-4dp", "0.5dp", ".5dp", "3dip", "14sp", "12px", "1pt", "2mm", "1in", "0px", "0sp")
 
         // 0dp is how a constrained or weighted child asks its parent for the size, not a magic

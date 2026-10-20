@@ -57,10 +57,10 @@ step "ktlint + detekt (all source sets incl. test + androidTest)"
 $GRADLE :app:ktlintCheck :app:detekt $GRADLE_ARGS
 
 step "Android lint"
-$GRADLE :app:lintGithubDebug :app:lintPlayDebug $GRADLE_ARGS
+$GRADLE :app:lintGithubDebug :app:lintPlayDebug :app:lintAmazonDebug $GRADLE_ARGS
 
 step "JVM unit tests"
-$GRADLE :app:testGithubDebugUnitTest :app:testPlayDebugUnitTest $GRADLE_ARGS
+$GRADLE :app:testGithubDebugUnitTest :app:testPlayDebugUnitTest :app:testAmazonDebugUnitTest $GRADLE_ARGS
 
 step "Native C++ tests"
 $GRADLE :app:nativeTest $GRADLE_ARGS
@@ -77,12 +77,13 @@ else
   echo "::notice:: g++-arm-linux-gnueabihf and qemu-user not installed; CI runs this lane. Skipping locally."
 fi
 
-step "Assemble debug APKs (github + play flavors)"
-$GRADLE :app:assembleGithubDebug :app:assemblePlayDebug $GRADLE_ARGS
+step "Assemble debug APKs (github + play + amazon flavors)"
+$GRADLE :app:assembleGithubDebug :app:assemblePlayDebug :app:assembleAmazonDebug $GRADLE_ARGS
 
 step "Each APK carries its flavor's ABIs"
 python scripts/check_apk_abis.py app/build/outputs/apk/github/debug/app-github-debug.apk armeabi-v7a arm64-v8a x86_64
 python scripts/check_apk_abis.py app/build/outputs/apk/play/debug/app-play-debug.apk armeabi-v7a arm64-v8a x86_64
+python scripts/check_apk_abis.py app/build/outputs/apk/amazon/debug/app-amazon-debug.apk armeabi-v7a arm64-v8a x86_64
 
 step "libsodium uses 128-bit arithmetic on 64-bit ABIs only"
 python scripts/check_sodium_ti_mode.py app/.cxx

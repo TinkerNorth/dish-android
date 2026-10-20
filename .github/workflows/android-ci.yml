@@ -69,21 +69,22 @@ jobs:
         run: ./gradlew detekt
 
       - name: Lint check
-        run: ./gradlew lintGithubDebug lintPlayDebug
+        run: ./gradlew lintGithubDebug lintPlayDebug lintAmazonDebug
 
       - name: Run unit tests
-        run: ./gradlew testGithubDebugUnitTest testPlayDebugUnitTest
+        run: ./gradlew testGithubDebugUnitTest testPlayDebugUnitTest testAmazonDebugUnitTest
 
       - name: Run native unit tests
         run: ./gradlew :app:nativeTest
 
-      - name: Build debug APKs (both distribution flavors)
-        run: ./gradlew assembleGithubDebug assemblePlayDebug
+      - name: Build debug APKs (all three distribution flavors)
+        run: ./gradlew assembleGithubDebug assemblePlayDebug assembleAmazonDebug
 
       - name: Each APK carries its flavor's ABIs
         run: |
           python scripts/check_apk_abis.py app/build/outputs/apk/github/debug/app-github-debug.apk armeabi-v7a arm64-v8a x86_64
           python scripts/check_apk_abis.py app/build/outputs/apk/play/debug/app-play-debug.apk armeabi-v7a arm64-v8a x86_64
+          python scripts/check_apk_abis.py app/build/outputs/apk/amazon/debug/app-amazon-debug.apk armeabi-v7a arm64-v8a x86_64
 
       - name: libsodium uses 128-bit arithmetic on 64-bit ABIs only
         run: python scripts/check_sodium_ti_mode.py app/.cxx

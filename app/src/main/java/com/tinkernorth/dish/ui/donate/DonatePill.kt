@@ -4,11 +4,13 @@ package com.tinkernorth.dish.ui.donate
 
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
+import android.content.Context
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -24,21 +26,25 @@ import com.tinkernorth.dish.ui.common.slidePillOut
 private const val HEARTBEAT_SCALE = 1.12f
 
 fun AppCompatActivity.attachDonatePill() {
-    if (donatePillDismissed(this) || isSupporter()) return
+    val ask = TIP_OFFER as? TipOffer.Ask ?: return
+    if (donatePillDismissed(this) || ask.supporters.isSupporter(this)) return
 
     val docked = findViewById<View>(R.id.donatePill)
-    val hide = if (docked != null) attachDockedDonatePill(docked) else attachFloatingDonatePill()
-    if (hide != null) hideOnceSupporting(hide)
+    val hide = if (docked != null) attachDockedDonatePill(docked, ask) else attachFloatingDonatePill(ask)
+    if (hide != null) hideOnceSupporting(ask.supporters, hide)
 }
 
-private fun AppCompatActivity.attachDockedDonatePill(docked: View): () -> Unit {
+private fun AppCompatActivity.attachDockedDonatePill(
+    docked: View,
+    ask: TipOffer.Ask,
+): () -> Unit {
     docked.isVisible = true
     val hide = { slidePillOut(docked) { docked.isVisible = false } }
-    wireDonatePill(docked, hide)
+    wireDonatePill(docked, ask, hide)
     return hide
 }
 
-private fun AppCompatActivity.attachFloatingDonatePill(): (() -> Unit)? {
+private fun AppCompatActivity.attachFloatingDonatePill(ask: TipOffer.Ask): (() -> Unit)? {
     val content = findViewById<ViewGroup>(android.R.id.content) ?: return null
     val pill = layoutInflater.inflate(R.layout.view_donate_pill, content, false)
     val baseGap = resources.getDimensionPixelSize(R.dimen.spacing_5xl)
@@ -46,7 +52,7 @@ private fun AppCompatActivity.attachFloatingDonatePill(): (() -> Unit)? {
 
     content.addView(pill)
     val hide = { slidePillOut(pill) { content.removeView(pill) } }
-    wireDonatePill(pill, hide)
+    wireDonatePill(pill, ask, hide)
     return hide
 }
 
@@ -80,24 +86,30 @@ private fun marginPillForSystemBars(
 // Checked on every resume rather than once: the tip may be bought on the donate screen this
 // pill opened, and the observer removes itself the first time it fires.
 private class HideOnceSupporting(
-    private val isSupporter: () -> Boolean,
+    private val context: Context,
+    private val supporters: SupporterCheck,
     private val hide: () -> Unit,
 ) : DefaultLifecycleObserver {
     override fun onResume(owner: LifecycleOwner) {
-        if (!isSupporter()) return
+        if (!supporters.isSupporter(context)) return
         hide()
         owner.lifecycle.removeObserver(this)
     }
 }
 
-private fun AppCompatActivity.hideOnceSupporting(hide: () -> Unit) {
-    lifecycle.addObserver(HideOnceSupporting(::isSupporter, hide))
+private fun AppCompatActivity.hideOnceSupporting(
+    supporters: SupporterCheck,
+    hide: () -> Unit,
+) {
+    lifecycle.addObserver(HideOnceSupporting(this, supporters, hide))
 }
 
 private fun AppCompatActivity.wireDonatePill(
     pill: View,
+    ask: TipOffer.Ask,
     onDismiss: () -> Unit,
 ) {
+    pill.findViewById<TextView>(R.id.donatePillAsk).setText(ask.pillAsk)
     pill.setOnClickListener { openDonateScreen() }
     pill.findViewById<View>(R.id.donatePillDismiss).setOnClickListener { dismissAndNotify(onDismiss) }
     slidePillIn(pill)

@@ -90,11 +90,12 @@ android {
         buildConfigField("boolean", "HOTPATH_BENCH", "false")
     }
 
-    // Distribution channel decides how the donate screen takes money. Both flavors ship the
-    // same donation touchpoints from src/main (toolbar heart, pill, Settings card) and their own
-    // `DonateActivity`: github links out to external payment rails, play sells tips through Play
-    // Billing, which Google Play's Payments policy requires of Play-distributed apps. External
-    // payment links never compile into the Play artifact.
+    // Distribution channel decides how the app takes tips and who updates it. Every flavor ships the
+    // donation touchpoints from src/main (toolbar heart, pill, Settings card), which show only where
+    // the flavor's TIP_OFFER asks for tips: github links out to external payment rails, play sells
+    // tips through Play Billing, which Google Play's Payments policy requires of Play-distributed
+    // apps, and amazon takes none, since the Amazon Appstore allows digital sales only through
+    // Amazon's own purchasing API. External payment links never compile into a store artifact.
     flavorDimensions += "distribution"
     productFlavors {
         create("github") {
@@ -103,6 +104,34 @@ android {
         }
         create("play") {
             dimension = "distribution"
+        }
+        create("amazon") {
+            dimension = "distribution"
+        }
+    }
+
+    // The two store flavors share the no-op update binding (each store updates the app itself), and
+    // the two flavors with a donate screen share its copy and layout, each from one directory.
+    sourceSets {
+        getByName("github") {
+            kotlin.directories += "src/donate/java"
+            res.directories += "src/donate/res"
+        }
+        getByName("play") {
+            kotlin.directories += listOf("src/donate/java", "src/storeUpdates/java")
+            res.directories += "src/donate/res"
+        }
+        getByName("amazon") {
+            kotlin.directories += "src/storeUpdates/java"
+        }
+        getByName("testGithub") {
+            kotlin.directories += "src/testDonate/java"
+        }
+        getByName("testPlay") {
+            kotlin.directories += listOf("src/testDonate/java", "src/testStoreUpdates/java")
+        }
+        getByName("testAmazon") {
+            kotlin.directories += "src/testStoreUpdates/java"
         }
     }
 
@@ -262,7 +291,7 @@ dependencies {
     // Firebase Analytics is deliberately omitted: it would auto-inject AD_ID permission and break the zero-analytics privacy posture.
     // Google Play's Payments policy requires Play-distributed apps to sell digital goods through
     // Play Billing, so the client (and the BILLING permission its manifest merges in) rides the
-    // `play` flavor only; the github flavor keeps its external donation links.
+    // `play` flavor only; the github flavor keeps its external donation links, and amazon has neither.
     "playImplementation"(libs.billing)
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
