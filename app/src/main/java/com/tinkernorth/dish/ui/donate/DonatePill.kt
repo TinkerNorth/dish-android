@@ -26,8 +26,7 @@ import com.tinkernorth.dish.ui.common.slidePillOut
 private const val HEARTBEAT_SCALE = 1.12f
 
 fun AppCompatActivity.attachDonatePill() {
-    val ask = TIP_OFFER as? TipOffer.Ask ?: return
-    if (donatePillDismissed(this) || ask.supporters.isSupporter(this)) return
+    val ask = donatePillAsk(TIP_OFFER, donatePillDismissed(this)) { it.isSupporter(this) } ?: return
 
     val docked = findViewById<View>(R.id.donatePill)
     val hide = if (docked != null) attachDockedDonatePill(docked, ask) else attachFloatingDonatePill(ask)
