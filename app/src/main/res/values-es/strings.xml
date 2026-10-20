@@ -382,7 +382,7 @@
 
     <!-- Pantalla de respaldo cuando falla la carga nativa. -->
     <string name="fatal_native_title">Esta versión no se ejecutará en tu dispositivo</string>
-    <string name="fatal_native_body">La biblioteca nativa de Dish no pudo cargarse. Reinstala desde Google Play, o contacta con el soporte.</string>
+    <string name="fatal_native_body">La biblioteca nativa de Dish no pudo cargarse. Vuelve a instalar Dish desde donde lo obtuviste, o contacta con el soporte.</string>
 
     <!-- Superposición de modo de ahorro de energía. -->
     <string name="low_power_in">AHORRO EN</string>

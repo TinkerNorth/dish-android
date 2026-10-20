@@ -436,7 +436,7 @@
 
     <!-- Native-load fatal fallback. -->
     <string name="fatal_native_title">This build won\'t run on your device</string>
-    <string name="fatal_native_body">The Dish native library couldn\'t load. Please reinstall from the Play Store, or contact support.</string>
+    <string name="fatal_native_body">The Dish native library couldn\'t load. Reinstall Dish from where you got it, or contact support.</string>
 
     <!-- Low-power overlay (overlay_low_power.xml + LowPowerManager). -->
     <string name="low_power_in">LOW POWER IN</string>

@@ -381,7 +381,7 @@
 
     <!-- Écran de repli quand le chargement natif échoue. -->
     <string name="fatal_native_title">Cette version ne fonctionnera pas sur votre appareil</string>
-    <string name="fatal_native_body">La bibliothèque native Dish n\'a pas pu se charger. Réinstallez depuis Google Play, ou contactez le support.</string>
+    <string name="fatal_native_body">La bibliothèque native Dish n\'a pas pu se charger. Réinstallez Dish depuis l\'endroit où vous l\'avez obtenu, ou contactez le support.</string>
 
     <!-- Superposition mode économie d\'énergie (overlay_low_power.xml + LowPowerManager). -->
     <string name="low_power_in">ÉCO DANS</string>

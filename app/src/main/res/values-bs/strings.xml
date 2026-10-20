@@ -379,7 +379,7 @@
 
     <!-- Rezervni ekran kada nativno učitavanje ne uspije. -->
     <string name="fatal_native_title">Ovaj build se neće pokrenuti na vašem uređaju</string>
-    <string name="fatal_native_body">Dish nativna biblioteka se nije mogla učitati. Reinstalirajte sa Google Play-a, ili kontaktirajte podršku.</string>
+    <string name="fatal_native_body">Dish nativna biblioteka se nije mogla učitati. Ponovo instalirajte Dish odakle ste ga preuzeli, ili kontaktirajte podršku.</string>
 
     <!-- Sloj režima niske potrošnje (overlay_low_power.xml + LowPowerManager). -->
     <string name="low_power_in">UŠTEDA ZA</string>

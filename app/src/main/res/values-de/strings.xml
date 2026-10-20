@@ -377,7 +377,7 @@
 
     <!-- Fallback-Bildschirm, wenn das native Laden fehlschlägt. -->
     <string name="fatal_native_title">Diese Version läuft nicht auf deinem Gerät</string>
-    <string name="fatal_native_body">Die native Dish-Bibliothek konnte nicht geladen werden. Installiere bitte über Google Play neu oder kontaktiere den Support.</string>
+    <string name="fatal_native_body">Die native Dish-Bibliothek konnte nicht geladen werden. Installiere Dish bitte dort neu, wo du es bekommen hast, oder kontaktiere den Support.</string>
 
     <!-- Energiesparmodus-Overlay (overlay_low_power.xml + LowPowerManager). -->
     <string name="low_power_in">ENERGIESPAREN IN</string>

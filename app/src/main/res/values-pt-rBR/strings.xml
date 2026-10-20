@@ -382,7 +382,7 @@
 
     <!-- Tela de fallback quando o carregamento nativo falha. -->
     <string name="fatal_native_title">Esta versão não vai rodar no seu dispositivo</string>
-    <string name="fatal_native_body">A biblioteca nativa do Dish não pôde ser carregada. Reinstale pela Google Play ou entre em contato com o suporte.</string>
+    <string name="fatal_native_body">A biblioteca nativa do Dish não pôde ser carregada. Reinstale o Dish de onde você o baixou ou entre em contato com o suporte.</string>
 
     <!-- Superposição do modo de baixa potência. -->
     <string name="low_power_in">ECONOMIA EM</string>
