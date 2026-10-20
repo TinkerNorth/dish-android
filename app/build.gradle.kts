@@ -377,7 +377,7 @@ tasks.register<Exec>("nativeTest") {
     description = "Run host unit tests for the pure gamepad-input layer."
     dependsOn(nativeTestBuild)
     workingDir = nativeTestBuildDir.get().asFile
-    commandLine("ctest", "--output-on-failure")
+    commandLine("ctest", "--output-on-failure", "--no-tests=error")
 }
 
 tasks.named("check") {

@@ -207,7 +207,7 @@ jobs:
           file build/native-test-armv7/gamepad_input_test | grep -q 'ELF 32-bit LSB .* ARM'
 
       - name: Run under qemu-arm
-        run: ctest --test-dir build/native-test-armv7 --output-on-failure
+        run: ctest --test-dir build/native-test-armv7 --output-on-failure --no-tests=error
 
   # The amazon APK has no 32-bit x86 library, so this x86 image (ABIs x86, armeabi-v7a, armeabi)
   # installs it as armeabi-v7a and runs libsatellite.so through its ARM translation, as on a 32-bit

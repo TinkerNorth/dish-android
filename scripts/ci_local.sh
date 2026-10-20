@@ -73,7 +73,7 @@ if command -v arm-linux-gnueabihf-g++ >/dev/null 2>&1 && command -v qemu-arm >/d
     -DCMAKE_C_FLAGS=-mfpu=neon -DCMAKE_CXX_FLAGS=-mfpu=neon \
     "-DCMAKE_CROSSCOMPILING_EMULATOR=qemu-arm;-L;/usr/arm-linux-gnueabihf"
   cmake --build build/native-test-armv7 --parallel
-  ctest --test-dir build/native-test-armv7 --output-on-failure
+  ctest --test-dir build/native-test-armv7 --output-on-failure --no-tests=error
 else
   echo "::notice:: g++-arm-linux-gnueabihf and qemu-user not installed; CI runs this lane. Skipping locally."
 fi
