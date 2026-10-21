@@ -2,7 +2,7 @@
 activity = "1.13.0"
 navigation = "2.10.2"
 agp = "9.4.1"
-kotlin = "2.4.20"
+kotlin = "2.4.21"
 ksp = "2.3.12"
 serialization = "1.11.0"
 hilt = "2.60.1"
