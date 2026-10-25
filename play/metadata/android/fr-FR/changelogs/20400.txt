@@ -1,6 +1,7 @@
-Dish 2.4.0 : manette N64 pour Switch Online et tablettes Fire 32 bits.
+Dish 2.4.0 : manette N64, tablettes Fire 32 bits et correctifs manettes.
 
-• Manette Nintendo 64 en USB-C et Bluetooth, en mode Direct avec vibration, batterie et voyants de joueur.
-• S'installe sur Android 32 bits, dont les Fire HD 8 (2018, 2020), Fire 7 (2019) et Fire HD 10 (2019).
-• Android 11 ou moins : un PC Bluetooth s'ajoute depuis les appareils appairés ou les réglages Bluetooth.
-• Hôtes Moonlight : l'haptique HD de la DualSense refonctionne ; vibration et mouvement ne se perdent plus.
+• Manette N64 en USB-C et Bluetooth : vibration, batterie et voyants en mode Direct.
+• S'installe sur les appareils 32 bits : Fire HD 8 (2018, 2020), Fire 7 (2019), HD 10 (2019).
+• Guide atteint le PC ; Xbox Elite Series 2 et manettes 8BitDo répondent bien en Standard.
+• Android 11 ou moins : ajouter un PC Bluetooth liste les appareils appairés.
+• Hôtes Moonlight : haptique HD DualSense et vibrations perdues corrigées.

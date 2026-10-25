@@ -1,6 +1,7 @@
-Dish 2.4.0: N64 kontroler za Switch Online i Fire tableti od 32 bita.
+Dish 2.4.0: N64 kontroler, Fire tableti od 32 bita i ispravke kontrolera.
 
-• Nintendo 64 kontroler preko USB-C i Bluetootha, u Brzom načinu uz vibraciju, bateriju i svjetla igrača.
-• Instalira se na Android uređaje od 32 bita, poput Fire HD 8 (2018, 2020), Fire 7 (2019) i Fire HD 10 (2019).
-• Android 11 i stariji: dodavanje Bluetooth računara prikazuje uparene uređaje i otvara Bluetooth postavke.
-• Moonlight hostovi: DualSense HD haptika opet radi, a vibracija i pokret se više ne gube.
+• N64 kontroler preko USB-C i Bluetootha: vibracija, baterija i svjetla igrača u Brzom načinu.
+• Instalira se na uređaje od 32 bita poput Fire HD 8 (2018, 2020), Fire 7 (2019) i HD 10 (2019).
+• Guide stiže do računara; Xbox Elite 2 i 8BitDo kontroleri rade u Standardnom.
+• Android 11 i stariji: dodavanje Bluetooth računara prikazuje uparene.
+• Moonlight hostovi: ispravljene DualSense HD haptika i izgubljena vibracija.
