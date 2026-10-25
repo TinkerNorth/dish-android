@@ -2265,13 +2265,13 @@ bool runSwitchProHandshake(const int fd, const uint8_t epOut) {
     return true;
 }
 
+} // namespace
+
 // One OUT report, as built by the feedback builders: nothing to write is a refusal, not a no-op.
 bool writeOutReport(const int fd, const uint8_t epOut, const uint8_t* buf, const size_t n) {
     if (n == 0) return false;
     return bulkWrite(fd, epOut, buf, n, kOutWriteTimeoutMs);
 }
-
-} // namespace
 
 bool runInit(const int fd, const int interfaceNumber, const uint8_t epOut, const InitKind init) {
     switch (init) {
