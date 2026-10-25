@@ -137,10 +137,7 @@ constexpr ButtonMapping STANDARD_BUTTON_MAP[] = {
 };
 
 // Switch-order HID pads declare buttons in usage row Y B A X L R ZL ZR Minus Plus L3 R3 Home
-// Capture, so the mapping is by position. ZL and ZR are absent here: they fold into the triggers
-// in decodeFromLayout instead.
-constexpr uint8_t kSwitchOrderZlIndex = 6;
-constexpr uint8_t kSwitchOrderZrIndex = 7;
+// Capture, so the mapping is by position, with ZL and ZR as the triggers.
 constexpr ButtonMapping SWITCH_ORDER_BUTTON_MAP[] = {
     {0, gamepad::XUSB_X},        {1, gamepad::XUSB_A},      {2, gamepad::XUSB_B},
     {3, gamepad::XUSB_Y},        {4, gamepad::XUSB_LB},     {5, gamepad::XUSB_RB},
@@ -148,19 +145,70 @@ constexpr ButtonMapping SWITCH_ORDER_BUTTON_MAP[] = {
     {11, gamepad::XUSB_THUMB_R}, {12, gamepad::XUSB_GUIDE},
 };
 
+// 8BitDo's D-input order: A B Heart X Y (unused) Z C L R Select Start Heart L3 R3, with Z and C
+// as the shoulders, L and R as the triggers, and Heart at 2 or 12 by firmware.
+constexpr ButtonMapping EIGHTBITDO_ORDER_BUTTON_MAP[] = {
+    {0, gamepad::XUSB_A},      {1, gamepad::XUSB_B},        {2, gamepad::XUSB_GUIDE},
+    {3, gamepad::XUSB_X},      {4, gamepad::XUSB_Y},        {6, gamepad::XUSB_LB},
+    {7, gamepad::XUSB_RB},     {10, gamepad::XUSB_BACK},    {11, gamepad::XUSB_START},
+    {12, gamepad::XUSB_GUIDE}, {13, gamepad::XUSB_THUMB_L}, {14, gamepad::XUSB_THUMB_R},
+};
+
+// The PlayStation Classic controller: Triangle Circle Cross Square L2 R2 L1 R1 Select Start by
+// position, with L2 and R2 as the triggers.
+constexpr ButtonMapping PLAYSTATION_CLASSIC_ORDER_BUTTON_MAP[] = {
+    {0, gamepad::XUSB_Y},  {1, gamepad::XUSB_B},  {2, gamepad::XUSB_A},    {3, gamepad::XUSB_X},
+    {6, gamepad::XUSB_LB}, {7, gamepad::XUSB_RB}, {8, gamepad::XUSB_BACK}, {9, gamepad::XUSB_START},
+};
+
+constexpr int kNoDigitalTrigger = -1;
+
+// One family's declared button order: its bits by declared index, and the indices of the buttons
+// that drive the triggers, since a trigger is a level and not a bit.
+struct ButtonOrderMap {
+    const ButtonMapping* mappings;
+    size_t count;
+    int leftTriggerIndex;
+    int rightTriggerIndex;
+};
+
 template <size_t N>
-uint16_t bitForDeclaredIndex(const ButtonMapping (&mappings)[N], const uint8_t idx) {
-    for (const ButtonMapping& mapping : mappings) {
-        const bool isTheIndex = mapping.declaredIndex == idx;
-        if (isTheIndex) return mapping.xusbBit;
+constexpr ButtonOrderMap orderMap(const ButtonMapping (&mappings)[N], const int leftTriggerIndex,
+                                  const int rightTriggerIndex) {
+    return {mappings, N, leftTriggerIndex, rightTriggerIndex};
+}
+
+ButtonOrderMap buttonOrderMap(const ButtonOrder order) {
+    switch (order) {
+    case ButtonOrder::SWITCH:
+        return orderMap(SWITCH_ORDER_BUTTON_MAP, 6, 7);
+    case ButtonOrder::EIGHTBITDO:
+        return orderMap(EIGHTBITDO_ORDER_BUTTON_MAP, 8, 9);
+    case ButtonOrder::PLAYSTATION_CLASSIC:
+        return orderMap(PLAYSTATION_CLASSIC_ORDER_BUTTON_MAP, 4, 5);
+    case ButtonOrder::WESTERN:
+        break;
+    }
+    return orderMap(STANDARD_BUTTON_MAP, kNoDigitalTrigger, kNoDigitalTrigger);
+}
+
+uint16_t bitForDeclaredIndex(const ButtonOrderMap& map, const uint8_t idx) {
+    for (size_t i = 0; i < map.count; i++) {
+        const bool isTheIndex = map.mappings[i].declaredIndex == idx;
+        if (isTheIndex) return map.mappings[i].xusbBit;
     }
     return 0;
 }
 
-uint16_t buttonBit(const uint8_t idx) { return bitForDeclaredIndex(STANDARD_BUTTON_MAP, idx); }
+// A three-state axis is a direction pad the device declared as an axis.
+bool axisIsDirection(const HidAxis& a) { return a.present && a.logicalMax - a.logicalMin == 2; }
 
-uint16_t switchOrderButtonBit(const uint8_t idx) {
-    return bitForDeclaredIndex(SWITCH_ORDER_BUTTON_MAP, idx);
+uint16_t directionBits(const uint32_t raw, const HidAxis& a, const uint16_t lowBit,
+                       const uint16_t highBit) {
+    const int64_t step = toSigned(raw, a.bitSize, a.logicalMin) - a.logicalMin;
+    if (step == 0) return lowBit;
+    if (step == 2) return highBit;
+    return 0;
 }
 
 void setAxis(HidAxis& a, const uint32_t bit, const uint32_t size, const int32_t lo,
@@ -524,17 +572,32 @@ bool skipReportIdPrefix(const uint8_t* buf, const size_t len, const HidLayout& L
     return true;
 }
 
-void decodeLayoutAxes(const uint8_t* d, const size_t dlen, const HidLayout& L, DeviceState& s) {
-    if (L.lx.present)
+// The sticks and triggers land in the state; the axes that are directions come back as d-pad bits.
+uint16_t decodeLayoutAxes(const uint8_t* d, const size_t dlen, const HidLayout& L, DeviceState& s) {
+    uint16_t directions = 0;
+    if (axisIsDirection(L.lx)) {
+        directions =
+            (uint16_t)(directions |
+                       directionBits(extractBits(d, dlen, L.lx.bitOffset, L.lx.bitSize), L.lx,
+                                     gamepad::XUSB_DPAD_LEFT, gamepad::XUSB_DPAD_RIGHT));
+    } else if (L.lx.present) {
         s.sLX = scaleAxis16(extractBits(d, dlen, L.lx.bitOffset, L.lx.bitSize), L.lx, false);
-    if (L.ly.present)
+    }
+    if (axisIsDirection(L.ly)) {
+        directions =
+            (uint16_t)(directions |
+                       directionBits(extractBits(d, dlen, L.ly.bitOffset, L.ly.bitSize), L.ly,
+                                     gamepad::XUSB_DPAD_UP, gamepad::XUSB_DPAD_DOWN));
+    } else if (L.ly.present) {
         s.sLY = scaleAxis16(extractBits(d, dlen, L.ly.bitOffset, L.ly.bitSize), L.ly, true);
+    }
     if (L.rx.present)
         s.sRX = scaleAxis16(extractBits(d, dlen, L.rx.bitOffset, L.rx.bitSize), L.rx, false);
     if (L.ry.present)
         s.sRY = scaleAxis16(extractBits(d, dlen, L.ry.bitOffset, L.ry.bitSize), L.ry, true);
     if (L.lt.present) s.bLT = scaleTrig8(extractBits(d, dlen, L.lt.bitOffset, L.lt.bitSize), L.lt);
     if (L.rt.present) s.bRT = scaleTrig8(extractBits(d, dlen, L.rt.bitOffset, L.rt.bitSize), L.rt);
+    return directions;
 }
 
 uint16_t decodeLayoutHat(const uint8_t* d, const size_t dlen, const HidLayout& L) {
@@ -551,30 +614,28 @@ bool layoutButtonIsDown(const uint8_t* d, const size_t dlen, const HidLayout& L,
     return extractBits(d, dlen, (uint32_t)L.buttonBitOffset + i, 1) != 0;
 }
 
-uint16_t decodeSwitchOrderButtons(const uint8_t* d, const size_t dlen, const HidLayout& L,
-                                  DeviceState& s) {
+uint16_t decodeOrderedButtons(const uint8_t* d, const size_t dlen, const HidLayout& L,
+                              DeviceState& s) {
+    const ButtonOrderMap map = buttonOrderMap(L.order);
     uint16_t buttons = 0;
-    bool zl = false;
-    bool zr = false;
+    bool leftTrigger = false;
+    bool rightTrigger = false;
     for (uint8_t i = 0; i < L.buttonCount; i++) {
         if (!layoutButtonIsDown(d, dlen, L, i)) continue;
-        if (i == kSwitchOrderZlIndex) {
-            zl = true;
-        } else if (i == kSwitchOrderZrIndex) {
-            zr = true;
+        if (i == map.leftTriggerIndex) {
+            leftTrigger = true;
+        } else if (i == map.rightTriggerIndex) {
+            rightTrigger = true;
         } else {
-            buttons = (uint16_t)(buttons | switchOrderButtonBit(i));
+            buttons = (uint16_t)(buttons | bitForDeclaredIndex(map, i));
         }
     }
-    s.bLT = zl ? kTriggerFull : 0;
-    s.bRT = zr ? kTriggerFull : 0;
-    return buttons;
-}
-
-uint16_t decodeStandardButtons(const uint8_t* d, const size_t dlen, const HidLayout& L) {
-    uint16_t buttons = 0;
-    for (uint8_t i = 0; i < L.buttonCount; i++) {
-        if (layoutButtonIsDown(d, dlen, L, i)) buttons = (uint16_t)(buttons | buttonBit(i));
+    // A digital trigger is the whole truth about that trigger: an analog usage beside it only
+    // echoes the same button.
+    const bool hasDigitalTriggers = map.leftTriggerIndex != kNoDigitalTrigger;
+    if (hasDigitalTriggers) {
+        s.bLT = leftTrigger ? kTriggerFull : 0;
+        s.bRT = rightTrigger ? kTriggerFull : 0;
     }
     return buttons;
 }
@@ -608,12 +669,11 @@ bool decodeFromLayout(const uint8_t* buf, const size_t len, DeviceState& s, cons
     const uint8_t* d = buf + dataStart;
     const size_t dlen = len - dataStart;
 
-    decodeLayoutAxes(d, dlen, L, s);
+    const uint16_t axisDpadBits = decodeLayoutAxes(d, dlen, L, s);
 
     const uint16_t hatBits = decodeLayoutHat(d, dlen, L);
-    const uint16_t buttonBits = L.switchOrderButtons ? decodeSwitchOrderButtons(d, dlen, L, s)
-                                                     : decodeStandardButtons(d, dlen, L);
-    s.wButtons = (uint16_t)(hatBits | buttonBits);
+    const uint16_t buttonBits = decodeOrderedButtons(d, dlen, L, s);
+    s.wButtons = (uint16_t)(axisDpadBits | hatBits | buttonBits);
     return true;
 }
 

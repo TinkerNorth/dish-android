@@ -53,10 +53,7 @@ enum class WirelessEvent : uint8_t {
     DISCONNECT = 2,
 };
 
-enum class ButtonOrder : uint8_t {
-    WESTERN = 0,
-    SWITCH = 1,
-};
+using usbhid::ButtonOrder;
 
 // The pad battery a decoder reads (gamepad::DeviceState::battery*). The status is MSG_BATTERY's
 // own value, restated here like the wire's button bits so this header stays free of the wire
@@ -145,7 +142,11 @@ enum class ProbeOutcome : uint8_t {
     UNDECODED = 2,
 };
 
-bool probePermitsClaim(ProbeOutcome outcome, bool verifiedFastLane);
+// Whether the family reports whether or not anything moved: a Sony pad or a Switch pad streams at
+// a fixed rate, so its silence through the probe is a fault rather than idleness.
+bool parserStreamsUnprompted(Parser p);
+
+bool probePermitsClaim(ProbeOutcome outcome, bool verifiedFastLane, Parser parser);
 
 // Whether releasing this model back to Standard produces a framework gamepad InputDevice (the
 // Steam Controller's stand-alone identity is a keyboard and mouse).
@@ -222,6 +223,18 @@ size_t buildMicMuteLedReport(Parser p, FeedbackState& st, uint8_t state, uint8_t
 // Pure: writes the index-th GIP init packet for an Xbox One InitKind into out (with the sequence
 // number at byte 2), returns its length or 0 when there are no more. runInit sends them in order.
 size_t buildGipInitPacket(InitKind init, int index, uint8_t seq, uint8_t* out, size_t outCap);
+
+// The Switch Pro USB init sequence, packet by packet: the two 0x80 commands as full 64-byte
+// packets, then the two subcommands. Zero once the sequence ends or the packet does not fit.
+size_t buildSwitchInitPacket(int index, uint8_t* out, size_t outCap);
+
+// A GIP report whose flags ask for an acknowledgement (the mode-button report does) is
+// retransmitted until one arrives; this builds the ack xpad sends. Zero when none is owed.
+constexpr size_t kGipAckBytes = 13;
+size_t buildGipAck(const uint8_t* report, size_t len, uint8_t* out, size_t outCap);
+
+// One OUT report on the interrupt endpoint; nothing to write is a refusal, not a no-op.
+bool writeOutReport(int fd, uint8_t epOut, const uint8_t* buf, size_t n);
 
 // Pure: writes the index-th Steam Controller feature report for a config direction into out,
 // returns its length or 0 when there are no more. Payload only; the caller frames it as a

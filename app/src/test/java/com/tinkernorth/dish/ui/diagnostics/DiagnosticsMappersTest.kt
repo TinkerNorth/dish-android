@@ -5,6 +5,7 @@ package com.tinkernorth.dish.ui.diagnostics
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.core.input.ReportedAxes
 import com.tinkernorth.dish.core.input.resolveGamepadQuirk
 import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.model.Feature
@@ -217,7 +218,7 @@ class DiagnosticsMappersTest {
 
     @Test
     fun `a synthetic pad reports no quirks while its framework twin does`() {
-        val quirk = resolveGamepadQuirk(NINTENDO_VID, 0x2009, reportsRxAxis = false)
+        val quirk = resolveGamepadQuirk(NINTENDO_VID, 0x2009, ReportedAxes())
         val quirky = device(9, "Pro Controller", vid = NINTENDO_VID, pid = 0x2009).copy(quirk = quirk)
         val synthetic = quirky.copy(id = -9, isUsbSynthetic = true)
         assertEquals(0, padFacts(synthetic, world()).quirkBits)

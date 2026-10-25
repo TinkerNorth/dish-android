@@ -698,6 +698,8 @@
     <string name="diagnostics_quirk_switch_layout">Switch raspored</string>
     <string name="diagnostics_quirk_n64_hid_layout">N64 raspored (generički HID)</string>
     <string name="diagnostics_quirk_n64_driver_layout">N64 raspored (drajver kernela)</string>
+    <string name="diagnostics_quirk_eightbitdo_dinput">8BitDo D-input (Srce je Guide)</string>
+    <string name="diagnostics_quirk_xpad_trigger_axes">Xbox okidači na Z/RZ</string>
     <string name="diagnostics_reports">Izvještaji</string>
     <string name="diagnostics_events_count">Događaji</string>
     <string name="diagnostics_last_input">Zadnji unos</string>
