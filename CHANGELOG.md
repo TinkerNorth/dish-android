@@ -7,51 +7,12 @@ computer. Those lines say "update Satellite too".
 
 ---
 
-## [Unreleased]
-
-### Fixed
-
-- **The Guide button reaches the PC from a controller on the Standard path.** It
-  was never forwarded; it arrives as Guide on a satellite and Home on a
-  Moonlight host.
-- **An Xbox controller Android has no key layout for drives the right stick and
-  the triggers correctly on the Standard path.** The Elite Series 2 over USB,
-  among others, puts its triggers on the axes Android calls Z and RZ, which
-  rest at their minimum, so the right stick sat pinned up-left and the triggers
-  read empty. On a Microsoft pad that reports no trigger axis of its own, Dish
-  now reads those two axes as the triggers and RX and RY as the right stick.
-- **An Xbox One or Elite Series 2 controller's Guide button no longer sticks on
-  Direct.** The pad retransmits that report until it is acknowledged; Dish now
-  answers it the way the kernel driver does.
-- **8BitDo pads in D-input mode send Heart as Guide, and L and R drive one
-  trigger each.** On the Standard path the pad's analog trigger echoes, which
-  are swapped over USB, are left alone and the digital L and R drive the
-  triggers. On Direct the M30 and both 8BitDo USB wireless adapters are known
-  models whose buttons decode in 8BitDo's order: Z and C are the shoulders,
-  Select is Back and Start is Start.
-- **The PlayStation Classic controller decodes on Direct**, with its d-pad read
-  as a d-pad rather than a stick.
-- **A Sony or Switch controller identity that sends nothing is not claimed
-  Direct.** Those families report whether or not anything moved, so a quiet pad
-  with their identity is an adapter in another mode; it stays on the Standard
-  path instead of in a Direct slot that streams nothing. The Switch Pro
-  handshake also goes out as the full 64-byte packets the 8BitDo USB Wireless
-  Adapter 2 needs.
-- **The known-controller table no longer lists the Elite Series 2's Bluetooth
-  identities as USB models**, and the 8BitDo FC30 Pro, N30 Pro and the SN30
-  Pro's Bluetooth identity, none of which speaks XInput, no longer claim a
-  quiet pad as a dead Xbox 360 controller.
-
-### Changed
-
-- **Diagnostics names the two new per-controller quirks**, 8BitDo D-input and
-  Xbox triggers on Z/RZ, beside the existing ones.
-
 ## [2.4.0] - 2026-10-25
 
 The Nintendo 64 controller for Switch Online, Dish on the 32-bit Fire tablets
-with a build for the Amazon Appstore, and fixes for Moonlight hosts, controller
-settings and audio.
+with a build for the Amazon Appstore, the Guide button and the Xbox Elite
+Series 2 and 8BitDo controllers on both paths, and fixes for Moonlight hosts,
+controller settings and audio.
 
 ### Added
 
@@ -112,6 +73,41 @@ settings and audio.
   setting up after Dish had stopped could start a microphone capture or open a
   speaker output anyway; a stopped engine now ignores it, and a microphone that
   restarts waits for its previous capture to end, so no stale samples are sent.
+- **The Guide button reaches the PC from a controller on the Standard path.** It
+  was never forwarded; it arrives as Guide on a satellite and Home on a
+  Moonlight host.
+- **An Xbox controller Android has no key layout for drives the right stick and
+  the triggers correctly on the Standard path.** The Elite Series 2 over USB,
+  among others, puts its triggers on the axes Android calls Z and RZ, which
+  rest at their minimum, so the right stick sat pinned up-left and the triggers
+  read empty. On a Microsoft pad that reports no trigger axis of its own, Dish
+  now reads those two axes as the triggers and RX and RY as the right stick.
+- **An Xbox One or Elite Series 2 controller's Guide button no longer sticks on
+  Direct.** The pad retransmits that report until it is acknowledged; Dish now
+  answers it the way the kernel driver does.
+- **8BitDo pads in D-input mode send Heart as Guide, and L and R drive one
+  trigger each.** On the Standard path the pad's analog trigger echoes, which
+  are swapped over USB, are left alone and the digital L and R drive the
+  triggers. On Direct the M30 and both 8BitDo USB wireless adapters are known
+  models whose buttons decode in 8BitDo's order: Z and C are the shoulders,
+  Select is Back and Start is Start.
+- **The PlayStation Classic controller decodes on Direct**, with its d-pad read
+  as a d-pad rather than a stick.
+- **A Sony or Switch controller identity that sends nothing is not claimed
+  Direct.** Those families report whether or not anything moved, so a quiet pad
+  with their identity is an adapter in another mode; it stays on the Standard
+  path instead of in a Direct slot that streams nothing. The Switch Pro
+  handshake also goes out as the full 64-byte packets the 8BitDo USB Wireless
+  Adapter 2 needs.
+- **The known-controller table no longer lists the Elite Series 2's Bluetooth
+  identities as USB models**, and the 8BitDo FC30 Pro, N30 Pro and the SN30
+  Pro's Bluetooth identity, none of which speaks XInput, no longer claim a
+  quiet pad as a dead Xbox 360 controller.
+
+### Changed
+
+- **Diagnostics names the two new per-controller quirks**, 8BitDo D-input and
+  Xbox triggers on Z/RZ, beside the existing ones.
 
 ## [2.3.2] - 2026-10-13
 

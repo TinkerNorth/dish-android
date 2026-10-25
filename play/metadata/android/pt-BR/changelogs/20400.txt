@@ -1,6 +1,7 @@
-Dish 2.4.0: controle de N64 para Switch Online e tablets Fire de 32 bits.
+Dish 2.4.0: controle de N64, tablets Fire de 32 bits e correções de controles.
 
-• Controle de Nintendo 64 por USB-C e Bluetooth, no modo Direto com vibração, bateria e luzes de jogador.
-• Instala em Android de 32 bits, como Fire HD 8 (2018, 2020), Fire 7 (2019) e Fire HD 10 (2019).
-• Android 11 ou anterior: adicionar um PC Bluetooth lista os pareados e abre as configurações de Bluetooth.
-• Hosts Moonlight: a háptica HD do DualSense volta a tocar; vibração e movimento não se perdem mais.
+• Controle de N64 por USB-C e Bluetooth: vibração, bateria e luzes no modo Direto.
+• Instala em aparelhos de 32 bits como Fire HD 8 (2018, 2020), Fire 7 (2019) e HD 10 (2019).
+• Guide chega ao PC; Xbox Elite Series 2 e controles 8BitDo respondem bem no Padrão.
+• Android 11 ou anterior: adicionar um PC Bluetooth lista os pareados.
+• Hosts Moonlight: háptica HD do DualSense e vibração perdida corrigidas.

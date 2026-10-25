@@ -1,6 +1,7 @@
-Dish 2.4.0: mando de N64 para Switch Online y tablets Fire de 32 bits.
+Dish 2.4.0: mando de N64, tablets Fire de 32 bits y arreglos de mandos.
 
-• Mando de Nintendo 64 por USB-C y Bluetooth, en modo Directo con vibración, batería y luces de jugador.
-• Se instala en Android de 32 bits, como Fire HD 8 (2018, 2020), Fire 7 (2019) y Fire HD 10 (2019).
-• Android 11 o anterior: añadir un PC Bluetooth muestra los emparejados y abre los ajustes de Bluetooth.
-• Hosts Moonlight: la háptica HD del DualSense vuelve a sonar; vibración y movimiento ya no se pierden.
+• Mando de N64 por USB-C y Bluetooth: vibración, batería y luces en modo Directo.
+• Se instala en dispositivos de 32 bits como Fire HD 8 (2018, 2020), Fire 7 (2019) y HD 10 (2019).
+• Guía llega al PC; Xbox Elite Series 2 y mandos 8BitDo responden bien en Estándar.
+• Android 11 o anterior: añadir un PC Bluetooth muestra los emparejados.
+• Hosts Moonlight: arreglados la háptica HD del DualSense y la vibración perdida.

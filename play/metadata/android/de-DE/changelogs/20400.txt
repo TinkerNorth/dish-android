@@ -1,6 +1,7 @@
-Dish 2.4.0: der N64-Controller für Switch Online und 32-Bit-Fire-Tablets.
+Dish 2.4.0: N64-Controller, 32-Bit-Fire-Tablets, Controller-Fixes.
 
-• N64-Controller per USB-C und Bluetooth, im Direkt-Modus mit Rumble, Akkustand und Spielerleuchten.
-• Läuft auf 32-Bit-Android-Geräten wie Fire HD 8 (2018, 2020), Fire 7 (2019) und Fire HD 10 (2019).
-• Android 11 und älter: Bluetooth-PC aus gekoppelten Geräten oder über die Bluetooth-Einstellungen hinzufügen.
-• Moonlight-Hosts: DualSense-HD-Haptik spielt wieder; Rumble- und Bewegungsanfragen gehen nicht verloren.
+• N64-Controller per USB-C und Bluetooth: Rumble, Akkustand und Spielerleuchten im Direkt-Modus.
+• Läuft auf 32-Bit-Geräten wie Fire HD 8 (2018, 2020), Fire 7 (2019), Fire HD 10 (2019).
+• Guide erreicht den PC; Xbox Elite Series 2 und 8BitDo-Pads stimmen im Standard-Modus.
+• Android 11 und älter: Bluetooth-PC aus den gekoppelten Geräten hinzufügen.
+• Moonlight-Hosts: DualSense-HD-Haptik und verlorene Rumble-Anfragen behoben.
