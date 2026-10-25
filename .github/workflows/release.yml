@@ -67,6 +67,21 @@ on:
 #                                 and its FIRST build must be created
 #                                 manually in the Play Console before the
 #                                 API can publish.
+#   AMAZON_APPSTORE_CLIENT_ID     Login with Amazon security profile attached
+#   AMAZON_APPSTORE_CLIENT_SECRET to the App Submission API (Developer Console,
+#                                 My Settings > API Access). With both set and
+#                                 the AMAZON_APPSTORE_APP_ID repository variable
+#                                 (the amzn1.devportal.mobileapp... id), the
+#                                 publish-amazon job opens an edit, replaces the
+#                                 live APK with the amazon flavor build, sets
+#                                 each listing's recent changes from the
+#                                 per-locale release notes and commits it
+#                                 (scripts/amazon_appstore_publish.py). The
+#                                 API cannot create the app or its first
+#                                 version, so those happen once in the
+#                                 console; pricing, DRM, content rating and
+#                                 device targeting stay console-only too.
+#                                 Unset, the job is skipped.
 #
 # Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
 #   actions/checkout                @ v7.0.1  → 3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -288,9 +303,10 @@ jobs:
           [ -n "$symbols" ] && cp "$symbols" "dist/dish-${tag}${suffix}-native-debug-symbols.zip"
           ls -l dist/
 
-      # The Amazon Appstore build goes up by hand in Amazon's developer console,
-      # so it stays out of dist/: never a GitHub release asset, never dish.apk,
-      # and never in SHA256SUMS or latest.json.
+      # The Amazon Appstore build goes up through Amazon's App Submission API
+      # (publish-amazon) or by hand in the developer console, never through
+      # GitHub: it stays out of dist/, is never dish.apk, and never appears in
+      # SHA256SUMS or latest.json, since that flavor checks for no updates.
       - name: Stage the Amazon Appstore build
         env:
           TAG_INPUT: ${{ inputs.tag }}
@@ -581,6 +597,60 @@ jobs:
             --skip_upload_images false \
             --skip_upload_screenshots false \
             --skip_upload_apk true
+
+  publish-amazon:
+    name: Upload APK to the Amazon Appstore
+    needs: [release]
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Gate on Amazon Appstore credentials
+        id: gate
+        env:
+          AMAZON_APPSTORE_CLIENT_ID: ${{ secrets.AMAZON_APPSTORE_CLIENT_ID }}
+          AMAZON_APPSTORE_CLIENT_SECRET: ${{ secrets.AMAZON_APPSTORE_CLIENT_SECRET }}
+          AMAZON_APPSTORE_APP_ID: ${{ vars.AMAZON_APPSTORE_APP_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${AMAZON_APPSTORE_CLIENT_ID:-}" ] || [ -z "${AMAZON_APPSTORE_CLIENT_SECRET:-}" ] || [ -z "${AMAZON_APPSTORE_APP_ID:-}" ]; then
+            echo "::notice::AMAZON_APPSTORE_CLIENT_ID, AMAZON_APPSTORE_CLIENT_SECRET or the AMAZON_APPSTORE_APP_ID variable is not set. Skipping the Amazon Appstore upload."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Download the Amazon Appstore build
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: amazon-appstore
+          path: dist-amazon
+
+      # An unsigned build (missing keystore secrets) is refused by the script
+      # itself, so a workflow_dispatch on a feature branch never reaches Amazon.
+      - name: Upload the APK and release notes, then commit the edit
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
+        env:
+          AMAZON_APPSTORE_CLIENT_ID: ${{ secrets.AMAZON_APPSTORE_CLIENT_ID }}
+          AMAZON_APPSTORE_CLIENT_SECRET: ${{ secrets.AMAZON_APPSTORE_CLIENT_SECRET }}
+          AMAZON_APPSTORE_APP_ID: ${{ vars.AMAZON_APPSTORE_APP_ID }}
+          VERSION_CODE: ${{ needs.release.outputs.version_code }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=$(find dist-amazon -maxdepth 1 -name '*-amazon.apk' | head -1)
+          [ -n "$apk" ] || { echo "::error::no amazon APK in the amazon-appstore artifact"; exit 1; }
+          python3 scripts/amazon_appstore_publish.py             --apk "$apk"             --release-notes play/metadata/android             --version-code "${VERSION_CODE}"
 
   harden:
     name: Harden artifacts (scan, SBOM, sign)
