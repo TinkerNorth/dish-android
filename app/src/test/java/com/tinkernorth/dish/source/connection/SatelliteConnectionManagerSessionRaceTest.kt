@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.source.connection
 
+import com.tinkernorth.dish.core.net.HttpReply
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -141,6 +142,32 @@ class SatelliteConnectionManagerSessionRaceTest : SatelliteConnectionManagerFixt
             assertFalse(serverId in mgr.staleSatelliteIds.value)
         }
 
+    @Test
+    fun `an old reconcile rejection cannot drop rotated credentials on the same server connection id`() =
+        runMgrTest { mgr, _ -> rejectOldReconcileAfterRotation(mgr) }
+
+    private fun rejectOldReconcileAfterRotation(mgr: SatelliteConnectionManager) {
+        stubLiveSession()
+        connectLive(mgr)
+        val conn = mgr.get(serverId)!!
+        val answered = CompletableDeferred<Unit>()
+        coEvery { discoveryRepo.getSession(any(), any(), any(), any(), any()) } coAnswers { replyAfterGate(answered, REJECTED) }
+        every { controllerRepo.openSocket(any(), any()) } returns 6
+        every { controllerRepo.getServerEpoch(any()) } returnsMany listOf(DRIFTED_EPOCH, NO_ACK_EPOCH)
+        every { controllerRepo.getSendCounter(any()) } returnsMany listOf(COUNTER_REPUSH_THRESHOLD, SEND_COUNTER_FRESH)
+        scope.testScheduler.advanceTimeBy(ONE_TICK_MS)
+        scope.testScheduler.runCurrent()
+        assertEquals("conn_1", conn.connectionId)
+        assertEquals(6, conn.handle)
+
+        answered.complete(Unit)
+        scope.testScheduler.runCurrent()
+
+        assertEquals(SatelliteSessionState.Live, conn.state.value)
+        verify(exactly = 0) { store.forgetSatelliteSharedKey(any()) }
+        assertFalse(serverId in mgr.staleSatelliteIds.value)
+    }
+
     // The first session's tick runs the reconcile its drift asked for, which replaces the session,
     // and then finds the send counter past the re-PUT threshold: the rekey it asks for is the first
     // session's, and the second session's counter starts afresh.
@@ -162,14 +189,22 @@ class SatelliteConnectionManagerSessionRaceTest : SatelliteConnectionManagerFixt
             assertStillTheSecondSession(conn)
         }
 
-    // A slot converge for the first session is out when the first session's heartbeat asks for a
-    // rekey; the converge's answer arrives once the rekey's fresh PUT has made the second one live.
-    private fun slotAnswerAfterARekeyReplacedTheSession(
+    // A slot converge for the first session is out when its heartbeat asks for a rekey. The
+    // queued rotation starts only after the slot response, while the same session is still live.
+    private fun slotAnswerBeforeAQueuedRekey(
         answer: String,
         converge: (SatelliteConnection) -> Unit,
         stubConverge: (CompletableDeferred<Unit>, String) -> Unit,
         check: (SatelliteConnectionManager, SatelliteConnection) -> Unit,
-    ) = runMgrTest { mgr, _ ->
+    ) = runMgrTest { mgr, _ -> answerSlotBeforeRekey(mgr, answer, converge, stubConverge, check) }
+
+    private fun answerSlotBeforeRekey(
+        mgr: SatelliteConnectionManager,
+        answer: String,
+        converge: (SatelliteConnection) -> Unit,
+        stubConverge: (CompletableDeferred<Unit>, String) -> Unit,
+        check: (SatelliteConnectionManager, SatelliteConnection) -> Unit,
+    ) {
         stubLiveSession()
         connectLive(mgr)
         val conn = mgr.get(serverId)!!
@@ -183,21 +218,28 @@ class SatelliteConnectionManagerSessionRaceTest : SatelliteConnectionManagerFixt
         every { controllerRepo.getSendCounter(any()) } returnsMany listOf(COUNTER_REPUSH_THRESHOLD, SEND_COUNTER_FRESH)
         scope.testScheduler.advanceTimeBy(ONE_TICK_MS)
         scope.testScheduler.runCurrent()
-        assertEquals("conn_2", conn.connectionId)
+        assertEquals(SatelliteSessionState.Live, conn.state.value)
+        coVerify(exactly = 1) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
 
         answered.complete(Unit)
         scope.testScheduler.runCurrent()
         check(mgr, conn)
     }
 
+    private suspend fun replyAfterGate(
+        gate: CompletableDeferred<Unit>,
+        body: String,
+    ): HttpReply {
+        gate.await()
+        return ok(body)
+    }
+
     private fun gatedControllerPut(
         answered: CompletableDeferred<Unit>,
         answer: String,
     ) {
-        coEvery { discoveryRepo.putController(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
-            answered.await()
-            ok(answer)
-        }
+        coEvery { discoveryRepo.putController(any(), any(), any(), any(), any(), any(), any()) } coAnswers
+            { replyAfterGate(answered, answer) }
     }
 
     private fun attachSlot(conn: SatelliteConnection) = conn.attachSlot("slot-1", controllerType = 1)
@@ -213,32 +255,36 @@ class SatelliteConnectionManagerSessionRaceTest : SatelliteConnectionManagerFixt
         answer: String,
     ) {
         coEvery { discoveryRepo.putController(any(), any(), any(), any(), any(), any(), any()) } returns ok(APPLIED)
-        coEvery { discoveryRepo.deleteController(any(), any(), any(), any(), any(), any()) } coAnswers {
-            answered.await()
-            ok(answer)
-        }
+        coEvery { discoveryRepo.deleteController(any(), any(), any(), any(), any(), any()) } coAnswers { replyAfterGate(answered, answer) }
     }
 
     @Test
-    fun `a slot put answering for a session a rekey replaced folds nothing into the new one`() =
-        slotAnswerAfterARekeyReplacedTheSession(APPLIED, ::attachSlot, ::gatedControllerPut) { _, conn ->
-            assertEquals(SECOND_SESSION_EPOCH, conn.lastAppliedEpoch)
-            val slot = conn.slots.value.getValue("slot-1")
-            assertFalse(slot.registered)
-        }
+    fun `a queued rekey replaces the old slot PUT epoch after that request finishes`() =
+        slotAnswerBeforeAQueuedRekey(APPLIED, ::attachSlot, ::gatedControllerPut) { _, conn -> assertRekeyReplacedSlot(conn) }
+
+    private fun assertRekeyReplacedSlot(conn: SatelliteConnection) {
+        assertEquals(SECOND_SESSION_EPOCH, conn.lastAppliedEpoch)
+        val slot = conn.slots.value.getValue("slot-1")
+        assertFalse(slot.registered)
+    }
 
     @Test
-    fun `a slot put rejected for a session a rekey replaced leaves the new one and its key`() =
-        slotAnswerAfterARekeyReplacedTheSession(REJECTED, ::attachSlot, ::gatedControllerPut) { mgr, conn ->
-            assertEquals(SatelliteSessionState.Live, conn.state.value)
-            assertEquals("conn_2", conn.connectionId)
-            verify(exactly = 0) { store.forgetSatelliteSharedKey(any()) }
-            assertFalse(serverId in mgr.staleSatelliteIds.value)
-        }
+    fun `a rejected slot PUT invalidates the session before a queued rekey can replace it`() =
+        slotAnswerBeforeAQueuedRekey(REJECTED, ::attachSlot, ::gatedControllerPut, ::assertRejectedSlotCancelledRekey)
+
+    private fun assertRejectedSlotCancelledRekey(
+        mgr: SatelliteConnectionManager,
+        conn: SatelliteConnection,
+    ) {
+        assertEquals(SatelliteSessionState.Idle, conn.state.value)
+        coVerify(exactly = 1) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 1) { store.forgetSatelliteSharedKey(serverId) }
+        assertEquals(setOf(serverId), mgr.staleSatelliteIds.value)
+    }
 
     @Test
-    fun `a slot delete answering for a session a rekey replaced leaves the new one's epoch`() =
-        slotAnswerAfterARekeyReplacedTheSession(STALE_DELETE_ANSWER, ::attachThenDetachSlot, ::appliedThenGatedDelete) { _, conn ->
+    fun `a queued rekey replaces the old slot DELETE epoch after that request finishes`() =
+        slotAnswerBeforeAQueuedRekey(STALE_DELETE_ANSWER, ::attachThenDetachSlot, ::appliedThenGatedDelete) { _, conn ->
             assertEquals(SECOND_SESSION_EPOCH, conn.lastAppliedEpoch)
         }
 
