@@ -713,21 +713,23 @@ TEST(DeviceStateJson, TooSmallBufferReturnsZero) {
 
 // ── Switch-layout quirk: Generic.kl hands Switch-order HID buttons over shifted by one row ──
 
-TEST(KeycodeToXusb, SwitchOrderKeycodesAreNotInBaseMap) {
-    // Physical A / R / Home on a Switch-order pad arrive as BUTTON_C / BUTTON_Z / BUTTON_MODE;
-    // the base map drops them (the PDP Faceoff "A does not register" symptom).
+TEST(KeycodeToXusb, SwitchOrderFaceKeycodesAreNotInBaseMap) {
+    // Physical A / R on a Switch-order pad arrive as BUTTON_C / BUTTON_Z; the base map drops them
+    // (the PDP Faceoff "A does not register" symptom). Home arrives as BUTTON_MODE, which is Guide
+    // on every layout.
     EXPECT_EQ(0, keycodeToXusb(KC_BUTTON_C));
     EXPECT_EQ(0, keycodeToXusb(KC_BUTTON_Z));
-    EXPECT_EQ(0, keycodeToXusb(KC_BUTTON_MODE));
+    EXPECT_EQ(XUSB_GUIDE, keycodeToXusb(KC_BUTTON_MODE));
 }
 
-TEST(ApplyKey, BaseQuirkIgnoresSwitchOrderKeycodes) {
+TEST(ApplyKey, BaseQuirkIgnoresSwitchOrderFaceKeycodesAndTakesMode) {
     DeviceState s;
     s.wButtons = XUSB_A;
     EXPECT_FALSE(applyKey(s, KC_BUTTON_C, true));
     EXPECT_FALSE(applyKey(s, KC_BUTTON_Z, true));
-    EXPECT_FALSE(applyKey(s, KC_BUTTON_MODE, true));
     EXPECT_EQ(XUSB_A, s.wButtons);
+    EXPECT_TRUE(applyKey(s, KC_BUTTON_MODE, true));
+    EXPECT_EQ(XUSB_A | XUSB_GUIDE, s.wButtons);
 }
 
 TEST(SwitchLayout, QuirkBitMatchesTheKotlinContract) { EXPECT_EQ(0x04, QUIRK_SWITCH_LAYOUT); }
@@ -1246,4 +1248,88 @@ TEST(N64Layout, QuirkBitsAreDistinctFromTheOthers) {
     EXPECT_TRUE(usesN64Layout(QUIRK_N64_DRIVER_LAYOUT));
     EXPECT_FALSE(usesN64Layout(QUIRK_SWITCH_LAYOUT));
     EXPECT_FALSE(usesN64Layout(QUIRK_SWAP_AB | QUIRK_SWAP_XY));
+}
+
+TEST(KeycodeToXusb, ModeMapsToGuide) { EXPECT_EQ(XUSB_GUIDE, keycodeToXusb(KC_BUTTON_MODE)); }
+
+TEST(EightBitDoDinput, HeartIsGuideUnderTheQuirkAndNothingWithoutIt) {
+    EXPECT_EQ(XUSB_GUIDE, standardKeycodeToXusb(KC_BUTTON_C, QUIRK_EIGHTBITDO_DINPUT));
+    EXPECT_EQ(0, standardKeycodeToXusb(KC_BUTTON_C, 0));
+    EXPECT_EQ(XUSB_A, standardKeycodeToXusb(KC_BUTTON_A, QUIRK_EIGHTBITDO_DINPUT));
+    EXPECT_EQ(XUSB_START, standardKeycodeToXusb(KC_BUTTON_START, QUIRK_EIGHTBITDO_DINPUT));
+}
+
+TEST(EightBitDoDinput, HeartIsConsumedAndAppliedUnderTheQuirk) {
+    EXPECT_EQ(KeyVerdict::APPLY, keyVerdict(KC_BUTTON_C, QUIRK_EIGHTBITDO_DINPUT, KEY_ACTION_DOWN));
+    EXPECT_EQ(KeyVerdict::PASS, keyVerdict(KC_BUTTON_C, 0, KEY_ACTION_DOWN));
+    DeviceState s{};
+    s.quirk = QUIRK_EIGHTBITDO_DINPUT;
+    EXPECT_TRUE(applyKey(s, KC_BUTTON_C, true));
+    EXPECT_EQ(XUSB_GUIDE, s.wButtons);
+    EXPECT_TRUE(applyKey(s, KC_BUTTON_C, false));
+    EXPECT_EQ(0, s.wButtons);
+}
+
+TEST(FrameworkAxes, ByDefaultTheLargerRightStickAxisWinsAndEitherTriggerAxisCounts) {
+    FrameworkAxes a{};
+    a.z = 0.1f;
+    a.rx = -0.8f;
+    a.rz = 0.5f;
+    a.ry = 0.2f;
+    a.lTrigger = 0.3f;
+    a.brake = 0.7f;
+    a.rTrigger = 0.9f;
+    a.gas = 0.1f;
+    const ReducedAxes r = reduceFrameworkAxes(a, 0);
+    EXPECT_FLOAT_EQ(-0.8f, r.rightX);
+    EXPECT_FLOAT_EQ(0.5f, r.rightY);
+    EXPECT_FLOAT_EQ(0.7f, r.lt);
+    EXPECT_FLOAT_EQ(0.9f, r.rt);
+}
+
+TEST(FrameworkAxes, TheXpadLayoutReadsZAndRzAsTriggersAndRxRyAsTheRightStick) {
+    FrameworkAxes a{};
+    a.z = -1.f; // a resting xpad trigger, normalised as a centred axis
+    a.rz = 1.f;
+    a.rx = 0.25f;
+    a.ry = -0.5f;
+    const ReducedAxes r = reduceFrameworkAxes(a, QUIRK_XPAD_TRIGGER_AXES);
+    EXPECT_FLOAT_EQ(0.25f, r.rightX);
+    EXPECT_FLOAT_EQ(-0.5f, r.rightY);
+    EXPECT_FLOAT_EQ(0.f, r.lt);
+    EXPECT_FLOAT_EQ(1.f, r.rt);
+    a.z = 0.f;
+    EXPECT_FLOAT_EQ(0.5f, reduceFrameworkAxes(a, QUIRK_XPAD_TRIGGER_AXES).lt);
+}
+
+TEST(FrameworkAxes, TheXpadLayoutIgnoresTheTriggerAxesThePadDoesNotHave) {
+    FrameworkAxes a{};
+    a.z = -1.f;
+    a.rz = -1.f;
+    a.lTrigger = 1.f;
+    a.gas = 1.f;
+    const ReducedAxes r = reduceFrameworkAxes(a, QUIRK_XPAD_TRIGGER_AXES);
+    EXPECT_FLOAT_EQ(0.f, r.lt);
+    EXPECT_FLOAT_EQ(0.f, r.rt);
+}
+
+TEST(FrameworkAxes, TheEightBitDoDinputQuirkLeavesTheAnalogTriggerEchoesAlone) {
+    FrameworkAxes a{};
+    a.brake = 1.f;
+    a.gas = 1.f;
+    EXPECT_FLOAT_EQ(1.f, reduceFrameworkAxes(a, 0).lt);
+    EXPECT_FLOAT_EQ(1.f, reduceFrameworkAxes(a, 0).rt);
+    const ReducedAxes r = reduceFrameworkAxes(a, QUIRK_EIGHTBITDO_DINPUT);
+    EXPECT_FLOAT_EQ(0.f, r.lt);
+    EXPECT_FLOAT_EQ(0.f, r.rt);
+    a.z = 0.6f;
+    EXPECT_FLOAT_EQ(0.6f, reduceFrameworkAxes(a, QUIRK_EIGHTBITDO_DINPUT).rightX);
+}
+
+TEST(QuirkBits, TheNewBitsSitAboveTheOlderOnes) {
+    EXPECT_EQ(0x20, QUIRK_EIGHTBITDO_DINPUT);
+    EXPECT_EQ(0x40, QUIRK_XPAD_TRIGGER_AXES);
+    const uint8_t older = QUIRK_SWAP_AB | QUIRK_SWAP_XY | QUIRK_SWITCH_LAYOUT |
+                          QUIRK_N64_HID_LAYOUT | QUIRK_N64_DRIVER_LAYOUT;
+    EXPECT_EQ(0, (QUIRK_EIGHTBITDO_DINPUT | QUIRK_XPAD_TRIGGER_AXES) & older);
 }

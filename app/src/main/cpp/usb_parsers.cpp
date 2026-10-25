@@ -62,14 +62,11 @@ constexpr KnownDevice kKnown[] = {
     {0x045E, 0x02EA, "Xbox One S Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_S},
     {0x045E, 0x02FD, "Xbox One S Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x045E, 0x0B00, "Xbox Elite Series 2 Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_S},
-    {0x045E, 0x0B05, "Xbox Elite Series 2 Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
     {0x045E, 0x0B0A, "Xbox Adaptive Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x045E, 0x0B12, "Xbox Series X|S Controller", Parser::XBOX_ONE_GIP,
      InitKind::XBOX_ONE_POWERON},
     {0x045E, 0x0B13, "Xbox Series X|S Controller", Parser::XBOX_ONE_GIP,
      InitKind::XBOX_ONE_POWERON},
-    {0x045E, 0x0B22, "Xbox Adaptive Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
 
     {0x046D, 0xC218, "Logitech F310 (XInput)", Parser::XINPUT_360, InitKind::NONE},
     {0x046D, 0xC219, "Logitech F710 (XInput)", Parser::XINPUT_360, InitKind::NONE},
@@ -78,12 +75,9 @@ constexpr KnownDevice kKnown[] = {
     {0x046D, 0xC21F, "Logitech F710 (XInput)", Parser::XINPUT_360, InitKind::NONE},
     {0x046D, 0xCAA3, "Logitech G29 Driving Force (XInput)", Parser::XINPUT_360, InitKind::NONE},
 
-    {0x2DC8, 0x9000, "8BitDo Pro 2", Parser::XINPUT_360, InitKind::NONE},
-    {0x2DC8, 0x9001, "8BitDo SN30 Pro", Parser::XINPUT_360, InitKind::NONE},
     {0x2DC8, 0x9003, "8BitDo SN30 Pro+", Parser::XINPUT_360, InitKind::NONE},
-    {0x2DC8, 0x310A, "8BitDo Pro 2 (XInput)", Parser::XINPUT_360, InitKind::NONE},
-    {0x2DC8, 0x6101, "8BitDo Ultimate (XInput)", Parser::XINPUT_360, InitKind::NONE},
-    {0x2DC8, 0x6001, "8BitDo M30", Parser::XINPUT_360, InitKind::NONE},
+    {0x2DC8, 0x310A, "8BitDo Ultimate 2C Wireless Controller", Parser::XINPUT_360, InitKind::NONE},
+    {0x2DC8, 0x6001, "8BitDo SN30 Pro (XInput)", Parser::XINPUT_360, InitKind::NONE},
 
     {0x0738, 0x4716, "Mad Catz Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x0738, 0x4726, "Mad Catz Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
@@ -181,7 +175,9 @@ constexpr KnownDevice kKnown[] = {
     {0x18D1, 0x9400, "Google Stadia Controller", Parser::STADIA, InitKind::NONE},
 };
 
-// Device IDs below are a curated subset of SDL's src/joystick/controller_list.h and its hidapi
+// The 8BitDo D-input identities and the PlayStation Classic controller are placed by their own
+// descriptors (usb_hid_descriptor_test.cpp carries the bytes). The other device IDs below are a
+// curated subset of SDL's src/joystick/controller_list.h and its hidapi
 // drivers (zlib license, Copyright (C) Valve Corporation; see THIRD_PARTY.md). They are NOT
 // hardware-verified here:
 // lookupKnown recognises them (name + the family parser) and the user can opt into Direct, where
@@ -189,6 +185,14 @@ constexpr KnownDevice kKnown[] = {
 // auto-claim never silently moves an untested model onto Direct. Bluetooth-only PIDs, USB-differs
 // entries, dongles that re-enumerate, and non-gamepads (wheels/guitars) from SDL are omitted.
 constexpr KnownDevice kImported[] = {
+    {0x2DC8, 0x5006, "8BitDo M30 (D-input)", Parser::GENERIC_HID_GAMEPAD, InitKind::NONE,
+     ButtonOrder::EIGHTBITDO},
+    {0x2DC8, 0x3100, "8BitDo USB Wireless Adapter (D-input)", Parser::GENERIC_HID_GAMEPAD,
+     InitKind::NONE, ButtonOrder::EIGHTBITDO},
+    {0x2DC8, 0x3105, "8BitDo USB Wireless Adapter 2 (D-input)", Parser::GENERIC_HID_GAMEPAD,
+     InitKind::NONE, ButtonOrder::EIGHTBITDO},
+    {0x054C, 0x0CDA, "PlayStation Classic controller", Parser::GENERIC_HID_GAMEPAD, InitKind::NONE,
+     ButtonOrder::PLAYSTATION_CLASSIC},
     {0x0079, 0x18D4, "GPD Win 2 Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x044F, 0xB326, "Thrustmaster Gamepad GP XID", Parser::XINPUT_360, InitKind::NONE},
     {0x046D, 0xC242, "Logitech ChillStream", Parser::XINPUT_360, InitKind::NONE},
@@ -449,12 +453,18 @@ bool modelExpectsFrameworkGamepad(const uint16_t vid, const uint16_t pid) {
     return k == nullptr || k->parser != Parser::STEAM_CONTROLLER;
 }
 
-bool probePermitsClaim(const ProbeOutcome outcome, const bool verifiedFastLane) {
+bool parserStreamsUnprompted(const Parser p) {
+    return p == Parser::DUALSHOCK4 || p == Parser::DUALSENSE || p == Parser::SWITCH_PRO_USB ||
+           p == Parser::SWITCH_N64_USB;
+}
+
+bool probePermitsClaim(const ProbeOutcome outcome, const bool verifiedFastLane,
+                       const Parser parser) {
     switch (outcome) {
     case ProbeOutcome::DECODED:
         return true;
     case ProbeOutcome::SILENT:
-        return verifiedFastLane;
+        return verifiedFastLane && !parserStreamsUnprompted(parser);
     case ProbeOutcome::UNDECODED:
         return false;
     }
@@ -1723,6 +1733,32 @@ constexpr InitPacket kGipSSeq[] = {
     {kGipAuthDone, sizeof(kGipAuthDone)},
 };
 
+// The Switch Pro USB handshake (0x80 0x02; the Pro answers 0x81 0x02 on its IN endpoint, which is
+// never read) and the timeout disable (0x80 0x04) that keeps the pad reporting. Both go out as
+// full 64-byte packets, as SDL writes them: the 8BitDo USB Wireless Adapter 2 ignores a two-byte
+// write.
+constexpr size_t kSwitchUsbPacketBytes = 64;
+constexpr uint8_t kSwitchHandshake[kSwitchUsbPacketBytes] = {0x80, 0x02};
+constexpr uint8_t kSwitchDisableTimeout[kSwitchUsbPacketBytes] = {0x80, 0x04};
+
+// Input report mode 0x30 (buttons + sticks + IMU) as one rumble + subcommand output report:
+// report id 0x01, packet counter, 8-byte neutral rumble pattern, subcommand 0x03, argument 0x30.
+constexpr uint8_t kSwitchSetReportMode[] = {
+    0x01, 0x00, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x03, 0x30,
+};
+
+// Subcommand 0x48 arg 0x01, so later rumble-only (0x10) reports take effect.
+constexpr uint8_t kSwitchEnableVibration[] = {
+    0x01, 0x01, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x48, 0x01,
+};
+
+constexpr InitPacket kSwitchInitPackets[] = {
+    {kSwitchHandshake, sizeof(kSwitchHandshake)},
+    {kSwitchDisableTimeout, sizeof(kSwitchDisableTimeout)},
+    {kSwitchSetReportMode, sizeof(kSwitchSetReportMode)},
+    {kSwitchEnableVibration, sizeof(kSwitchEnableVibration)},
+};
+
 InitSequence gipSequenceFor(const InitKind init) {
     if (init == InitKind::XBOX_ONE_POWERON) return {kGipPowerOnSeq, countOf(kGipPowerOnSeq)};
     if (init == InitKind::XBOX_ONE_S) return {kGipSSeq, countOf(kGipSSeq)};
@@ -1737,6 +1773,22 @@ size_t buildGipInitPacket(const InitKind init, const int index, const uint8_t se
     if (len == 0) return 0;
     out[2] = seq;
     return len;
+}
+
+size_t buildSwitchInitPacket(const int index, uint8_t* out, const size_t outCap) {
+    return copyInitPacket({kSwitchInitPackets, countOf(kSwitchInitPackets)}, index, out, outCap);
+}
+
+size_t buildGipAck(const uint8_t* report, const size_t len, uint8_t* out, const size_t outCap) {
+    constexpr size_t kHeaderBytes = 4;
+    constexpr uint8_t kNeedsAckFlags = 0x30;
+    if (len < kHeaderBytes || outCap < kGipAckBytes) return 0;
+    const bool asksForAnAck = (report[1] & kNeedsAckFlags) == kNeedsAckFlags;
+    if (!asksForAnAck) return 0;
+    const uint8_t ack[kGipAckBytes] = {0x01,      0x20, report[2], 0x09, 0x00, report[0], 0x20,
+                                       report[3], 0x00, 0x00,      0x00, 0x00, 0x00};
+    memcpy(out, ack, kGipAckBytes);
+    return kGipAckBytes;
 }
 
 namespace {
@@ -2166,26 +2218,6 @@ bool runGipInit(const int fd, const uint8_t epOut, const InitKind init) {
     return true;
 }
 
-// Status request. The Pro answers with controller info on its IN endpoint; the reply is never
-// read. Sending the request is what moves the device out of whatever residual state the kernel
-// driver left it in when the interface was stolen.
-constexpr uint8_t kSwitchStatus[] = {0x80, 0x02};
-
-// Without this the controller sleeps after a few seconds of idle and stops emitting reports.
-constexpr uint8_t kSwitchDisableTimeout[] = {0x80, 0x04};
-
-// Input report mode 0x30 (standard full report: buttons + sticks + IMU), carried as one rumble +
-// subcommand HID output report: report id 0x01, packet counter, 8-byte neutral rumble pattern,
-// subcommand id 0x03, argument 0x30.
-constexpr uint8_t kSwitchSetReportMode[] = {
-    0x01, 0x00, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x03, 0x30,
-};
-
-// Subcommand 0x48 arg 0x01, so later rumble-only (0x10) reports take effect.
-constexpr uint8_t kSwitchEnableVibration[] = {
-    0x01, 0x01, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x48, 0x01,
-};
-
 constexpr unsigned kSwitchInitSettleUs = 40000;
 
 struct SwitchInitStep {
@@ -2200,8 +2232,8 @@ struct SwitchInitStep {
 // A fatal step failing leaves the pad unusable, so the sequence stops; the other two only cost a
 // feature and the pad still streams without them.
 constexpr SwitchInitStep kSwitchInitSequence[] = {
-    {kSwitchStatus, sizeof(kSwitchStatus), kSwitchStatusTimeoutMs, kSwitchInitSettleUs, true,
-     "status request"},
+    {kSwitchHandshake, sizeof(kSwitchHandshake), kSwitchStatusTimeoutMs, kSwitchInitSettleUs, true,
+     "handshake"},
     {kSwitchDisableTimeout, sizeof(kSwitchDisableTimeout), kSwitchStatusTimeoutMs,
      kSwitchInitSettleUs, false, "disable-timeout write"},
     {kSwitchSetReportMode, sizeof(kSwitchSetReportMode), kSwitchModeTimeoutMs, kSwitchInitSettleUs,
@@ -2233,13 +2265,13 @@ bool runSwitchProHandshake(const int fd, const uint8_t epOut) {
     return true;
 }
 
+} // namespace
+
 // One OUT report, as built by the feedback builders: nothing to write is a refusal, not a no-op.
 bool writeOutReport(const int fd, const uint8_t epOut, const uint8_t* buf, const size_t n) {
     if (n == 0) return false;
     return bulkWrite(fd, epOut, buf, n, kOutWriteTimeoutMs);
 }
-
-} // namespace
 
 bool runInit(const int fd, const int interfaceNumber, const uint8_t epOut, const InitKind init) {
     switch (init) {

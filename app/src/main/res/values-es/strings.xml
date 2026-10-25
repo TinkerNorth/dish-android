@@ -699,6 +699,8 @@
     <string name="diagnostics_quirk_switch_layout">Disposición Switch</string>
     <string name="diagnostics_quirk_n64_hid_layout">Disposición N64 (HID genérico)</string>
     <string name="diagnostics_quirk_n64_driver_layout">Disposición N64 (controlador del kernel)</string>
+    <string name="diagnostics_quirk_eightbitdo_dinput">8BitDo D-input (Corazón es Guía)</string>
+    <string name="diagnostics_quirk_xpad_trigger_axes">Gatillos Xbox en Z/RZ</string>
     <string name="diagnostics_reports">Informes</string>
     <string name="diagnostics_events_count">Eventos</string>
     <string name="diagnostics_last_input">Última entrada</string>

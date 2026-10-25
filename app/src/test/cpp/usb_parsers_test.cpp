@@ -712,18 +712,154 @@ TEST(KnownDevices, UnknownModelIsNeitherRecognizedNorFastLane) {
 }
 
 TEST(ProbeRule, DecodedReportClaimsAtAnyTrustLevel) {
-    EXPECT_TRUE(probePermitsClaim(ProbeOutcome::DECODED, true));
-    EXPECT_TRUE(probePermitsClaim(ProbeOutcome::DECODED, false));
+    EXPECT_TRUE(probePermitsClaim(ProbeOutcome::DECODED, true, Parser::XINPUT_360));
+    EXPECT_TRUE(probePermitsClaim(ProbeOutcome::DECODED, false, Parser::GENERIC_HID_GAMEPAD));
+    EXPECT_TRUE(probePermitsClaim(ProbeOutcome::DECODED, true, Parser::DUALSENSE));
 }
 
-TEST(ProbeRule, SilenceClaimsOnlyVerifiedModels) {
-    EXPECT_TRUE(probePermitsClaim(ProbeOutcome::SILENT, true));
-    EXPECT_FALSE(probePermitsClaim(ProbeOutcome::SILENT, false));
+TEST(ProbeRule, SilenceClaimsOnlyVerifiedModelsOfFamiliesThatReportOnChange) {
+    EXPECT_TRUE(probePermitsClaim(ProbeOutcome::SILENT, true, Parser::XINPUT_360));
+    EXPECT_TRUE(probePermitsClaim(ProbeOutcome::SILENT, true, Parser::XBOX_ONE_GIP));
+    EXPECT_FALSE(probePermitsClaim(ProbeOutcome::SILENT, false, Parser::XINPUT_360));
+    EXPECT_FALSE(probePermitsClaim(ProbeOutcome::SILENT, false, Parser::GENERIC_HID_GAMEPAD));
+}
+
+TEST(ProbeRule, SilenceFromAFamilyThatStreamsUnpromptedNeverClaims) {
+    // A Sony pad or a Switch pad reports whether or not anything moved, so a verified identity
+    // that stays quiet through the probe is not that pad: an 8BitDo adapter in its Switch or
+    // PS Classic mode, say.
+    for (const Parser p :
+         {Parser::SWITCH_PRO_USB, Parser::SWITCH_N64_USB, Parser::DUALSHOCK4, Parser::DUALSENSE}) {
+        EXPECT_FALSE(probePermitsClaim(ProbeOutcome::SILENT, true, p));
+        EXPECT_FALSE(probePermitsClaim(ProbeOutcome::SILENT, false, p));
+    }
 }
 
 TEST(ProbeRule, UndecodedTrafficNeverClaims) {
-    EXPECT_FALSE(probePermitsClaim(ProbeOutcome::UNDECODED, true));
-    EXPECT_FALSE(probePermitsClaim(ProbeOutcome::UNDECODED, false));
+    EXPECT_FALSE(probePermitsClaim(ProbeOutcome::UNDECODED, true, Parser::XINPUT_360));
+    EXPECT_FALSE(probePermitsClaim(ProbeOutcome::UNDECODED, false, Parser::XINPUT_360));
+    EXPECT_FALSE(probePermitsClaim(ProbeOutcome::UNDECODED, true, Parser::DUALSHOCK4));
+}
+
+TEST(ProbeRule, TheStreamingFamiliesAreTheSonyPadsAndTheSwitchPads) {
+    EXPECT_TRUE(usbparsers::parserStreamsUnprompted(Parser::DUALSHOCK4));
+    EXPECT_TRUE(usbparsers::parserStreamsUnprompted(Parser::DUALSENSE));
+    EXPECT_TRUE(usbparsers::parserStreamsUnprompted(Parser::SWITCH_PRO_USB));
+    EXPECT_TRUE(usbparsers::parserStreamsUnprompted(Parser::SWITCH_N64_USB));
+    EXPECT_FALSE(usbparsers::parserStreamsUnprompted(Parser::XINPUT_360));
+    EXPECT_FALSE(usbparsers::parserStreamsUnprompted(Parser::XINPUT_360_WIRELESS));
+    EXPECT_FALSE(usbparsers::parserStreamsUnprompted(Parser::XBOX_ONE_GIP));
+    EXPECT_FALSE(usbparsers::parserStreamsUnprompted(Parser::GENERIC_HID_GAMEPAD));
+    EXPECT_FALSE(usbparsers::parserStreamsUnprompted(Parser::STEAM_CONTROLLER));
+    EXPECT_FALSE(usbparsers::parserStreamsUnprompted(Parser::STADIA));
+    EXPECT_FALSE(usbparsers::parserStreamsUnprompted(Parser::NONE));
+}
+
+TEST(KnownDevices, BluetoothOnlyXboxIdentitiesAreNotUsbRows) {
+    // 0x0B05 and 0x0B22 are the Elite Series 2's Bluetooth and BLE identities; neither ever
+    // enumerates on USB.
+    EXPECT_EQ(nullptr, usbparsers::lookupKnown(0x045E, 0x0B05));
+    EXPECT_EQ(nullptr, usbparsers::lookupKnown(0x045E, 0x0B22));
+    EXPECT_FALSE(usbparsers::isVerifiedFastLane(0x045E, 0x0B22));
+}
+
+TEST(KnownDevices, EightBitDoXinputRowsCarryTheXpadNames) {
+    const usbparsers::KnownDevice* sn30 = usbparsers::lookupKnown(0x2DC8, 0x6001);
+    ASSERT_NE(nullptr, sn30);
+    EXPECT_STREQ("8BitDo SN30 Pro (XInput)", sn30->name);
+    EXPECT_EQ(Parser::XINPUT_360, sn30->parser);
+    const usbparsers::KnownDevice* ultimate = usbparsers::lookupKnown(0x2DC8, 0x310A);
+    ASSERT_NE(nullptr, ultimate);
+    EXPECT_STREQ("8BitDo Ultimate 2C Wireless Controller", ultimate->name);
+}
+
+TEST(KnownDevices, EightBitDoHidIdentitiesAreNoLongerXinputRows) {
+    // 0x9000 and 0x9001 are the FC30 Pro and N30 Pro in D-input, 0x6101 the SN30 Pro's Bluetooth
+    // identity: none speaks XInput, and a row that said so claimed a quiet pad as dead.
+    EXPECT_EQ(nullptr, usbparsers::lookupKnown(0x2DC8, 0x9000));
+    EXPECT_EQ(nullptr, usbparsers::lookupKnown(0x2DC8, 0x9001));
+    EXPECT_EQ(nullptr, usbparsers::lookupKnown(0x2DC8, 0x6101));
+}
+
+TEST(KnownDevices, EightBitDoDinputIdentitiesAreGenericHidInTheirOrderAndNotFastLane) {
+    for (const uint16_t pid : {0x5006, 0x3100, 0x3105}) {
+        const usbparsers::KnownDevice* k = usbparsers::lookupKnown(0x2DC8, pid);
+        ASSERT_NE(nullptr, k) << pid;
+        EXPECT_EQ(Parser::GENERIC_HID_GAMEPAD, k->parser) << pid;
+        EXPECT_EQ(usbparsers::ButtonOrder::EIGHTBITDO, k->order) << pid;
+        EXPECT_FALSE(usbparsers::isVerifiedFastLane(0x2DC8, pid)) << pid;
+    }
+    const usbparsers::Classification c = usbparsers::classifyDevice(0x2DC8, 0x5006, 3, 0, 0);
+    EXPECT_EQ(Parser::GENERIC_HID_GAMEPAD, c.parser);
+    EXPECT_EQ(usbparsers::ButtonOrder::EIGHTBITDO, c.order);
+}
+
+TEST(KnownDevices, ThePlayStationClassicControllerIsGenericHidInItsOwnOrder) {
+    const usbparsers::KnownDevice* k = usbparsers::lookupKnown(0x054C, 0x0CDA);
+    ASSERT_NE(nullptr, k);
+    EXPECT_EQ(Parser::GENERIC_HID_GAMEPAD, k->parser);
+    EXPECT_EQ(usbparsers::ButtonOrder::PLAYSTATION_CLASSIC, k->order);
+    EXPECT_FALSE(usbparsers::isVerifiedFastLane(0x054C, 0x0CDA));
+}
+
+TEST(SwitchInit, TheUsbCommandsGoOutAsSixtyFourBytePackets) {
+    uint8_t buf[64];
+    memset(buf, 0xAA, sizeof(buf));
+    ASSERT_EQ(64u, usbparsers::buildSwitchInitPacket(0, buf, sizeof(buf)));
+    EXPECT_EQ(0x80, buf[0]);
+    EXPECT_EQ(0x02, buf[1]);
+    for (size_t i = 2; i < sizeof(buf); i++) EXPECT_EQ(0, buf[i]) << i;
+    ASSERT_EQ(64u, usbparsers::buildSwitchInitPacket(1, buf, sizeof(buf)));
+    EXPECT_EQ(0x80, buf[0]);
+    EXPECT_EQ(0x04, buf[1]);
+    for (size_t i = 2; i < sizeof(buf); i++) EXPECT_EQ(0, buf[i]) << i;
+}
+
+TEST(SwitchInit, TheSubcommandsKeepTheirTwelveBytes) {
+    uint8_t buf[64];
+    ASSERT_EQ(12u, usbparsers::buildSwitchInitPacket(2, buf, sizeof(buf)));
+    EXPECT_EQ(0x01, buf[0]);
+    EXPECT_EQ(0x03, buf[10]);
+    EXPECT_EQ(0x30, buf[11]);
+    ASSERT_EQ(12u, usbparsers::buildSwitchInitPacket(3, buf, sizeof(buf)));
+    EXPECT_EQ(0x48, buf[10]);
+    EXPECT_EQ(0x01, buf[11]);
+}
+
+TEST(SwitchInit, TheSequenceEndsAfterFourPacketsAndRefusesASmallBuffer) {
+    uint8_t buf[64];
+    EXPECT_EQ(0u, usbparsers::buildSwitchInitPacket(4, buf, sizeof(buf)));
+    EXPECT_EQ(0u, usbparsers::buildSwitchInitPacket(-1, buf, sizeof(buf)));
+    uint8_t small[16];
+    EXPECT_EQ(0u, usbparsers::buildSwitchInitPacket(0, small, sizeof(small)));
+}
+
+TEST(GipAck, AReportThatAsksForAnAckGetsXpadsAnswer) {
+    // The mode-button report an Xbox One S retransmits until it is acknowledged; the answer is
+    // the one xpad sends (xpadone_ack_mode_report).
+    const uint8_t guide[] = {0x07, 0x30, 0x1A, 0x02, 0x01, 0x5B};
+    uint8_t ack[usbparsers::kGipAckBytes];
+    ASSERT_EQ(usbparsers::kGipAckBytes,
+              usbparsers::buildGipAck(guide, sizeof(guide), ack, sizeof(ack)));
+    const uint8_t expected[] = {0x01, 0x20, 0x1A, 0x09, 0x00, 0x07, 0x20,
+                                0x02, 0x00, 0x00, 0x00, 0x00, 0x00};
+    EXPECT_EQ(0, memcmp(expected, ack, sizeof(expected)));
+}
+
+TEST(GipAck, AReportWithoutTheAckFlagsGetsNone) {
+    const uint8_t input[] = {0x20, 0x00, 0x05, 0x0E, 0x00, 0x00, 0x00, 0x00, 0x00};
+    uint8_t ack[usbparsers::kGipAckBytes];
+    EXPECT_EQ(0u, usbparsers::buildGipAck(input, sizeof(input), ack, sizeof(ack)));
+    const uint8_t halfFlag[] = {0x07, 0x20, 0x1A, 0x02, 0x01, 0x5B};
+    EXPECT_EQ(0u, usbparsers::buildGipAck(halfFlag, sizeof(halfFlag), ack, sizeof(ack)));
+}
+
+TEST(GipAck, AShortReportOrASmallBufferGetsNone) {
+    const uint8_t guide[] = {0x07, 0x30, 0x1A, 0x02, 0x01, 0x5B};
+    uint8_t ack[usbparsers::kGipAckBytes];
+    EXPECT_EQ(0u, usbparsers::buildGipAck(guide, 3, ack, sizeof(ack)));
+    uint8_t small[usbparsers::kGipAckBytes - 1];
+    EXPECT_EQ(0u, usbparsers::buildGipAck(guide, sizeof(guide), small, sizeof(small)));
 }
 
 TEST(Decode, SwitchProAveragesImuSubframes) {
@@ -1290,7 +1426,7 @@ TEST(GenericHidDecode, SwitchOrderLayoutFlowsThroughDecodeReport) {
                             0x29, 0x0E, 0x81, 0x02, 0x95, 0x02, 0x81, 0x01, 0xC0};
     ParserState st;
     ASSERT_TRUE(usbhid::parseReportDescriptor(desc, sizeof(desc), st.hidLayout));
-    st.hidLayout.switchOrderButtons = true;
+    st.hidLayout.order = usbhid::ButtonOrder::SWITCH;
 
     std::vector<uint8_t> physicalA = {0x04, 0x00};
     DeviceState s;

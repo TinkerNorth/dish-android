@@ -56,6 +56,7 @@ constexpr KeycodeMapping BASE_KEYCODE_MAP[] = {
     {KC_BUTTON_THUMBR, XUSB_THUMB_R},
     {KC_BUTTON_START, XUSB_START},
     {KC_BUTTON_SELECT, XUSB_BACK},
+    {KC_BUTTON_MODE, XUSB_GUIDE},
     {KC_DPAD_UP, XUSB_DPAD_UP},
     {KC_DPAD_DOWN, XUSB_DPAD_DOWN},
     {KC_DPAD_LEFT, XUSB_DPAD_LEFT},
@@ -321,7 +322,7 @@ bool applyStandardKey(DeviceState& s, const int32_t androidKeycode, const bool d
         setRightTriggerFromKey(s, down);
         return true;
     }
-    const uint16_t mappedBit = keycodeToXusb(androidKeycode);
+    const uint16_t mappedBit = standardKeycodeToXusb(androidKeycode, s.quirk);
     const uint16_t xusbBit = applyButtonQuirk(mappedBit, s.quirk);
     const bool isMapped = xusbBit != NO_XUSB_BIT;
     if (!isMapped) return false;
@@ -330,12 +331,18 @@ bool applyStandardKey(DeviceState& s, const int32_t androidKeycode, const bool d
     return true;
 }
 
-bool standardLayoutConsumesKey(const int32_t androidKeycode) {
+bool standardLayoutConsumesKey(const int32_t androidKeycode, const uint8_t quirk) {
     const bool isATriggerKey =
         isStandardLeftTriggerKey(androidKeycode) || isStandardRightTriggerKey(androidKeycode);
-    const bool isAMappedButton = keycodeToXusb(androidKeycode) != NO_XUSB_BIT;
+    const bool isAMappedButton = standardKeycodeToXusb(androidKeycode, quirk) != NO_XUSB_BIT;
     return isATriggerKey || isAMappedButton;
 }
+
+float pickLargerMagnitude(const float a, const float b) {
+    return std::fabs(a) >= std::fabs(b) ? a : b;
+}
+
+float centredToTrigger(const float v) { return std::clamp((v + 1.f) / 2.f, 0.f, 1.f); }
 
 uint16_t hatAxesToDpadBits(const float hatX, const float hatY) {
     uint16_t bits = 0;
@@ -359,6 +366,23 @@ uint16_t keycodeToXusb(const int32_t androidKeycode) {
     return lookUpXusbBit(BASE_KEYCODE_MAP, androidKeycode);
 }
 
+uint16_t standardKeycodeToXusb(const int32_t androidKeycode, const uint8_t quirk) {
+    const bool heartIsGuide =
+        (quirk & QUIRK_EIGHTBITDO_DINPUT) != 0 && androidKeycode == KC_BUTTON_C;
+    if (heartIsGuide) return XUSB_GUIDE;
+    return keycodeToXusb(androidKeycode);
+}
+
+ReducedAxes reduceFrameworkAxes(const FrameworkAxes& a, const uint8_t quirk) {
+    const bool zAndRzAreTheTriggers = (quirk & QUIRK_XPAD_TRIGGER_AXES) != 0;
+    if (zAndRzAreTheTriggers) return {a.rx, a.ry, centredToTrigger(a.z), centredToTrigger(a.rz)};
+    const float rightX = pickLargerMagnitude(a.z, a.rx);
+    const float rightY = pickLargerMagnitude(a.rz, a.ry);
+    const bool analogTriggersOnlyEchoTheKeys = (quirk & QUIRK_EIGHTBITDO_DINPUT) != 0;
+    if (analogTriggersOnlyEchoTheKeys) return {rightX, rightY, a.lTrigger, a.rTrigger};
+    return {rightX, rightY, std::max(a.lTrigger, a.brake), std::max(a.rTrigger, a.gas)};
+}
+
 uint16_t switchLayoutKeycodeToXusb(const int32_t androidKeycode) {
     return lookUpXusbBit(SWITCH_LAYOUT_KEYCODE_MAP, androidKeycode);
 }
@@ -378,7 +402,7 @@ bool consumesKey(const int32_t androidKeycode, const uint8_t quirk) {
     if (usesN64Layout(quirk)) return n64LayoutConsumesKey(quirk, androidKeycode);
     const bool usesSwitchLayout = (quirk & QUIRK_SWITCH_LAYOUT) != 0;
     if (usesSwitchLayout) return switchLayoutConsumesKey(androidKeycode);
-    return standardLayoutConsumesKey(androidKeycode);
+    return standardLayoutConsumesKey(androidKeycode, quirk);
 }
 
 KeyVerdict keyVerdict(const int32_t androidKeycode, const uint8_t quirk, const int32_t action) {
