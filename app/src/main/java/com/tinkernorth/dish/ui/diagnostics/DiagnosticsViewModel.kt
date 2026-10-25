@@ -52,6 +52,7 @@ class DiagnosticsViewModel
             val hosts: List<HostDiag>,
             val radios: RadioFacts,
             val latencyRows: LatencyRows,
+            val ignoredInputs: List<IgnoredInputDiag> = emptyList(),
         ) {
             companion object {
                 val EMPTY = Overview(emptyList(), emptyList(), RadioFacts.NONE, LatencyRows(emptyList(), emptyList()))
@@ -89,7 +90,7 @@ class DiagnosticsViewModel
                 .map { w ->
                     val controllers = controllerDiags(w, sources::touchpadMode)
                     val hosts = hostDiags(w, sources::touchpadMode)
-                    Overview(controllers, hosts, w.radios, latencyRows(controllers, hosts))
+                    Overview(controllers, hosts, w.radios, latencyRows(controllers, hosts), ignoredInputDiags(w))
                 }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), Overview.EMPTY)
 
         val latencyPanel: StateFlow<LatencyPanelUi> =

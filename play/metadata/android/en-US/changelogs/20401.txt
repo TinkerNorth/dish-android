@@ -1,0 +1,4 @@
+Dish 2.4.1: controllers with a built-in keyboard, and a fuller Diagnostics screen.
+
+• Controllers that Android also reads as a keyboard now show up in Dish and reach the PC.
+• Diagnostics lists the input devices Dish does not treat as controllers, with what Android reports for each: inputs, keyboard type, hardware ID.

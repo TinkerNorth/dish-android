@@ -1,0 +1,4 @@
+Dish 2.4.1: kontroleri s ugrađenom tastaturom i potpunija Dijagnostika.
+
+• Kontroleri koje Android čita i kao tastaturu sada se pojavljuju u Dishu i stižu do računara.
+• Dijagnostika navodi ulazne uređaje koje Dish ne tretira kao kontrolere, s onim što Android javlja za svaki: ulazi, tip tastature, hardverski ID.

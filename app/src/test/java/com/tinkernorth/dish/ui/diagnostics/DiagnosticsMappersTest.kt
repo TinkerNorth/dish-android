@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.ui.diagnostics
 
+import android.view.InputDevice
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
@@ -90,6 +91,94 @@ class DiagnosticsMappersTest {
     )
 
     private val touchpadMode: (String) -> String = { "ds4" }
+
+    private fun ignored(
+        id: Int,
+        name: String,
+        sources: Int,
+        keyboardType: Int = InputDevice.KEYBOARD_TYPE_NONE,
+    ) = PhysicalGamepadRegistry.IgnoredInputDevice(
+        id = id,
+        name = name,
+        vendorId = 0x046D,
+        productId = 0xB34B,
+        sources = sources,
+        keyboardType = keyboardType,
+    )
+
+    @Test
+    fun `ignored devices sort by name then id and carry their decoded inputs`() {
+        val w =
+            world().copy(
+                ignoredInputs =
+                    listOf(
+                        ignored(5, "Zed keyboard", InputDevice.SOURCE_KEYBOARD, InputDevice.KEYBOARD_TYPE_ALPHABETIC),
+                        ignored(9, "Alpha mouse", InputDevice.SOURCE_MOUSE),
+                        ignored(2, "Alpha mouse", InputDevice.SOURCE_MOUSE),
+                    ),
+            )
+
+        val diags = ignoredInputDiags(w)
+
+        assertEquals(listOf(2, 9, 5), diags.map { it.id })
+        assertEquals(
+            IgnoredInputDiag(
+                id = 5,
+                name = "Zed keyboard",
+                vendorId = 0x046D,
+                productId = 0xB34B,
+                sources = InputDevice.SOURCE_KEYBOARD,
+                inputs = listOf(InputSourceKind.KEYBOARD),
+                keyboard = KeyboardKind.FULL,
+            ),
+            diags.last(),
+        )
+        assertEquals(listOf(InputSourceKind.MOUSE), diags.first().inputs)
+        assertEquals(KeyboardKind.NONE, diags.first().keyboard)
+    }
+
+    @Test
+    fun `a world without ignored devices maps to no rows`() {
+        assertEquals(emptyList<IgnoredInputDiag>(), ignoredInputDiags(world()))
+    }
+
+    @Test
+    fun `input kinds decode every device bit a source mask carries, in display order`() {
+        assertEquals(
+            listOf(InputSourceKind.KEYBOARD, InputSourceKind.DPAD, InputSourceKind.GAMEPAD, InputSourceKind.JOYSTICK),
+            inputSourceKinds(
+                InputDevice.SOURCE_JOYSTICK or InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_DPAD or InputDevice.SOURCE_KEYBOARD,
+            ),
+        )
+        assertEquals(
+            listOf(InputSourceKind.MOUSE, InputSourceKind.TOUCHPAD),
+            inputSourceKinds(InputDevice.SOURCE_MOUSE or InputDevice.SOURCE_TOUCHPAD),
+        )
+        assertEquals(
+            listOf(InputSourceKind.TOUCHSCREEN, InputSourceKind.STYLUS, InputSourceKind.TRACKBALL),
+            inputSourceKinds(InputDevice.SOURCE_TOUCHSCREEN or InputDevice.SOURCE_STYLUS or InputDevice.SOURCE_TRACKBALL),
+        )
+    }
+
+    @Test
+    fun `a bare source class or an empty mask is no input kind`() {
+        assertEquals(emptyList<InputSourceKind>(), inputSourceKinds(InputDevice.SOURCE_CLASS_BUTTON))
+        assertEquals(emptyList<InputSourceKind>(), inputSourceKinds(InputDevice.SOURCE_CLASS_POINTER))
+        assertEquals(emptyList<InputSourceKind>(), inputSourceKinds(0))
+    }
+
+    @Test
+    fun `a sensor-only device shares no input kind with a joystick`() {
+        assertEquals(emptyList<InputSourceKind>(), inputSourceKinds(InputDevice.SOURCE_SENSOR))
+        assertEquals(listOf(InputSourceKind.JOYSTICK), inputSourceKinds(InputDevice.SOURCE_JOYSTICK))
+    }
+
+    @Test
+    fun `keyboard kinds follow Android's keyboard types`() {
+        assertEquals(KeyboardKind.NONE, keyboardKind(InputDevice.KEYBOARD_TYPE_NONE))
+        assertEquals(KeyboardKind.BUTTONS_ONLY, keyboardKind(InputDevice.KEYBOARD_TYPE_NON_ALPHABETIC))
+        assertEquals(KeyboardKind.FULL, keyboardKind(InputDevice.KEYBOARD_TYPE_ALPHABETIC))
+    }
 
     @Test
     fun `the virtual pad leads the list and physical pads follow by name`() {

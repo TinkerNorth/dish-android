@@ -24,123 +24,85 @@ import org.junit.Test
 class PhysicalGamepadRegistryTest {
     @Test
     fun `device with SOURCE_GAMEPAD bit is accepted`() {
-        assertTrue(
-            isGamepadDeviceFromCapabilities(
-                sources = InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_KEYBOARD,
-                keyboardType = InputDevice.KEYBOARD_TYPE_NON_ALPHABETIC,
-            ),
-        )
+        assertTrue(isGamepadDeviceFromCapabilities(InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_KEYBOARD))
     }
 
     @Test
     fun `device with SOURCE_JOYSTICK bit is accepted`() {
-        assertTrue(
-            isGamepadDeviceFromCapabilities(
-                sources = InputDevice.SOURCE_JOYSTICK,
-                keyboardType = InputDevice.KEYBOARD_TYPE_NON_ALPHABETIC,
-            ),
-        )
+        assertTrue(isGamepadDeviceFromCapabilities(InputDevice.SOURCE_JOYSTICK))
     }
 
     @Test
     fun `device with the exact mask seen in the Generic USB Joystick bug is accepted`() {
-        assertTrue(
-            isGamepadDeviceFromCapabilities(
-                sources = 0x1000111,
-                keyboardType = InputDevice.KEYBOARD_TYPE_NON_ALPHABETIC,
-            ),
-        )
+        assertTrue(isGamepadDeviceFromCapabilities(0x1000111))
     }
 
     @Test
     fun `device with both SOURCE_GAMEPAD and SOURCE_JOYSTICK is accepted`() {
+        assertTrue(isGamepadDeviceFromCapabilities(InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK))
+    }
+
+    @Test
+    fun `a controller that also carries a keyboard is accepted on its gamepad bit`() {
         assertTrue(
             isGamepadDeviceFromCapabilities(
-                sources = InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK,
-                keyboardType = InputDevice.KEYBOARD_TYPE_NON_ALPHABETIC,
+                InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK or InputDevice.SOURCE_KEYBOARD or InputDevice.SOURCE_DPAD,
             ),
         )
+    }
+
+    @Test
+    fun `a joystick that also carries a keyboard is accepted on its joystick bit`() {
+        assertTrue(isGamepadDeviceFromCapabilities(InputDevice.SOURCE_JOYSTICK or InputDevice.SOURCE_KEYBOARD))
     }
 
     @Test
     fun `pure keyboard with no gamepad-source bits is rejected`() {
-        assertFalse(
-            isGamepadDeviceFromCapabilities(
-                sources = InputDevice.SOURCE_KEYBOARD,
-                keyboardType = InputDevice.KEYBOARD_TYPE_NON_ALPHABETIC,
-            ),
-        )
+        assertFalse(isGamepadDeviceFromCapabilities(InputDevice.SOURCE_KEYBOARD))
     }
 
     @Test
     fun `touchscreen device is rejected`() {
-        assertFalse(
-            isGamepadDeviceFromCapabilities(
-                sources = InputDevice.SOURCE_TOUCHSCREEN,
-                keyboardType = InputDevice.KEYBOARD_TYPE_NONE,
-            ),
-        )
+        assertFalse(isGamepadDeviceFromCapabilities(InputDevice.SOURCE_TOUCHSCREEN))
     }
 
     @Test
     fun `mouse device is rejected`() {
-        assertFalse(
-            isGamepadDeviceFromCapabilities(
-                sources = InputDevice.SOURCE_MOUSE,
-                keyboardType = InputDevice.KEYBOARD_TYPE_NONE,
-            ),
-        )
+        assertFalse(isGamepadDeviceFromCapabilities(InputDevice.SOURCE_MOUSE))
     }
 
     @Test
     fun `dpad-only device without GAMEPAD or JOYSTICK is rejected`() {
-        assertFalse(
-            isGamepadDeviceFromCapabilities(
-                sources = InputDevice.SOURCE_DPAD,
-                keyboardType = InputDevice.KEYBOARD_TYPE_NON_ALPHABETIC,
-            ),
-        )
+        assertFalse(isGamepadDeviceFromCapabilities(InputDevice.SOURCE_DPAD))
     }
 
     @Test
     fun `zero source mask is rejected`() {
-        assertFalse(
-            isGamepadDeviceFromCapabilities(
-                sources = 0,
-                keyboardType = InputDevice.KEYBOARD_TYPE_NONE,
-            ),
-        )
-    }
-
-    @Test
-    fun `alphabetic keyboard with SOURCE_JOYSTICK is still rejected`() {
-        assertFalse(
-            isGamepadDeviceFromCapabilities(
-                sources = InputDevice.SOURCE_JOYSTICK,
-                keyboardType = InputDevice.KEYBOARD_TYPE_ALPHABETIC,
-            ),
-        )
-    }
-
-    @Test
-    fun `KEYBOARD_TYPE_NONE with SOURCE_JOYSTICK is accepted`() {
-        assertTrue(
-            isGamepadDeviceFromCapabilities(
-                sources = InputDevice.SOURCE_JOYSTICK,
-                keyboardType = InputDevice.KEYBOARD_TYPE_NONE,
-            ),
-        )
+        assertFalse(isGamepadDeviceFromCapabilities(0))
     }
 
     @Test
     fun `partial source bits without a full GAMEPAD class are rejected`() {
         val incomplete = InputDevice.SOURCE_GAMEPAD and 0x400.inv()
-        assertFalse(
-            isGamepadDeviceFromCapabilities(
-                sources = incomplete,
-                keyboardType = InputDevice.KEYBOARD_TYPE_NON_ALPHABETIC,
-            ),
-        )
+        assertFalse(isGamepadDeviceFromCapabilities(incomplete))
+    }
+
+    @Test
+    fun `a virtual device is never listed among the ignored devices`() {
+        assertFalse(isListableIgnoredDevice(isVirtual = true, isExternal = true, vendorId = 0x3537, productId = 0x1010))
+    }
+
+    @Test
+    fun `where Android says whether a device is external, that decides the listing`() {
+        assertTrue(isListableIgnoredDevice(isVirtual = false, isExternal = true, vendorId = 0, productId = 0))
+        assertFalse(isListableIgnoredDevice(isVirtual = false, isExternal = false, vendorId = 0x3537, productId = 0x1010))
+    }
+
+    @Test
+    fun `where Android cannot say, a vendor or product id stands in for external`() {
+        assertTrue(isListableIgnoredDevice(isVirtual = false, isExternal = null, vendorId = 0x3537, productId = 0))
+        assertTrue(isListableIgnoredDevice(isVirtual = false, isExternal = null, vendorId = 0, productId = 0x1010))
+        assertFalse(isListableIgnoredDevice(isVirtual = false, isExternal = null, vendorId = 0, productId = 0))
     }
 
     private fun buildRegistry(): PhysicalGamepadRegistry {

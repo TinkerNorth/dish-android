@@ -44,6 +44,10 @@ class DiagnosticsFormattingTest {
             every { getString(R.string.diagnostics_ms_approx_window, *anyVararg()) } answers {
                 "~${formatArg(0)} ms over ${formatArg(1)}"
             }
+            every { getString(R.string.diagnostics_hardware_id_value, *anyVararg()) } answers {
+                "%04x:%04x".format(formatArg(0), formatArg(1))
+            }
+            every { getString(R.string.diagnostics_source_mask_value, *anyVararg()) } answers { "0x%08x".format(formatArg(0)) }
         }
 
     private fun MockKAnswerScope<*, *>.formatArg(index: Int): Any? = secondArg<Array<Any?>>()[index]
@@ -80,6 +84,61 @@ class DiagnosticsFormattingTest {
             serverVersion = null,
             slots = emptyList(),
         )
+
+    private fun ignored(
+        inputs: List<InputSourceKind>,
+        keyboard: KeyboardKind,
+    ) = IgnoredInputDiag(
+        id = 20,
+        name = "Keyboard",
+        vendorId = 0x046D,
+        productId = 0xB34B,
+        sources = 0x101,
+        inputs = inputs,
+        keyboard = keyboard,
+    )
+
+    @Test
+    fun `an ignored device reads its status, inputs, keyboard, hardware id and source bits`() {
+        val lines = context.ignoredInputCardLines(ignored(listOf(InputSourceKind.KEYBOARD, InputSourceKind.MOUSE), KeyboardKind.FULL))
+        assertEquals(
+            listOf(
+                "s${R.string.diagnostics_state}=s${R.string.diagnostics_state_ignored}",
+                "s${R.string.diagnostics_inputs}=s${R.string.diagnostics_input_keyboard} · s${R.string.diagnostics_input_mouse}",
+                "s${R.string.diagnostics_keyboard_type}=s${R.string.diagnostics_keyboard_full}",
+                "s${R.string.diagnostics_hardware_id}=046d:b34b",
+                "s${R.string.diagnostics_source_mask}=0x00000101",
+            ),
+            lines,
+        )
+    }
+
+    @Test
+    fun `an ignored device without a keyboard has no keyboard line, and no known inputs read none`() {
+        val lines = context.ignoredInputCardLines(ignored(emptyList(), KeyboardKind.NONE))
+        assertEquals(
+            listOf(
+                "s${R.string.diagnostics_state}=s${R.string.diagnostics_state_ignored}",
+                "s${R.string.diagnostics_inputs}=s${R.string.diagnostics_none}",
+                "s${R.string.diagnostics_hardware_id}=046d:b34b",
+                "s${R.string.diagnostics_source_mask}=0x00000101",
+            ),
+            lines,
+        )
+    }
+
+    @Test
+    fun `a buttons-only keyboard is named as such`() {
+        val lines = context.ignoredInputCardLines(ignored(listOf(InputSourceKind.KEYBOARD), KeyboardKind.BUTTONS_ONLY))
+        assertTrue(lines.contains("s${R.string.diagnostics_keyboard_type}=s${R.string.diagnostics_keyboard_buttons}"))
+    }
+
+    @Test
+    fun `every input kind has a label of its own`() {
+        val labels = InputSourceKind.entries.map { context.inputKindList(listOf(it)) }
+        assertEquals(InputSourceKind.entries.size, labels.toSet().size)
+        assertTrue(labels.none { it == "s${R.string.diagnostics_none}" })
+    }
 
     @Test
     fun `a virtual pad has no transport, poll or state line`() {

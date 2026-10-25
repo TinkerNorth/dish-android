@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.ui.diagnostics
 
+import android.view.InputDevice
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
@@ -34,6 +35,32 @@ import com.tinkernorth.dish.source.usb.UsbEndpointFacts
 import com.tinkernorth.dish.ui.main.BatteryUi
 
 enum class ControllerDiagState { CONNECTED, DISCONNECTING, TRANSITIONING, NEEDS_REPLUG }
+
+enum class InputSourceKind(
+    val mask: Int,
+) {
+    KEYBOARD(InputDevice.SOURCE_KEYBOARD),
+    DPAD(InputDevice.SOURCE_DPAD),
+    GAMEPAD(InputDevice.SOURCE_GAMEPAD),
+    JOYSTICK(InputDevice.SOURCE_JOYSTICK),
+    MOUSE(InputDevice.SOURCE_MOUSE),
+    TOUCHPAD(InputDevice.SOURCE_TOUCHPAD),
+    TOUCHSCREEN(InputDevice.SOURCE_TOUCHSCREEN),
+    STYLUS(InputDevice.SOURCE_STYLUS),
+    TRACKBALL(InputDevice.SOURCE_TRACKBALL),
+}
+
+enum class KeyboardKind { NONE, BUTTONS_ONLY, FULL }
+
+data class IgnoredInputDiag(
+    val id: Int,
+    val name: String,
+    val vendorId: Int,
+    val productId: Int,
+    val sources: Int,
+    val inputs: List<InputSourceKind>,
+    val keyboard: KeyboardKind,
+)
 
 data class SatelliteTelemetry(
     val vigemAvailable: Boolean,
@@ -272,6 +299,7 @@ internal data class DiagnosticsWorld(
     val links: LinkWorld = LinkWorld(),
     val audio: AudioWorld = AudioWorld(),
     val nowMs: Long = 0L,
+    val ignoredInputs: List<PhysicalGamepadRegistry.IgnoredInputDevice> = emptyList(),
 ) {
     val summariesById: Map<String, ConnectionSummary> get() = summaries.associateBy { it.id }
 }

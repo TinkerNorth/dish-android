@@ -1,0 +1,4 @@
+Dish 2.4.1: mandos con teclado integrado y una pantalla de Diagnóstico más completa.
+
+• Los mandos que Android también lee como teclado ahora aparecen en Dish y llegan al PC.
+• Diagnóstico lista los dispositivos de entrada que Dish no trata como mandos, con lo que Android informa de cada uno: entradas, tipo de teclado, ID de hardware.

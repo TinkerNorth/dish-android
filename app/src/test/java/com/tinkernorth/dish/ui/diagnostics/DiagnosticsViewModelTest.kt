@@ -2,10 +2,12 @@
 
 package com.tinkernorth.dish.ui.diagnostics
 
+import android.view.InputDevice
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.store.LatencyProfilingStore
 import com.tinkernorth.dish.source.system.WifiLinkSource
 import io.mockk.every
@@ -158,6 +160,40 @@ class DiagnosticsViewModelTest {
             val measuring = vm.latencyPanel.value
             assertTrue(measuring.ui is DiagnosticsViewModel.LatencyUi.Stats)
             assertEquals(satelliteRows(), measuring.rows)
+            job.cancel()
+        }
+
+    @Test
+    fun `the overview lists the input devices the registry ignored`() =
+        runTest(dispatcher.scheduler) {
+            val keyboard =
+                PhysicalGamepadRegistry.IgnoredInputDevice(
+                    id = 20,
+                    name = "Keyboard",
+                    vendorId = 0x046D,
+                    productId = 0xB34B,
+                    sources = InputDevice.SOURCE_KEYBOARD,
+                    keyboardType = InputDevice.KEYBOARD_TYPE_ALPHABETIC,
+                )
+            every { sources.world } returns flowOf(worldWithOneSatellite().copy(ignoredInputs = listOf(keyboard)))
+            val vm = viewModel()
+            val job = launch { vm.overview.collect {} }
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(
+                listOf(
+                    IgnoredInputDiag(
+                        id = 20,
+                        name = "Keyboard",
+                        vendorId = 0x046D,
+                        productId = 0xB34B,
+                        sources = InputDevice.SOURCE_KEYBOARD,
+                        inputs = listOf(InputSourceKind.KEYBOARD),
+                        keyboard = KeyboardKind.FULL,
+                    ),
+                ),
+                vm.overview.value.ignoredInputs,
+            )
             job.cancel()
         }
 

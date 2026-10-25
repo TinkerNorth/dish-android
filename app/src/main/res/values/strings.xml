@@ -609,6 +609,25 @@
     <string name="diagnostics_host_version">Host version</string>
     <string name="diagnostics_host_features">Host features</string>
     <string name="diagnostics_none">none</string>
+    <string name="diagnostics_ignored_inputs_header">Other input devices. Dish does not treat these as controllers.</string>
+    <string name="diagnostics_state_ignored">Not a controller: no gamepad or joystick input</string>
+    <string name="diagnostics_inputs">Inputs</string>
+    <string name="diagnostics_input_keyboard">keyboard</string>
+    <string name="diagnostics_input_dpad">d-pad</string>
+    <string name="diagnostics_input_gamepad">gamepad</string>
+    <string name="diagnostics_input_joystick">joystick</string>
+    <string name="diagnostics_input_mouse">mouse</string>
+    <string name="diagnostics_input_touchpad">touchpad</string>
+    <string name="diagnostics_input_touchscreen">touchscreen</string>
+    <string name="diagnostics_input_stylus">stylus</string>
+    <string name="diagnostics_input_trackball">trackball</string>
+    <string name="diagnostics_keyboard_type">Keyboard</string>
+    <string name="diagnostics_keyboard_full">Full keyboard</string>
+    <string name="diagnostics_keyboard_buttons">Buttons only</string>
+    <string name="diagnostics_hardware_id">Hardware ID</string>
+    <string name="diagnostics_hardware_id_value" translatable="false">%1$04x:%2$04x</string>
+    <string name="diagnostics_source_mask">Source bits</string>
+    <string name="diagnostics_source_mask_value" translatable="false">0x%1$08x</string>
     <string name="diagnostics_section_radios">RADIOS</string>
     <string name="diagnostics_radio_usb" translatable="false">USB</string>
     <string name="diagnostics_signal">Signal</string>
