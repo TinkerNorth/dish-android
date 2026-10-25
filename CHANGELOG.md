@@ -7,10 +7,22 @@ computer. Those lines say "update Satellite too".
 
 ---
 
-## [Unreleased]
+## [2.4.0] - 2026-10-25
+
+The Nintendo 64 controller for Switch Online, Dish on the 32-bit Fire tablets
+with a build for the Amazon Appstore, and fixes for Moonlight hosts, controller
+settings and audio.
 
 ### Added
 
+- **The Nintendo 64 controller for Switch Online works with Dish.** Over a
+  USB-C cable, direct mode wakes it the way it wakes the Switch Pro
+  Controller, with rumble, battery and player lights. Over Bluetooth, the
+  buttons land in the right places on phones with and without Nintendo's
+  kernel driver. On the computer, A and B stay A and B, Z and ZR are the
+  triggers, L and R the shoulders, Start is Start, Home is the guide button,
+  Capture is Back, and the four C buttons move the right stick, which is
+  where N64 emulators look for them.
 - **The native library now ships for 32-bit ARM**, so Dish installs on
   devices with no 64-bit side at all, such as the Amazon Fire HD 8 (2018 and
   2020), Fire 7 (2019) and Fire HD 10 (2019). Before, Google Play did not
@@ -38,21 +50,28 @@ computer. Those lines say "update Satellite too".
   ends a session with the termination type Wolf's control protocol names while
   still reading the older one, and sends the keepalive in the form captured
   from a real client.
-
-## [2.4.0] - 2026-10-18
-
-The Nintendo 64 controller for Switch Online, over USB-C and Bluetooth.
-
-### Added
-
-- **The Nintendo 64 controller for Switch Online works with Dish.** Over a
-  USB-C cable, direct mode wakes it the way it wakes the Switch Pro
-  Controller, with rumble, battery and player lights. Over Bluetooth, the
-  buttons land in the right places on phones with and without Nintendo's
-  kernel driver. On the computer, A and B stay A and B, Z and ZR are the
-  triggers, L and R the shoulders, Start is Start, Home is the guide button,
-  Capture is Back, and the four C buttons move the right stick, which is
-  where N64 emulators look for them.
+- **DualSense HD haptics play again.** The host's word that it carries the
+  haptics lane was dropped on the way into the app and reset by every catalog
+  read, so the lane was never opened and the host, told the pad plays haptics,
+  never sent rumble in its place either. The lane now rides the same merge as
+  the mic and the speaker and survives a catalog write.
+- **The mic-mute bit stays off the Moonlight wire.** A DualSense claimed in
+  Direct mode sets bit 0x0800 on every muted frame; a Moonlight host has no
+  button there. The frame mask and the advertised buttons now leave it out.
+- **The onboarding help says crash reports are on by default and can be turned
+  off**, which is what the switch does; it said "opt-in".
+- **A controller setting changed while the previous change was still on its
+  way reaches the satellite as your final choice.** Dish sends a satellite its
+  session and controller changes one at a time, re-reads what you chose once
+  each answer lands, and records what the satellite acknowledged rather than
+  what the app wanted at the time, so a toggle flipped and flipped back no
+  longer leaves the satellite on the first choice while the app shows the
+  second. Reconnecting right after a disconnect also waits for the old session
+  to close first, since a satellite keeps its connection id across sessions.
+- **Controller audio stays off once you leave the app.** Audio that finished
+  setting up after Dish had stopped could start a microphone capture or open a
+  speaker output anyway; a stopped engine now ignores it, and a microphone that
+  restarts waits for its previous capture to end, so no stale samples are sent.
 
 ## [2.3.2] - 2026-10-13
 
@@ -69,19 +88,6 @@ controller changes.
   app.** Dish asked Android about the controller on the thread that draws the
   screen, and on one phone the answer took long enough to trigger "Dish isn't
   responding". Those lookups now run on their own thread.
-
-## [Unreleased]
-
-- **DualSense HD haptics play again.** The host's word that it carries the
-  haptics lane was dropped on the way into the app and reset by every catalog
-  read, so the lane was never opened and the host, told the pad plays haptics,
-  never sent rumble in its place either. The lane now rides the same merge as
-  the mic and the speaker and survives a catalog write.
-- **The mic-mute bit stays off the Moonlight wire.** A DualSense claimed in
-  Direct mode sets bit 0x0800 on every muted frame; a Moonlight host has no
-  button there. The frame mask and the advertised buttons now leave it out.
-- **The onboarding help says crash reports are on by default and can be turned
-  off**, which is what the switch does; it said "opt-in".
 
 ## [2.3.1] - 2026-10-12
 
