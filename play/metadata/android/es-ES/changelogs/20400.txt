@@ -1,5 +1,6 @@
-Dish 2.4.0: el mando de Nintendo 64 para Switch Online.
+Dish 2.4.0: mando de N64 para Switch Online y tablets Fire de 32 bits.
 
-• Conéctalo al móvil y el modo Directo lo despierta, con vibración, batería y luces de jugador.
-• Por Bluetooth, cada botón cae donde debe, con o sin el driver de kernel de Nintendo en el móvil.
-• En el ordenador, A y B siguen siendo A y B, Z y ZR son los gatillos y los botones C mueven el stick derecho, donde los emuladores de N64 los esperan.
+• Mando de Nintendo 64 por USB-C y Bluetooth, en modo Directo con vibración, batería y luces de jugador.
+• Se instala en Android de 32 bits, como Fire HD 8 (2018, 2020), Fire 7 (2019) y Fire HD 10 (2019).
+• Android 11 o anterior: añadir un PC Bluetooth muestra los emparejados y abre los ajustes de Bluetooth.
+• Hosts Moonlight: la háptica HD del DualSense vuelve a sonar; vibración y movimiento ya no se pierden.

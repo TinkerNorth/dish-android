@@ -1,5 +1,6 @@
-Dish 2.4.0: the Nintendo 64 controller for Switch Online.
+Dish 2.4.0: the N64 controller for Switch Online, and 32-bit Fire tablets.
 
-• Plug it into your phone and Direct mode wakes it, with rumble, battery and player lights.
-• Over Bluetooth, every button lands where it should, with or without Nintendo's kernel driver on the phone.
-• On the computer, A and B stay A and B, Z and ZR are the triggers, and the C buttons move the right stick, where N64 emulators look for them.
+• Nintendo 64 controller over USB-C and Bluetooth, with rumble, battery and player lights in Direct mode.
+• Installs on 32-bit Android devices such as the Fire HD 8 (2018, 2020), Fire 7 (2019) and Fire HD 10 (2019).
+• Android 11 and older: adding a Bluetooth PC lists paired devices and opens Bluetooth settings.
+• Moonlight hosts: DualSense HD haptics play again; rumble and motion requests are no longer lost.

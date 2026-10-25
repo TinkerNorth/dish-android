@@ -66,6 +66,7 @@ class SatelliteConnection(
         val connectionId: String,
         val epoch: Int,
         val applied: List<ControllerApplyDto>,
+        val descriptors: List<ControllerDescriptor> = emptyList(),
         val mouseControlGranted: Boolean = false,
     )
 
@@ -184,7 +185,7 @@ class SatelliteConnection(
         live.set(LiveHandle(handle, grant.connectionId))
         lastAppliedEpoch = grant.epoch
         this.mouseControlGranted = grant.mouseControlGranted
-        applyResults(grant.applied, callbacks.onApplyFailures)
+        applyResults(grant.applied, grant.descriptors, callbacks.onApplyFailures)
         _state.value = SatelliteSessionState.Live
         // Drain the downstream socket (acks, rumble, close-notify); receiveAck
         // blocks ≤500 ms. Negative status = socket gone and every further call
@@ -453,13 +454,16 @@ class SatelliteConnection(
      */
     internal fun applyResults(
         results: List<ControllerApplyDto>,
+        sent: List<ControllerDescriptor>,
         onApplyFailures: (failures: List<ControllerApplyDto>) -> Unit = {},
     ) {
         if (results.isEmpty()) return
         val byIdx = results.associateBy { it.ctrlIdx }
+        val sentByIdx = sent.associateBy { it.ctrlIdx }
         _slots.update { map ->
             map.mapValues { (slotId, binding) ->
                 val result = byIdx[binding.controllerIndex] ?: return@mapValues binding
+                val descriptor = sentByIdx[binding.controllerIndex] ?: return@mapValues binding
                 if (result.slotIsLive) {
                     // A failed replug keeps the PREVIOUS pad alive (appliedType
                     // reports it). Streams keep flowing rather than killing a
@@ -474,8 +478,8 @@ class SatelliteConnection(
                     )
                     binding.copy(
                         registered = true,
-                        lastAdvertisedCaps = wireCapsFor(slotId),
-                        lastAdvertisedTouchpadMode = touchpadModeFor(slotId),
+                        lastAdvertisedCaps = if (result.ok) descriptor.caps else binding.lastAdvertisedCaps,
+                        lastAdvertisedTouchpadMode = if (result.ok) descriptor.touchpadMode else binding.lastAdvertisedTouchpadMode,
                         lastApplyResult = result.result,
                     )
                 } else {
