@@ -59,6 +59,9 @@ jobs:
       - name: Play metadata lint (lengths, counts, dimensions)
         run: python scripts/check_play_metadata.py
 
+      - name: Release script tests
+        run: python -m unittest discover -s scripts -p '*_test.py' -t scripts
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
