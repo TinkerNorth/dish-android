@@ -1,0 +1,4 @@
+Dish 2.4.1 : manettes avec clavier intégré et un écran Diagnostic plus complet.
+
+• Les manettes qu'Android lit aussi comme un clavier apparaissent désormais dans Dish et atteignent le PC.
+• Diagnostic liste les périphériques d'entrée que Dish ne traite pas comme des manettes, avec ce qu'Android rapporte pour chacun : entrées, type de clavier, ID matériel.

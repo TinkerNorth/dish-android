@@ -7,6 +7,26 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [2.4.1] - 2026-10-25
+
+Controllers that Android also reads as a keyboard, and a Diagnostics list of
+the input devices Dish leaves alone.
+
+### Fixed
+
+- **A controller that Android also reads as a full keyboard now shows up in
+  Dish.** Some pads carry a keyboard alongside their buttons and sticks, and
+  Android can then call the whole device an alphabetic keyboard. Dish used to
+  leave every such device alone, so the pad never appeared and never reached
+  the computer. It now goes by the gamepad and joystick inputs alone.
+
+### Added
+
+- **Diagnostics lists the input devices Dish does not treat as controllers**,
+  under the controllers, with what Android reports for each one: its inputs,
+  keyboard type, hardware ID and raw source bits. A pad in a mode Dish
+  cannot read shows up there with the reason instead of nowhere.
+
 ## [2.4.0] - 2026-10-25
 
 The Nintendo 64 controller for Switch Online, Dish on the 32-bit Fire tablets

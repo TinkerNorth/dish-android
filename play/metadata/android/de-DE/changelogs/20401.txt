@@ -1,0 +1,4 @@
+Dish 2.4.1: Controller mit eingebauter Tastatur und eine umfassendere Diagnose.
+
+• Controller, die Android zugleich als Tastatur erkennt, erscheinen jetzt in Dish und erreichen den PC.
+• Die Diagnose listet die Eingabegeräte, die Dish nicht als Controller behandelt, mit dem, was Android über sie meldet: Eingaben, Tastaturtyp, Hardware-ID.

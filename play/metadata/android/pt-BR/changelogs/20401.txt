@@ -1,0 +1,4 @@
+Dish 2.4.1: controles com teclado embutido e uma tela de Diagnóstico mais completa.
+
+• Controles que o Android também lê como teclado agora aparecem no Dish e chegam ao PC.
+• O Diagnóstico lista os dispositivos de entrada que o Dish não trata como controles, com o que o Android informa sobre cada um: entradas, tipo de teclado, ID de hardware.
