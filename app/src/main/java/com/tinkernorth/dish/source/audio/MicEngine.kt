@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -37,7 +38,7 @@ enum class MicCaptureState {
 interface MicCaptureLoop {
     fun start(body: () -> Unit)
 
-    /** Wait (briefly) for a previously started body to return. No-op when none is running. */
+    /** Wait for a previously started body to return. Never called from lifecycle stop. */
     fun join()
 }
 
@@ -62,19 +63,13 @@ internal class ThreadMicCaptureLoop(
     }
 
     override fun join() {
-        thread?.join(JOIN_TIMEOUT_MS)
+        thread?.join()
         thread = null
     }
 
     private fun runAtAudioPriority(body: () -> Unit) {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
         body()
-    }
-
-    private companion object {
-        // Generous next to one blocking 20 ms read; it exists so a wedged recorder cannot pin
-        // whichever thread is starting the next capture.
-        const val JOIN_TIMEOUT_MS = 500L
     }
 }
 
@@ -117,7 +112,7 @@ class MicEngine
         private val loops: MicCaptureLoopFactory,
         private val routing: SlotAudioRoutes,
         scope: CoroutineScope,
-    ) : AbstractController<MicCapturePlan>(scope) {
+    ) : AbstractController<AudioPlanEmission<MicCapturePlan>>(scope) {
         @Inject
         constructor(
             plans: MicCaptureComposer,
@@ -136,6 +131,12 @@ class MicEngine
 
         private val _state = MutableStateFlow(MicCaptureState.Idle)
         val state: StateFlow<MicCaptureState> = _state.asStateFlow()
+
+        // Preparation may wait for hardware; stop takes only lifecycleLock, never applyLock.
+        private val lifecycleLock = Any()
+        private val applyLock = Any()
+        private var generation = 0L
+        private var stopped = false
 
         /**
          * The eligible targets, grouped by the endpoint their windows come from. Read by every
@@ -168,33 +169,66 @@ class MicEngine
          */
         val quiescent: Boolean get() = recorders.values.none { it.executing }
 
-        override fun upstream(): Flow<MicCapturePlan> =
+        override fun upstream(): Flow<AudioPlanEmission<MicCapturePlan>> {
+            val collectingGeneration = synchronized(lifecycleLock) { generation }
             // Deliberately no distinctUntilChanged: an unchanged plan over a changed route table is
             // a real change of which recorder a slot belongs to, and [apply] is a reconcile that
             // costs nothing when nothing moved.
-            combine(plans.state, routing.changes) { plan, _ -> plan }
+            return combine(plans.state, routing.changes) { plan, _ -> plan }
+                .map { AudioPlanEmission(collectingGeneration, it) }
+        }
+
+        override fun onStarting() {
+            synchronized(lifecycleLock) {
+                generation++
+                stopped = false
+            }
+        }
 
         // Public because it IS the engine: the eligibility decision arrives here and nothing else
         // starts or stops a microphone.
-        public override fun apply(value: MicCapturePlan) {
+        fun apply(value: MicCapturePlan) {
+            val currentGeneration = synchronized(lifecycleLock) { generation }
+            apply(AudioPlanEmission(currentGeneration, value))
+        }
+
+        override fun apply(value: AudioPlanEmission<MicCapturePlan>) {
+            synchronized(applyLock) {
+                if (!isCurrent(value.generation)) return
+                applyPlan(value)
+            }
+        }
+
+        private fun applyPlan(value: AudioPlanEmission<MicCapturePlan>) {
             // Order matters both ways round, and one assignment gets both. Widening before starting
             // means the first window already has somewhere to go; narrowing before stopping means a
             // window recorded a moment ago is dropped rather than sent to a slot that just muted.
             val byRoute =
-                value.delivering
+                value.plan.delivering
                     .groupBy { routing.forSlot(it.slotId).captureDeviceId }
                     .mapValues { (_, targets) -> targets.toSet() }
-            delivering = byRoute
-            reconcile(byRoute.keys)
+            synchronized(lifecycleLock) {
+                if (!isCurrent(value.generation)) return
+                delivering = byRoute
+                reconcile(byRoute.keys)
+            }
+            for (route in byRoute.keys) recorders[route]?.ensureStarted(value.generation)
+            synchronized(lifecycleLock) { refreshState() }
         }
 
         override fun onStop(owner: LifecycleOwner) {
-            super.onStop(owner)
-            // Inputs keep moving while the actuator is stopped (AbstractController's contract), so
-            // the microphone must not: a stopped engine is a stopped recorder.
-            delivering = emptyMap()
-            reconcile(emptySet())
+            synchronized(lifecycleLock) {
+                generation++
+                stopped = true
+                delivering = emptyMap()
+                reconcile(emptySet())
+                refreshState()
+            }
+            cancelCollection()
         }
+
+        private fun isCurrent(expectedGeneration: Long): Boolean =
+            synchronized(lifecycleLock) { !stopped && generation == expectedGeneration }
 
         /** Capture on exactly the wanted routes, starting and stopping only what moved. */
         private fun reconcile(wanted: Set<Int>) {
@@ -205,8 +239,6 @@ class MicEngine
             if (missing.isNotEmpty()) {
                 recorders = current + missing.associateWith { Recorder(it) }
             }
-            for (route in wanted) recorders[route]?.ensureStarted()
-            refreshState()
         }
 
         /**
@@ -239,8 +271,7 @@ class MicEngine
             // capture thread and read by the collector, hence volatile.
             @Volatile private var broken = false
 
-            // Whether a capture is meant to exist. Collector-thread only, deliberately: the capture
-            // thread never clears it, so a failed loop cannot race a start into opening two recorders.
+            // Guarded by lifecycleLock. A failed body leaves its arming intact until stop.
             private var started = false
 
             // Whether a body is executing right now, as opposed to being told to keep going. Set
@@ -259,8 +290,10 @@ class MicEngine
              * Start, unless one is already meant to exist. A refusal leaves [started] set, which is
              * what stops a re-applied plan from hammering a device that already said no.
              */
-            fun ensureStarted() {
-                if (started) return
+            fun ensureStarted(expectedGeneration: Long) {
+                synchronized(lifecycleLock) {
+                    if (!isCurrent(expectedGeneration) || started) return
+                }
                 // A previous capture may still be unwinding its last blocking read. Wait for it
                 // HERE, not in stop: stopping happens on the main thread at background time, and one
                 // recorder at a time is a property of the start, not of the stop.
@@ -269,11 +302,14 @@ class MicEngine
                 // microphone is usually another app's, and that app may well have finished. Cleared
                 // here rather than in stop because the join above means the body that recorded it
                 // has returned, so this cannot race the thread that sets it.
-                broken = false
-                started = true
-                running = true
-                bodyRunning = true
-                loop.start(::captureLoop)
+                synchronized(lifecycleLock) {
+                    if (!isCurrent(expectedGeneration)) return
+                    broken = false
+                    started = true
+                    running = true
+                    bodyRunning = true
+                    loop.start(::captureLoop)
+                }
             }
 
             fun stop() {
@@ -292,6 +328,7 @@ class MicEngine
             }
 
             private fun runCapture() {
+                if (!running) return
                 val session = source.open(FRAME_SAMPLES, preferredDeviceId)
                 if (session == null) {
                     Log.w(TAG, "no microphone at endpoint $preferredDeviceId, capture stays off until a slot re-arms it")
@@ -331,9 +368,11 @@ class MicEngine
             }
 
             private fun markBroken() {
-                running = false
-                broken = true
-                refreshState()
+                synchronized(lifecycleLock) {
+                    running = false
+                    broken = true
+                    refreshState()
+                }
             }
         }
 

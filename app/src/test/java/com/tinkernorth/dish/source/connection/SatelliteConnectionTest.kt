@@ -132,6 +132,7 @@ class SatelliteConnectionTest {
                     connectionId = "conn_abc",
                     epoch = epoch,
                     applied = applied,
+                    descriptors = target.desiredDescriptors(),
                     mouseControlGranted = mouseControlGranted,
                 ),
                 callbacks,
@@ -329,6 +330,22 @@ class SatelliteConnectionTest {
     }
 
     @Test
+    fun `an apply acknowledgement records the descriptor sent before settings changed`() {
+        var caps = BASE_CAPS
+        val target = newConnection(wireCapsFor = { caps })
+        target.attachSlot("slot-1", controllerType = 1)
+        val sent = target.desiredDescriptors()
+        caps = BASE_CAPS or ControllerDescriptor.CAP_MOTION
+        touchpadModes["slot-1"] = ControllerDescriptor.TOUCHPAD_MODE_DS4
+
+        target.applyResults(listOf(okApply(0, appliedType = 1)), sent)
+
+        val binding = target.slots.value.getValue("slot-1")
+        assertEquals(BASE_CAPS, binding.lastAdvertisedCaps)
+        assertEquals(ControllerDescriptor.TOUCHPAD_MODE_OFF, binding.lastAdvertisedTouchpadMode)
+    }
+
+    @Test
     fun `refreshCapsIfChanged reacts to an audio cap moving, not just motion`() {
         every { repo.isConnectionAlive(any()) } returns true
         var caps = BASE_CAPS or ControllerDescriptor.CAP_SPEAKER
@@ -440,7 +457,7 @@ class SatelliteConnectionTest {
         val withStore = newConnection(store = store)
         withStore.attachSlot("slot-1", controllerType = 1)
 
-        withStore.applyResults(listOf(okApply(0, appliedType = 1, sinkSupported = true, backendOk = true)))
+        withStore.applyResults(listOf(okApply(0, appliedType = 1, sinkSupported = true, backendOk = true)), withStore.desiredDescriptors())
 
         assertEquals(true, withStore.slots.value["slot-1"]?.registered)
         val status = store.statusFor(withStore.id, "slot-1")
@@ -453,7 +470,7 @@ class SatelliteConnectionTest {
         conn.attachSlot("slot-1", controllerType = 0)
         var surfaced: List<ControllerApplyDto>? = null
 
-        conn.applyResults(listOf(failedApply(0, result = "noSlots")), onApplyFailures = { surfaced = it })
+        conn.applyResults(listOf(failedApply(0, result = "noSlots")), conn.desiredDescriptors(), onApplyFailures = { surfaced = it })
 
         assertEquals(false, conn.slots.value["slot-1"]?.registered)
         assertEquals("noSlots", surfaced?.single()?.result)
@@ -474,11 +491,31 @@ class SatelliteConnectionTest {
                     motion = SessionMotionDto(sinkSupportedForType = false, backendOk = true),
                 ),
             ),
+            sent = conn.desiredDescriptors(),
             onApplyFailures = { surfaced = it },
         )
 
         assertEquals(true, conn.slots.value["slot-1"]?.registered)
         assertEquals(ControllerApplyDto.APPLY_REPLUG_FAILED, surfaced?.single()?.result)
+    }
+
+    @Test
+    fun `a failed replug keeps the previous acknowledged caps and touchpad mode`() {
+        var caps = BASE_CAPS
+        val target = newConnection(wireCapsFor = { caps })
+        target.attachSlot("slot-1", controllerType = 0)
+        target.applyResults(listOf(okApply(0)), target.desiredDescriptors())
+        caps = BASE_CAPS or ControllerDescriptor.CAP_MOTION
+        touchpadModes["slot-1"] = ControllerDescriptor.TOUCHPAD_MODE_DS4
+        target.setControllerType("slot-1", 1)
+        val failed = ControllerApplyDto(0, ControllerApplyDto.APPLY_REPLUG_FAILED, appliedType = 0)
+
+        target.applyResults(listOf(failed), target.desiredDescriptors())
+
+        val binding = target.slots.value.getValue("slot-1")
+        assertTrue(binding.registered)
+        assertEquals(BASE_CAPS, binding.lastAdvertisedCaps)
+        assertEquals(ControllerDescriptor.TOUCHPAD_MODE_OFF, binding.lastAdvertisedTouchpadMode)
     }
 
     @Test
@@ -490,7 +527,7 @@ class SatelliteConnectionTest {
         conn.sendReport("slot-1", buttons = 1, lt = 0, rt = 0, lx = 0, ly = 0, rx = 0, ry = 0)
         verify(exactly = 0) { repo.sendReport(any(), any(), any(), any(), any(), any(), any(), any(), any()) }
 
-        conn.applyResults(listOf(okApply(0)))
+        conn.applyResults(listOf(okApply(0)), conn.desiredDescriptors())
         conn.sendReport("slot-1", buttons = 0x42, lt = 10, rt = 20, lx = 30, ly = -40, rx = 50, ry = -60)
         verify { repo.sendReport(7, 0, 0x42, 10, 20, 30, -40, 50, -60) }
     }
@@ -535,7 +572,7 @@ class SatelliteConnectionTest {
         assertFalse("an unapplied descriptor is a pad the host does not know", conn.sendMicFrame("slot-1", window))
         verify(exactly = 0) { repo.sendMicFrame(any(), any(), any()) }
 
-        conn.applyResults(listOf(okApply(0)))
+        conn.applyResults(listOf(okApply(0)), conn.desiredDescriptors())
         assertTrue(conn.sendMicFrame("slot-1", window))
         verify(exactly = 1) { repo.sendMicFrame(7, 0, window) }
     }

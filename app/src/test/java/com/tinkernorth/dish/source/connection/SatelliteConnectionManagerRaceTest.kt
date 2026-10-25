@@ -376,19 +376,24 @@ class SatelliteConnectionManagerRaceTest : SatelliteConnectionManagerFixture() {
         }
 
     @Test
-    fun `a connect that a disconnect meets as it starts linking never goes live`() =
-        runMgrTest { mgr, events ->
-            stubLiveSession()
-            disconnectOnceLinking(mgr)
+    fun `a connect that a disconnect meets as it starts linking never goes live`() = runMgrTest(block = ::disconnectWhileStartingLink)
 
-            mgr.connect(server, ConnectIntent.USER_INITIATED)
-            scope.testScheduler.runCurrent()
+    private fun disconnectWhileStartingLink(
+        mgr: SatelliteConnectionManager,
+        events: MutableList<ConnectionEvent>,
+    ) {
+        stubLiveSession()
+        disconnectOnceLinking(mgr)
 
-            assertEquals(SatelliteSessionState.Idle, stateOf(mgr))
-            coVerify(exactly = 1) { discoveryRepo.disconnect("10.0.0.5", 9877, "conn_1", "test-device-id", any()) }
-            verify(exactly = 0) { controllerRepo.openSocket(any(), any()) }
-            assertNoBanner(events)
-        }
+        mgr.connect(server, ConnectIntent.USER_INITIATED)
+        scope.testScheduler.runCurrent()
+
+        assertEquals(SatelliteSessionState.Idle, stateOf(mgr))
+        coVerify(exactly = 0) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { discoveryRepo.disconnect(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { controllerRepo.openSocket(any(), any()) }
+        assertNoBanner(events)
+    }
 
     @Test
     fun `a PIN pair that a disconnect meets as it starts linking opens no session`() =
@@ -575,36 +580,38 @@ class SatelliteConnectionManagerRaceTest : SatelliteConnectionManagerFixture() {
             coVerify(exactly = 0) { discoveryRepo.disconnect(any(), any(), "conn_2", any(), any()) }
         }
 
-    // A PIN submitted while a connect is still linking runs a second handshake under the same
-    // generation; whichever answers second finds the connection live already.
+    // Session PUT rotates credentials in place: two same-generation handshakes must not both
+    // PUT and let the later one's cleanup delete the live connection they share.
     @Test
-    fun `a handshake that loses the race to go live hands its own session back`() =
-        runMgrTest { mgr, _ ->
-            stubStoredKey()
-            val olderProtocol = grantFor("conn_2").replace(""""protocolVersion":2""", """"protocolVersion":1""")
-            val (connectPut, pinPut) = gatedSessionPuts(sessionGrantBody(), olderProtocol)
-            every { controllerRepo.openSocket(any(), any()) } returnsMany listOf(FIRST_SOCKET, SECOND_SOCKET)
-            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), any()) } returns ok(PAIRED)
-            mgr.connect(server, ConnectIntent.USER_INITIATED)
-            scope.testScheduler.runCurrent()
-            mgr.pairWithPin(server, PIN)
-            scope.testScheduler.runCurrent()
+    fun `a queued handshake does not rotate or delete the session that already went live`() =
+        runMgrTest { mgr, _ -> skipHandshakeAfterConnectionWentLive(mgr) }
 
-            connectPut.complete(Unit)
-            scope.testScheduler.runCurrent()
-            pinPut.complete(Unit)
-            scope.testScheduler.runCurrent()
+    private fun skipHandshakeAfterConnectionWentLive(mgr: SatelliteConnectionManager) {
+        stubStoredKey()
+        val olderProtocol = sessionGrantBody().replace(""""protocolVersion":2""", """"protocolVersion":1""")
+        val (connectPut, pinPut) = gatedSessionPuts(sessionGrantBody(), olderProtocol)
+        every { controllerRepo.openSocket(any(), any()) } returnsMany listOf(FIRST_SOCKET, SECOND_SOCKET)
+        coEvery { discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), any()) } returns ok(PAIRED)
+        mgr.connect(server, ConnectIntent.USER_INITIATED)
+        scope.testScheduler.runCurrent()
+        mgr.pairWithPin(server, PIN)
+        scope.testScheduler.runCurrent()
 
-            val conn = mgr.get(serverId)!!
-            assertEquals(SatelliteSessionState.Live, conn.state.value)
-            assertEquals("conn_1", conn.connectionId)
-            assertEquals(FIRST_SOCKET, conn.handle)
-            assertEquals(2, conn.protocolVersion)
-            assertEquals(2, conn.sessionFacts.value?.protocolVersion)
-            verify(exactly = 1) { controllerRepo.closeSocket(SECOND_SOCKET) }
-            coVerify(exactly = 1) { discoveryRepo.disconnect(any(), any(), "conn_2", any(), any()) }
-            coVerify(exactly = 0) { discoveryRepo.disconnect(any(), any(), "conn_1", any(), any()) }
-        }
+        connectPut.complete(Unit)
+        scope.testScheduler.runCurrent()
+        pinPut.complete(Unit)
+        scope.testScheduler.runCurrent()
+
+        val conn = mgr.get(serverId)!!
+        assertEquals(SatelliteSessionState.Live, conn.state.value)
+        assertEquals("conn_1", conn.connectionId)
+        assertEquals(FIRST_SOCKET, conn.handle)
+        assertEquals(2, conn.protocolVersion)
+        assertEquals(2, conn.sessionFacts.value?.protocolVersion)
+        verify(exactly = 1) { controllerRepo.openSocket(any(), any()) }
+        coVerify(exactly = 1) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { discoveryRepo.disconnect(any(), any(), any(), any(), any()) }
+    }
 
     @Test
     fun `a disconnect and a new tap while a failed wire hands its session back leave the new tap alone`() =
@@ -769,7 +776,15 @@ class SatelliteConnectionManagerRaceTest : SatelliteConnectionManagerFixture() {
         converge: (SatelliteConnection) -> Unit,
         stubConverge: (CompletableDeferred<Unit>, String) -> Unit,
         check: (SatelliteConnectionManager, SatelliteConnection) -> Unit,
-    ) = runMgrTest { mgr, _ ->
+    ) = runMgrTest { mgr, _ -> answerSlotAfterReconnect(mgr, answer, converge, stubConverge, check) }
+
+    private fun answerSlotAfterReconnect(
+        mgr: SatelliteConnectionManager,
+        answer: String,
+        converge: (SatelliteConnection) -> Unit,
+        stubConverge: (CompletableDeferred<Unit>, String) -> Unit,
+        check: (SatelliteConnectionManager, SatelliteConnection) -> Unit,
+    ) {
         stubLiveSession()
         connectLive(mgr)
         val conn = mgr.get(serverId)!!
@@ -784,10 +799,12 @@ class SatelliteConnectionManagerRaceTest : SatelliteConnectionManagerFixture() {
         } returns ok(grantFor("conn_2").replace(""""epoch":1""", """"epoch":3"""))
         mgr.connect(server, ConnectIntent.USER_INITIATED)
         scope.testScheduler.runCurrent()
-        assertEquals("conn_2", conn.connectionId)
+        assertEquals(SatelliteSessionState.Linking, conn.state.value)
+        coVerify(exactly = 1) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
 
         answered.complete(Unit)
         scope.testScheduler.runCurrent()
+        assertEquals("conn_2", conn.connectionId)
         check(mgr, conn)
     }
 
