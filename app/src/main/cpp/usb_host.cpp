@@ -217,10 +217,20 @@ void publishWirelessEvent(DeviceCtx& ctx, const usbparsers::WirelessEvent wev,
     usbparsers::runInit(ctx.fd, ctx.interfaceNumber, ctx.epOut, ctx.init);
 }
 
+void ackGipReport(DeviceCtx& ctx, const uint8_t* report, const size_t len) {
+    if (ctx.parser != usbparsers::Parser::XBOX_ONE_GIP) return;
+    uint8_t ack[usbparsers::kGipAckBytes];
+    const size_t n = usbparsers::buildGipAck(report, len, ack, sizeof(ack));
+    if (n == 0) return;
+    std::lock_guard<std::mutex> lock(ctx.outMtx);
+    usbparsers::writeOutReport(ctx.fd, ctx.epOut, ack, n);
+}
+
 void publishCompletedUrb(DeviceCtx& ctx, const UrbSlot& completed, const int actualLength,
                          gamepad::DeviceState& scratch, bool& lastMicMuted) {
     hotpath::markInputRead(ctx.syntheticDeviceId); // stage-1 start: a fresh input report is in hand
     ctx.urbCount.fetch_add(1, std::memory_order_relaxed);
+    ackGipReport(ctx, completed.buf.data(), (size_t)actualLength);
     memset(&scratch, 0, sizeof(scratch));
 
     const usbparsers::WirelessEvent wev =
@@ -492,7 +502,7 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
     }
 
     usbparsers::ProbeOutcome probed = probeEndpoint(fd, epIn, epInMaxPacket, parser);
-    if (!usbparsers::probePermitsClaim(probed, usbparsers::isVerifiedFastLane(vid, pid))) {
+    if (!usbparsers::probePermitsClaim(probed, usbparsers::isVerifiedFastLane(vid, pid), parser)) {
         LOGI("attach %04X:%04X (%s): %s, releasing to framework", vid, pid, modelName.c_str(),
              probed == usbparsers::ProbeOutcome::SILENT ? "no reports" : "reports did not decode");
         usbparsers::runTeardown(fd, interfaceNumber, parser);
@@ -520,8 +530,7 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
     ctx->parserName = usbparsers::parserName(parser);
     if (parser == usbparsers::Parser::GENERIC_HID_GAMEPAD) {
         fetchHidLayout(fd, interfaceNumber, ctx->stickRange.hidLayout);
-        ctx->stickRange.hidLayout.switchOrderButtons =
-            classification.order == usbparsers::ButtonOrder::SWITCH;
+        ctx->stickRange.hidLayout.order = classification.order;
     } else if (parser == usbparsers::Parser::DUALSHOCK4) {
         fetchPsCalibration(fd, interfaceNumber, 0x02, ctx->stickRange.psImu);
     } else if (parser == usbparsers::Parser::DUALSENSE) {

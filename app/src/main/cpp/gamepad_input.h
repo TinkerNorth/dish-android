@@ -93,6 +93,12 @@ constexpr uint8_t QUIRK_SWAP_XY = 0x02;
 constexpr uint8_t QUIRK_SWITCH_LAYOUT = 0x04;
 constexpr uint8_t QUIRK_N64_HID_LAYOUT = 0x08;
 constexpr uint8_t QUIRK_N64_DRIVER_LAYOUT = 0x10;
+// 8BitDo pads in D-input mode: Heart arrives as BTN_C and is Guide, and the analog Accelerator
+// and Brake only echo the digital L and R (swapped over USB), so the keys alone drive the triggers.
+constexpr uint8_t QUIRK_EIGHTBITDO_DINPUT = 0x20;
+// An Xbox pad on the kernel's xpad driver with no key layout file: Generic.kl leaves the triggers
+// on Z and RZ, centred axes that rest at -1, and the right stick on RX and RY.
+constexpr uint8_t QUIRK_XPAD_TRIGGER_AXES = 0x40;
 
 constexpr uint8_t N64_C_UP = 0x01;
 constexpr uint8_t N64_C_DOWN = 0x02;
@@ -226,9 +232,27 @@ KeyVerdict keyVerdict(int32_t androidKeycode, uint8_t quirk, int32_t action);
 
 uint16_t applyButtonQuirk(uint16_t xusbBit, uint8_t quirk);
 
+// The standard layout's bit for a key under a quirk: keycodeToXusb, plus the 8BitDo Heart.
+uint16_t standardKeycodeToXusb(int32_t androidKeycode, uint8_t quirk);
+
 bool applyKey(DeviceState& s, int32_t androidKeycode, bool down);
 
-// Caller pre-resolves trigger pairs: lt=max(LTRIGGER,BRAKE), rt=max(RTRIGGER,GAS).
+// One joystick sample as the framework reports it, before the right-stick and trigger axes are
+// reduced to the pair the pad is actually driving.
+struct FrameworkAxes {
+    float x = 0.f, y = 0.f, z = 0.f, rz = 0.f, rx = 0.f, ry = 0.f;
+    float hatX = 0.f, hatY = 0.f;
+    float lTrigger = 0.f, rTrigger = 0.f, brake = 0.f, gas = 0.f;
+};
+
+struct ReducedAxes {
+    float rightX = 0.f, rightY = 0.f, lt = 0.f, rt = 0.f;
+};
+
+// Which framework axes carry the right stick and the triggers, by quirk.
+ReducedAxes reduceFrameworkAxes(const FrameworkAxes& axes, uint8_t quirk);
+
+// z/rz and the triggers are the reduced pair (reduceFrameworkAxes).
 void applyAxes(DeviceState& s, float x, float y, float z, float rz, float leftTrigger,
                float rightTrigger, float hatX, float hatY);
 

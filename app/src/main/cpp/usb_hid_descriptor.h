@@ -24,6 +24,15 @@ struct HidAxis {
 // A gamepad field map distilled from a HID report descriptor: where each stick/trigger/hat/button
 // lives within the input report. Fixed-size (no heap) so it can be stored per device and read on
 // the report hot path.
+// The order a pad declares its buttons in. WESTERN is DirectInput's A B X Y LB RB Back Start L3 R3
+// Guide; the others are what the named families actually send.
+enum class ButtonOrder : uint8_t {
+    WESTERN = 0,
+    SWITCH = 1,
+    EIGHTBITDO = 2,
+    PLAYSTATION_CLASSIC = 3,
+};
+
 struct HidLayout {
     bool valid = false;
     uint8_t reportId = 0; // 0 means the device sends no report-id prefix byte
@@ -37,7 +46,7 @@ struct HidLayout {
     uint8_t buttonCount = 0;
     // Set by the attach path from the model catalog, after parseReportDescriptor resets the
     // struct; never derived from the descriptor itself.
-    bool switchOrderButtons = false;
+    ButtonOrder order = ButtonOrder::WESTERN;
 };
 
 // Parses a HID report descriptor into the gamepad field map. Pure; false leaves the layout invalid

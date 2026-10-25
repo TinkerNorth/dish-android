@@ -12,6 +12,7 @@ import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
 import androidx.annotation.ChecksSdkIntAtLeast
+import com.tinkernorth.dish.core.input.ReportedAxes
 import com.tinkernorth.dish.core.input.resolveGamepadQuirk
 import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
@@ -279,12 +280,21 @@ class PhysicalGamepadRegistry
             )
         }
 
-        private fun quirkFor(dev: InputDevice): Int =
-            resolveGamepadQuirk(
-                dev.vendorIdOrZero(),
-                dev.productIdOrZero(),
-                reportsRxAxis = dev.getMotionRange(MotionEvent.AXIS_RX, InputDevice.SOURCE_JOYSTICK) != null,
+        private fun quirkFor(dev: InputDevice): Int = resolveGamepadQuirk(dev.vendorIdOrZero(), dev.productIdOrZero(), reportedAxesOf(dev))
+
+        private fun reportedAxesOf(dev: InputDevice): ReportedAxes {
+            fun reports(axis: Int): Boolean = dev.getMotionRange(axis, InputDevice.SOURCE_JOYSTICK) != null
+            return ReportedAxes(
+                z = reports(MotionEvent.AXIS_Z),
+                rz = reports(MotionEvent.AXIS_RZ),
+                rx = reports(MotionEvent.AXIS_RX),
+                ry = reports(MotionEvent.AXIS_RY),
+                lTrigger = reports(MotionEvent.AXIS_LTRIGGER),
+                rTrigger = reports(MotionEvent.AXIS_RTRIGGER),
+                brake = reports(MotionEvent.AXIS_BRAKE),
+                gas = reports(MotionEvent.AXIS_GAS),
             )
+        }
 
         private fun touchpadSurfaceFor(
             deviceId: Int,

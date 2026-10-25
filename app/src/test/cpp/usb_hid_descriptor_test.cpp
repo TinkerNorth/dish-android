@@ -22,6 +22,7 @@ using gamepad::XUSB_THUMB_L;
 using gamepad::XUSB_THUMB_R;
 using gamepad::XUSB_X;
 using gamepad::XUSB_Y;
+using usbhid::ButtonOrder;
 using usbhid::decodeFromLayout;
 using usbhid::HidLayout;
 using usbhid::parseReportDescriptor;
@@ -276,7 +277,7 @@ std::vector<uint8_t> switchReport(uint8_t btnLo, uint8_t btnHi, uint8_t hat = 0x
 HidLayout switchLayout(bool switchOrder) {
     HidLayout L;
     EXPECT_TRUE(parseReportDescriptor(kSwitchOrderDescriptor, sizeof(kSwitchOrderDescriptor), L));
-    L.switchOrderButtons = switchOrder;
+    L.order = switchOrder ? ButtonOrder::SWITCH : ButtonOrder::WESTERN;
     return L;
 }
 
@@ -301,9 +302,9 @@ TEST(SwitchOrderHid, ParsesTheFaceoffReportShape) {
 
 TEST(SwitchOrderHid, ParseResetsTheOrderFlagSoAttachMustSetItAfter) {
     HidLayout L;
-    L.switchOrderButtons = true;
+    L.order = ButtonOrder::SWITCH;
     ASSERT_TRUE(parseReportDescriptor(kSwitchOrderDescriptor, sizeof(kSwitchOrderDescriptor), L));
-    EXPECT_FALSE(L.switchOrderButtons);
+    EXPECT_EQ(ButtonOrder::WESTERN, L.order);
 }
 
 TEST(SwitchOrderHid, WesternDecodeScramblesTheFaceoffPad) {
@@ -1411,4 +1412,220 @@ TEST(HidDescriptor, AShortUsageTakesThePageCurrentAtTheMainItem) {
     ASSERT_TRUE(L.lx.present);
     EXPECT_EQ(0, L.lx.bitOffset);
     EXPECT_EQ(0, L.buttonCount);
+}
+
+namespace {
+
+// 8BitDo M30 over USB in D-input mode (2dc8:5006), rebuilt item by item from fwupd's
+// plugins/ebitdo/data/m30.txt: 15 buttons, a hat, X/Y/Z/Rz, Accelerator and Brake in a 9-byte
+// report with no report id.
+const uint8_t kM30UsbDescriptor[] = {
+    0x05, 0x01, 0x09, 0x05, 0xa1, 0x01, 0x15, 0x00, 0x25, 0x01, 0x35, 0x00, 0x45, 0x01, 0x75, 0x01,
+    0x95, 0x0f, 0x05, 0x09, 0x19, 0x01, 0x29, 0x0f, 0x81, 0x02, 0x95, 0x01, 0x81, 0x01, 0x05, 0x01,
+    0x25, 0x07, 0x46, 0x3b, 0x01, 0x75, 0x04, 0x95, 0x01, 0x65, 0x14, 0x09, 0x39, 0x81, 0x42, 0x65,
+    0x00, 0x95, 0x01, 0x81, 0x01, 0x26, 0xff, 0x00, 0x46, 0xff, 0x00, 0x09, 0x30, 0x09, 0x31, 0x09,
+    0x32, 0x09, 0x35, 0x75, 0x08, 0x95, 0x04, 0x81, 0x02, 0x05, 0x02, 0x15, 0x00, 0x26, 0xff, 0x00,
+    0x09, 0xc4, 0x09, 0xc5, 0x95, 0x02, 0x75, 0x08, 0x81, 0x02, 0x05, 0x08, 0x09, 0x43, 0x15, 0x00,
+    0x26, 0xff, 0x00, 0x35, 0x00, 0x46, 0xff, 0x00, 0x75, 0x08, 0x95, 0x02, 0x91, 0x82, 0x09, 0x44,
+    0x91, 0x82, 0x09, 0x45, 0x91, 0x82, 0x09, 0x46, 0x91, 0x82, 0xc0,
+};
+
+// 8BitDo USB Wireless Adapter 2 in D-input mode (2dc8:3105), from sys-con issue 65's log: the M30
+// layout behind report id 1, plus a vendor input report 2 and an output report 0x81 the decode
+// never touches.
+const uint8_t kAdapter2Descriptor[] = {
+    0x05, 0x01, 0x09, 0x05, 0xA1, 0x01, 0x85, 0x01, 0x15, 0x00, 0x25, 0x01, 0x35, 0x00, 0x45,
+    0x01, 0x75, 0x01, 0x95, 0x0F, 0x05, 0x09, 0x19, 0x01, 0x29, 0x0F, 0x81, 0x02, 0x95, 0x01,
+    0x81, 0x01, 0x05, 0x01, 0x25, 0x07, 0x46, 0x3B, 0x01, 0x75, 0x04, 0x95, 0x01, 0x65, 0x14,
+    0x09, 0x39, 0x81, 0x42, 0x65, 0x00, 0x95, 0x01, 0x81, 0x01, 0x26, 0xFF, 0x00, 0x46, 0xFF,
+    0x00, 0x09, 0x30, 0x09, 0x31, 0x09, 0x32, 0x09, 0x35, 0x75, 0x08, 0x95, 0x04, 0x81, 0x02,
+    0x05, 0x02, 0x15, 0x00, 0x26, 0xFF, 0x00, 0x09, 0xC4, 0x09, 0xC5, 0x95, 0x02, 0x75, 0x08,
+    0x81, 0x02, 0x05, 0x08, 0x09, 0x43, 0x15, 0x00, 0x26, 0xFF, 0x00, 0x35, 0x00, 0x46, 0xFF,
+    0x00, 0x75, 0x08, 0x95, 0x02, 0x91, 0x82, 0x09, 0x44, 0x91, 0x82, 0x09, 0x45, 0x91, 0x82,
+    0x09, 0x46, 0x91, 0x82, 0x85, 0x02, 0x09, 0x02, 0x75, 0x08, 0x95, 0x3F, 0x81, 0x03, 0x85,
+    0x81, 0x09, 0x03, 0x75, 0x08, 0x95, 0x3F, 0x91, 0x83, 0xC0,
+};
+
+// PlayStation Classic controller (054c:0cda), from J2Kbr/TitanTwo issue 177: ten buttons, then X
+// and Y as two-bit, three-state directions in a 2-byte report with no report id.
+const uint8_t kPsClassicDescriptor[] = {
+    0x05, 0x01, 0x09, 0x05, 0xA1, 0x01, 0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95,
+    0x0A, 0x05, 0x09, 0x19, 0x01, 0x29, 0x0A, 0x81, 0x02, 0x05, 0x01, 0x09, 0x30,
+    0x09, 0x31, 0x15, 0x00, 0x25, 0x02, 0x35, 0x00, 0x45, 0x02, 0x75, 0x02, 0x95,
+    0x02, 0x81, 0x02, 0x75, 0x01, 0x95, 0x02, 0x81, 0x01, 0xC0,
+};
+
+HidLayout orderedLayout(const uint8_t* desc, const size_t len, const ButtonOrder order) {
+    HidLayout L;
+    EXPECT_TRUE(parseReportDescriptor(desc, len, L));
+    L.order = order;
+    return L;
+}
+
+// M30 USB report: buttons 1-8 in byte 0, 9-15 in byte 1, the hat in byte 2's low nibble (0x0F
+// when centred), X Y Z Rz at 0x7F centre, Accelerator and Brake last.
+std::vector<uint8_t> m30Report(const uint8_t buttonsLow, const uint8_t buttonsHigh,
+                               const uint8_t hat = 0x0F) {
+    return {buttonsLow, buttonsHigh, hat, 0x7F, 0x7F, 0x7F, 0x7F, 0x00, 0x00};
+}
+
+} // namespace
+
+TEST(EightBitDoHid, TheM30DescriptorParsesToItsFieldMap) {
+    EXPECT_EQ(123u, sizeof(kM30UsbDescriptor));
+    const HidLayout L =
+        orderedLayout(kM30UsbDescriptor, sizeof(kM30UsbDescriptor), ButtonOrder::EIGHTBITDO);
+    EXPECT_EQ(0, L.reportId);
+    EXPECT_EQ(15, L.buttonCount);
+    EXPECT_EQ(0, L.buttonBitOffset);
+    EXPECT_TRUE(L.hasHat);
+    EXPECT_EQ(16, L.hatBitOffset);
+    EXPECT_TRUE(L.lx.present);
+    EXPECT_EQ(24, L.lx.bitOffset);
+    EXPECT_EQ(32, L.ly.bitOffset);
+    EXPECT_EQ(40, L.rx.bitOffset);
+    EXPECT_EQ(48, L.ry.bitOffset);
+}
+
+TEST(EightBitDoHid, FaceButtonsKeepTheirLettersAndHeartIsGuide) {
+    const HidLayout L =
+        orderedLayout(kM30UsbDescriptor, sizeof(kM30UsbDescriptor), ButtonOrder::EIGHTBITDO);
+    EXPECT_EQ(XUSB_A, decoded(L, m30Report(0x01, 0x00)).wButtons);
+    EXPECT_EQ(XUSB_B, decoded(L, m30Report(0x02, 0x00)).wButtons);
+    EXPECT_EQ(XUSB_GUIDE, decoded(L, m30Report(0x04, 0x00)).wButtons); // Heart, firmware 1.x
+    EXPECT_EQ(XUSB_X, decoded(L, m30Report(0x08, 0x00)).wButtons);
+    EXPECT_EQ(XUSB_Y, decoded(L, m30Report(0x10, 0x00)).wButtons);
+    EXPECT_EQ(0, decoded(L, m30Report(0x20, 0x00)).wButtons);          // button 6 is not on the pad
+    EXPECT_EQ(XUSB_GUIDE, decoded(L, m30Report(0x00, 0x10)).wButtons); // Heart, firmware 2.00
+}
+
+TEST(EightBitDoHid, ZAndCAreTheShouldersSelectIsBackAndStartIsStart) {
+    const HidLayout L =
+        orderedLayout(kM30UsbDescriptor, sizeof(kM30UsbDescriptor), ButtonOrder::EIGHTBITDO);
+    EXPECT_EQ(XUSB_LB, decoded(L, m30Report(0x40, 0x00)).wButtons);
+    EXPECT_EQ(XUSB_RB, decoded(L, m30Report(0x80, 0x00)).wButtons);
+    EXPECT_EQ(XUSB_BACK, decoded(L, m30Report(0x00, 0x04)).wButtons);
+    EXPECT_EQ(XUSB_START, decoded(L, m30Report(0x00, 0x08)).wButtons);
+    EXPECT_EQ(XUSB_THUMB_L, decoded(L, m30Report(0x00, 0x20)).wButtons);
+    EXPECT_EQ(XUSB_THUMB_R, decoded(L, m30Report(0x00, 0x40)).wButtons);
+}
+
+TEST(EightBitDoHid, LAndREachDriveOneTriggerAndNothingElse) {
+    const HidLayout L =
+        orderedLayout(kM30UsbDescriptor, sizeof(kM30UsbDescriptor), ButtonOrder::EIGHTBITDO);
+    const DeviceState left = decoded(L, m30Report(0x00, 0x01));
+    EXPECT_EQ(255, left.bLT);
+    EXPECT_EQ(0, left.bRT);
+    EXPECT_EQ(0, left.wButtons);
+    const DeviceState right = decoded(L, m30Report(0x00, 0x02));
+    EXPECT_EQ(0, right.bLT);
+    EXPECT_EQ(255, right.bRT);
+    EXPECT_EQ(0, right.wButtons);
+}
+
+TEST(EightBitDoHid, AcceleratorAndBrakeBytesAreNotReadAsTriggers) {
+    // The pad's L and R are digital; the two analog usages only ever echo them.
+    const HidLayout L =
+        orderedLayout(kM30UsbDescriptor, sizeof(kM30UsbDescriptor), ButtonOrder::EIGHTBITDO);
+    const DeviceState s = decoded(L, {0x00, 0x00, 0x0F, 0x7F, 0x7F, 0x7F, 0x7F, 0xFF, 0xFF});
+    EXPECT_EQ(0, s.bLT);
+    EXPECT_EQ(0, s.bRT);
+}
+
+TEST(EightBitDoHid, TheDpadArrivesAsTheHatInDpadModeAndAsTheLeftStickInStickMode) {
+    const HidLayout L =
+        orderedLayout(kM30UsbDescriptor, sizeof(kM30UsbDescriptor), ButtonOrder::EIGHTBITDO);
+    EXPECT_EQ(gamepad::XUSB_DPAD_UP,
+              decoded(L, m30Report(0x00, 0x00, 0x00)).wButtons & XUSB_DPAD_MASK);
+    EXPECT_EQ(gamepad::XUSB_DPAD_LEFT,
+              decoded(L, m30Report(0x00, 0x00, 0x06)).wButtons & XUSB_DPAD_MASK);
+    const DeviceState stickLeft =
+        decoded(L, {0x00, 0x00, 0x0F, 0x00, 0x7F, 0x7F, 0x7F, 0x00, 0x00});
+    EXPECT_LT(stickLeft.sLX, -32000);
+    EXPECT_EQ(0, stickLeft.wButtons & XUSB_DPAD_MASK);
+}
+
+TEST(EightBitDoHid, TheWesternOrderScramblesTheM30) {
+    const HidLayout western =
+        orderedLayout(kM30UsbDescriptor, sizeof(kM30UsbDescriptor), ButtonOrder::WESTERN);
+    EXPECT_EQ(0, decoded(western, m30Report(0x00, 0x08)).wButtons);      // Start is lost
+    EXPECT_EQ(XUSB_X, decoded(western, m30Report(0x04, 0x00)).wButtons); // Heart lands on X
+}
+
+TEST(EightBitDoHid, TheAdapter2DescriptorLocksReportOneAndDecodesItsCapturedReports) {
+    EXPECT_EQ(145u, sizeof(kAdapter2Descriptor));
+    const HidLayout L =
+        orderedLayout(kAdapter2Descriptor, sizeof(kAdapter2Descriptor), ButtonOrder::EIGHTBITDO);
+    EXPECT_EQ(1, L.reportId);
+    EXPECT_EQ(15, L.buttonCount);
+    EXPECT_EQ(16, L.hatBitOffset);
+
+    const DeviceState idle =
+        decoded(L, {0x01, 0x00, 0x00, 0x0F, 0x7C, 0x82, 0x7F, 0x82, 0x00, 0x00});
+    EXPECT_EQ(0, idle.wButtons);
+    EXPECT_EQ(0, idle.bLT);
+    EXPECT_EQ(0, idle.bRT);
+    EXPECT_GT(idle.sLX, -2000);
+    EXPECT_LT(idle.sLX, 0);
+
+    const DeviceState viewLeft =
+        decoded(L, {0x01, 0x00, 0x04, 0x06, 0x7C, 0x82, 0x7F, 0x81, 0x00, 0x00});
+    EXPECT_EQ(XUSB_BACK | gamepad::XUSB_DPAD_LEFT, viewLeft.wButtons);
+
+    const DeviceState right =
+        decoded(L, {0x01, 0x00, 0x00, 0x02, 0x7C, 0x82, 0x7F, 0x82, 0x00, 0x00});
+    EXPECT_EQ(XUSB_DPAD_RIGHT, right.wButtons);
+
+    DeviceState wrongId{};
+    const std::vector<uint8_t> vendor{0x02, 0x00, 0x00, 0x0F, 0x7C, 0x82, 0x7F, 0x82, 0x00, 0x00};
+    EXPECT_FALSE(decodeFromLayout(vendor.data(), vendor.size(), wrongId, L));
+}
+
+TEST(PsClassicHid, TheDescriptorParsesToTenButtonsAndTwoThreeStateAxes) {
+    EXPECT_EQ(49u, sizeof(kPsClassicDescriptor));
+    const HidLayout L = orderedLayout(kPsClassicDescriptor, sizeof(kPsClassicDescriptor),
+                                      ButtonOrder::PLAYSTATION_CLASSIC);
+    EXPECT_EQ(0, L.reportId);
+    EXPECT_EQ(10, L.buttonCount);
+    EXPECT_TRUE(L.lx.present);
+    EXPECT_EQ(10, L.lx.bitOffset);
+    EXPECT_EQ(2, L.lx.bitSize);
+    EXPECT_EQ(2, L.lx.logicalMax);
+    EXPECT_EQ(12, L.ly.bitOffset);
+    EXPECT_FALSE(L.hasHat);
+}
+
+TEST(PsClassicHid, ButtonsMapByPosition) {
+    const HidLayout L = orderedLayout(kPsClassicDescriptor, sizeof(kPsClassicDescriptor),
+                                      ButtonOrder::PLAYSTATION_CLASSIC);
+    // X and Y centred (value 1 in bits 2-3 and 4-5 of byte 1) is 0x14.
+    EXPECT_EQ(XUSB_Y, decoded(L, {0x01, 0x14}).wButtons);     // Triangle
+    EXPECT_EQ(XUSB_B, decoded(L, {0x02, 0x14}).wButtons);     // Circle
+    EXPECT_EQ(XUSB_A, decoded(L, {0x04, 0x14}).wButtons);     // Cross
+    EXPECT_EQ(XUSB_X, decoded(L, {0x08, 0x14}).wButtons);     // Square
+    EXPECT_EQ(XUSB_LB, decoded(L, {0x40, 0x14}).wButtons);    // L1
+    EXPECT_EQ(XUSB_RB, decoded(L, {0x80, 0x14}).wButtons);    // R1
+    EXPECT_EQ(XUSB_BACK, decoded(L, {0x00, 0x15}).wButtons);  // Select
+    EXPECT_EQ(XUSB_START, decoded(L, {0x00, 0x16}).wButtons); // Start
+    const DeviceState l2 = decoded(L, {0x10, 0x14});
+    EXPECT_EQ(255, l2.bLT);
+    EXPECT_EQ(0, l2.wButtons);
+    const DeviceState r2 = decoded(L, {0x20, 0x14});
+    EXPECT_EQ(255, r2.bRT);
+    EXPECT_EQ(0, r2.wButtons);
+}
+
+TEST(PsClassicHid, AThreeStateAxisIsADirectionPadNotAStick) {
+    const HidLayout L = orderedLayout(kPsClassicDescriptor, sizeof(kPsClassicDescriptor),
+                                      ButtonOrder::PLAYSTATION_CLASSIC);
+    const DeviceState centred = decoded(L, {0x00, 0x14});
+    EXPECT_EQ(0, centred.wButtons & XUSB_DPAD_MASK);
+    EXPECT_EQ(0, centred.sLX);
+    EXPECT_EQ(0, centred.sLY);
+    EXPECT_EQ(gamepad::XUSB_DPAD_LEFT, decoded(L, {0x00, 0x10}).wButtons); // X = 0
+    EXPECT_EQ(XUSB_DPAD_RIGHT, decoded(L, {0x00, 0x18}).wButtons);         // X = 2
+    EXPECT_EQ(gamepad::XUSB_DPAD_UP, decoded(L, {0x00, 0x04}).wButtons);   // Y = 0
+    EXPECT_EQ(XUSB_DPAD_DOWN, decoded(L, {0x00, 0x24}).wButtons);          // Y = 2
+    EXPECT_EQ(XUSB_DPAD_DOWN | gamepad::XUSB_DPAD_LEFT, decoded(L, {0x00, 0x20}).wButtons);
+    EXPECT_EQ(0, decoded(L, {0x00, 0x18}).sLX);
 }

@@ -1013,31 +1013,15 @@ static bool gamepadKeyFilter(const GameActivityKeyEvent* ev) {
     return consumed;
 }
 
-// Right-stick layout varies by pad (Z/RZ against RX/RY); the larger-magnitude axis is the one
-// the pad is actually driving.
-static float pickLargerMagnitude(const float a, const float b) {
-    return std::fabs(a) >= std::fabs(b) ? a : b;
-}
-
-// One joystick sample as Android reports it, before the right-stick and trigger axes are reduced
-// to the pair the pad is actually driving.
-struct JoystickSample {
-    float x, y, z, rz, rx, ry;
-    float hatX, hatY;
-    float lTrigger, rTrigger, brake, gas;
-};
-
-static void applyJoystickSample(gamepad::DeviceState& state, const JoystickSample& sample) {
-    const float rightX = pickLargerMagnitude(sample.z, sample.rx);
-    const float rightY = pickLargerMagnitude(sample.rz, sample.ry);
-    const float lt = std::max(sample.lTrigger, sample.brake);
-    const float rt = std::max(sample.rTrigger, sample.gas);
-    gamepad::applyAxes(state, sample.x, sample.y, rightX, rightY, lt, rt, sample.hatX, sample.hatY);
+static void applyJoystickSample(gamepad::DeviceState& state, const gamepad::FrameworkAxes& sample) {
+    const gamepad::ReducedAxes reduced = gamepad::reduceFrameworkAxes(sample, state.quirk);
+    gamepad::applyAxes(state, sample.x, sample.y, reduced.rightX, reduced.rightY, reduced.lt,
+                       reduced.rt, sample.hatX, sample.hatY);
 }
 
 // Latest sample wins: historicals are intermediate states the next apply overwrites anyway.
-static JoystickSample joystickSampleOf(const GameActivityMotionEvent* ev) {
-    return JoystickSample{
+static gamepad::FrameworkAxes joystickSampleOf(const GameActivityMotionEvent* ev) {
+    return gamepad::FrameworkAxes{
         axisCur(ev, AMOTION_EVENT_AXIS_X),        axisCur(ev, AMOTION_EVENT_AXIS_Y),
         axisCur(ev, AMOTION_EVENT_AXIS_Z),        axisCur(ev, AMOTION_EVENT_AXIS_RZ),
         axisCur(ev, AMOTION_EVENT_AXIS_RX),       axisCur(ev, AMOTION_EVENT_AXIS_RY),
@@ -1050,7 +1034,7 @@ static JoystickSample joystickSampleOf(const GameActivityMotionEvent* ev) {
 // action is already masked. Stages under the device lock, so the caller sends out once the lock is
 // let go.
 static void applyFrameworkMotion(const int32_t deviceId, const int32_t action,
-                                 const JoystickSample& sample, PendingDatagram& out) {
+                                 const gamepad::FrameworkAxes& sample, PendingDatagram& out) {
     std::lock_guard<std::mutex> lock(g_devicesMtx);
     auto& state = g_devices[deviceId];
 
@@ -1870,7 +1854,8 @@ Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_processGamepadMotionEvent(
     jfloat brake, jfloat gas) {
     if ((source & AINPUT_SOURCE_JOYSTICK) != AINPUT_SOURCE_JOYSTICK) return JNI_FALSE;
     const int32_t maskedAction = action & AMOTION_EVENT_ACTION_MASK;
-    const JoystickSample sample{x, y, z, rz, rx, ry, hatX, hatY, lTrigger, rTrigger, brake, gas};
+    const gamepad::FrameworkAxes sample{x,    y,    z,        rz,       rx,    ry,
+                                        hatX, hatY, lTrigger, rTrigger, brake, gas};
     PendingDatagram datagram;
     applyFrameworkMotion(deviceId, maskedAction, sample, datagram);
     transmitPublished(datagram);

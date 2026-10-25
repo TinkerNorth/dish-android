@@ -688,6 +688,8 @@
     <string name="diagnostics_quirk_switch_layout">Switch-Layout</string>
     <string name="diagnostics_quirk_n64_hid_layout">N64-Layout (generisches HID)</string>
     <string name="diagnostics_quirk_n64_driver_layout">N64-Layout (Kerneltreiber)</string>
+    <string name="diagnostics_quirk_eightbitdo_dinput">8BitDo D-Input (Herz ist Guide)</string>
+    <string name="diagnostics_quirk_xpad_trigger_axes">Xbox-Trigger auf Z/RZ</string>
     <string name="diagnostics_reports">Reports</string>
     <string name="diagnostics_events_count">Ereignisse</string>
     <string name="diagnostics_last_input">Letzte Eingabe</string>
