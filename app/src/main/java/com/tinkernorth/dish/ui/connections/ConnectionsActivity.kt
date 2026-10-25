@@ -22,6 +22,7 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -71,6 +72,7 @@ import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.connectionErrorWords
 import com.tinkernorth.dish.ui.common.moonlightErrorText
 import com.tinkernorth.dish.ui.common.observeWhileStarted
+import com.tinkernorth.dish.ui.common.openBluetoothSettings
 import com.tinkernorth.dish.ui.common.setLoading
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.donate.attachDonatePill
@@ -654,23 +656,27 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         private val container = view.findViewById<LinearLayout>(R.id.deviceContainer)
         private val progress = view.findViewById<TextView>(R.id.scanProgress)
         private val empty = view.findViewById<TextView>(R.id.deviceEmpty)
-        private val canScan = !btPermissionState.state.value.scanMissing
+        private val discovery = hostDiscoveryFor(Build.VERSION.SDK_INT, btPermissionState.state.value)
         private var discoverableUntilMs = initialDiscoverableUntilMs
 
         // Hosts already linked before this attempt; a newly connected id means our host arrived.
         private var baselineConnected = connectedIds()
 
-        private val dialog =
-            MaterialAlertDialogBuilder(this@ConnectionsActivity)
-                .setTitle(R.string.dialog_bt_device_title)
-                .setView(view)
-                .setNeutralButton(R.string.bt_wait_for_host, null)
-                .setNegativeButton(R.string.action_cancel, null)
-                .create()
+        private val dialog = pickerDialogBuilder().create()
+
+        private fun pickerDialogBuilder(): MaterialAlertDialogBuilder {
+            val builder =
+                MaterialAlertDialogBuilder(this@ConnectionsActivity)
+                    .setTitle(R.string.dialog_bt_device_title)
+                    .setView(view)
+                    .setNeutralButton(R.string.bt_wait_for_host, null)
+                    .setNegativeButton(R.string.action_cancel, null)
+            if (discovery.offersBluetoothSettings) builder.setPositiveButton(R.string.bt_open_bluetooth_settings, null)
+            return builder
+        }
 
         fun show() {
-            view.findViewById<TextView>(R.id.scanNote).visibility =
-                if (canScan) View.GONE else View.VISIBLE
+            showDiscoveryNote()
             val job =
                 lifecycleScope.launch {
                     launch { collectScan() }
@@ -682,10 +688,21 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             dialog.show()
         }
 
-        // The neutral button is wired after show() so it can be pressed without closing the dialog.
+        private fun showDiscoveryNote() {
+            val note = view.findViewById<TextView>(R.id.scanNote)
+            val text = hostDiscoveryNote(discovery)
+            note.isVisible = text != null
+            if (text != null) note.setText(text)
+        }
+
+        // The neutral and positive buttons are wired after show() so they can be pressed without
+        // closing the dialog.
         private fun onWaitDialogShown() {
             refreshWaitButton()
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener { onWaitForHostClicked() }
+            if (discovery.offersBluetoothSettings) {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setOnClickListener { openBluetoothSettings() }
+            }
         }
 
         private fun connectedIds(): Set<String> {
@@ -753,7 +770,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
         private suspend fun collectScan() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                btScanner.start(canScan)
+                btScanner.start(discovery.scansInApp)
                 try {
                     btScanner.state.collect { renderScan(it) }
                 } finally {
@@ -1273,11 +1290,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         } catch (e: ActivityNotFoundException) {
             Log.w(TAG, "no activity for the Bluetooth enable request: ${e.message}")
         }
-        try {
-            startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-        } catch (e: ActivityNotFoundException) {
-            Log.w(TAG, "no Bluetooth settings screen on this device: ${e.message}")
-        }
+        openBluetoothSettings()
     }
 
     private fun openWifiSettings() {

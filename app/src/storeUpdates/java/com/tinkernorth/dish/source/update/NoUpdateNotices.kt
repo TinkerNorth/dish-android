@@ -6,9 +6,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 
-// Google Play updates a Play-distributed app itself, and its policy forbids
-// the app pointing anywhere else for that, so this flavor has no update check:
-// the screens see nothing and no update code compiles into the artifact.
+// Google Play and the Amazon Appstore update the apps they distribute themselves, and Play's policy
+// forbids the app pointing anywhere else for that, so the store flavors have no update check: the
+// screens see nothing and no update code compiles into either artifact.
 class NoUpdateNotices
     @Inject
     constructor() : UpdateNotices {

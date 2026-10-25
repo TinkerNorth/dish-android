@@ -3,7 +3,7 @@
     Donation copy specific to the directly-distributed (github) flavor: the
     external payment rails and the three lines whose wording differs from the
     Play flavor (donate_bar_ask, donate_lead, settings_support_body). Shared
-    donation copy lives in src/main.
+    donation copy lives in src/main and src/donate.
 -->
 <resources>
     <string name="donate_bar_ask">Doe para que continue assim →</string>

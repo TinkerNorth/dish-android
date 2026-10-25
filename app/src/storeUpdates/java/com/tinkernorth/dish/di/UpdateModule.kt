@@ -10,7 +10,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
-// Play updates the app; see NoUpdateNotices.
+// The store updates the app; see NoUpdateNotices.
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class UpdateModule {

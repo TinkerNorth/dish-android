@@ -73,11 +73,11 @@ on:
 #   actions/setup-java              @ v6.0.1  → de7274f081f381c8f8158605e0321c36c376e2e6
 #   actions/upload-artifact         @ v7.0.1  → 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
 #   actions/download-artifact       @ v8.0.1  → 3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-#   gradle/actions/setup-gradle     @ v6.3.0  → 9c971963bec38e04b3d30dcc455b5382be2fdbfb
-#   anchore/sbom-action             @ v0.24.0 → e22c389904149dbc22b58101806040fa8d37a610
-#   anchore/scan-action             @ v7.4.0  → e1165082ffb1fe366ebaf02d8526e7c4989ea9d2
+#   gradle/actions/setup-gradle     @ v6.4.0  → 3f5f9adaf7d9fecd50b5935e54106014257a94e6
+#   anchore/sbom-action             @ v0.24.3 → 66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c
+#   anchore/scan-action             @ v7.4.2  → 27805bf3b4e84b4a5c980df22ed233c00390a439
 #   github/codeql-action/upload-sarif @ v4.38.2 → 2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
-#   softprops/action-gh-release     @ v3.0.2  → 3d0d9888cb7fd7b750713d6e236d1fcb99157228
+#   softprops/action-gh-release     @ v3.0.3  → efb35369e0ad2afab669f228072c1b0d510eae64
 #   slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml
 #                                   @ v2.1.0  → f7dd8c54c2067bafc12ca7a55595d5ee9b75204a
 #
@@ -143,7 +143,6 @@ jobs:
     name: Build + sign APK/AAB
     needs: [gates, required-secrets]
     runs-on: ubuntu-latest
-    # Baseline-profile generation now runs per flavor before two release builds.
     timeout-minutes: 90
     outputs:
       version_code: ${{ steps.ver.outputs.code }}
@@ -233,11 +232,7 @@ jobs:
           DISH_VERSION_NAME: ${{ steps.ver.outputs.name }}
         run: ./gradlew :app:generateBaselineProfile
 
-      # Two distribution flavors: `github` ships the APK published to GitHub
-      # Releases (donation surface included), `play` builds the AAB uploaded to
-      # Google Play (no donation surface, per the Payments policy). Only the
-      # flavor each channel needs is built.
-      - name: Build release APK (github) + AAB (play)
+      - name: Build release APKs (github, amazon) + AAB (play)
         env:
           DISH_KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
           DISH_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -247,10 +242,11 @@ jobs:
           DISH_VERSION_NAME: ${{ steps.ver.outputs.name }}
         run: |
           if [ "${{ steps.firebase.outputs.present }}" = "true" ]; then
-            ./gradlew assembleGithubRelease bundlePlayRelease \
-              uploadCrashlyticsSymbolFileGithubRelease uploadCrashlyticsSymbolFilePlayRelease
+            ./gradlew assembleGithubRelease bundlePlayRelease assembleAmazonRelease \
+              uploadCrashlyticsSymbolFileGithubRelease uploadCrashlyticsSymbolFilePlayRelease \
+              uploadCrashlyticsSymbolFileAmazonRelease
           else
-            ./gradlew assembleGithubRelease bundlePlayRelease
+            ./gradlew assembleGithubRelease bundlePlayRelease assembleAmazonRelease
           fi
 
       - name: Stage artifacts
@@ -291,6 +287,38 @@ jobs:
           symbols=$(find app/build/outputs/native-debug-symbols/playRelease -name 'native-debug-symbols.zip' 2>/dev/null | head -1)
           [ -n "$symbols" ] && cp "$symbols" "dist/dish-${tag}${suffix}-native-debug-symbols.zip"
           ls -l dist/
+
+      # The Amazon Appstore build goes up by hand in Amazon's developer console,
+      # so it stays out of dist/: never a GitHub release asset, never dish.apk,
+      # and never in SHA256SUMS or latest.json.
+      - name: Stage the Amazon Appstore build
+        env:
+          TAG_INPUT: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist-amazon
+          suffix=""
+          if [ "${{ steps.keystore.outputs.present }}" != "true" ]; then
+            suffix="-unsigned"
+          fi
+          tag="${TAG_INPUT:-${GITHUB_REF_NAME}}"
+          apk=$(find app/build/outputs/apk/amazon/release -name '*.apk' | head -1)
+          [ -n "$apk" ] || { echo "::error::no amazon release APK was built"; exit 1; }
+          cp "$apk" "dist-amazon/dish-${tag}${suffix}-amazon.apk"
+          mapping=$(find app/build/outputs/mapping/amazonRelease -name 'mapping.txt' | head -1)
+          [ -n "$mapping" ] && cp "$mapping" "dist-amazon/dish-${tag}${suffix}-amazon-mapping.txt"
+          symbols=$(find app/build/outputs/native-debug-symbols/amazonRelease -name 'native-debug-symbols.zip' 2>/dev/null | head -1)
+          [ -n "$symbols" ] && cp "$symbols" "dist-amazon/dish-${tag}${suffix}-amazon-native-debug-symbols.zip"
+          ls -l dist-amazon/
+
+      # aapt2's badging is what a store filters devices by: a build without
+      # armeabi-v7a is "not compatible" with the 32-bit Fire tablets.
+      - name: Every release build carries its flavor's ABIs
+        run: |
+          set -euo pipefail
+          python3 scripts/check_apk_abis.py dist/dish.apk armeabi-v7a arm64-v8a x86_64
+          python3 scripts/check_apk_abis.py "$(find dist -maxdepth 1 -name '*.aab' | head -1)" armeabi-v7a arm64-v8a x86_64
+          python3 scripts/check_apk_abis.py "$(find dist-amazon -maxdepth 1 -name '*-amazon.apk' | head -1)" armeabi-v7a arm64-v8a x86_64
 
       # Auto-update manifest, fetched by the GitHub build of the app from the
       # stable permalink releases/latest/download/latest.json. The client only
@@ -339,6 +367,13 @@ jobs:
         with:
           name: android
           path: dist/
+
+      - name: Upload the Amazon Appstore build
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: amazon-appstore
+          path: dist-amazon/
+          retention-days: 90
 
   play-inputs:
     name: Play publish inputs

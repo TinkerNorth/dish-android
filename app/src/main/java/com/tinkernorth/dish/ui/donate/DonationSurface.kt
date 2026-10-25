@@ -12,16 +12,19 @@ import androidx.core.view.isVisible
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.ui.common.DishNavigator
 
-// Every screen shares these touchpoints (with the pill in DonatePill.kt); the flavors part ways
-// inside DonateActivity, which github and play each supply: external payment rails on github,
-// Play Billing on play, as Google Play's Payments policy requires of Play-distributed apps.
 fun AppCompatActivity.wireDonateButton() {
-    findViewById<View>(R.id.btnDonate)?.setOnClickListener { openDonateScreen() }
+    val button = findViewById<View>(R.id.btnDonate) ?: return
+    val asksForTips = TIP_OFFER is TipOffer.Ask
+    button.isVisible = asksForTips
+    if (!asksForTips) return
+    button.setOnClickListener { openDonateScreen() }
 }
 
 fun AppCompatActivity.bindDonateSettingsCard() {
     val card = findViewById<View>(R.id.cardSupport) ?: return
-    card.isVisible = true
+    val ask = TIP_OFFER as? TipOffer.Ask
+    card.isVisible = ask != null
+    if (ask == null) return
     // Scoped to the card: `card_row_icon_label_value` is included several
     // times in Settings, so these ids are unique only within one card.
     card.findViewById<ImageView>(R.id.cardRowIcon)?.apply {
@@ -29,7 +32,7 @@ fun AppCompatActivity.bindDonateSettingsCard() {
         imageTintList = ColorStateList.valueOf(ContextCompat.getColor(context, R.color.colorPulse))
     }
     card.findViewById<TextView>(R.id.cardRowTitle)?.setText(R.string.settings_support_title)
-    card.findViewById<TextView>(R.id.cardRowSubtitle)?.setText(R.string.settings_support_body)
+    card.findViewById<TextView>(R.id.cardRowSubtitle)?.setText(ask.settingsBody)
     card.setOnClickListener { openDonateScreen() }
 }
 

@@ -3,7 +3,8 @@
     Donation copy specific to the Play flavor, where tips go through Google
     Play's billing system: the tier cards and the three lines whose wording
     differs from the github flavor (donate_bar_ask, donate_lead,
-    settings_support_body). Shared donation copy lives in src/main.
+    settings_support_body). Shared donation copy lives in src/main and
+    src/donate.
 -->
 <resources>
     <string name="donate_bar_ask">Tip through Google Play to keep it that way →</string>

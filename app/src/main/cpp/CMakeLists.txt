@@ -37,16 +37,50 @@ SODIUM_EXPORT int sodium_library_minimal(void);\n\
 
 file(GLOB_RECURSE SODIUM_SOURCES ${SODIUM_SRC}/*.c)
 
+# libsodium's own configure turns on its 128-bit field arithmetic only where this probe compiles,
+# and the probe refuses clang on 32-bit targets, so armeabi-v7a keeps the portable 32-bit code.
+function(check_sodium_ti_mode)
+    include(CheckCSourceCompiles)
+    set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+    set(CMAKE_REQUIRED_DEFINITIONS -DNATIVE_LITTLE_ENDIAN=1)
+    check_c_source_compiles([=[
+#if !defined(__clang__) && !defined(__GNUC__) && !defined(__SIZEOF_INT128__)
+# error mode(TI) is a gcc extension, and __int128 is not available
+#endif
+#if defined(__clang__) && !defined(__x86_64__) && !defined(__aarch64__)
+# error clang does not properly handle the 128-bit type on 32-bit systems
+#endif
+#ifndef NATIVE_LITTLE_ENDIAN
+# error libsodium currently expects a little endian CPU for the 128-bit type
+#endif
+#include <stddef.h>
+#include <stdint.h>
+#if defined(__SIZEOF_INT128__)
+typedef unsigned __int128 uint128_t;
+#else
+typedef unsigned uint128_t __attribute__((mode(TI)));
+#endif
+void fcontract(uint128_t *t) {
+  *t += 0x8000000000000 - 1;
+  *t *= *t;
+  *t >>= 84;
+}
+]=] SODIUM_HAVE_TI_MODE)
+endfunction()
+check_sodium_ti_mode()
+
 add_library(sodium_static STATIC ${SODIUM_SOURCES})
 target_include_directories(sodium_static SYSTEM
     PUBLIC  ${SODIUM_SRC}/include
     PRIVATE ${SODIUM_SRC}/include/sodium
 )
+if(SODIUM_HAVE_TI_MODE)
+    target_compile_definitions(sodium_static PRIVATE HAVE_TI_MODE=1)
+endif()
 target_compile_definitions(sodium_static PRIVATE
     CONFIGURED=1
     NATIVE_LITTLE_ENDIAN=1
     HAVE_INLINE_ASM=1
-    HAVE_TI_MODE=1
     HAVE_WEAK_SYMBOLS=1
     HAVE_ATOMIC_OPS=1
     HAVE_ALLOCA_H=1

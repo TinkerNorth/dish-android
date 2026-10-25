@@ -298,6 +298,8 @@
     <string name="bt_device_tag_paired">Vinculado</string>
     <string name="bt_device_tag_available">Disponible</string>
     <string name="bt_scan_permission_note">El escaneo necesita el permiso de dispositivos cercanos. Los dispositivos vinculados se muestran sin él.</string>
+    <string name="bt_scan_system_settings_note">Vincula primero un dispositivo nuevo en los ajustes de Bluetooth. Los dispositivos vinculados se muestran aquí.</string>
+    <string name="bt_open_bluetooth_settings">Ajustes de Bluetooth</string>
     <string name="notif_bt_discoverability_denied_title">Visibilidad denegada</string>
     <string name="notif_bt_discoverability_denied_body">Tu host no puede ver este teléfono hasta que lo hagas visible.</string>
     <string name="notif_bt_adapter_off_title">Bluetooth desactivado</string>
@@ -380,7 +382,7 @@
 
     <!-- Pantalla de respaldo cuando falla la carga nativa. -->
     <string name="fatal_native_title">Esta versión no se ejecutará en tu dispositivo</string>
-    <string name="fatal_native_body">La biblioteca nativa de Dish no pudo cargarse. Reinstala desde Google Play, o contacta con el soporte.</string>
+    <string name="fatal_native_body">La biblioteca nativa de Dish no pudo cargarse. Vuelve a instalar Dish desde donde lo obtuviste, o contacta con el soporte.</string>
 
     <!-- Superposición de modo de ahorro de energía. -->
     <string name="low_power_in">AHORRO EN</string>
@@ -830,13 +832,5 @@
     <string name="donate_bar_headline">Dish es gratuito y de código abierto.</string>
     <string name="donate_bar_dismiss">Cerrar banner de donación</string>
     <string name="donate_title">Apoyar Dish</string>
-    <string name="donate_eyebrow">Apoya el proyecto</string>
-    <string name="donate_h1">Dish funciona con café y buena voluntad.</string>
-    <string name="donate_why_title">Qué paga realmente tu donación</string>
-    <string name="donate_why_hosting">Hosting. dish.tinkernorth.com, tinkernorth.com y cada mirror de instalador firmado. AWS no es gratis, ni siquiera a nuestra escala de tráfico.</string>
-    <string name="donate_why_signing">Certificados de firma de código. Windows SmartScreen solo se porta bien porque pagamos un certificado EV cada año. Lo mismo va para la cuenta del Apple Developer Program para el próximo cliente macOS.</string>
-    <string name="donate_why_play">Cuota de desarrollador de Google Play. Una cuota única de 25 $ más el tiempo necesario para mantener la ficha de Play conforme con cada nueva ronda de políticas.</string>
-    <string name="donate_why_time">Tiempo. Respuesta honesta: la mayor parte. Dish es un proyecto de noches y fines de semana. Las donaciones me dejan decir \"sí\" a trabajar en él en vez de aceptar consultoría extra.</string>
-    <string name="donate_thanks">Gracias. Cada dólar, cada estrella, cada enlace compartido. Todo suma. Emir</string>
     <string name="settings_support_title">Apoyar Dish</string>
 </resources>
