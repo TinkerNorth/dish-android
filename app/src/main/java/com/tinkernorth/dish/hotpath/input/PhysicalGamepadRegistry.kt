@@ -118,6 +118,15 @@ class PhysicalGamepadRegistry
             val hasTouchpad: Boolean = false,
         )
 
+        data class IgnoredInputDevice(
+            val id: Int,
+            val name: String,
+            val vendorId: Int,
+            val productId: Int,
+            val sources: Int,
+            val keyboardType: Int,
+        )
+
         private fun Device.placeholderState(): PlaceholderState =
             PlaceholderState(
                 transitioning = transitioning,
@@ -146,6 +155,9 @@ class PhysicalGamepadRegistry
         private val _devices = MutableStateFlow<Map<Int, Device>>(emptyMap())
         val devices: StateFlow<Map<Int, Device>> = _devices.asStateFlow()
 
+        private val _ignoredInputDevices = MutableStateFlow<Map<Int, IgnoredInputDevice>>(emptyMap())
+        val ignoredInputDevices: StateFlow<Map<Int, IgnoredInputDevice>> = _ignoredInputDevices.asStateFlow()
+
         @Volatile private var installed = false
 
         private val disconnectJobs = ConcurrentHashMap<Int, Job>()
@@ -169,24 +181,23 @@ class PhysicalGamepadRegistry
         }
 
         private fun syncAll() {
-            val next = mutableMapOf<Int, Device>()
-            for (id in InputDevice.getDeviceIds()) {
-                val dev = InputDevice.getDevice(id) ?: continue
-                if (!isGamepad(dev)) continue
-                pushDeadzones(dev)
-                next[id] = makeRoutedDevice(id, dev)
-            }
-            _devices.value = next
+            val enumerated = InputDevice.getDeviceIds().asList().mapNotNull { id -> InputDevice.getDevice(id)?.let { id to it } }
+            val (pads, others) = enumerated.partition { (_, dev) -> isGamepad(dev) }
+            pads.forEach { (_, dev) -> pushDeadzones(dev) }
+            _devices.value = pads.associate { (id, dev) -> id to makeRoutedDevice(id, dev) }
+            _ignoredInputDevices.value = others.mapNotNull { (id, dev) -> ignoredOf(id, dev) }.associateBy { it.id }
         }
 
         override fun onInputDeviceAdded(deviceId: Int) {
             val dev = InputDevice.getDevice(deviceId) ?: return
             if (!isGamepad(dev)) {
+                noteIgnored(deviceId, dev)
                 // A pad's touch surface can enumerate as a device of its own, a beat after the
                 // pad: re-resolve the surfaces so the pad it belongs to picks it up.
                 if (hasPointerSource(dev.sources)) refreshTouchpadSurfaces()
                 return
             }
+            forgetIgnored(deviceId)
             pushDeadzones(dev)
             cancelDisconnect(deviceId)
             adopt(deviceId, makeRoutedDevice(deviceId, dev))
@@ -220,6 +231,31 @@ class PhysicalGamepadRegistry
         private fun InputDevice.vendorIdOrZero(): Int = runCatching { vendorId }.getOrDefault(0)
 
         private fun InputDevice.productIdOrZero(): Int = runCatching { productId }.getOrDefault(0)
+
+        private fun noteIgnored(
+            deviceId: Int,
+            dev: InputDevice,
+        ) {
+            val entry = ignoredOf(deviceId, dev)
+            _ignoredInputDevices.update { if (entry == null) it - deviceId else it + (deviceId to entry) }
+        }
+
+        private fun forgetIgnored(deviceId: Int) {
+            _ignoredInputDevices.update { it - deviceId }
+        }
+
+        private fun ignoredOf(
+            deviceId: Int,
+            dev: InputDevice,
+        ): IgnoredInputDevice? {
+            val vid = dev.vendorIdOrZero()
+            val pid = dev.productIdOrZero()
+            val listed = isListableIgnoredDevice(dev.isVirtual, externalOrUnknown(dev), vid, pid)
+            return if (listed) IgnoredInputDevice(deviceId, dev.name, vid, pid, dev.sources, dev.keyboardType) else null
+        }
+
+        // InputDevice.isExternal arrived with API 29; older releases cannot say.
+        private fun externalOrUnknown(dev: InputDevice): Boolean? = if (atLeast(Build.VERSION_CODES.Q)) dev.isExternal else null
 
         private fun isFrameworkCardOfModel(
             d: Device,
@@ -523,6 +559,7 @@ class PhysicalGamepadRegistry
         }
 
         override fun onInputDeviceRemoved(deviceId: Int) {
+            forgetIgnored(deviceId)
             val current = _devices.value[deviceId]
             if (current == null) {
                 // Not a pad: perhaps a pad's separately enumerated surface going away.
@@ -535,11 +572,13 @@ class PhysicalGamepadRegistry
         override fun onInputDeviceChanged(deviceId: Int) {
             val dev = InputDevice.getDevice(deviceId)
             if (dev == null || !isGamepad(dev)) {
+                if (dev == null) forgetIgnored(deviceId) else noteIgnored(deviceId, dev)
                 _devices.value[deviceId]?.let { cur ->
                     if (isModelTransitioning(cur)) holdAsTransitioning(deviceId) else scheduleDisconnect(cur)
                 }
                 return
             }
+            forgetIgnored(deviceId)
             cancelDisconnect(deviceId)
             // Sensors and lights can enumerate after onInputDeviceAdded (a Bluetooth Switch Pro's
             // gyro; a pad's light bar as its merged device gains a sub-device), so re-probe.
@@ -683,7 +722,7 @@ class PhysicalGamepadRegistry
                 }.joinToString(",")
 
         // Generic HID joysticks expose buttons as KEYCODE_BUTTON_1..16; gating on hasKeys would hide them.
-        private fun isGamepad(d: InputDevice): Boolean = isGamepadDeviceFromCapabilities(d.sources, d.keyboardType)
+        private fun isGamepad(d: InputDevice): Boolean = isGamepadDeviceFromCapabilities(d.sources)
 
         companion object {
             private const val TAG = "PhysicalGamepadRegistry"
@@ -710,13 +749,19 @@ internal fun hasPointerSource(sources: Int): Boolean =
         (sources and InputDevice.SOURCE_TOUCHPAD) == InputDevice.SOURCE_TOUCHPAD
 
 // Lifted out so the classifier is JVM-testable without mocking InputDevice (final class with many native methods).
-internal fun isGamepadDeviceFromCapabilities(
-    sources: Int,
-    keyboardType: Int,
-): Boolean {
-    if (keyboardType == InputDevice.KEYBOARD_TYPE_ALPHABETIC) return false
-    return (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
+internal fun isGamepadDeviceFromCapabilities(sources: Int): Boolean =
+    (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
         (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+
+// A null isExternal is a release before API 29, where InputDevice.isExternal does not exist.
+internal fun isListableIgnoredDevice(
+    isVirtual: Boolean,
+    isExternal: Boolean?,
+    vendorId: Int,
+    productId: Int,
+): Boolean {
+    if (isVirtual) return false
+    return isExternal ?: (vendorId != 0 || productId != 0)
 }
 
 // Pure projection of a device's transient ("placeholder") fields plus the identity flag that gates

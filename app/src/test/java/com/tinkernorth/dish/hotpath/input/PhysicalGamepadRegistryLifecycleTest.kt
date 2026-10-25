@@ -83,19 +83,55 @@ class PhysicalGamepadRegistryLifecycleTest {
         pid: Int = PID,
         name: String = NAME,
         motor: Vibrator = motor(present = false),
+        sources: Int = InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK,
+        keyboardType: Int = InputDevice.KEYBOARD_TYPE_NON_ALPHABETIC,
     ): InputDevice {
         val pad =
             mockk<InputDevice>(relaxed = true) {
                 every { id } returns deviceId
                 every { this@mockk.name } returns name
-                every { sources } returns (InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK)
-                every { keyboardType } returns InputDevice.KEYBOARD_TYPE_NON_ALPHABETIC
+                every { this@mockk.sources } returns sources
+                every { this@mockk.keyboardType } returns keyboardType
                 every { vendorId } returns vid
                 every { productId } returns pid
             }
         stubLegacyVibrator(pad, motor)
         return pad
     }
+
+    // Anything Android enumerates that is not a controller: a keyboard, a mouse, a built-in button row.
+    private fun otherDevice(
+        deviceId: Int,
+        sources: Int,
+        keyboardType: Int = InputDevice.KEYBOARD_TYPE_NONE,
+        vid: Int = 0,
+        pid: Int = 0,
+        name: String = "",
+        isVirtual: Boolean = false,
+        isExternal: Boolean = false,
+    ): InputDevice =
+        mockk(relaxed = true) {
+            every { id } returns deviceId
+            every { this@mockk.name } returns name
+            every { this@mockk.sources } returns sources
+            every { this@mockk.keyboardType } returns keyboardType
+            every { vendorId } returns vid
+            every { productId } returns pid
+            every { this@mockk.isVirtual } returns isVirtual
+            every { this@mockk.isExternal } returns isExternal
+        }
+
+    private fun keyboard(deviceId: Int = KEYBOARD): InputDevice =
+        otherDevice(
+            deviceId,
+            sources = InputDevice.SOURCE_KEYBOARD,
+            keyboardType = InputDevice.KEYBOARD_TYPE_ALPHABETIC,
+            vid = KEYBOARD_VID,
+            pid = KEYBOARD_PID,
+            name = KEYBOARD_NAME,
+        )
+
+    private fun ignoredIds(registry: PhysicalGamepadRegistry): Set<Int> = registry.ignoredInputDevices.value.keys
 
     // A pad's touch surface enumerated as a device of its own: a mouse of the pad's model.
     private fun surfaceOf(
@@ -209,6 +245,149 @@ class PhysicalGamepadRegistryLifecycleTest {
 
         assertSame(before, registry.devices.value)
         verify(exactly = 1) { InputDevice.getDevice(PAD) }
+    }
+
+    @Test
+    fun `a controller Android also reads as a full keyboard is adopted`() {
+        val registry = buildRegistry()
+        val composite =
+            frameworkPad(
+                PAD,
+                name = COMPOSITE_NAME,
+                sources = InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK or InputDevice.SOURCE_KEYBOARD,
+                keyboardType = InputDevice.KEYBOARD_TYPE_ALPHABETIC,
+            )
+
+        addPad(registry, composite)
+
+        assertEquals(
+            COMPOSITE_NAME,
+            registry.devices.value
+                .getValue(PAD)
+                .name,
+        )
+        assertEquals(emptySet<Int>(), ignoredIds(registry))
+    }
+
+    @Test
+    fun `a joystick Android also reads as a full keyboard is adopted`() {
+        val registry = buildRegistry()
+        val composite =
+            frameworkPad(
+                PAD,
+                sources = InputDevice.SOURCE_JOYSTICK or InputDevice.SOURCE_KEYBOARD,
+                keyboardType = InputDevice.KEYBOARD_TYPE_ALPHABETIC,
+            )
+
+        addPad(registry, composite)
+
+        assertEquals(setOf(PAD), registry.devices.value.keys)
+    }
+
+    @Test
+    fun `a keyboard with a hardware id arriving is listed among the ignored devices`() {
+        val registry = buildRegistry()
+        every { InputDevice.getDevice(KEYBOARD) } returns keyboard()
+
+        registry.onInputDeviceAdded(KEYBOARD)
+
+        assertEquals(
+            PhysicalGamepadRegistry.IgnoredInputDevice(
+                id = KEYBOARD,
+                name = KEYBOARD_NAME,
+                vendorId = KEYBOARD_VID,
+                productId = KEYBOARD_PID,
+                sources = InputDevice.SOURCE_KEYBOARD,
+                keyboardType = InputDevice.KEYBOARD_TYPE_ALPHABETIC,
+            ),
+            registry.ignoredInputDevices.value.getValue(KEYBOARD),
+        )
+        assertEquals(emptySet<Int>(), registry.devices.value.keys)
+    }
+
+    @Test
+    fun `below API 29 a device without a hardware id is not listed`() {
+        val registry = buildRegistry()
+        every { InputDevice.getDevice(KEYBOARD) } returns otherDevice(KEYBOARD, sources = InputDevice.SOURCE_KEYBOARD)
+
+        registry.onInputDeviceAdded(KEYBOARD)
+
+        assertEquals(emptySet<Int>(), ignoredIds(registry))
+    }
+
+    @Test
+    fun `from API 29 Android's own external flag decides what is listed`() {
+        val registry = buildRegistry(sdkInt = Build.VERSION_CODES.Q)
+        val builtIn = otherDevice(KEYBOARD, sources = InputDevice.SOURCE_KEYBOARD, vid = KEYBOARD_VID, pid = KEYBOARD_PID)
+        val pluggedIn = otherDevice(MOUSE, sources = InputDevice.SOURCE_MOUSE, isExternal = true)
+        every { InputDevice.getDevice(KEYBOARD) } returns builtIn
+        every { InputDevice.getDevice(MOUSE) } returns pluggedIn
+
+        registry.onInputDeviceAdded(KEYBOARD)
+        registry.onInputDeviceAdded(MOUSE)
+
+        assertEquals(setOf(MOUSE), ignoredIds(registry))
+    }
+
+    @Test
+    fun `a virtual device is never listed`() {
+        val registry = buildRegistry(sdkInt = Build.VERSION_CODES.Q)
+        every { InputDevice.getDevice(KEYBOARD) } returns
+            otherDevice(KEYBOARD, sources = InputDevice.SOURCE_KEYBOARD, vid = KEYBOARD_VID, isVirtual = true, isExternal = true)
+
+        registry.onInputDeviceAdded(KEYBOARD)
+
+        assertEquals(emptySet<Int>(), ignoredIds(registry))
+    }
+
+    @Test
+    fun `an ignored device going away leaves the list`() {
+        val registry = buildRegistry()
+        every { InputDevice.getDevice(KEYBOARD) } returns keyboard()
+        registry.onInputDeviceAdded(KEYBOARD)
+        assertEquals(setOf(KEYBOARD), ignoredIds(registry))
+        every { InputDevice.getDevice(KEYBOARD) } returns null
+
+        registry.onInputDeviceRemoved(KEYBOARD)
+
+        assertEquals(emptySet<Int>(), ignoredIds(registry))
+    }
+
+    @Test
+    fun `an ignored device that changes into a controller moves to the controllers`() {
+        val registry = buildRegistry()
+        every { InputDevice.getDevice(KEYBOARD) } returns keyboard()
+        registry.onInputDeviceAdded(KEYBOARD)
+        every { InputDevice.getDevice(KEYBOARD) } returns frameworkPad(KEYBOARD)
+
+        registry.onInputDeviceChanged(KEYBOARD)
+
+        assertEquals(setOf(KEYBOARD), registry.devices.value.keys)
+        assertEquals(emptySet<Int>(), ignoredIds(registry))
+    }
+
+    @Test
+    fun `a controller that changes into something else joins the ignored list`() {
+        val registry = buildRegistry()
+        addPad(registry, frameworkPad(PAD))
+        every { InputDevice.getDevice(PAD) } returns keyboard(deviceId = PAD)
+
+        registry.onInputDeviceChanged(PAD)
+
+        assertEquals(setOf(PAD), ignoredIds(registry))
+    }
+
+    @Test
+    fun `the first enumeration lists the ignored devices beside the controllers`() {
+        every { InputDevice.getDeviceIds() } returns intArrayOf(PAD, KEYBOARD)
+        every { InputDevice.getDevice(PAD) } returns frameworkPad(PAD)
+        every { InputDevice.getDevice(KEYBOARD) } returns keyboard()
+        val registry = buildRegistry()
+
+        registry.install()
+
+        assertEquals(setOf(PAD), registry.devices.value.keys)
+        assertEquals(setOf(KEYBOARD), ignoredIds(registry))
     }
 
     @Test
@@ -813,6 +992,10 @@ class PhysicalGamepadRegistryLifecycleTest {
         const val PID = 0x0CE6
         const val OTHER_PID = 0x09CC
         const val NAME = "Wireless Controller"
+        const val COMPOSITE_NAME = "Pad With Keys"
+        const val KEYBOARD_VID = 0x046D
+        const val KEYBOARD_PID = 0xB34B
+        const val KEYBOARD_NAME = "Keyboard K380"
         const val DISCONNECT_GRACE_SEC = 5
         const val TWO_TICKS_MS = 2_000L
         const val THREE_TICKS_MS = 3_000L

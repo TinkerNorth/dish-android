@@ -76,3 +76,13 @@ internal fun Context.controllerCardLines(diag: ControllerDiag): List<String> {
     if (diag.functions.isNotEmpty()) lines += diagKv(R.string.binding_label_functions, featureList(diag.functions))
     return lines
 }
+
+internal fun Context.ignoredInputCardLines(device: IgnoredInputDiag): List<String> =
+    buildList {
+        add(diagKv(R.string.diagnostics_state, getString(R.string.diagnostics_state_ignored)))
+        add(diagKv(R.string.diagnostics_inputs, inputKindList(device.inputs)))
+        keyboardKindLabelRes(device.keyboard)?.let { add(diagKv(R.string.diagnostics_keyboard_type, getString(it))) }
+        val hardwareId = getString(R.string.diagnostics_hardware_id_value, device.vendorId, device.productId)
+        add(diagKv(R.string.diagnostics_hardware_id, hardwareId))
+        add(diagKv(R.string.diagnostics_source_mask, getString(R.string.diagnostics_source_mask_value, device.sources)))
+    }

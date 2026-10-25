@@ -39,6 +39,7 @@ private data class LiveInputs(
     val bindings: Map<String, String>,
     val summaries: List<ConnectionSummary>,
     val satellites: Map<String, SatelliteSnapshot>,
+    val ignored: Map<Int, PhysicalGamepadRegistry.IgnoredInputDevice>,
 )
 
 internal data class FactInputs(
@@ -116,12 +117,13 @@ class DiagnosticsSources
 
         internal val world: Flow<DiagnosticsWorld> =
             combine(
-                combine(registry.devices, hub.bindings, hub.connections, satellites, ::LiveInputs),
+                combine(registry.devices, hub.bindings, hub.connections, satellites, registry.ignoredInputDevices, ::LiveInputs),
                 facts.flow,
                 extras.flow(telemetryTicks),
             ) { live, facts, extra ->
                 DiagnosticsWorld(
                     devices = live.devices,
+                    ignoredInputs = live.ignored.values.toList(),
                     virtualName = context.getString(R.string.default_virtual_controller_name),
                     bindings = live.bindings,
                     summaries = live.summaries,

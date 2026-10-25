@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.ui.diagnostics
 
 import android.content.Context
+import androidx.annotation.StringRes
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.model.Feature
@@ -74,3 +75,30 @@ internal fun Context.hostFeatureList(features: HostFeatureSet): String {
     if (labels.isEmpty()) return getString(R.string.diagnostics_none)
     return labels.joinToString(SEPARATOR) { getString(it) }
 }
+
+@StringRes
+internal fun inputKindLabelRes(kind: InputSourceKind): Int =
+    when (kind) {
+        InputSourceKind.KEYBOARD -> R.string.diagnostics_input_keyboard
+        InputSourceKind.DPAD -> R.string.diagnostics_input_dpad
+        InputSourceKind.GAMEPAD -> R.string.diagnostics_input_gamepad
+        InputSourceKind.JOYSTICK -> R.string.diagnostics_input_joystick
+        InputSourceKind.MOUSE -> R.string.diagnostics_input_mouse
+        InputSourceKind.TOUCHPAD -> R.string.diagnostics_input_touchpad
+        InputSourceKind.TOUCHSCREEN -> R.string.diagnostics_input_touchscreen
+        InputSourceKind.STYLUS -> R.string.diagnostics_input_stylus
+        InputSourceKind.TRACKBALL -> R.string.diagnostics_input_trackball
+    }
+
+internal fun Context.inputKindList(kinds: List<InputSourceKind>): String {
+    if (kinds.isEmpty()) return getString(R.string.diagnostics_none)
+    return kinds.joinToString(SEPARATOR) { getString(inputKindLabelRes(it)) }
+}
+
+@StringRes
+internal fun keyboardKindLabelRes(kind: KeyboardKind): Int? =
+    when (kind) {
+        KeyboardKind.NONE -> null
+        KeyboardKind.BUTTONS_ONLY -> R.string.diagnostics_keyboard_buttons
+        KeyboardKind.FULL -> R.string.diagnostics_keyboard_full
+    }

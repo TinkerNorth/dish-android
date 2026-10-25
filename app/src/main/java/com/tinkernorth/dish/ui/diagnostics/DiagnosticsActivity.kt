@@ -76,7 +76,7 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
 
     private fun renderOverview(overview: Overview) {
         renderRadios(overview)
-        renderControllers(overview.controllers)
+        renderControllers(overview.controllers, overview.ignoredInputs)
         renderHosts(overview.hosts)
     }
 
@@ -97,11 +97,20 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
 
     // ── Controllers ─────────────────────────────────────────────────────────
 
-    private fun renderControllers(items: List<ControllerDiag>) {
+    private fun renderControllers(
+        items: List<ControllerDiag>,
+        ignored: List<IgnoredInputDiag>,
+    ) {
         val container = binding.containerControllers
         container.removeAllViews()
         items.forEach { diag ->
             container.addView(container.card(diag.name, controllerCardLines(diag)) { parent -> controllerActions(parent, diag) })
+        }
+        if (ignored.isEmpty()) return
+        container.addView(container.emptyRow(getString(R.string.diagnostics_ignored_inputs_header)))
+        ignored.forEach { device ->
+            val title = device.name.ifBlank { getString(R.string.diagnostics_unknown) }
+            container.addView(container.card(title, ignoredInputCardLines(device)))
         }
     }
 
