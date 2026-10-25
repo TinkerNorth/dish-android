@@ -153,7 +153,7 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Set up JDK 17
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           java-version: "17"
           distribution: temurin
@@ -363,13 +363,13 @@ jobs:
             > dist/latest.json
           cat dist/latest.json
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android
           path: dist/
 
       - name: Upload the Amazon Appstore build
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: amazon-appstore
           path: dist-amazon/
@@ -468,14 +468,14 @@ jobs:
 
       - name: Download release artifacts
         if: ${{ steps.gate.outputs.enabled == 'true' }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: android
           path: dist
 
       - name: Download fresh screenshots
         if: ${{ steps.gate.outputs.enabled == 'true' }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: screenshots-*
           merge-multiple: true
@@ -595,7 +595,7 @@ jobs:
       hashes: ${{ steps.hashes.outputs.hashes }}
     steps:
       - name: Download release artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: android
           path: release
@@ -615,7 +615,7 @@ jobs:
         # Soft-fail: the grype step above is the gate, this is observability.
         if: ${{ always() && steps.grype.outputs.sarif != '' }}
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: ${{ steps.grype.outputs.sarif }}
           category: release-grype
@@ -698,7 +698,7 @@ jobs:
           echo "hashes=${h}" >> "$GITHUB_OUTPUT"
 
       - name: Upload hardened bundle
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-bundle
           path: release/
@@ -729,13 +729,13 @@ jobs:
       contents: write
     steps:
       - name: Download hardened bundle
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-bundle
           path: release
 
       - name: Download SLSA provenance
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.provenance.outputs.provenance-name }}
           path: release
