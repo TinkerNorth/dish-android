@@ -397,12 +397,12 @@ in-app callback (`DishNavigator.toConnectionsForPairing`), not a deep
 link, so the lint check stays clean.
 
 **`DonateActivity` is in the graph** (`donateActivity`, reached through
-`DishNavigator.toDonate()` from `ui/donate/DonationSurface.kt`). Both
-flavors supply a class by that name, which is what makes it safe:
+`DishNavigator.toDonate()` from `ui/donate/DonationSurface.kt`). Every
+flavor supplies a class by that name, which is what makes it safe:
 `NavInflater` resolves every `android:name` when the graph inflates, so a
 destination pointing at a class one flavor lacks would break navigation on
 every screen. See "Distribution flavors" below for what each flavor's
-`DonateActivity` does.
+`DonateActivity` does; amazon's closes as it opens, and nothing opens it.
 
 **What stays outside the graph**: external `startActivity` calls that
 target other apps (browser `ACTION_VIEW`, Bluetooth settings, Wi-Fi
@@ -647,36 +647,54 @@ deeper), the error red can drop below AA. Compute before adopting.
 | Navigation graph | `app/src/main/res/navigation/nav_graph.xml` |
 | Navigation wrapper | `app/src/main/java/com/tinkernorth/dish/ui/common/DishNavigator.kt` |
 | Donation touchpoints (shared) | `app/src/main/java/com/tinkernorth/dish/ui/donate/`, `view_donate_*.xml` |
-| Donate screen (per flavor) | `app/src/github/`, `app/src/play/` |
+| Donate screen (per flavor) | `app/src/github/`, `app/src/play/`, and the copy both share in `app/src/donate/` |
 
 ## Distribution flavors
 
-One flavor dimension, `distribution`, with two flavors:
+One flavor dimension, `distribution`, with three flavors:
 
-| Flavor | Ships as | Donate screen takes money via |
-|---|---|---|
-| `github` (default) | APK on GitHub Releases / tinkernorth.com | External links: GitHub Sponsors, Ko-fi, Buy Me a Coffee |
-| `play` | AAB on Google Play | Google Play's billing system: one-time tips and a monthly supporter plan |
+| Flavor | Ships as | Tips | Updates |
+|---|---|---|---|
+| `github` (default) | APK on GitHub Releases / tinkernorth.com | External links: GitHub Sponsors, Ko-fi, Buy Me a Coffee | `UpdateCoordinator` asks GitHub Releases |
+| `play` | AAB on Google Play | Google Play's billing system: one-time tips and a monthly supporter plan | Google Play (`NoUpdateNotices`) |
+| `amazon` | APK uploaded to the Amazon Appstore | None | The Amazon Appstore (`NoUpdateNotices`) |
 
 Google Play's Payments policy requires a Play-distributed app to sell
 digital goods through Play Billing and forbids steering users to other
-payment methods, so the two flavors part ways only inside `DonateActivity`.
-The touchpoints that open it are shared and live in `src/main`: the toolbar
-heart (`view_donate_heart_button.xml`), the dismissable pill
-(`DonatePill.kt`, `view_donate_pill.xml`), the Settings support card
-(`DonationSurface.kt`), the pulse-pink color roles, the `donate_*`
-dimensions, the `donate_why_row` include, and the copy both screens share.
-`DonateActivity` is a `nav_graph` destination reached through
+payment methods, and the Amazon Appstore takes digital sales only through
+Amazon's In-App Purchasing API, so the flavors part ways in whether they ask
+for tips and inside `DonateActivity`. The touchpoints are shared and live in
+`src/main`: the toolbar heart (`view_donate_heart_button.xml`), the
+dismissable pill (`DonatePill.kt`, `view_donate_pill.xml`), the Settings
+support card (`DonationSurface.kt`), the pulse-pink color roles and the
+`donate_*` dimensions they use. Each one reads the flavor's `TIP_OFFER`
+(`ui/donate/TipOffer.kt`) the way the update pill and the Settings update
+rows read `UpdateNotices.supported`: an `Ask` carries the pill's and the
+card's wording and the flavor's `SupporterCheck`, and `None` hides every
+surface. `DonateActivity` is a `nav_graph` destination reached through
 `DishNavigator.toDonate()`.
 
-Each flavor supplies its own `DonateActivity`, `activity_donate.xml`
-(plus `layout-sw600dp`), and the three strings whose wording differs
-(`donate_bar_ask`, `donate_lead`, `settings_support_body`), in all six
-locales:
+Code two flavors share lives in a directory of its own, wired into both
+flavors' source sets in `app/build.gradle.kts`:
+
+- `src/donate` (github and play): `TIP_OFFER` as an `Ask` built from each
+  flavor's own `donate_bar_ask`, `settings_support_body` and
+  `Context.isSupporter()`, and the donate screen's shared copy
+  (`donate_eyebrow`, `donate_h1`, `donate_why_*`, `donate_thanks`, in all
+  six locales), the `donate_why_row` include with its `bg_pulse_dot`, and
+  the hero dimensions. `src/testDonate` holds its tests.
+- `src/storeUpdates` (play and amazon): `NoUpdateNotices` and the
+  `UpdateModule` that binds it, since each store updates the app itself.
+  `src/testStoreUpdates` holds its tests.
+
+Each flavor with a donate screen supplies its own `DonateActivity`,
+`activity_donate.xml` (plus `layout-sw600dp`), and the three strings whose
+wording differs (`donate_bar_ask`, `donate_lead`, `settings_support_body`),
+in all six locales:
 
 - `src/github`: the payment rail cards and their URLs. Nothing in here
-  compiles into the Play artifact, so the Play build carries no external
-  payment link.
+  compiles into the Play or the Amazon artifact, so neither store build
+  carries an external payment link.
 - `src/play`: the Play Billing client. `source/billing/` holds the
   `BillingGateway` contract, `PlayBillingGateway` wrapping the Billing
   Library behind it, `TipJarSource` owning the catalog and purchase state,
@@ -694,19 +712,26 @@ locales:
   screen opens, plus one purchase check per launch on a device that last
   saw a subscription, so the stream path never pays for it.
 
-Both flavors also supply `ui/donate/SupporterStatus.kt`, whose
-`Context.isSupporter()` lets the shared pill in `src/main` stay away from a
-monthly supporter: `src/github` answers false, `src/play` reads the cached
-answer and asks the tip jar to re-verify it.
+`src/amazon` has no donate screen: its `TIP_OFFER` is `TipOffer.None`, so
+no donation surface shows, and its `DonateActivity` closes as it opens,
+since the manifest and the nav graph in `src/main` name the class. No
+payment link, billing client or update check compiles into that artifact.
 
-Adding a donation touchpoint means adding it to `src/main` and letting it
-call `openDonateScreen()`; adding a payment path means changing one
-flavor's `DonateActivity` only.
+Both github and play also supply `ui/donate/SupporterStatus.kt`, whose
+`Context.isSupporter()` is the `SupporterCheck` their `Ask` carries, so the
+shared pill stays away from a monthly supporter: `src/github` answers
+false, `src/play` reads the cached answer and asks the tip jar to re-verify
+it.
+
+Adding a donation touchpoint means adding it to `src/main`, showing it only
+for an `Ask`, and letting it call `openDonateScreen()`; adding a payment
+path means changing one flavor's `DonateActivity` only.
 
 Gradle task names carry the flavor: `assembleGithubDebug`,
-`assemblePlayDebug`, `testGithubDebugUnitTest`, `bundlePlayRelease`, and
-so on. Store screenshots are captured from the `play` flavor so listing
-images never show donation UI.
+`assemblePlayDebug`, `assembleAmazonDebug`, `testGithubDebugUnitTest`,
+`bundlePlayRelease`, and so on. Every flavor ships the `armeabi-v7a`,
+`arm64-v8a` and `x86_64` libraries. Store screenshots are captured from the
+`play` flavor so listing images never show donation UI.
 
 ## Naming
 

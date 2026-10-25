@@ -32,7 +32,8 @@ policy, as do the desktop clients; do not read one as describing another.
 - The **GitHub build** (the APK from our releases page) checks for a newer
   release by fetching one small file from GitHub while the app is open, at
   most once an hour, and sends nothing about you. You can turn that off in
-  Settings. The Google Play build never does this: Play updates it.
+  Settings. The Google Play and Amazon Appstore builds never do this: each
+  store updates its build itself.
 - Dish can act as your controller's **microphone**, so voice chat on your
   PC hears you through the emulated pad. That is off unless you switch it
   on for a controller, it needs the microphone permission, and the audio
@@ -171,6 +172,9 @@ The build distributed on GitHub and tinkernorth.com contains none of this.
 It links to third-party donation pages instead, and their own privacy
 policies apply once you leave the app.
 
+The Amazon Appstore build offers no tips at all: it has no billing code and
+no donation links, so nothing about payments is processed by it.
+
 ---
 
 ### 2.5 Sent to GitHub (update check, GitHub build only)
@@ -213,7 +217,8 @@ any kind, including from the *Check for updates* button.
 
 **The Google Play build** never contacts GitHub for this. Play updates it, as
 Google's policy requires, and the update code is not compiled into that
-build at all.
+build at all. **The Amazon Appstore build** is the same: the Appstore
+updates it, and it carries no update code either.
 
 ---
 
@@ -224,7 +229,7 @@ build at all.
 | `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE` | Sending the encrypted UDP stream and discovery beacons over your local network. | Install-time (normal permissions). |
 | `BLUETOOTH_CONNECT` (API 31+) | Pairing with a Bluetooth host (PC, console, set-top box) and presenting as a HID gamepad, or connecting a Bluetooth game controller. | Runtime, when you add a Bluetooth host or controller. |
 | `BLUETOOTH_SCAN` (API 31+) | Discovering nearby Bluetooth hosts and controllers so you can pair them. Declared with `neverForLocation`: we do not derive your location from Bluetooth results and collect no scan data. | Runtime, when you scan for a Bluetooth host or controller. |
-| `BLUETOOTH`, `BLUETOOTH_ADMIN` (API ≤ 30 only) | Legacy Bluetooth equivalent for Android ≤ 11. | Install-time. |
+| `BLUETOOTH`, `BLUETOOTH_ADMIN` (API ≤ 30 only) | Legacy Bluetooth equivalent for Android ≤ 11. Those versions report nearby devices only to an app holding a location permission, which Dish does not request, so there Dish lists paired devices only and you pair a new one in the system Bluetooth settings. | Install-time. |
 | `POST_NOTIFICATIONS` (API 33+) | Showing the ongoing-session notification while a controller is streaming, plus actionable error banners. | Runtime, on first launch on Android 13+. Declining still lets the app run; the notification just isn't visible. |
 | `RECORD_AUDIO` | Acting as the emulated controller's own microphone, so voice chat on your PC hears you through the pad. | Runtime, only when you switch Microphone on for a controller. Declining leaves everything else working; the row says it needs permission and never pretends to capture. |
 | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE` | Keeping the streaming session alive when you background the app. | Install-time. |
@@ -271,7 +276,8 @@ or comparable laws in other jurisdictions.
   screen, then flip *Check for updates automatically* off. Off means no
   update-related request at all, including from the *Check for updates*
   button. *Skip this version* on the update notice mutes that one version
-  instead. The Play build has neither, because Play updates it.
+  instead. The Play and Amazon Appstore builds have neither, because their
+  stores update them.
 - **Controller microphone opt-out:** it is off until you switch it on, per
   controller, on that controller's binding screen. Switching it off stops
   capture and stops the client advertising a microphone to the host at all.

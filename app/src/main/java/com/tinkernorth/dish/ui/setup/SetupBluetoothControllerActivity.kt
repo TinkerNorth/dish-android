@@ -3,10 +3,8 @@
 package com.tinkernorth.dish.ui.setup
 
 import android.Manifest
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.view.View
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -18,6 +16,7 @@ import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.observeWhileStarted
+import com.tinkernorth.dish.ui.common.openBluetoothSettings
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -108,10 +107,6 @@ class SetupBluetoothControllerActivity : BaseGamepadHostActivity() {
                 Manifest.permission.BLUETOOTH_SCAN,
             ),
         )
-    }
-
-    private fun openBluetoothSettings() {
-        runCatching { startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
     }
 
     // 2C is a single screen with no reversible sub-state, so back always exits the branch.

@@ -6,11 +6,11 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import kotlinx.coroutines.flow.StateFlow
 
 // What the screens see of the update feature. The github flavor binds a
-// coordinator that asks GitHub Releases for the newest build; the play flavor
-// binds NoUpdateNotices, because Google Play reserves updating a
-// Play-distributed app to Play itself, so no update code compiles into that
-// artifact. Registered on the process lifecycle, so checks run only while the
-// app is on screen.
+// coordinator that asks GitHub Releases for the newest build; the play and
+// amazon flavors bind NoUpdateNotices, because each store updates the apps it
+// distributes itself, so no update code compiles into those artifacts.
+// Registered on the process lifecycle, so checks run only while the app is on
+// screen.
 interface UpdateNotices : DefaultLifecycleObserver {
     // False on a build whose distribution channel updates the app itself; the
     // screens then show nothing update-related at all.

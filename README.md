@@ -56,6 +56,18 @@ the hot-path rules are in [`docs/architecture.md`](docs/architecture.md).
 - Android SDK 37, NDK with CMake 3.22.1
 - JDK 17+
 - Min SDK 24 (Android 7.0)
+- Native ABIs: `armeabi-v7a`, `arm64-v8a` and `x86_64`, in every flavor
+
+## Distribution flavors
+
+| Flavor | Ships as | Tips | Updates |
+|--------|----------|------|---------|
+| `github` (default) | APK on GitHub Releases | External donation links | The app checks GitHub Releases |
+| `play` | AAB on Google Play | Google Play billing | Google Play |
+| `amazon` | APK uploaded to the Amazon Appstore | None | The Amazon Appstore |
+
+What each flavor's own code is and which directories two flavors share is in
+[`docs/design-system.md`](docs/design-system.md), "Distribution flavors".
 
 ## Build and run
 
@@ -102,10 +114,13 @@ gradle/libs.versions.toml        Version catalog
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) and the
 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md). CI runs build + style
-(`android-ci.yml`) and security gates (`security.yml`, `codeql.yml`)
-on every PR: OSV-Scanner, dependency-review, gitleaks, action-pin
-lint, and CodeQL for `java-kotlin` and `cpp`; release artifacts get a
-Grype scan in `release.yml`.
+(`android-ci.yml`, including the C++ host tests as 32-bit ARM under
+qemu and the integration tests on an API 28 emulator that runs the
+`armeabi-v7a` library through ARM translation) and security gates
+(`security.yml`, `codeql.yml`) on every PR: OSV-Scanner,
+dependency-review, gitleaks, action-pin lint, and CodeQL for
+`java-kotlin` and `cpp`; release artifacts get a Grype scan in
+`release.yml`.
 
 > Branch protection is unavailable on this repo's current org plan,
 > so direct pushes to `main` are blocked by convention only. The CI

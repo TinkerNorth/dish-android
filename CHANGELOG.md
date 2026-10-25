@@ -9,8 +9,27 @@ computer. Those lines say "update Satellite too".
 
 ## [Unreleased]
 
+### Added
+
+- **The native library now ships for 32-bit ARM**, so Dish installs on
+  devices with no 64-bit side at all, such as the Amazon Fire HD 8 (2018 and
+  2020), Fire 7 (2019) and Fire HD 10 (2019). Before, Google Play did not
+  offer Dish on them and the GitHub APK refused to install.
+- **The release now also builds an APK for the Amazon Appstore.** It is the
+  same app, it leaves updates to the Appstore instead of checking GitHub, and
+  it asks for no tips: no donate button, banner or Settings card.
+
 ### Fixed
 
+- **Adding a Bluetooth PC on Android 11 and older lists your paired devices
+  and offers a button that opens Bluetooth settings for a new one.** Those
+  Android versions report nearby devices only to an app with the location
+  permission, which Dish does not ask for, so the scan in the picker could
+  never find anything.
+- **The screen shown when Dish's native library cannot load no longer tells
+  you to reinstall from the Play Store**, which was wrong for every build
+  installed from somewhere else. It now says to reinstall Dish from where you
+  got it.
 - **A Moonlight host's rumble or motion request that overtakes an earlier
   packet is no longer lost.** It now waits for the packet it overtook, the way
   ENet's own clients do, instead of being dropped with it. The link also

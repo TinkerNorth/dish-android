@@ -295,6 +295,8 @@
     <string name="bt_device_tag_paired">Uparen</string>
     <string name="bt_device_tag_available">Dostupan</string>
     <string name="bt_scan_permission_note">Skeniranje zahtijeva dozvolu za uređaje u blizini. Upareni uređaji se prikazuju i bez nje.</string>
+    <string name="bt_scan_system_settings_note">Novi uređaj prvo uparite u Bluetooth podešavanjima. Upareni uređaji se prikazuju ovdje.</string>
+    <string name="bt_open_bluetooth_settings">Bluetooth podešavanja</string>
     <string name="notif_bt_discoverability_denied_title">Vidljivost odbijena</string>
     <string name="notif_bt_discoverability_denied_body">Vaš host ne može vidjeti ovaj telefon dok ga ne učinite vidljivim.</string>
     <string name="notif_bt_adapter_off_title">Bluetooth je isključen</string>
@@ -377,7 +379,7 @@
 
     <!-- Rezervni ekran kada nativno učitavanje ne uspije. -->
     <string name="fatal_native_title">Ovaj build se neće pokrenuti na vašem uređaju</string>
-    <string name="fatal_native_body">Dish nativna biblioteka se nije mogla učitati. Reinstalirajte sa Google Play-a, ili kontaktirajte podršku.</string>
+    <string name="fatal_native_body">Dish nativna biblioteka se nije mogla učitati. Ponovo instalirajte Dish odakle ste ga preuzeli, ili kontaktirajte podršku.</string>
 
     <!-- Sloj režima niske potrošnje (overlay_low_power.xml + LowPowerManager). -->
     <string name="low_power_in">UŠTEDA ZA</string>
@@ -829,13 +831,5 @@
     <string name="donate_bar_headline">Dish je besplatan i otvorenog koda.</string>
     <string name="donate_bar_dismiss">Zatvori baner za donaciju</string>
     <string name="donate_title">Podrži Dish</string>
-    <string name="donate_eyebrow">Podržite projekat</string>
-    <string name="donate_h1">Dish radi na kafi i dobroj volji.</string>
-    <string name="donate_why_title">Šta vaša donacija zapravo plaća</string>
-    <string name="donate_why_hosting">Hosting. dish.tinkernorth.com, tinkernorth.com i svaki signed-installer mirror. AWS nije besplatan, čak ni na našem obimu saobraćaja.</string>
-    <string name="donate_why_signing">Code-signing sertifikati. Windows SmartScreen sarađuje samo zato što plaćamo EV sertifikat svake godine. Isto vrijedi za Apple Developer Program nalog za nadolazeći macOS klijent.</string>
-    <string name="donate_why_play">Google Play developer naknada. Jednokratna naknada od 25 dolara plus vrijeme potrebno za održavanje Play oglasa usklađenim sa svakom novom rundom politika.</string>
-    <string name="donate_why_time">Vrijeme. Iskren odgovor: većina toga. Dish je projekat noći i vikenda. Donacije mi dozvoljavaju da kažem „da“ radu na njemu umjesto preuzimanju dodatnog konsultantskog posla.</string>
-    <string name="donate_thanks">Hvala vam. Svaki dolar, svaka zvjezdica, svaki podijeljeni link. Sve to zbraja. Emir</string>
     <string name="settings_support_title">Podrži Dish</string>
 </resources>
