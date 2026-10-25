@@ -3,10 +3,10 @@
 #
 # Two fast checks, each gated on what's actually staged:
 #   1. clang-format (autofix) on staged JNI C/C++ files.
-#   2. Translation completeness when any values*/strings.xml is staged.
-#      Mirrors the MissingTranslation lint check that CI runs via
-#      ./gradlew lintGithubDebug lintPlayDebug, but ~30× faster (Python,
-#      no Gradle warmup).
+#   2. Translation completeness when any source set's values*/strings*.xml
+#      is staged. Mirrors the MissingTranslation lint check that CI runs via
+#      ./gradlew lintGithubDebug lintPlayDebug lintAmazonDebug, but ~30×
+#      faster (Python, no Gradle warmup).
 #
 # Both tools gracefully skip if their binary is missing so devs who haven't
 # yet run setup-hooks.sh or installed the tool aren't blocked locally. CI
@@ -33,17 +33,17 @@ if [ -n "$staged_jni" ]; then
 fi
 
 # ── translation completeness ─────────────────────────────────────────────
-# Triggered only when a strings.xml file is touched. Matches both
-# values/strings.xml (the source) and values-*/strings.xml (each locale).
+# Triggered only when a strings file of any source set is touched: its
+# values/ source or one of its locales.
 staged_strings=$(git diff --cached --name-only --diff-filter=ACM \
-    | grep -E '^app/src/main/res/values[^/]*/strings\.xml$' || true)
+    | grep -E '^app/src/[^/]+/res/values[^/]*/strings[^/]*\.xml$' || true)
 
 if [ -n "$staged_strings" ]; then
     if command -v python3 >/dev/null 2>&1; then
-        echo "▶ check-translations (staged values*/strings.xml)"
+        echo "▶ check-translations (staged values*/strings*.xml)"
         if ! python3 "$REPO_ROOT/scripts/check-translations.py"; then
             echo
-            echo "✗ commit blocked: a string in values/strings.xml is not"
+            echo "✗ commit blocked: a string in a values/ strings file is not"
             echo "  translated in every locale. Add the missing translations,"
             echo "  mark the string translatable=\"false\", or rerun the commit"
             echo "  with --no-verify if you know what you're doing."

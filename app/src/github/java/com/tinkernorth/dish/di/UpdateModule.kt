@@ -13,7 +13,7 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 // The directly-distributed build learns about new releases from GitHub; the
-// play flavor binds a no-op in its own UpdateModule.
+// store flavors bind a no-op in their shared UpdateModule.
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class UpdateModule {

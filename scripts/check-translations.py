@@ -1,53 +1,71 @@
 #!/usr/bin/env python3
+"""Fails when a translatable string in one source set's values/ is missing from one of that source
+set's own locales, for every app/src/*/res: main, each flavor and each shared flavor directory.
+Mirrors lint's MissingTranslation without starting Gradle.
+
+    scripts/check-translations.py
+"""
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SOURCE = REPO_ROOT / "app/src/main/res/values/strings.xml"
-LOCALES_GLOB = "app/src/main/res/values-*/strings.xml"
+RES_GLOB = "app/src/*/res"
 
 
-def translatable_names(path: Path) -> set[str]:
-    try:
-        tree = ET.parse(path)
-    except (FileNotFoundError, ET.ParseError) as e:
-        print(f"  ✗ {path}: {e}", file=sys.stderr)
-        return set()
-    return {
-        elem.attrib["name"]
-        for elem in tree.getroot().findall("string")
-        if "name" in elem.attrib and elem.attrib.get("translatable", "true") != "false"
-    }
+def string_files(values_dir: Path) -> list[Path]:
+    return sorted(values_dir.glob("strings*.xml"))
+
+
+def translatable_names(files: list[Path]) -> set[str]:
+    names: set[str] = set()
+    for path in files:
+        try:
+            root = ET.parse(path).getroot()
+        except ET.ParseError as e:
+            print(f"✗ {path}: {e}", file=sys.stderr)
+            sys.exit(2)
+        names |= {
+            elem.attrib["name"]
+            for elem in root.findall("string")
+            if "name" in elem.attrib and elem.attrib.get("translatable", "true") != "false"
+        }
+    return names
+
+
+def missing_by_locale(res: Path) -> dict[Path, set[str]]:
+    source = translatable_names(string_files(res / "values"))
+    missing: dict[Path, set[str]] = {}
+    for locale_dir in sorted(res.glob("values-*")):
+        files = string_files(locale_dir)
+        if not files:
+            continue
+        gap = source - translatable_names(files)
+        if gap:
+            missing[locale_dir] = gap
+    return missing
 
 
 def main() -> int:
-    if not SOURCE.exists():
-        print(f"✗ source strings.xml not found: {SOURCE}", file=sys.stderr)
-        return 2
-
-    source_names = translatable_names(SOURCE)
-    if not source_names:
-        print(f"✗ no translatable strings parsed from {SOURCE}", file=sys.stderr)
+    res_dirs = [res for res in sorted(REPO_ROOT.glob(RES_GLOB)) if string_files(res / "values")]
+    if not res_dirs:
+        print(f"✗ no values/strings*.xml under {RES_GLOB}", file=sys.stderr)
         return 2
 
     any_missing = False
-    for locale_path in sorted(REPO_ROOT.glob(LOCALES_GLOB)):
-        locale_names = translatable_names(locale_path)
-        missing = source_names - locale_names
-        if missing:
+    for res in res_dirs:
+        for locale_dir, names in missing_by_locale(res).items():
             any_missing = True
-            locale = locale_path.parent.name
-            print(f"⚠  Missing translations in {locale}:")
-            for name in sorted(missing):
+            print(f"⚠  Missing translations in {locale_dir.relative_to(REPO_ROOT).as_posix()}:")
+            for name in sorted(names):
                 print(f"    {name}")
 
     if any_missing:
         print()
         print(
             "  Add translations to the locale files above, or mark the "
-            "string `translatable=\"false\"` in values/strings.xml if it's "
-            "a brand constant or URL."
+            "string `translatable=\"false\"` in that source set's values/ if "
+            "it's a brand constant or URL."
         )
         return 1
 
