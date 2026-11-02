@@ -277,8 +277,9 @@ foreach(mutex_test tracked_mutex_test tracked_mutex_stats_test)
     target_link_libraries(${mutex_test} PRIVATE GTest::gtest_main Threads::Threads)
 endforeach()
 
-# The lock-free ring and the worker wake the hand-off queues are built on: header-only.
-foreach(primitive_test mpmc_ring_test worker_wake_test)
+# The lock-free ring and the worker wake the hand-off queues are built on, and the USB pads' fixed
+# table: header-only.
+foreach(primitive_test mpmc_ring_test worker_wake_test usb_device_table_test)
     add_executable(${primitive_test} ${primitive_test}.cpp)
     target_include_directories(${primitive_test} PRIVATE "${SATELLITE_CPP}")
     target_compile_options(${primitive_test} PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -345,6 +346,7 @@ gtest_discover_tests(bridge_queue_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(speaker_queue_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(mpmc_ring_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(worker_wake_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(usb_device_table_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(tracked_mutex_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(tracked_mutex_stats_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(lock_laws_test DISCOVERY_MODE PRE_TEST)

@@ -61,6 +61,11 @@ int openSessionSocket() {
         SOCKET_ERROR) {
         dish_log::info("IP_TOS not supported (non-fatal): %d", WSAGetLastError());
     }
+    const int sendBuffer = kSessionSendBufferBytes;
+    if (setsockopt(sock, SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&sendBuffer),
+                   sizeof(sendBuffer)) == SOCKET_ERROR) {
+        dish_log::info("SO_SNDBUF not taken (non-fatal): %d", WSAGetLastError());
+    }
     // Winsock takes the receive timeout in milliseconds, not as a timeval.
     const DWORD timeoutMs = 500;
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeoutMs),

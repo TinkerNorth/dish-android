@@ -88,6 +88,21 @@ TEST_F(UdpSocket, APeerThatIsGoneDoesNotEndTheReceiveLoop) {
     EXPECT_TRUE(errno == EAGAIN || errno == EWOULDBLOCK) << "errno " << errno;
 }
 
+// The kernel may cap or double what it is asked for, but a session's buffer is always more than a
+// plain socket starts with.
+TEST_F(UdpSocket, TheSessionSocketHasALargerSendBufferThanAPlainOne) {
+    const int plain = (int)socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    ASSERT_GE(plain, 0);
+    int plainBytes = 0;
+    int sessionBytes = 0;
+    socklen_t len = sizeof(plainBytes);
+    ASSERT_EQ(getsockopt(plain, SOL_SOCKET, SO_SNDBUF, (char*)&plainBytes, &len), 0);
+    len = sizeof(sessionBytes);
+    ASSERT_EQ(getsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char*)&sessionBytes, &len), 0);
+    dish_net::closeSocket(plain);
+    EXPECT_GT(sessionBytes, plainBytes);
+}
+
 TEST(UdpDestination, TakesAnIpv4LiteralWithItsPortInNetworkOrder) {
     sockaddr_in out = {};
     ASSERT_TRUE(dish_net::ipv4Destination("192.168.1.20", 0x1234, out));

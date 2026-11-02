@@ -28,6 +28,10 @@ int openSessionSocket() {
     if (setsockopt(sock, SOL_SOCKET, SO_BUSY_POLL, &busyPoll, sizeof(busyPoll)) < 0)
         dish_log::info("SO_BUSY_POLL not supported (non-fatal): %s", strerror(errno));
 
+    const int sendBuffer = kSessionSendBufferBytes;
+    if (setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &sendBuffer, sizeof(sendBuffer)) < 0)
+        dish_log::info("SO_SNDBUF not taken (non-fatal): %s", strerror(errno));
+
     const struct timeval rtv = {0, 500000};
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rtv, sizeof(rtv));
     return sock;

@@ -28,8 +28,14 @@ namespace dish_net {
 // DSCP EF, the class Wi-Fi WMM queues as voice.
 inline constexpr int kSessionTos = 0xB8;
 
-// A session's UDP socket: IP_TOS and SO_BUSY_POLL, both best effort, and a 500 ms receive timeout
-// so the receive loop wakes to notice a stop. -1 when socket() fails.
+// Room for a burst of every sender at once (input, motion, touch, mic, heartbeat) before a send
+// is refused for lack of buffer space.
+inline constexpr int kSessionSendBufferBytes = 256 * 1024;
+
+// A session's UDP socket: IP_TOS, SO_BUSY_POLL and SO_SNDBUF, all best effort, and a 500 ms
+// receive timeout so the receive loop wakes to notice a stop. Not connected: the satellite answers
+// from whichever of its addresses its routing picks, and a connected socket drops any other.
+// -1 when socket() fails.
 int openSessionSocket();
 
 void closeSocket(int sock);
