@@ -204,7 +204,13 @@ class MeasurementsReportTest(unittest.TestCase):
         self.assertEqual(top["p999Us"], 30.0)
         self.assertEqual(top["inputLocksPerReport"], 0.0)
         self.assertEqual(top["noiseFloor"], {"maxUs": 50.0, "overOneMs": 0})
+        self.assertIn("max 50.0 us, 0 reports over 1 ms.", self.markdown())
         self.assertIn("The UsbPoller thread took 0.00 locks per report in S1.", self.markdown())
+
+        edit_run(self.raw / "bench_send_path.json",
+                 lambda data: data["rows"][0].update(maxUs=3246.6, overOneMs=1))
+        self.report()
+        self.assertIn("max 3246.6 us, 1 report over 1 ms.", self.markdown())
 
         write_runs(self.raw, extra_locks=[lock_row("S1", "input.devices", "UsbPoller", 15000)])
         self.report()

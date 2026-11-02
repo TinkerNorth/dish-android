@@ -280,12 +280,12 @@ idle machine:
 | S6 | UI | UiInput | 750 | 39.6 | 34.3 | 81.3 | 78.4 | 148.1 | 201.1 | 148.1 | 201.1 |
 
 The locks of the reported runs of S1, S6 and S7 from one `bench_send_path_lockstats` invocation
-with the same settings. Every lock left belongs to a thread off the input path: open and close
-(`session.table`, on the bench's own thread), the mic encoder (`session.audio`) and the binding
-thread (`input.bindings`).
+with the same settings. Every lock left belongs to a thread off the input path: the bench's own
+thread closing the session (`session.table` twice, `session.audio` once), the mic encoder
+(`session.audio`) and the binding thread (`input.bindings`).
 
 | scenario | lock | role | acquisitions | contended | failed tries | max wait us | p99 wait us | max hold us |
-| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | S1 | session.table | Other | 2 | 0 | 0 | 0.1 | 0.1 | 0.2 |
 | S1 | session.audio | Other | 1 | 0 | 0 | 0.0 | 0.0 | 0.3 |
 | S6 | session.table | Other | 2 | 0 | 0 | 0.2 | 0.3 | 0.2 |
@@ -340,7 +340,7 @@ The markdown is the job summary, and both files are the `measurements` workflow 
   whose lists are empty, read off the bench: it counts events, which no runner can disturb, and
   takes no tolerance. A lock-statistics run that recorded no lock at all fails too, as does a set
   with no lock-statistics run, since a gate that sees no lock cannot pass; a working run always
-  records the bench's own thread opening and closing the session. A failed `try_lock` is not an
+  records the bench's own thread closing the session. A failed `try_lock` is not an
   acquisition here. `lock_laws_test`, which the same job runs first, also fails on a lock nested
   in another or held across a blocking call.
 - **Trend (warnings only).** The report downloads `measurements-*.json` from the latest published
@@ -385,3 +385,77 @@ the other release scripts, in its x86_64 lane with `DISH_BENCH_JSON` naming the 
 wrote (files separated as in `PATH`), which the tests then read too, and in the workflow against
 the release's own runs before it writes the record. Once the workflow is on `main`,
 `gh workflow run measurements.yml --ref <branch> -f version=<label>` measures a branch.
+
+### On a hosted runner: the first record
+
+The workflow's run on this branch's pull request (run 41427771512, 2026-11-02 10:18 to 10:25Z)
+measured `bf666952` merged into `main` (`f9e5919`) on a GitHub-hosted `ubuntu-24.04` runner,
+image 20261026.354.1: AMD EPYC 7763, 4 hardware threads, gcc 13.3.0, Release (`-O3 -DNDEBUG`), at
+the defaults (`--rate 1000 --secs 3 --reps 3 --mic-hz 50`) and again with `--mic-hz 1000`. The
+job took 6 min 39 s, 5 min 41 s of it the four bench runs, and its `measurements` artifact holds
+the record (`measurements-dev-f9e5919.md` and `.json`). The lock law gate passed: 28 lock rows,
+none taken by the USB pollers, the UI thread or the receive thread, and the USB poller took 0.00
+locks per report in S1. No earlier release carried measurements, so the trend compared nothing.
+Host numbers again, from a shared runner: the phone run is still owed, and the Windows desktop
+above runs another OS, socket stack and compiler, so the two compare by shape, not by number.
+
+| scenario | stream | role | rate Hz | reports | datagrams | datagrams/report | max per report | p50 us | p99 us | p99.9 us | max us | over 1 ms |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| S1 | A | UsbPoller | 1000 | 3000 | 3000 | 1.000 | 1 | 11.2 | 24.6 | 32.6 | 3246.6 | 1 |
+| S2 | A | UsbPoller | 1000 | 3000 | 3000 | 1.000 | 1 | 14.6 | 29.8 | 38.8 | 65.2 | 0 |
+| S2 | B | UsbPoller | 250 | 750 | 750 | 1.000 | 1 | 26.6 | 44.0 | 83.5 | 83.5 | 0 |
+| S3 | A | UsbPoller | 1000 | 3000 | 3000 | 1.000 | 1 | 11.1 | 43.5 | 51.9 | 54.6 | 0 |
+| S3 | B | UsbPoller | 250 | 750 | 750 | 1.000 | 1 | 37.3 | 52.8 | 94.6 | 94.6 | 0 |
+| S3 | UI | UiInput | 250 | 750 | 750 | 1.000 | 1 | 26.7 | 47.8 | 74.7 | 74.7 | 0 |
+| S4 | A | UsbPoller | 1000 | 3000 | 3000 | 1.000 | 1 | 11.9 | 43.3 | 52.3 | 84.1 | 0 |
+| S4 | B | UsbPoller | 250 | 750 | 750 | 1.000 | 1 | 26.3 | 54.4 | 105.3 | 105.3 | 0 |
+| S4 | UI | UiInput | 250 | 750 | 750 | 1.000 | 1 | 37.5 | 57.8 | 77.4 | 77.4 | 0 |
+| S5 | A | UsbPoller | 1000 | 3000 | 3000 | 1.000 | 1 | 15.4 | 47.3 | 59.3 | 105.0 | 0 |
+| S5 | B | UsbPoller | 250 | 750 | 750 | 1.000 | 1 | 37.2 | 62.4 | 309.0 | 309.0 | 0 |
+| S5 | UI | UiInput | 250 | 750 | 750 | 1.000 | 1 | 36.3 | 66.3 | 291.9 | 291.9 | 0 |
+| S6 | A | UsbPoller | 1000 | 3000 | 3000 | 1.000 | 1 | 13.1 | 30.5 | 49.1 | 172.3 | 0 |
+| S6 | B | UsbPoller | 250 | 750 | 400 | 0.533 | 1 | 32.4 | 58.7 | 471.8 | 471.8 | 0 |
+| S6 | UI | UiInput | 250 | 750 | 750 | 1.000 | 1 | 30.0 | 60.7 | 293.2 | 293.2 | 0 |
+| S7 | A | UsbPoller | 1000 | 3000 | 3701 | 1.234 | 3 | 10.9 | 23.3 | 30.5 | 499.7 | 0 |
+| S7 | A, 3-datagram reports to the last send | UsbPoller | 1000 | 171 | 513 | 3.000 | 3 | 21.5 | 47.2 | 69.5 | 69.5 | 0 |
+
+With the mic at 1000 frames a second (S4 to S6):
+
+| scenario | stream | role | rate Hz | reports | datagrams | datagrams/report | max per report | p50 us | p99 us | p99.9 us | max us | over 1 ms |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| S4 | A | UsbPoller | 1000 | 3000 | 3000 | 1.000 | 1 | 17.2 | 49.5 | 58.3 | 63.3 | 0 |
+| S4 | B | UsbPoller | 250 | 750 | 750 | 1.000 | 1 | 31.3 | 62.8 | 289.7 | 289.7 | 0 |
+| S4 | UI | UiInput | 250 | 750 | 750 | 1.000 | 1 | 39.6 | 73.8 | 254.9 | 254.9 | 0 |
+| S5 | A | UsbPoller | 1000 | 3000 | 3000 | 1.000 | 1 | 16.9 | 49.9 | 59.2 | 282.7 | 0 |
+| S5 | B | UsbPoller | 250 | 750 | 750 | 1.000 | 1 | 31.6 | 59.3 | 608.9 | 608.9 | 0 |
+| S5 | UI | UiInput | 250 | 750 | 750 | 1.000 | 1 | 40.4 | 62.8 | 265.0 | 265.0 | 0 |
+| S6 | A | UsbPoller | 1000 | 3000 | 3000 | 1.000 | 1 | 16.1 | 44.5 | 57.2 | 94.5 | 0 |
+| S6 | B | UsbPoller | 250 | 750 | 400 | 0.533 | 1 | 27.1 | 61.5 | 77.5 | 77.5 | 0 |
+| S6 | UI | UiInput | 250 | 750 | 750 | 1.000 | 1 | 33.0 | 63.7 | 375.1 | 375.1 | 0 |
+
+The locks of the reported runs of S1, S6 and S7, from the same record's `bench_send_path_lockstats`
+run. Waits and holds in microseconds.
+
+| scenario | lock | role | acquisitions | contended | failed tries | max wait us | p99 wait us | max hold us |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| S1 | session.table | Other | 2 | 0 | 0 | 0.5 | 0.5 | 0.2 |
+| S1 | session.audio | Other | 1 | 0 | 0 | 0.1 | 0.1 | 0.7 |
+| S6 | session.table | Other | 2 | 0 | 0 | 1.1 | 2.0 | 0.2 |
+| S6 | session.audio | MicCapture | 150 | 0 | 0 | 2.0 | 2.0 | 507.3 |
+| S6 | session.audio | Other | 1 | 0 | 0 | 0.0 | 0.1 | 1.6 |
+| S6 | input.bindings | Binding | 14 | 0 | 0 | 0.3 | 0.5 | 26.7 |
+| S7 | session.table | Other | 2 | 0 | 0 | 0.7 | 1.0 | 0.2 |
+| S7 | session.audio | Other | 1 | 0 | 0 | 0.1 | 0.1 | 0.6 |
+
+Stream A's median stays between 11 and 17 us in every scenario and its p99 between 23 and 50 us;
+with the mic at 1000 frames a second its median in S4 to S6 rises from 12 to 15 us to 16 to 17
+us. The tails are the runner's. S1, one poller alone with no lock on its path, had one report of
+3.2 ms against a p99.9 of 33 us. S4 to S6 put seven to nine threads on the four hardware threads,
+and there the worst of a 250 Hz stream's 750 reports (its p99.9) reaches 0.6 ms (S5 B with the
+1 kHz mic) while those streams' p99s stay between 54 and 74 us. The harness counted what it
+counted on the desktop: in S4 to S6 the fake satellite received 2 pings, 150 mic frames (3000 at
+1 kHz) and 6 battery datagrams; in S5 and S6 it sent 303 rumble and 31 lightbar datagrams, of
+which the receive loop handed on 301 and 30 before it stopped, and S6 rebound B's slot 7 times
+(hence B's 400 datagrams). S7 carried input, motion and touch in 171 of its reports. The locks
+left are the desktop's: the bench's own thread closing the session, the mic encoder holding
+`session.audio` for up to 0.5 ms across an encode, and the binding thread.

@@ -414,8 +414,9 @@ def headline_markdown(top: dict) -> list[str]:
                      f"{fixed(top['p999Us'])} us p99.9 from the report in hand to the return of "
                      "its sendto.")
         floor = top["noiseFloor"]
+        reports = "report" if floor["overOneMs"] == 1 else "reports"
         lines.append(f"Runner noise floor, the same run: max {fixed(floor['maxUs'])} us, "
-                     f"{floor['overOneMs']} reports over 1 ms. A shared runner is noisy; a "
+                     f"{floor['overOneMs']} {reports} over 1 ms. A shared runner is noisy; a "
                      "difference inside that is not a finding.")
     if "inputLocksPerReport" in top:
         lines.append(f"The {HEADLINE_ROLE} thread took {fixed(top['inputLocksPerReport'], 2)} "
