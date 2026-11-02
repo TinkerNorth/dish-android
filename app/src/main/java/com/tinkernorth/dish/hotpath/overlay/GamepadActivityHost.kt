@@ -140,7 +140,7 @@ class GamepadActivityHost(
     }
 
     fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (!acceptsGamepadKey(event.source, event.deviceId, gamepadRegistry.devices.value.keys)) return false
+        if (!acceptsGamepadKey(event.source, event.deviceId, gamepadRegistry.knownPadIds())) return false
         if (inputTiming.enabled) inputTiming.record(event.deviceId, event.eventTime, SystemClock.uptimeMillis())
         PhysicalSlotNative.processGamepadKeyEvent(
             event.deviceId,
@@ -156,7 +156,7 @@ class GamepadActivityHost(
         // the pad's, never a stick: taken first, before the joystick fold below could read
         // their coordinates as axes.
         if (padTouchpad.onGenericMotionEvent(event)) return true
-        val isJoy = isJoystickEvent(event.source) { event.deviceId in gamepadRegistry.devices.value }
+        val isJoy = isJoystickEvent(event.source) { event.deviceId in gamepadRegistry.knownPadIds() }
         if (shouldRequestUnbufferedJoystick(isJoy, unbufferedJoystickRequested)) {
             unbufferedJoystickRequested = true
             requestUnbufferedJoystickDispatch(event)

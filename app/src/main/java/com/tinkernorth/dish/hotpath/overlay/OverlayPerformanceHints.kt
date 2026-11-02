@@ -4,6 +4,7 @@ package com.tinkernorth.dish.hotpath.overlay
 
 import android.view.InputDevice
 import android.view.MotionEvent
+import com.tinkernorth.dish.hotpath.input.KnownPadIds
 
 // Highest-refresh mode at the CURRENT physical resolution; switching resolution would force a reconfigure
 // and is not worth it. Returns 0 (no preference) when the current mode already has the best available rate.
@@ -34,7 +35,7 @@ internal fun isGamepadKeySource(source: Int): Boolean =
 internal fun acceptsGamepadKey(
     source: Int,
     deviceId: Int,
-    knownPadIds: Set<Int>,
+    knownPadIds: KnownPadIds,
 ): Boolean = isGamepadKeySource(source) || deviceId in knownPadIds
 
 // The joystick fold reads any motion from a pad the registry knows, whatever source bits it carries.
