@@ -18,6 +18,7 @@ import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.verify
+import io.mockk.verifyOrder
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -74,14 +75,12 @@ class SatelliteConnectionTest {
     private fun newConnection(
         wireCapsFor: (String) -> Int = { SatelliteConnection.DEFAULT_WIRE_CAPABILITIES },
         store: SatelliteMotionBackendStatusStore? = null,
-        ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO,
     ): SatelliteConnection =
         SatelliteConnection(
             id = satelliteConnectionIdFor(server),
             server = server,
             scope = scope,
             controllerRepo = repo,
-            ioDispatcher = ioDispatcher,
             hooks =
                 SatelliteConnection.Hooks(
                     wireCapsFor = wireCapsFor,
@@ -95,9 +94,6 @@ class SatelliteConnectionTest {
     @Before
     fun setUp() {
         repo = mockk(relaxed = true)
-        // -1 = dead socket so the RX-drain loop exits after one call (the
-        // mock has no real socket to block on).
-        every { repo.receiveAck(any()) } returns -1
         // No enriched ack / close-notify seen unless a test says otherwise.
         every { repo.getServerEpoch(any()) } returns -1
         every { repo.getActiveBitmap(any()) } returns -1
@@ -1149,18 +1145,20 @@ class SatelliteConnectionTest {
         }
 
     @Test
-    fun `the ack drain stops once the socket reports negative`() =
+    fun `going live starts the session's native receive thread once, before its heartbeat`() =
         connTest {
-            val ioDispatcher = StandardTestDispatcher(scope.testScheduler)
-            val drained = newConnection(ioDispatcher = ioDispatcher)
-            every { repo.receiveAck(7) } returnsMany listOf(0, 0, -1)
+            val live = newConnection()
             try {
-                connectLive(target = drained, handle = 7)
+                connectLive(target = live, handle = 7)
                 scope.advanceTimeBy(1100)
 
-                verify(exactly = 3) { repo.receiveAck(7) }
+                verifyOrder {
+                    repo.startReceive(7)
+                    repo.startHeartbeat(7)
+                }
+                verify(exactly = 1) { repo.startReceive(7) }
             } finally {
-                drained.markDisconnected()
+                live.markDisconnected()
             }
         }
 

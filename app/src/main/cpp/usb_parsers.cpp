@@ -14,6 +14,8 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <errno.h>
+
+#include "tracked_mutex.h"
 #endif
 
 namespace usbparsers {
@@ -586,6 +588,7 @@ bool bulkWrite(const int fd, const uint8_t epOut, const uint8_t* data, const siz
     xfer.len = (unsigned int)len;
     xfer.timeout = timeoutMs;
     xfer.data = (void*)data;
+    blockingRegion("usb.bulk");
     const int n = ioctl(fd, USBDEVFS_BULK, &xfer);
     if (n < 0) {
         logError("USBDEVFS_BULK out to 0x%02X failed: %s", epOut, strerror(errno));
@@ -617,6 +620,7 @@ bool sendFeatureReport(const int fd, const int interfaceNumber, const uint8_t* d
         ct.wLength = (uint16_t)sizeof(buf);
         ct.timeout = USB_CONTROL_TIMEOUT_MS;
         ct.data = buf;
+        blockingRegion("usb.control");
         if (ioctl(fd, USBDEVFS_CONTROL, &ct) >= 0) return true;
         if (errno != EPIPE) break;
         usleep(kFeatureReportRetryUs);

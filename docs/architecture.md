@@ -83,11 +83,16 @@ The Kotlin → JNI → `sendto()` chain runs at gamepad polling rate
 - No allocations per event: the JNI uses a preallocated
   `XUSB_REPORT` and a packed `Int` for HID button + hat (a `Pair`
   would burn ~6 KB/s of garbage at 250 Hz).
-- The send path takes the device and slot locks, the session map's
-  briefly, and its session's send turn. A physical pad's datagram
-  takes its counter under the device and slot locks and is encrypted
-  and sent after they are released, with only the turn held, which
-  keeps the counters in order on the wire.
+- The send path takes no lock. A pad's slot and its session live in
+  fixed hot tables (`slot_table.h`, `session_table.h`) that the
+  reporting thread finds by scanning one packed line; the pad's one
+  reporting thread (its USB poller, or the UI thread for a framework
+  pad) holds its slot through an epoch, which the cold path (binds,
+  resets, configuration) waits out under a generation of its own. The
+  datagram is framed on the stack, then sealed and sent holding the
+  session's send gate (a compare-and-swap, yielded on), which keeps the
+  counters in order on the wire; a close or a re-key takes the same
+  gate, so neither ever overlaps a send under the old socket or key.
 - `IP_TOS = 0xB8` (DSCP EF) and `MSG_DONTWAIT` stay set on every
   send.
 
@@ -458,32 +463,50 @@ Rumble flows the opposite direction to the input hot path:
 ```
 satellite                                  dish-android
   │                                              │
-  ├─ MSG_RUMBLE (encrypted UDP) ────────────────►├─ receiveAck (Dispatchers.IO)
+  ├─ MSG_RUMBLE (encrypted UDP) ────────────────►├─ the session's receive thread (native)
                                                  │   ├─ decrypt + parse
                                                  │   └─ JNI → RumbleBridge.dispatchRumble
                                                  │         └─ RumbleRouter → actuator
+                                                 │               └─ Direct pad: post to its
+                                                 │                  output worker → USB OUT
 ```
 
-`receiveAck` runs on `Dispatchers.IO`, which is JVM-attached, so the
-JNI side calls into Java directly with no `AttachCurrentThread`
-ceremony and no dispatcher thread. The dispatch is synchronous on
-the JNI caller.
+Each session has a native receive thread (`SessionNative.startReceive`,
+`runReceiveLoop` in `receive_path.cpp`), attached to the JVM once and
+raised to the input threads' priority. It owns the socket's receive side
+until `closeSocket`, which wakes it and joins it before the descriptor is
+closed. The feedback upcalls are synchronous on that thread, so nothing
+they reach may block: speaker audio goes onto a lock-free ring for the
+audio dispatch thread, and a Direct pad's writes onto its output worker.
 
 `RumbleRouter` routes each `MSG_RUMBLE` to the device that owns the
-targeted slot (reverse-resolved from the session `handle` + `ctrlIdx`
-through `SatelliteConnection.slots`) instead of always buzzing the
-phone: the on-screen pad drives the phone vibrator, a framework gamepad
-drives its own `InputDevice` vibrator, and a claimed USB-direct pad
-gets a device-specific report written to its USB OUT endpoint
-(`UsbDirectNative.sendUsbRumble` to `usbhost::sendRumble` to
-`usbparsers::runMergedRumble`). Routing is strict: a pad with no usable
-actuator stays silent rather than buzzing the phone. Slot-kind routing,
+targeted slot instead of always buzzing the phone: the on-screen pad drives
+the phone vibrator, a framework gamepad drives its own `InputDevice`
+vibrator, and a claimed USB-direct pad gets a device-specific report written
+to its USB OUT endpoint. The (session `handle`, `ctrlIdx`) pair resolves
+through `FeedbackRoutes`: every bound pair's target, slot id and light-bar
+source, built once from `SatelliteConnection.slots` and rebuilt on the first
+lookup after a session, its state, its slots or its handle changes, so a
+datagram's lookup scans two int arrays and allocates nothing.
+`FeedbackRouter` resolves the light bar, trigger effects, player LEDs and
+the mic lamp the same way. Routing is strict: a pad with no usable actuator
+stays silent rather than buzzing the phone. Slot-kind routing,
 magnitude/duration mapping, the USB report layouts, and the satellite
 feature requests are in [`rumble.md`](rumble.md).
 
+A Direct pad's OUT endpoint belongs to its output worker (`usb_output.h`),
+started at attach and stopped at detach before the fd closes. Feedback
+(`UsbDirectNative.sendUsbRumble` and the rest) only posts the newest value
+of its kind to the pad's mailbox and wakes the worker, which writes it
+(`usbparsers::runMergedRumble` and friends, 100 ms timeout); the Xbox One
+poller queues its GIP acks there too instead of writing them before it
+decodes. So no thread that hands the pad feedback, the receive thread and
+the poller included, ever waits on a USB transfer.
+
 Pure rumble helpers (`rumbleMagnitudeTo255`, `rumbleSafeDurationMs`,
 `resolveSlotId`, `classifyTarget`) are covered by
-`RumbleBridgeHelpersTest.kt` and `RumbleRouterTest.kt`.
+`RumbleBridgeHelpersTest.kt` and `RumbleRouterTest.kt`, the route snapshot
+by `FeedbackRoutesTest.kt`, and the output worker by `usb_output_test.cpp`.
 
 ## Host-testable C++ split
 
@@ -509,14 +532,43 @@ can't reach are still unit-testable from a host build:
   formats. Not header-only (it needs `<opus.h>`), but still host-buildable:
   `audio_codec_test` links the same pinned libopus the app does.
 - `bridge_connection_ids.h`: the bridge thread's Java string per bound
-  connection id, made on a bind's first report and released once the bind
-  and its queued reports are gone. JNI-free (the refs are a template
-  parameter), so `bridge_connection_ids_test` proves the one-string-per-bind
-  rule with a fake JVM.
-- `satellite_jni.cpp`: the Android-only glue. Owns sockets, libsodium,
-  the session map, the rumble + Bluetooth callbacks, the speaker-audio
-  dispatch thread, and the JNI registration. This file does **not** ship
-  pure helpers: anything testable belongs in one of the files above.
+  connection id, made on a bind's first report (which names its bind by a
+  connection number) and released once the bind is gone. JNI-free (the refs
+  are a template parameter), so `bridge_connection_ids_test` proves the
+  one-string-per-bind rule with a fake JVM.
+- `mpmc_ring.h`, `worker_wake.h`, `bridge_queue.{cpp,h}` and
+  `speaker_queue.{cpp,h}`: the hand-offs to the two JVM-attached dispatch
+  threads. A bounded lock-free ring of fixed-size items (Bluetooth and
+  Moonlight reports, drop-oldest; mic-mute edges, never dropped; speaker and
+  haptic Opus packets, drop-oldest) and a wake that costs a producer one load
+  while its worker is busy and a semaphore post only when it sleeps.
+- `session_table.{cpp,h}`, `slot_table.{cpp,h}`, `send_path.{cpp,h}` and
+  `receive_path.{cpp,h}`: the native hot path, JNI-free. The fixed session
+  table (eight entries) and its sockets, keys and send gates; the fixed slot
+  table (sixteen pads), with every pad's state, its slot binding and the
+  send-on-change latch; framing, sealing and `sendto` under the gate; opening
+  and dispatching what the satellite sends back. What leaves through Kotlin goes
+  through a sink the JNI layer implements (`BridgeSink` for Bluetooth and
+  Moonlight slots, `FeedbackSink` for rumble, LEDs and audio), and the
+  socket calls through `udp_socket.h`, so the host tests drive them on a
+  loopback socket (`send_path_test` holds them to the bytes pinned in
+  `wire_vectors.h`).
+- `usb_device_table.h` and `usb_output.{cpp,h}`: the claimed USB pads' fixed
+  table (their counters, read without a lock) and each pad's output worker,
+  which owns its OUT endpoint: per-kind latest-value mailboxes whose values
+  name the pad they were posted for, a ring for GIP acks, and a fake device in
+  `usb_output_test` standing in for USBDEVFS.
+- `tracked_mutex.h`: every hot-path mutex is a named `TrackedMutex` and every
+  thread that takes one runs in a `ThreadRole`. In the app they are a
+  `std::mutex` and nothing; in the host build's `DISH_LOCK_STATS` variant they
+  count each lock's acquisitions, waits and holds per role, which
+  `lock_laws_test` holds to lists that only shrink and `bench_send_path_lockstats`
+  reports (`tools/bench/README.md`, "Host bench").
+- `satellite_jni.cpp`: the Android-only glue. Argument marshalling, the
+  Kotlin upcalls, the JVM attach of the bridge and speaker-audio dispatch
+  threads that make them, the GameActivity filters and the JNI registration. This file does
+  **not** ship pure helpers: anything testable belongs in one of the files
+  above.
 
 The split is the reason `gamepad_input.h` mirrors Android keycodes
 as integer constants instead of including `<android/keycodes.h>`:

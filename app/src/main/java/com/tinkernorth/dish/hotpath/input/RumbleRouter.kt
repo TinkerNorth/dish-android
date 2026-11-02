@@ -14,7 +14,6 @@ import androidx.annotation.RequiresApi
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
-import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.store.FeedbackActivityStore
 import com.tinkernorth.dish.source.store.FeedbackKind
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
@@ -66,6 +65,7 @@ class RumbleRouter
         // A claimed USB pad has no oneshot duration, so a dropped session could leave it buzzing;
         // each rumble schedules a stop at the clamped duration, cancelled by the next rumble.
         private val usbStopJobs = ConcurrentHashMap<Int, Job>()
+        private val routes = FeedbackRouteCache(satellite)
         private val triggerStopJobs = ConcurrentHashMap<Int, Job>()
 
         private val phoneVibratorManager: VibratorManager? =
@@ -125,7 +125,8 @@ class RumbleRouter
             weakMagnitude: Int,
             durationMs: Int,
         ) {
-            deliver(resolveTarget(sessionHandle, controllerIndex), strongMagnitude, weakMagnitude, durationMs)
+            val route = routes.current().routeFor(sessionHandle, controllerIndex) ?: return
+            deliver(route.target, route.slotId, strongMagnitude, weakMagnitude, durationMs)
         }
 
         /**
@@ -139,18 +140,19 @@ class RumbleRouter
             weakMagnitude: Int,
             durationMs: Int,
         ) {
-            deliver(classifyTarget(slotId), strongMagnitude, weakMagnitude, durationMs)
+            deliver(classifyTarget(slotId), slotId, strongMagnitude, weakMagnitude, durationMs)
         }
 
         private fun deliver(
             target: RumbleTarget,
+            slotId: String,
             strongMagnitude: Int,
             weakMagnitude: Int,
             durationMs: Int,
         ) {
             if (target is RumbleTarget.None) return
-            feedbackActivity.note(slotIdOf(target), FeedbackKind.RUMBLE)
-            if (!rumbleEnabled.isEnabled(slotIdOf(target))) return
+            feedbackActivity.note(slotId, FeedbackKind.RUMBLE)
+            if (!rumbleEnabled.isEnabled(slotId)) return
             if (isRumbleStop(strongMagnitude, weakMagnitude, durationMs)) {
                 cancel(target)
                 return
@@ -158,32 +160,6 @@ class RumbleRouter
             val safeDuration = rumbleSafeDurationMs(durationMs).toLong()
             actuate(target, strongMagnitude, weakMagnitude, safeDuration)
         }
-
-        private fun resolveTarget(
-            sessionHandle: Int,
-            controllerIndex: Int,
-        ): RumbleTarget {
-            // Read each StateFlow once into a flat snapshot so the routing decision is pure and
-            // testable; the native receive thread never re-reads the live manager mid-resolve.
-            val snapshot =
-                satellite.connections.value.values.map { conn ->
-                    RumbleConnectionSnapshot(
-                        connectionId = conn.id,
-                        handle = conn.handle,
-                        connected = conn.state.value == SatelliteSessionState.Live,
-                        slots = conn.slots.value,
-                    )
-                }
-            return resolveRumble(snapshot, sessionHandle, controllerIndex)
-        }
-
-        private fun slotIdOf(target: RumbleTarget): String =
-            when (target) {
-                RumbleTarget.Phone -> VIRTUAL_SLOT_ID
-                is RumbleTarget.Framework -> target.deviceId.toString()
-                is RumbleTarget.DirectUsb -> target.deviceId.toString()
-                RumbleTarget.None -> ""
-            }
 
         private fun actuate(
             target: RumbleTarget,
@@ -311,7 +287,8 @@ class RumbleRouter
         private fun atLeast(api: Int): Boolean = sdkInt >= api
     }
 
-// Flat, immutable view of one connection captured once per dispatch so resolveRumble stays pure.
+// Flat, immutable view of one connection, captured once per change of the sessions (FeedbackRoutes)
+// so resolveRumble stays pure.
 data class RumbleConnectionSnapshot(
     val connectionId: String,
     val handle: Int,

@@ -496,7 +496,6 @@ class SatelliteConnectionManager
                 server,
                 scope,
                 controllerRepo,
-                ioDispatcher = ioDispatcher,
                 hooks =
                     SatelliteConnection.Hooks(
                         wireCapsFor = { slotId -> capabilityProvider.get().wireCapsFor(slotId) },

@@ -1,0 +1,5 @@
+Dish 2.5.0 : une entrée plus régulière quand plusieurs manettes, la manette à l'écran et le chat vocal servent en même temps.
+
+• Un appui sur n'importe quelle manette ou sur la manette à l'écran part aussitôt, dans l'ordre, sans attendre une autre manette ni le micro.
+• Les vibrations et lumières d'une manette USB sont écrites par un assistant dédié : une écriture lente ne retarde jamais le message suivant du PC.
+• Les messages du PC arrivent sur un fil dédié à haute priorité.

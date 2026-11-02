@@ -27,9 +27,10 @@ inline bool acquireSendCounter(std::atomic<uint64_t>& counter, uint32_t* out) {
 // reach the wire in the order they were drawn. A sender takes the session's turn, then draws, and
 // keeps the turn until its datagram has left sendto; false, with the turn given back, once the
 // counter space is exhausted.
-inline bool takeTurnAndCounter(std::mutex& turnMtx, std::atomic<uint64_t>& counter,
-                               std::unique_lock<std::mutex>& turn, uint32_t* out) {
-    turn = std::unique_lock<std::mutex>(turnMtx);
+template <typename Mutex>
+inline bool takeTurnAndCounter(Mutex& turnMtx, std::atomic<uint64_t>& counter,
+                               std::unique_lock<Mutex>& turn, uint32_t* out) {
+    turn = std::unique_lock<Mutex>(turnMtx);
     const bool drawn = acquireSendCounter(counter, out);
     if (!drawn) turn.unlock();
     return drawn;

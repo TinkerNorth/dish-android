@@ -1,0 +1,5 @@
+Dish 2.5.0: entrada más estable cuando varios mandos, el mando en pantalla y el chat de voz se usan a la vez.
+
+• Una pulsación de cualquier mando o del mando en pantalla sale de inmediato y en orden, sin esperar detrás de otro mando ni del micrófono.
+• La vibración y las luces de un mando USB las escribe un ayudante propio, así que una escritura lenta nunca retrasa el siguiente mensaje del PC.
+• Los mensajes del PC llegan en un hilo dedicado de alta prioridad.

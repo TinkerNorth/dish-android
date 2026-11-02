@@ -4,6 +4,8 @@ package com.tinkernorth.dish.hotpath.overlay
 
 import android.view.InputDevice
 import android.view.MotionEvent
+import com.tinkernorth.dish.hotpath.input.KnownPadIds
+import com.tinkernorth.dish.hotpath.input.knownPadIdsOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -146,22 +148,22 @@ class OverlayPerformanceHintsTest {
 
     @Test
     fun `a key from a known pad with a keyboard source is still a gamepad key`() {
-        assertTrue(acceptsGamepadKey(InputDevice.SOURCE_KEYBOARD, deviceId = KNOWN_PAD, knownPadIds = setOf(KNOWN_PAD)))
+        assertTrue(acceptsGamepadKey(InputDevice.SOURCE_KEYBOARD, deviceId = KNOWN_PAD, knownPadIds = padIds(KNOWN_PAD)))
     }
 
     @Test
     fun `a key from an unknown keyboard is not a gamepad key`() {
-        assertFalse(acceptsGamepadKey(InputDevice.SOURCE_KEYBOARD, deviceId = STRANGER, knownPadIds = setOf(KNOWN_PAD)))
+        assertFalse(acceptsGamepadKey(InputDevice.SOURCE_KEYBOARD, deviceId = STRANGER, knownPadIds = padIds(KNOWN_PAD)))
     }
 
     @Test
     fun `a gamepad-sourced key from a device the registry has not listed yet is a gamepad key`() {
-        assertTrue(acceptsGamepadKey(InputDevice.SOURCE_GAMEPAD, deviceId = STRANGER, knownPadIds = emptySet()))
+        assertTrue(acceptsGamepadKey(InputDevice.SOURCE_GAMEPAD, deviceId = STRANGER, knownPadIds = padIds()))
     }
 
     @Test
     fun `a joystick-sourced key is a gamepad key`() {
-        assertTrue(acceptsGamepadKey(InputDevice.SOURCE_JOYSTICK, deviceId = STRANGER, knownPadIds = emptySet()))
+        assertTrue(acceptsGamepadKey(InputDevice.SOURCE_JOYSTICK, deviceId = STRANGER, knownPadIds = padIds()))
     }
 
     @Test
@@ -215,6 +217,8 @@ class OverlayPerformanceHintsTest {
     fun `no touch re-arms the timer while the screen is not kept on`() {
         assertFalse(shouldResetInactivity(keepScreenOn = false, actionMasked = MotionEvent.ACTION_DOWN))
     }
+
+    private fun padIds(vararg ids: Int): KnownPadIds = knownPadIdsOf(ids.associateWith { it })
 
     private fun mode(
         modeId: Int,

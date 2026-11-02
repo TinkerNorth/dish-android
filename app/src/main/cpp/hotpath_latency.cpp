@@ -233,11 +233,13 @@ void markInputRead(const int32_t deviceId) {
     t_reapNs = now;
 }
 
-void markGamepadSent() {
+void markGamepadSent() { markGamepadSentAt(nowNs()); }
+
+void markGamepadSentAt(const int64_t sentNs) {
     if (!g_enabled.load(std::memory_order_relaxed)) return;
     const bool isUrbDriven = t_reapNs != 0;
     if (!isUrbDriven) return;
-    const double us = elapsedUs(t_reapNs, nowNs());
+    const double us = elapsedUs(t_reapNs, sentNs);
     t_reapNs = 0;
     const bool isAHotPathReading = us >= 0 && us < kStage1MaxUs;
     if (isAHotPathReading) {

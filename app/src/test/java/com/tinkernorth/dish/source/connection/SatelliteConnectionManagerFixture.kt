@@ -206,10 +206,6 @@ open class SatelliteConnectionManagerFixture {
         every { prefsEditor.remove(any()) } returns prefsEditor
         every { store.remembered() } returns emptyList()
         every { store.satelliteSharedKey(any()) } returns null
-        // -1 = dead socket: the RX-drain loop exits after one call. Anything
-        // else would spin it forever on the unconfined test dispatcher (mocks
-        // return instantly, the loop never suspends).
-        every { controllerRepo.receiveAck(any()) } returns -1
         every { controllerRepo.getServerEpoch(any()) } returns -1
         every { controllerRepo.getActiveBitmap(any()) } returns -1
         every { controllerRepo.getSessionCloseReason(any()) } returns -1

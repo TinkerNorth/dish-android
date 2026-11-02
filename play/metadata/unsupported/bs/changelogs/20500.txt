@@ -1,0 +1,5 @@
+Dish 2.5.0: stabilniji unos kada se više kontrolera, kontroler na ekranu i glasovni chat koriste istovremeno.
+
+• Pritisak s bilo kojeg kontrolera ili kontrolera na ekranu odmah izlazi, redom, bez čekanja iza drugog kontrolera ili mikrofona.
+• Vibraciju i svjetla USB kontrolera piše zaseban pomoćnik, pa spor upis nikada ne odgađa sljedeću poruku s računara.
+• Poruke s računara stižu na zasebnoj niti visokog prioriteta.

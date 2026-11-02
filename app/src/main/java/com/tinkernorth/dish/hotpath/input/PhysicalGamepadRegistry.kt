@@ -155,6 +155,16 @@ class PhysicalGamepadRegistry
         private val _devices = MutableStateFlow<Map<Int, Device>>(emptyMap())
         val devices: StateFlow<Map<Int, Device>> = _devices.asStateFlow()
 
+        @Volatile private var knownIds = knownPadIdsOf(emptyMap<Int, Device>())
+
+        /** [devices]' ids for the UI thread's per-event check, taken again on the first call after the map changes. */
+        fun knownPadIds(): KnownPadIds {
+            val current = _devices.value
+            val cached = knownIds
+            if (cached.isTakenFrom(current)) return cached
+            return knownPadIdsOf(current).also { knownIds = it }
+        }
+
         private val _ignoredInputDevices = MutableStateFlow<Map<Int, IgnoredInputDevice>>(emptyMap())
         val ignoredInputDevices: StateFlow<Map<Int, IgnoredInputDevice>> = _ignoredInputDevices.asStateFlow()
 

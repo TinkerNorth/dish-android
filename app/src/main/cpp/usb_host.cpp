@@ -21,6 +21,8 @@
 #include "gamepad_input.h"
 #include "hotpath_latency.h"
 #include "thread_priority.h"
+#include "tracked_mutex.h"
+#include "usb_device_table.h"
 #include "usb_parsers.h"
 
 #define TAG "SatelliteUsbHost"
@@ -30,6 +32,53 @@
 namespace usbhost {
 
 namespace {
+
+// A pad's OUT endpoint as its output worker writes it. The worker is the only thread that touches
+// the feedback state and the output report counter, from its start at attach to its stop at
+// detach, which comes before the fd is closed.
+class UsbOutput final : public dish_usb::OutputDevice {
+  public:
+    void rumble(const uint16_t strong, const uint16_t weak) override {
+        feedback.strong = strong;
+        feedback.weak = weak;
+        usbparsers::runMergedRumble(fd, epOut, parser, feedback, outSeq++);
+    }
+
+    void triggerRumble(const uint16_t left, const uint16_t right) override {
+        if (!usbparsers::parserHasTriggerRumble(parser)) return;
+        feedback.leftTrigger = left;
+        feedback.rightTrigger = right;
+        usbparsers::runMergedRumble(fd, epOut, parser, feedback, outSeq++);
+    }
+
+    void lightbar(const uint8_t r, const uint8_t g, const uint8_t b) override {
+        usbparsers::runLightbar(fd, epOut, parser, feedback, r, g, b);
+    }
+
+    void playerLeds(const uint8_t ledMask) override {
+        usbparsers::runPlayerLeds(fd, epOut, parser, feedback, ledMask, outSeq++);
+    }
+
+    void triggerEffects(const uint8_t* left, const uint8_t* right) override {
+        usbparsers::runTriggerEffects(fd, epOut, parser, feedback, left, right);
+    }
+
+    void micLed(const uint8_t state) override {
+        usbparsers::runMicMuteLed(fd, epOut, parser, feedback, state);
+    }
+
+    void ack(const uint8_t* bytes, const size_t len) override {
+        usbparsers::writeOutReport(fd, epOut, bytes, len);
+    }
+
+    int fd = -1;
+    uint8_t epOut = 0;
+    usbparsers::Parser parser = usbparsers::Parser::NONE;
+    usbparsers::FeedbackState feedback;
+    // The output report counter for protocols that carry one (Xbox One serial, Switch Pro packet
+    // number).
+    uint8_t outSeq = 0;
+};
 
 struct DeviceCtx {
     int32_t syntheticDeviceId = 0;
@@ -49,26 +98,22 @@ struct DeviceCtx {
     int64_t lastMotionNs = 0;
     gamepad::TouchpadGate touchGate;
 
-    std::atomic<uint64_t> urbCount{0};
-    std::atomic<uint64_t> motionCount{0};
-    std::atomic<uint64_t> urbErrorCount{0};
-    std::atomic<int32_t> lastUrbStatus{0};
-    // The last charge the decoder read, packed level << 8 | status; -1 until a report carries
-    // one. Written on the reader thread, read by getPadBattery from the JVM.
-    std::atomic<int32_t> lastBattery{-1};
+    // The pad's entry in g_usbDevices: its poller's counters and charge, which the JVM reads
+    // without a lock, and the worker that owns its OUT endpoint.
+    dish_usb::UsbDevice* entry = nullptr;
 
-    // Serialises the send* paths' writes to the device against each other and against the
-    // detach that closes fd; outSeq is the output report
-    // counter for protocols that carry one (Xbox One serial, Switch Pro packet number).
-    std::mutex outMtx;
-    uint8_t outSeq = 0;
-    usbparsers::FeedbackState feedback; // guarded by outMtx
+    // The writes the pad's output worker performs.
+    UsbOutput output;
 
     std::atomic<bool> stop{false};
     std::thread poller;
 };
 
-std::mutex g_mtx;
+// The diagnostics the Kotlin pollers read every 500 ms and the output workers the feedback paths
+// post to, kept out of g_mtx.
+dish_usb::UsbDeviceTable g_usbDevices;
+
+TrackedMutex g_mtx{"usb.devices"};
 std::unordered_map<int32_t, std::shared_ptr<DeviceCtx>> g_devices;
 std::atomic<int32_t> g_nextSyntheticId{-1000};
 
@@ -143,7 +188,7 @@ UrbSlot* findCompletedSlot(UrbSlot* (&slots)[kInFlightUrbs], const usbdevfs_urb*
 void publishBattery(DeviceCtx& ctx, const gamepad::DeviceState& scratch) {
     if (!scratch.batteryValid) return;
     const uint32_t packed = ((uint32_t)scratch.batteryLevel << 8) | scratch.batteryStatus;
-    ctx.lastBattery.store((int32_t)packed, std::memory_order_relaxed);
+    ctx.entry->stats.lastBattery.store((int32_t)packed, std::memory_order_relaxed);
 }
 
 // The decoder owns the mute latch (the wire bit has to be folded in here, on this thread, with no
@@ -155,19 +200,24 @@ void publishMicMuteEdge(DeviceCtx& ctx, bool& lastMicMuted) {
     dispatch::applyPadMicMute(ctx.syntheticDeviceId, lastMicMuted);
 }
 
-void publishMotion(DeviceCtx& ctx, const gamepad::DeviceState& scratch, const int64_t nowNs) {
+// The motion sample this report is due to carry, no closer than kMotionMinIntervalNs to the last.
+bool dueMotion(DeviceCtx& ctx, const gamepad::DeviceState& scratch, const int64_t nowNs,
+               dish_send::MotionSample& out) {
     const bool isFirstSample = ctx.lastMotionNs == 0;
     const bool intervalElapsed = nowNs - ctx.lastMotionNs >= kMotionMinIntervalNs;
-    if (!isFirstSample && !intervalElapsed) return;
+    if (!isFirstSample && !intervalElapsed) return false;
 
     const uint32_t deltaUs = isFirstSample ? 0 : (uint32_t)((nowNs - ctx.lastMotionNs) / 1000);
     ctx.lastMotionNs = nowNs;
-    ctx.motionCount.fetch_add(1, std::memory_order_relaxed);
-    dispatch::applyUsbMotion(ctx.syntheticDeviceId, scratch.gyroX, scratch.gyroY, scratch.gyroZ,
-                             scratch.accelX, scratch.accelY, scratch.accelZ, deltaUs);
+    dish_usb::bump(ctx.entry->stats.motionCount);
+    out = dish_send::MotionSample{{scratch.gyroX, scratch.gyroY, scratch.gyroZ},
+                                  {scratch.accelX, scratch.accelY, scratch.accelZ},
+                                  deltaUs};
+    return true;
 }
 
-void publishTouch(DeviceCtx& ctx, const gamepad::DeviceState& scratch, const int64_t nowNs) {
+// Whether the send-on-change gate lets this report's touch frame (its lastSent) through.
+bool dueTouch(DeviceCtx& ctx, const gamepad::DeviceState& scratch, const int64_t nowNs) {
     gamepad::TouchpadState cur;
     cur.f0Active = scratch.touch0Active;
     cur.f1Active = scratch.touch1Active;
@@ -178,10 +228,7 @@ void publishTouch(DeviceCtx& ctx, const gamepad::DeviceState& scratch, const int
     cur.f0Y = scratch.touch0Y;
     cur.f1X = scratch.touch1X;
     cur.f1Y = scratch.touch1Y;
-    const bool worthSending = ctx.touchGate.decide(cur, nowNs) != gamepad::TouchpadSend::SKIP;
-    if (!worthSending) return;
-    dispatch::applyUsbTouchpad(ctx.syntheticDeviceId, ctx.touchGate.lastSent(),
-                               (uint32_t)ctx.touchGate.lastEventTimeMs());
+    return ctx.touchGate.decide(cur, nowNs) != gamepad::TouchpadSend::SKIP;
 }
 
 int64_t monotonicNowNs() {
@@ -190,15 +237,22 @@ int64_t monotonicNowNs() {
     return (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
 }
 
+// One URB, one hold of the session's gate: the report, then the motion and touch it carried.
 void publishDecodedReport(DeviceCtx& ctx, const gamepad::DeviceState& scratch, bool& lastMicMuted) {
-    dispatch::applyUsbReport(ctx.syntheticDeviceId, scratch);
-    publishMicMuteEdge(ctx, lastMicMuted);
-    publishBattery(ctx, scratch);
-
     const bool needsTimestamp = scratch.motionValid || scratch.touchValid;
     const int64_t nowNs = needsTimestamp ? monotonicNowNs() : 0;
-    if (scratch.motionValid) publishMotion(ctx, scratch, nowNs);
-    if (scratch.touchValid) publishTouch(ctx, scratch, nowNs);
+    dish_send::MotionSample motion{};
+    const bool hasMotion = scratch.motionValid && dueMotion(ctx, scratch, nowNs, motion);
+    const bool hasTouch = scratch.touchValid && dueTouch(ctx, scratch, nowNs);
+
+    dish_slots::UsbFrame frame;
+    frame.report = &scratch;
+    frame.motion = hasMotion ? &motion : nullptr;
+    frame.touch = hasTouch ? &ctx.touchGate.lastSent() : nullptr;
+    frame.touchEventTimeMs = (uint32_t)ctx.touchGate.lastEventTimeMs();
+    dispatch::applyUsbFrame(ctx.syntheticDeviceId, frame);
+    publishMicMuteEdge(ctx, lastMicMuted);
+    publishBattery(ctx, scratch);
 }
 
 // Both directions publish neutral: a departed pad must not keep its last input latched, and a
@@ -210,10 +264,9 @@ void publishWirelessEvent(DeviceCtx& ctx, const usbparsers::WirelessEvent wev,
     dispatch::applyUsbReport(ctx.syntheticDeviceId, scratch);
     if (wev != usbparsers::WirelessEvent::CONNECT) return;
     // The reboot wiped the quiet-mode settings, so re-run the attach init or the pad streams
-    // without motion while its lizard keyboard leaks through. Not under outMtx: only the Steam
-    // Controller reports wireless events, its feedback builders send nothing, and init touches no
-    // FeedbackState, so there is no write to serialise; holding outMtx here would instead let a
-    // rumble on the session receive thread wait out an init of up to a second.
+    // without motion while its lizard keyboard leaks through. Written here rather than through the
+    // output worker: only the Steam Controller reports wireless events, its feedback builders send
+    // nothing, and init touches no FeedbackState, so there is nothing for the two to interleave.
     usbparsers::runInit(ctx.fd, ctx.interfaceNumber, ctx.epOut, ctx.init);
 }
 
@@ -222,14 +275,13 @@ void ackGipReport(DeviceCtx& ctx, const uint8_t* report, const size_t len) {
     uint8_t ack[usbparsers::kGipAckBytes];
     const size_t n = usbparsers::buildGipAck(report, len, ack, sizeof(ack));
     if (n == 0) return;
-    std::lock_guard<std::mutex> lock(ctx.outMtx);
-    usbparsers::writeOutReport(ctx.fd, ctx.epOut, ack, n);
+    ctx.entry->output.postAck(ctx.syntheticDeviceId, ack, n);
 }
 
 void publishCompletedUrb(DeviceCtx& ctx, const UrbSlot& completed, const int actualLength,
                          gamepad::DeviceState& scratch, bool& lastMicMuted) {
     hotpath::markInputRead(ctx.syntheticDeviceId); // stage-1 start: a fresh input report is in hand
-    ctx.urbCount.fetch_add(1, std::memory_order_relaxed);
+    dish_usb::bump(ctx.entry->stats.urbCount);
     ackGipReport(ctx, completed.buf.data(), (size_t)actualLength);
     memset(&scratch, 0, sizeof(scratch));
 
@@ -268,7 +320,7 @@ bool reapReadyUrbs(DeviceCtx& ctx, UrbSlot* (&slots)[kInFlightUrbs], gamepad::De
         if (r < 0) {
             if (errno == EAGAIN) return true;
             LOGE("dev=%d REAPURB failed: %s", ctx.syntheticDeviceId, strerror(errno));
-            ctx.urbErrorCount.fetch_add(1, std::memory_order_relaxed);
+            dish_usb::bump(ctx.entry->stats.urbErrorCount);
             return false;
         }
         if (reaped == nullptr) return true;
@@ -282,15 +334,15 @@ bool reapReadyUrbs(DeviceCtx& ctx, UrbSlot* (&slots)[kInFlightUrbs], gamepad::De
             return false;
         }
         if (reaped->status != 0) {
-            ctx.urbErrorCount.fetch_add(1, std::memory_order_relaxed);
-            ctx.lastUrbStatus.store(reaped->status, std::memory_order_relaxed);
+            dish_usb::bump(ctx.entry->stats.urbErrorCount);
+            ctx.entry->stats.lastUrbStatus.store(reaped->status, std::memory_order_relaxed);
         }
         const bool carriesAReport = reaped->status == 0 && reaped->actual_length > 0;
         if (carriesAReport) {
             publishCompletedUrb(ctx, *completed, reaped->actual_length, scratch, lastMicMuted);
         }
         if (!submitUrb(ctx, *completed)) {
-            ctx.urbErrorCount.fetch_add(1, std::memory_order_relaxed);
+            dish_usb::bump(ctx.entry->stats.urbErrorCount);
             return false;
         }
     }
@@ -314,6 +366,7 @@ PollOutcome waitForUrbCompletion(DeviceCtx& ctx) {
 }
 
 void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
+    const ScopedThreadRole role(ThreadRole::UsbPoller);
     dish::elevateCurrentThreadToInputPriority();
     std::unique_ptr<UrbSlot> slotStorage[kInFlightUrbs];
     UrbSlot* slots[kInFlightUrbs];
@@ -360,12 +413,11 @@ void shutdownLocked(const std::shared_ptr<DeviceCtx>& ctx) {
     ctx->stop.store(true, std::memory_order_relaxed);
     if (ctx->poller.joinable()) {
         // No lock is held here: detachDevice has already taken ctx out of the map and released
-        // g_mtx, and outMtx is taken only after the join so the poll thread's last writes land
-        // before teardown.
+        // g_mtx.
         ctx->poller.join();
     }
-    // outMtx so an in-flight sendRumble finishes before the fd it is writing to is closed.
-    std::lock_guard<std::mutex> lock(ctx->outMtx);
+    // The worker's last write finishes before the fd it is writing to is closed.
+    ctx->entry->output.stop();
     usbparsers::runTeardown(ctx->fd, ctx->interfaceNumber, ctx->parser);
     releaseAndReattach(ctx->fd, ctx->interfaceNumber);
     if (ctx->fd >= 0) {
@@ -517,6 +569,15 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
 
     auto ctx = std::make_shared<DeviceCtx>();
     ctx->syntheticDeviceId = allocSyntheticId();
+    ctx->entry = g_usbDevices.claim(ctx->syntheticDeviceId);
+    if (ctx->entry == nullptr) {
+        LOGE("attach %04X:%04X (%s): %u pads already claimed, releasing to framework", vid, pid,
+             modelName.c_str(), (unsigned)dish_usb::MAX_USB_DEVICES);
+        usbparsers::runTeardown(fd, interfaceNumber, parser);
+        releaseAndReattach(fd, interfaceNumber);
+        ::close(fd);
+        return out;
+    }
     ctx->fd = fd;
     ctx->vid = vid;
     ctx->pid = pid;
@@ -537,19 +598,23 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
         fetchPsCalibration(fd, interfaceNumber, 0x05, ctx->stickRange.psImu);
         usbparsers::Ds5FirmwareInfo firmware;
         fetchDs5FirmwareInfo(fd, interfaceNumber, firmware);
-        ctx->feedback.ds5VibrationV2 = usbparsers::ds5UsesVibrationV2(pid, firmware);
+        ctx->output.feedback.ds5VibrationV2 = usbparsers::ds5UsesVibrationV2(pid, firmware);
         LOGI("attach %04X:%04X: DualSense feature version %04X (%s), rumble mode %s", vid, pid,
              firmware.featureVersion, firmware.valid ? "read" : "unread",
-             ctx->feedback.ds5VibrationV2 ? "v2" : "v1");
+             ctx->output.feedback.ds5VibrationV2 ? "v2" : "v1");
     }
 
     {
-        std::lock_guard<std::mutex> lock(g_mtx);
+        std::lock_guard<TrackedMutex> lock(g_mtx);
         g_devices[ctx->syntheticDeviceId] = ctx;
     }
 
     dispatch::prewarmDevice(ctx->syntheticDeviceId);
 
+    ctx->output.fd = fd;
+    ctx->output.epOut = epOut;
+    ctx->output.parser = parser;
+    ctx->entry->output.start(ctx->syntheticDeviceId, ctx->output);
     ctx->poller = std::thread(pollLoop, ctx);
 
     LOGI("attach ok: %04X:%04X (%s) dev=%d parser=%s ep=0x%02X max=%u", vid, pid, modelName.c_str(),
@@ -563,7 +628,7 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
 void detachDevice(int32_t syntheticDeviceId) {
     std::shared_ptr<DeviceCtx> ctx;
     {
-        std::lock_guard<std::mutex> lock(g_mtx);
+        std::lock_guard<TrackedMutex> lock(g_mtx);
         auto it = g_devices.find(syntheticDeviceId);
         if (it == g_devices.end()) return;
         ctx = it->second;
@@ -571,6 +636,7 @@ void detachDevice(int32_t syntheticDeviceId) {
     }
     if (!ctx) return;
     shutdownLocked(ctx);
+    g_usbDevices.release(syntheticDeviceId);
     dispatch::resetAndPublish(syntheticDeviceId);
     dispatch::forgetDevice(syntheticDeviceId);
     hotpath::forgetDevice(syntheticDeviceId);
@@ -578,24 +644,21 @@ void detachDevice(int32_t syntheticDeviceId) {
 }
 
 uint64_t getUrbCount(int32_t deviceId) {
-    std::lock_guard<std::mutex> lock(g_mtx);
-    auto it = g_devices.find(deviceId);
-    if (it == g_devices.end()) return 0;
-    return it->second->urbCount.load(std::memory_order_relaxed);
+    return g_usbDevices.read<uint64_t>(deviceId, 0, [](const dish_usb::UsbDeviceStats& s) {
+        return s.urbCount.load(std::memory_order_relaxed);
+    });
 }
 
 uint64_t getUrbErrorCount(int32_t deviceId) {
-    std::lock_guard<std::mutex> lock(g_mtx);
-    auto it = g_devices.find(deviceId);
-    if (it == g_devices.end()) return 0;
-    return it->second->urbErrorCount.load(std::memory_order_relaxed);
+    return g_usbDevices.read<uint64_t>(deviceId, 0, [](const dish_usb::UsbDeviceStats& s) {
+        return s.urbErrorCount.load(std::memory_order_relaxed);
+    });
 }
 
 int32_t getPadBattery(int32_t deviceId) {
-    std::lock_guard<std::mutex> lock(g_mtx);
-    auto it = g_devices.find(deviceId);
-    if (it == g_devices.end()) return -1;
-    return it->second->lastBattery.load(std::memory_order_relaxed);
+    return g_usbDevices.read<int32_t>(deviceId, -1, [](const dish_usb::UsbDeviceStats& s) {
+        return s.lastBattery.load(std::memory_order_relaxed);
+    });
 }
 
 static const char* initKindName(usbparsers::InitKind init) {
@@ -627,7 +690,7 @@ static void appendJsonString(std::string& out, const std::string& value) {
 std::string deviceInfoJson(int32_t deviceId) {
     std::shared_ptr<DeviceCtx> ctx;
     {
-        std::lock_guard<std::mutex> lock(g_mtx);
+        std::lock_guard<TrackedMutex> lock(g_mtx);
         auto it = g_devices.find(deviceId);
         if (it == g_devices.end()) return "";
         ctx = it->second;
@@ -641,78 +704,54 @@ std::string deviceInfoJson(int32_t deviceId) {
     char buf[96];
     snprintf(buf, sizeof(buf), ",\"reportBytes\":%u,\"endpointOut\":%s,\"lastUrbStatus\":%d}",
              (unsigned)ctx->epInMaxPacket, ctx->epOut != 0 ? "true" : "false",
-             (int)ctx->lastUrbStatus.load(std::memory_order_relaxed));
+             (int)g_usbDevices.read<int32_t>(deviceId, 0, [](const dish_usb::UsbDeviceStats& s) {
+                 return s.lastUrbStatus.load(std::memory_order_relaxed);
+             }));
     out += buf;
     return out;
 }
 
 uint64_t getMotionCount(int32_t deviceId) {
-    std::lock_guard<std::mutex> lock(g_mtx);
-    auto it = g_devices.find(deviceId);
-    if (it == g_devices.end()) return 0;
-    return it->second->motionCount.load(std::memory_order_relaxed);
+    return g_usbDevices.read<uint64_t>(deviceId, 0, [](const dish_usb::UsbDeviceStats& s) {
+        return s.motionCount.load(std::memory_order_relaxed);
+    });
 }
 
-static std::shared_ptr<DeviceCtx> ctxFor(int32_t syntheticDeviceId) {
-    std::lock_guard<std::mutex> lock(g_mtx);
-    auto it = g_devices.find(syntheticDeviceId);
-    return it == g_devices.end() ? nullptr : it->second;
-}
-
+// The feedback paths only post to the pad's output worker, which performs the OUT transfer.
 void sendRumble(int32_t syntheticDeviceId, uint16_t strong, uint16_t weak) {
-    auto ctx = ctxFor(syntheticDeviceId);
-    if (!ctx) return;
-    std::lock_guard<std::mutex> lock(ctx->outMtx);
-    if (ctx->fd < 0) return;
-    ctx->feedback.strong = strong;
-    ctx->feedback.weak = weak;
-    uint8_t seq = ctx->outSeq++;
-    usbparsers::runMergedRumble(ctx->fd, ctx->epOut, ctx->parser, ctx->feedback, seq);
+    g_usbDevices.post(syntheticDeviceId, [&](dish_usb::OutputWorker& output) {
+        output.postRumble(syntheticDeviceId, strong, weak);
+    });
 }
 
 void sendTriggerRumble(int32_t syntheticDeviceId, uint16_t left, uint16_t right) {
-    auto ctx = ctxFor(syntheticDeviceId);
-    if (!ctx) return;
-    std::lock_guard<std::mutex> lock(ctx->outMtx);
-    if (ctx->fd < 0) return;
-    if (!usbparsers::parserHasTriggerRumble(ctx->parser)) return;
-    ctx->feedback.leftTrigger = left;
-    ctx->feedback.rightTrigger = right;
-    uint8_t seq = ctx->outSeq++;
-    usbparsers::runMergedRumble(ctx->fd, ctx->epOut, ctx->parser, ctx->feedback, seq);
+    g_usbDevices.post(syntheticDeviceId, [&](dish_usb::OutputWorker& output) {
+        output.postTriggerRumble(syntheticDeviceId, left, right);
+    });
 }
 
 void sendLightbar(int32_t syntheticDeviceId, uint8_t r, uint8_t g, uint8_t b) {
-    auto ctx = ctxFor(syntheticDeviceId);
-    if (!ctx) return;
-    std::lock_guard<std::mutex> lock(ctx->outMtx);
-    if (ctx->fd < 0) return;
-    usbparsers::runLightbar(ctx->fd, ctx->epOut, ctx->parser, ctx->feedback, r, g, b);
+    g_usbDevices.post(syntheticDeviceId, [&](dish_usb::OutputWorker& output) {
+        output.postLightbar(syntheticDeviceId, r, g, b);
+    });
 }
 
 void sendPlayerLeds(int32_t syntheticDeviceId, uint8_t ledMask) {
-    auto ctx = ctxFor(syntheticDeviceId);
-    if (!ctx) return;
-    std::lock_guard<std::mutex> lock(ctx->outMtx);
-    if (ctx->fd < 0) return;
-    uint8_t seq = ctx->outSeq++;
-    usbparsers::runPlayerLeds(ctx->fd, ctx->epOut, ctx->parser, ctx->feedback, ledMask, seq);
+    g_usbDevices.post(syntheticDeviceId, [&](dish_usb::OutputWorker& output) {
+        output.postPlayerLeds(syntheticDeviceId, ledMask);
+    });
 }
 
 void sendTriggerEffects(int32_t syntheticDeviceId, const uint8_t* left, const uint8_t* right) {
-    auto ctx = ctxFor(syntheticDeviceId);
-    if (!ctx) return;
-    std::lock_guard<std::mutex> lock(ctx->outMtx);
-    if (ctx->fd < 0) return;
-    usbparsers::runTriggerEffects(ctx->fd, ctx->epOut, ctx->parser, ctx->feedback, left, right);
+    g_usbDevices.post(syntheticDeviceId, [&](dish_usb::OutputWorker& output) {
+        output.postTriggerEffects(syntheticDeviceId, left, right);
+    });
 }
 
 void sendMicMuteLed(int32_t syntheticDeviceId, uint8_t state) {
-    auto ctx = ctxFor(syntheticDeviceId);
-    if (!ctx) return;
-    std::lock_guard<std::mutex> lock(ctx->outMtx);
-    if (ctx->fd < 0) return;
-    usbparsers::runMicMuteLed(ctx->fd, ctx->epOut, ctx->parser, ctx->feedback, state);
+    g_usbDevices.post(syntheticDeviceId, [&](dish_usb::OutputWorker& output) {
+        output.postMicLed(syntheticDeviceId, state);
+    });
 }
 
 } // namespace usbhost

@@ -75,5 +75,8 @@ obj/
 # Kotlin
 .kotlin/
 
+# Python (the release scripts' tests)
+__pycache__/
+
 # Gradle dependency verification metadata (locally generated)
 gradle/verification-metadata.xml

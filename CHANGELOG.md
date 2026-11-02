@@ -7,6 +7,34 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [2.5.0] - 2026-11-02
+
+Steadier input when several controllers, the on-screen pad and voice chat are
+in use at once.
+
+### Added
+
+- **Every release on GitHub now carries a measurement of the input path.** Two
+  files, `measurements-<version>.md` and `.json`, show how long Dish's input
+  code takes to send each controller report, timed on GitHub's build machines
+  rather than on a phone, and confirm that no controller, on-screen pad or
+  incoming message waits on a lock. A release that fails that check is not
+  published on GitHub.
+
+### Changed
+
+- **Controller input no longer waits its turn behind other controllers.** A
+  press from a USB controller, a Bluetooth one or the on-screen pad used to
+  queue for a moment behind whatever another controller or the microphone was
+  sending. Each now goes straight out, in order, without waiting on the others.
+- **Rumble and lights on a USB controller no longer hold up what your computer
+  sends next.** Each USB controller now has a helper of its own that writes
+  its rumble, light bar and LEDs, so a slow USB write never delays the next
+  message from Satellite, and a newer rumble or color simply replaces one that
+  has not been written yet.
+- **Messages from Satellite are received on a dedicated, high-priority
+  thread**, the same priority the controllers' own input already had.
+
 ## [2.4.1] - 2026-10-25
 
 Controllers that Android also reads as a keyboard, and a Diagnostics list of

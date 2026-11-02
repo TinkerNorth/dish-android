@@ -1,0 +1,193 @@
+name: Measurements
+
+# Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
+#   actions/checkout           @ v7.0.1 → 3d3c42e5aac5ba805825da76410c181273ba90b1
+#   actions/upload-artifact    @ v7.0.2 → cf430e030ddbb5b0abf93d22962f4752f3646cd9
+#   actions/download-artifact  @ v8.0.2 → 9000827ccba6bdab643e8b6fd33ac0654aef8333
+
+# Runs the host bench (tools/bench/README.md, "Host bench") and its lock-statistics twin on a
+# hosted runner and turns their JSON into measurements-<version>.md (the job summary) and
+# measurements-<version>.json through scripts/measurements_report.py. release.yml runs it beside
+# the build and its publish job attaches both files to the GitHub release; the next release's
+# run compares against them. Host numbers: the phone's own stage 1 is still measured by hand.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Version label for measurements-<version>.json and the job summary"
+        type: string
+        required: true
+      upload_to_release:
+        description: "Attach the two files to the release named by tag"
+        type: boolean
+        required: false
+        default: false
+      tag:
+        description: "Release tag to measure and to attach the files to"
+        type: string
+        required: false
+        default: ""
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label (default: dev-<short commit>)"
+        type: string
+        required: false
+        default: ""
+      upload_to_release:
+        description: "Attach the two files to the release named by tag"
+        type: boolean
+        required: false
+        default: false
+      tag:
+        description: "Release tag to measure and to attach the files to (default: the ref the workflow runs on)"
+        type: string
+        required: false
+        default: ""
+  pull_request:
+    branches: [main]
+    paths:
+      - "app/src/main/cpp/**"
+      - "app/src/test/cpp/**"
+      - "scripts/measurements_report.py"
+      - "scripts/measurements_report_test.py"
+      - ".github/workflows/measurements.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: Measure (host bench, ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    concurrency:
+      group: measurements-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - name: Check the inputs
+        env:
+          UPLOAD: ${{ inputs.upload_to_release }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [ "$UPLOAD" = "true" ] && [ -z "$TAG" ]; then
+            echo "::error::upload_to_release needs a tag"
+            exit 1
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Resolve the version label
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          version="${INPUT_VERSION#v}"
+          if [ -z "$version" ]; then version="dev-${GITHUB_SHA::7}"; fi
+          if ! [[ "$version" =~ ^[0-9A-Za-z][0-9A-Za-z._+-]*$ ]]; then
+            echo "::error::version label '$version' may only hold letters, digits, '.', '_', '+' and '-'"
+            exit 1
+          fi
+          echo "MEASURE_VERSION=$version" >> "$GITHUB_ENV"
+
+      # One tree builds both benches: bench_send_path links the plain dish_core either way, and
+      # DISH_BENCH_LOCKSTATS only adds its twin on dish_core_lockstats.
+      - name: Configure (Release)
+        run: cmake -S app/src/test/cpp -B build/measure -DCMAKE_BUILD_TYPE=Release -DDISH_BENCH_LOCKSTATS=ON
+
+      - name: Build the benches and the lock-law test
+        run: cmake --build build/measure --parallel --target bench_send_path bench_send_path_lockstats lock_laws_test
+
+      - name: Lock laws
+        run: build/measure/lock_laws_test
+
+      - name: Fetch the previous release's measurements
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir -p build/previous-measurements
+          if ! gh release download --pattern 'measurements-*.json' --dir build/previous-measurements; then
+            echo "::notice::No earlier release carries measurements; the trend comparison is skipped."
+          fi
+
+      # Each bench at its defaults, and again with a 1 kHz mic. The runs go one after another:
+      # two benches at once would measure each other.
+      - name: Run the benches
+        id: bench
+        run: |
+          set -uo pipefail
+          mkdir -p build/measurements-raw
+          failures=()
+          for target in bench_send_path bench_send_path_lockstats; do
+            exe="build/measure/$target"
+            echo "::group::$target"
+            "$exe" --json "build/measurements-raw/$target.json" || failures+=("$target exited with $?")
+            echo "::endgroup::"
+            echo "::group::$target --mic-hz 1000"
+            "$exe" --mic-hz 1000 --json "build/measurements-raw/$target-mic1000.json" \
+              || failures+=("$target --mic-hz 1000 exited with $?")
+            echo "::endgroup::"
+          done
+          if [ "${#failures[@]}" -gt 0 ]; then
+            printf '::error::%s\n' "${failures[@]}"
+            exit 1
+          fi
+
+      # The report's own tests first, against what the benches just wrote.
+      - name: Test the report script
+        if: ${{ !cancelled() && steps.bench.outcome != 'skipped' }}
+        env:
+          DISH_BENCH_JSON: build/measurements-raw/bench_send_path.json:build/measurements-raw/bench_send_path_lockstats.json
+        run: python3 -m unittest discover -s scripts -p 'measurements_report_test.py' -t scripts
+
+      - name: Build the report and check the gates
+        id: report
+        if: ${{ !cancelled() && steps.bench.outcome != 'skipped' }}
+        run: |
+          set -euo pipefail
+          python3 scripts/measurements_report.py \
+            --input-dir build/measurements-raw \
+            --output-dir build/measurements \
+            --version "$MEASURE_VERSION" \
+            --previous-dir build/previous-measurements \
+            --commit "$(git rev-parse HEAD)"
+
+      - name: Upload the measurements
+        if: ${{ !cancelled() && steps.report.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: measurements
+          path: |
+            build/measurements/measurements-*.json
+            build/measurements/measurements-*.md
+          retention-days: 90
+          if-no-files-found: warn
+
+  attach:
+    name: Attach to the release
+    needs: [measure]
+    if: ${{ inputs.upload_to_release }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download the measurements
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: measurements
+          path: measurements
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" measurements/measurements-*.json measurements/measurements-*.md --clobber

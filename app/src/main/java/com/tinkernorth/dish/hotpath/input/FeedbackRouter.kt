@@ -4,7 +4,6 @@ package com.tinkernorth.dish.hotpath.input
 
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
-import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.lights.FrameworkLightGateway
 import com.tinkernorth.dish.source.lights.LightSource
 import com.tinkernorth.dish.source.store.FeedbackActivityStore
@@ -32,8 +31,8 @@ import javax.inject.Singleton
  *   no API for them, and folding trigger rumble into the pad's main vibrator
  *   would fight the real rumble stream.
  *
- * Session resolution reuses [resolveRumble]: the slot the (session, controller
- * index) pair is bound to is the same one for every feedback kind.
+ * Session resolution goes through the same [FeedbackRoutes] as rumble: the slot the
+ * (session, controller index) pair is bound to is the same one for every feedback kind.
  */
 @Singleton
 class FeedbackRouter
@@ -47,6 +46,8 @@ class FeedbackRouter
         private val frameworkLights: FrameworkLightGateway,
         private val rumbleEnabled: RumbleEnabledStore,
     ) {
+        private val routes = FeedbackRouteCache(satellite)
+
         fun dispatchLightbar(
             sessionHandle: Int,
             controllerIndex: Int,
@@ -54,11 +55,9 @@ class FeedbackRouter
             g: Int,
             b: Int,
         ) {
-            val connections = connectionSnapshots()
-            val target = resolveRumble(connections, sessionHandle, controllerIndex)
-            noteHost(target, FeedbackKind.LIGHTBAR)
-            val connectionId = connectionForHandle(connections, sessionHandle)?.connectionId.orEmpty()
-            actuateLightbar(target, LightSource(connectionId, controllerIndex), r, g, b)
+            val route = routes.current().routeFor(sessionHandle, controllerIndex) ?: return
+            noteHost(route, FeedbackKind.LIGHTBAR)
+            actuateLightbar(route.target, route.lightSource, r, g, b)
         }
 
         fun dispatchTriggerEffects(
@@ -66,9 +65,9 @@ class FeedbackRouter
             controllerIndex: Int,
             blocks: ByteArray,
         ) {
-            val target = resolveTarget(sessionHandle, controllerIndex)
-            noteHost(target, FeedbackKind.TRIGGER_EFFECTS)
-            actuateTriggerEffects(target, blocks)
+            val route = routes.current().routeFor(sessionHandle, controllerIndex) ?: return
+            noteHost(route, FeedbackKind.TRIGGER_EFFECTS)
+            actuateTriggerEffects(route.target, blocks)
         }
 
         fun dispatchPlayerLeds(
@@ -76,9 +75,9 @@ class FeedbackRouter
             controllerIndex: Int,
             ledMask: Int,
         ) {
-            val target = resolveTarget(sessionHandle, controllerIndex)
-            noteHost(target, FeedbackKind.PLAYER_LEDS)
-            actuatePlayerLeds(target, ledMask)
+            val route = routes.current().routeFor(sessionHandle, controllerIndex) ?: return
+            noteHost(route, FeedbackKind.PLAYER_LEDS)
+            actuatePlayerLeds(route.target, ledMask)
         }
 
         /**
@@ -97,9 +96,9 @@ class FeedbackRouter
             controllerIndex: Int,
             state: Int,
         ) {
-            val target = resolveTarget(sessionHandle, controllerIndex)
-            noteHost(target, FeedbackKind.MIC_LED)
-            actuateMicLed(target, state)
+            val route = routes.current().routeFor(sessionHandle, controllerIndex) ?: return
+            noteHost(route, FeedbackKind.MIC_LED)
+            actuateMicLed(route.target, state)
         }
 
         /** Slot-addressed entry points: the Moonlight path and the inspector's test bench already know the slot. */
@@ -193,17 +192,11 @@ class FeedbackRouter
         }
 
         private fun noteHost(
-            target: RumbleTarget,
+            route: FeedbackRoute,
             kind: FeedbackKind,
         ) {
-            val slotId =
-                when (target) {
-                    RumbleTarget.Phone -> VIRTUAL_SLOT_ID
-                    is RumbleTarget.Framework -> target.deviceId.toString()
-                    is RumbleTarget.DirectUsb -> target.deviceId.toString()
-                    RumbleTarget.None -> return
-                }
-            feedbackActivity.note(slotId, kind)
+            if (route.target == RumbleTarget.None) return
+            feedbackActivity.note(route.slotId, kind)
         }
 
         private fun actuateLightbar(
@@ -257,21 +250,6 @@ class FeedbackRouter
                 else -> Unit
             }
         }
-
-        private fun resolveTarget(
-            sessionHandle: Int,
-            controllerIndex: Int,
-        ): RumbleTarget = resolveRumble(connectionSnapshots(), sessionHandle, controllerIndex)
-
-        private fun connectionSnapshots(): List<RumbleConnectionSnapshot> =
-            satellite.connections.value.values.map { conn ->
-                RumbleConnectionSnapshot(
-                    connectionId = conn.id,
-                    handle = conn.handle,
-                    connected = conn.state.value == SatelliteSessionState.Live,
-                    slots = conn.slots.value,
-                )
-            }
 
         companion object {
             // Wire order of MSG_TRIGGER_EFFECTS blocks: left (0..10), right (11..21);

@@ -3,15 +3,16 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 
 namespace dish_bridge {
 
 // The Kotlin-side connection id of a bridge slot (Bluetooth / Moonlight). Built once when the slot
-// binds and shared, never copied: every report the slot queues points at the same string, so the
-// per-event path bumps a reference count where a std::string copy would allocate (an id is longer
-// than the small-string buffer). Null for a satellite slot or a bind that named no connection.
+// binds and held by the slot and by the bridge thread's cache, never copied: the per-event path
+// carries the bind's connection number instead. Null for a satellite slot or a bind that named no
+// connection.
 using BridgeConnectionId = std::shared_ptr<const std::string>;
 
 // The bridge thread's Java string for each bind's connection id, so an upcall passes a string it
@@ -19,21 +20,26 @@ using BridgeConnectionId = std::shared_ptr<const std::string>;
 // upcalls, which is also the only thread that makes and releases the refs, so no other thread
 // ever needs a JVM to let one go.
 //
-// A bind's ref is made on its first report. It is released once nothing but this cache holds the
-// bind's id (the slot unbound or rebound, and every report it queued dispatched or dropped), when
-// the next new id arrives or the thread stops. With every entry still bound, a new id takes over
-// the entries in turn: correct, only no longer free.
+// Reports name their bind by a connection number; the first report of a bind resolves it to the
+// id (SlotTable::bridgeConnectionId) and makes the ref. A bind's ref is released once nothing but
+// this cache holds the bind's id (the slot unbound or rebound), when the next new number arrives
+// or the thread stops; a report of that bind still queued then resolves to nothing and is dropped.
+// With every entry still bound, a new number takes over the entries in turn: correct, only no
+// longer free.
 //
 // Refs: `Ref make(const std::string&)`, which may answer an empty Ref when it cannot make one, and
-// `void release(Ref)`.
+// `void release(Ref)`. Resolve: `BridgeConnectionId(uint32_t connection)`, null for a bind gone.
 template <typename Ref, std::size_t Capacity> class ConnectionRefCache {
   public:
-    template <typename Refs> Ref refFor(const BridgeConnectionId& id, Refs& refs) {
-        if (!id) return Ref{};
+    template <typename Resolve, typename Refs>
+    Ref refFor(const uint32_t connection, Resolve&& resolve, Refs& refs) {
+        if (connection == 0) return Ref{};
         for (Entry& entry : entries_) {
-            if (entry.id == id) return entry.ref;
+            if (entry.connection == connection) return entry.ref;
         }
-        return adopt(id, refs);
+        const BridgeConnectionId id = resolve(connection);
+        if (!id) return Ref{};
+        return adopt(connection, id, refs);
     }
 
     template <typename Refs> void releaseAll(Refs& refs) {
@@ -44,22 +50,25 @@ template <typename Ref, std::size_t Capacity> class ConnectionRefCache {
 
   private:
     struct Entry {
+        uint32_t connection = 0;
         BridgeConnectionId id;
         Ref ref{};
     };
 
-    template <typename Refs> Ref adopt(const BridgeConnectionId& id, Refs& refs) {
+    template <typename Refs>
+    Ref adopt(const uint32_t connection, const BridgeConnectionId& id, Refs& refs) {
         releaseUnbound(refs);
         Entry& entry = freeOrNextEntry(refs);
         const Ref made = refs.make(*id);
         if (!made) return Ref{};
+        entry.connection = connection;
         entry.id = id;
         entry.ref = made;
         return made;
     }
 
-    // An id whose only owner is this cache belongs to a bind that is gone: no slot holds it and no
-    // queued report does, and nothing can hand it out again.
+    // An id whose only owner is this cache belongs to a bind that is gone: no slot holds it, and
+    // nothing can hand its number out again.
     template <typename Refs> void releaseUnbound(Refs& refs) {
         for (Entry& entry : entries_) {
             const bool isOnlyOwner = entry.id && entry.id.use_count() == 1;
@@ -79,6 +88,7 @@ template <typename Ref, std::size_t Capacity> class ConnectionRefCache {
 
     template <typename Refs> static void clear(Entry& entry, Refs& refs) {
         refs.release(entry.ref);
+        entry.connection = 0;
         entry.id.reset();
         entry.ref = Ref{};
     }

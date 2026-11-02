@@ -27,8 +27,9 @@ void setEnabled(bool on);
 bool enabled();
 
 // stage 1 (called on the per-device USB poller thread, in order)
-void markInputRead(int32_t deviceId); // URB reaped with a fresh input report
-void markGamepadSent();               // the resulting MSG_GAMEPAD_DATA packet has left sendto()
+void markInputRead(int32_t deviceId);   // URB reaped with a fresh input report
+void markGamepadSent();                 // the resulting MSG_GAMEPAD_DATA packet has left sendto()
+void markGamepadSentAt(int64_t sentNs); // the same, at a time read when it left (nowMonotonicNs)
 
 // Per-device stage-1 / inter-arrival rings, populated alongside the pooled ones.
 std::string deviceLatencyJson(int32_t deviceId);
