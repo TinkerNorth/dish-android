@@ -1056,7 +1056,8 @@ std::string jsonArray(const std::vector<T>& items, ToJson toJson) {
 
 bool writeJson(const std::string& path, const Options& options, const RunPlan& plan,
                const std::vector<Row>& rows, const std::vector<LockRow>& locks,
-               const std::vector<std::pair<std::string, Harness>>& harnesses) {
+               const std::vector<std::pair<std::string, Harness>>& harnesses,
+               const std::vector<std::string>& problems) {
     std::ofstream out(path, std::ios::binary);
     if (!out) return false;
     out << "{\"bench\":\"bench_send_path\",\"lockStats\":" << (LOCK_STATS_BUILD ? "true" : "false")
@@ -1069,7 +1070,7 @@ bool writeJson(const std::string& path, const Options& options, const RunPlan& p
                      [](const std::pair<std::string, Harness>& item) {
                          return harnessJson(item.first, item.second);
                      })
-        << "}\n";
+        << ",\"problems\":" << jsonArray(problems, jsonString) << "}\n";
     return (bool)out;
 }
 
@@ -1162,7 +1163,7 @@ int main(int argc, char** argv) {
     printTables(rows, locks);
 
     if (!options.jsonPath.empty() &&
-        !writeJson(options.jsonPath, options, plan, rows, locks, harnesses)) {
+        !writeJson(options.jsonPath, options, plan, rows, locks, harnesses, problems)) {
         problems.push_back("could not write " + options.jsonPath);
     }
     if (!options.csvPath.empty() && !writeCsv(options.csvPath, rows)) {

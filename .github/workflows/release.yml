@@ -27,6 +27,11 @@ on:
 # resolves to the previous release, and the flip is what makes publication
 # atomic for every client polling it.
 #
+# The draft also carries measurements-<version>.md and .json: the host bench
+# of the input path on the tagged commit (measurements.yml), run beside the
+# build. publish waits for it, so a release whose USB poller, UI or receive
+# thread takes a lock is never published here; Play and Amazon do not wait.
+#
 # Required secrets (optional: workflow falls back to unsigned artifacts
 # for workflow_dispatch on feature branches; tagged releases on main are
 # blocked by `required-secrets` if any are missing):
@@ -790,9 +795,21 @@ jobs:
       # (signing posts the repo name to the public Rekor log).
       private-repository: false
 
+  # Needs no build output, so it measures beside the build; publish attaches what it writes.
+  measurements:
+    name: Release measurements
+    needs: [gates]
+    permissions:
+      contents: write
+    uses: ./.github/workflows/measurements.yml
+    with:
+      version: ${{ inputs.tag || github.ref_name }}
+      upload_to_release: false
+      tag: ${{ inputs.tag || github.ref_name }}
+
   publish:
     name: Publish to GitHub Releases
-    needs: [harden, provenance]
+    needs: [harden, provenance, measurements]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -808,6 +825,12 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.provenance.outputs.provenance-name }}
+          path: release
+
+      - name: Download the measurements
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: measurements
           path: release
 
       - name: Show what we're about to publish

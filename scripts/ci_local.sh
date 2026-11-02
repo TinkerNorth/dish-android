@@ -53,6 +53,9 @@ fi
 step "Play metadata lint"
 python scripts/check_play_metadata.py
 
+step "Release script tests"
+python -m unittest discover -s scripts -p '*_test.py' -t scripts
+
 step "ktlint + detekt (all source sets incl. test + androidTest)"
 $GRADLE :app:ktlintCheck :app:detekt $GRADLE_ARGS
 
@@ -86,6 +89,11 @@ cmake -S app/src/test/cpp -B build/native-test-host ${HOST_GENERATOR[@]+"${HOST_
 cmake --build build/native-test-host --parallel
 ctest --test-dir build/native-test-host --output-on-failure --no-tests=error
 build/native-test-host/bench_send_path --smoke
+
+step "Measurements report tests (with the JSON both smokes wrote)"
+PATH_SEP=$(python -c 'import os, sys; sys.stdout.write(os.pathsep)')
+DISH_BENCH_JSON="build/native-test-host/send_path_bench_smoke.json${PATH_SEP}build/native-test-host/send_path_bench_lockstats_smoke.json" \
+  python -m unittest discover -s scripts -p 'measurements_report_test.py' -t scripts
 
 step "Assemble debug APKs (github + play + amazon flavors)"
 $GRADLE :app:assembleGithubDebug :app:assemblePlayDebug :app:assembleAmazonDebug $GRADLE_ARGS

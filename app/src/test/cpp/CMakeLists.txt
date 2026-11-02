@@ -307,7 +307,8 @@ option(DISH_BENCH_LOCKSTATS "Build bench_send_path_lockstats, the bench with loc
 if(DISH_BENCH)
     add_executable(bench_send_path send_path_bench.cpp)
     target_link_libraries(bench_send_path PRIVATE fake_satellite dish_core)
-    add_test(NAME send_path_bench_smoke COMMAND bench_send_path --smoke)
+    add_test(NAME send_path_bench_smoke
+             COMMAND bench_send_path --smoke --json "${CMAKE_BINARY_DIR}/send_path_bench_smoke.json")
 endif()
 if(DISH_BENCH_LOCKSTATS)
     add_executable(bench_send_path_lockstats send_path_bench.cpp)

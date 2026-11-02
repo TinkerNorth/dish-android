@@ -234,6 +234,12 @@ jobs:
       - name: Bench smoke
         run: build/native-test/bench_send_path --smoke
 
+      # measurements.yml's report, also read against the JSON both smokes under ctest wrote.
+      - name: Measurements report tests
+        env:
+          DISH_BENCH_JSON: build/native-test/send_path_bench_smoke.json:build/native-test/send_path_bench_lockstats_smoke.json
+        run: python3 -m unittest discover -s scripts -p 'measurements_report_test.py' -t scripts
+
   # The amazon APK has no 32-bit x86 library, so this x86 image (ABIs x86, armeabi-v7a, armeabi)
   # installs it as armeabi-v7a and runs libsatellite.so through its ARM translation, as on a 32-bit
   # Fire tablet.

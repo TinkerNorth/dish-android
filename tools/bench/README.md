@@ -114,15 +114,16 @@ contended acquisitions, failed `try_lock`s, maximum wait, p99 wait (the upper ed
 bucket) and maximum hold. The instrumentation costs a few clock reads per lock, so the latencies
 come from `bench_send_path` and only the lock figures from the stats build.
 
-`--json PATH` writes the settings, the machine, every row (and the lock rows) and the harness
-counts; `--csv PATH` writes the rows. `--smoke` runs every scenario once for 0.2 s with the
-battery burst and the rebinds compressed to fit; ctest runs it as `send_path_bench_smoke`, and
-the stats build, when configured with `-DDISH_BENCH_LOCKSTATS=ON`, as
-`send_path_bench_lockstats_smoke`. The exit code reflects the harness's own accounting (a report
-that sent nothing, a failed send, a datagram the satellite could not open or saw out of counter
-order, a cold sender or feedback that never arrived) and usage errors, never a latency; in a
-smoke run it also checks the pacing: no frame before its deadline, and the median frame within
-1 ms of it. `--help` lists the options.
+`--json PATH` writes the settings, the machine, every row (and the lock rows), the harness
+counts and the harness's problems; `--csv PATH` writes the rows. `--smoke` runs every scenario
+once for 0.2 s with the battery burst and the rebinds compressed to fit; ctest runs it as
+`send_path_bench_smoke`, and the stats build, when configured with `-DDISH_BENCH_LOCKSTATS=ON`,
+as `send_path_bench_lockstats_smoke`, each writing its JSON into the build directory
+(`send_path_bench_smoke.json`, `send_path_bench_lockstats_smoke.json`). The exit code reflects
+the harness's own accounting (a report that sent nothing, a failed send, a datagram the
+satellite could not open or saw out of counter order, a cold sender or feedback that never
+arrived) and usage errors, never a latency; in a smoke run it also checks the pacing: no frame
+before its deadline, and the median frame within 1 ms of it. `--help` lists the options.
 
 Build and run (Windows: msys2 ucrt64 g++, with `C:\msys64\ucrt64\bin` first on `PATH` when the
 binaries run, so they load that toolchain's runtime DLLs):
@@ -311,3 +312,76 @@ The device run is still owed. Take stage 1 as in "Running it" above, with a Dual
 USB-direct mode (each of its URBs carries a report, motion and touch), on a build from before
 these commits and on one from after, about 30 s each while a second pad or the on-screen pad also
 streams, and compare `stage1_hotpath_us`.
+
+## Release measurements
+
+`.github/workflows/measurements.yml` turns the host bench into a record per release, as the
+satellite and dish-linux do. It runs on pull requests that touch `app/src/main/cpp/**`,
+`app/src/test/cpp/**`, the report script or the workflow, by hand (`workflow_dispatch`), and from
+`release.yml` as the `measurements` job. That job needs no build output, so it runs beside the
+build; `publish` needs it and uploads its two files with the release's other assets to the draft
+before flipping it to published. Google Play and the Amazon Appstore do not wait for it.
+
+One `ubuntu-24.04` job configures `app/src/test/cpp` once, in Release with
+`-DDISH_BENCH_LOCKSTATS=ON` (`bench_send_path` links the plain units either way; the option only
+adds its twin), builds `bench_send_path`, `bench_send_path_lockstats` and `lock_laws_test`, runs
+the lock laws, then runs each bench at its defaults and again with `--mic-hz 1000`, one after
+another, each with `--json`. `scripts/measurements_report.py` merges the four JSON files into
+`measurements-<version>.json` and renders `measurements-<version>.md`: the headline, the two
+gates, the latency of every stream in every scenario (of the 1000 Hz mic runs only S4 to S6, the
+scenarios that run the mic, kept as `S4 (mic 1000 Hz)` and so on), what the fake satellite and
+the receive loop counted, every lock each thread role took, and any problem the harness found.
+The markdown is the job summary, and both files are the `measurements` workflow artifact.
+
+- **Lock law gate (fails the job).** In the lock-statistics runs the `UsbPoller`, `UiInput` and
+  `Receive` roles must show no acquisition of any lock, in every scenario the report keeps. Any
+  acquisition fails the report with an `::error title=Lock law gate::` that names the run, the
+  scenario, the role and the lock. It is the poller, UI and receive laws of `lock_laws_test.cpp`,
+  whose lists are empty, read off the bench: it counts events, which no runner can disturb, and
+  takes no tolerance. A lock-statistics run that recorded no lock at all fails too, as does a set
+  with no lock-statistics run, since a gate that sees no lock cannot pass; a working run always
+  records the bench's own thread opening and closing the session. A failed `try_lock` is not an
+  acquisition here. `lock_laws_test`, which the same job runs first, also fails on a lock nested
+  in another or held across a blocking call.
+- **Trend (warnings only).** The report downloads `measurements-*.json` from the latest published
+  release (`gh release download`; finding none is not an error) and warns, in the markdown and as
+  `::warning::` annotations, when a row's p99.9 or max is more than twice the previous release's
+  and more than 100 us above it. Shared runners are noisy, so this never fails a run.
+- **Headline.** S1's stream A, one USB poller and nothing else: the median, p99 and p99.9 of the
+  reported run, that run's max and its reports over 1 ms as the runner's noise floor, and the USB
+  poller's locks per report in the stats build (zero). The JSON carries the same figures under
+  `headline`.
+- **Harness problems.** A report that sent nothing, a failed send, a datagram the satellite could
+  not open or saw out of counter order, or a cold sender or feedback that never arrived fails the
+  bench's run and so the job; the bench also writes them into its JSON, and the record lists them.
+- **Host numbers, and the phone.** The record says at its top that its numbers are the runner's,
+  not a phone's. The phone's own stage 1 stays a manual step: "Running it" above, or Diagnostics,
+  Latency profiling, which arms the same `hotpath_latency` instrumentation on any build and shows
+  the phone path's p50 and p99 (the debug and benchmark builds' adb switch,
+  `HotPathBenchController`, logs the full JSON).
+
+To produce the same files by hand, from the repository root (everything lands under the ignored
+`build/`; on Windows, configure with the msys2 compilers as in "Host bench" above):
+
+```
+cmake -S app/src/test/cpp -B build/measure -DCMAKE_BUILD_TYPE=Release -DDISH_BENCH_LOCKSTATS=ON
+cmake --build build/measure --parallel --target bench_send_path bench_send_path_lockstats lock_laws_test
+build/measure/lock_laws_test
+mkdir -p build/measurements-raw
+for bench in bench_send_path bench_send_path_lockstats; do
+    build/measure/$bench --json build/measurements-raw/$bench.json
+    build/measure/$bench --mic-hz 1000 --json build/measurements-raw/$bench-mic1000.json
+done
+gh release download --pattern 'measurements-*.json' --dir build/previous-measurements
+python3 scripts/measurements_report.py --input-dir build/measurements-raw \
+    --output-dir build/measurements --version <label> --previous-dir build/previous-measurements
+```
+
+The report exits 1 when the lock law gate fails, after writing both files, and 2 when the input
+cannot be read; `--previous-dir` is optional, `--allow-partial` accepts a directory that lacks
+some of the four runs, and `--trend-ratio` and `--trend-min-delta-us` move the trend's
+thresholds. `scripts/measurements_report_test.py` tests it: in `android-ci.yml`'s build job with
+the other release scripts, in its x86_64 lane with `DISH_BENCH_JSON` naming the JSON both smokes
+wrote (files separated as in `PATH`), which the tests then read too, and in the workflow against
+the release's own runs before it writes the record. Once the workflow is on `main`,
+`gh workflow run measurements.yml --ref <branch> -f version=<label>` measures a branch.

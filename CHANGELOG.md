@@ -12,6 +12,15 @@ computer. Those lines say "update Satellite too".
 Steadier input when several controllers, the on-screen pad and voice chat are
 in use at once.
 
+### Added
+
+- **Every release on GitHub now carries a measurement of the input path.** Two
+  files, `measurements-<version>.md` and `.json`, show how long Dish's input
+  code takes to send each controller report, timed on GitHub's build machines
+  rather than on a phone, and confirm that no controller, on-screen pad or
+  incoming message waits on a lock. A release that fails that check is not
+  published on GitHub.
+
 ### Changed
 
 - **Controller input no longer waits its turn behind other controllers.** A
