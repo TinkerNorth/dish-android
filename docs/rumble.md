@@ -151,8 +151,9 @@ frequency, right), 0..65535. Layouts follow the Linux kernel drivers:
   Vibration is enabled in `runInit` via subcommand `0x48`.
 
 Counters that the protocol carries (Xbox One serial, Switch Pro packet
-number) live in `DeviceCtx.outSeq`. The write is serialized against
-detach by `DeviceCtx.outMtx` so it never races the fd close.
+number) live in the pad's `UsbOutput.outSeq`. Every write is made by the
+pad's output worker (`usb_output.h`), its only writer, which detach stops
+before the fd closes.
 
 **Sources:** `drivers/input/joystick/xpad.c` (`xpad_play_effect`),
 `drivers/hid/hid-playstation.c`, `drivers/hid/hid-nintendo.c`

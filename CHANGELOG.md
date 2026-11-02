@@ -7,6 +7,25 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [Unreleased]
+
+Steadier input when several controllers, the on-screen pad and voice chat are
+in use at once.
+
+### Changed
+
+- **Controller input no longer waits its turn behind other controllers.** A
+  press from a USB controller, a Bluetooth one or the on-screen pad used to
+  queue for a moment behind whatever another controller or the microphone was
+  sending. Each now goes straight out, in order, without waiting on the others.
+- **Rumble and lights on a USB controller no longer hold up what your computer
+  sends next.** Each USB controller now has a helper of its own that writes
+  its rumble, light bar and LEDs, so a slow USB write never delays the next
+  message from Satellite, and a newer rumble or color simply replaces one that
+  has not been written yet.
+- **Messages from Satellite are received on a dedicated, high-priority
+  thread**, the same priority the controllers' own input already had.
+
 ## [2.4.1] - 2026-10-25
 
 Controllers that Android also reads as a keyboard, and a Diagnostics list of

@@ -17,8 +17,9 @@ the cakama3a-equivalent poll cadence. Full chain and methodology: see that READM
 mark is a single relaxed atomic load, so the streaming path is unchanged. Hooks:
 
 - `markInputRead()` — `usb_host.cpp`, at URB reap (per-device poller thread).
-- `markGamepadSent()` — `send_path.cpp` `transmitPublished`, right after the
-  `MSG_GAMEPAD_DATA` packet leaves `sendto()`. Stage 1 = this Δ on one thread.
+- `markGamepadSentAt()` — `send_path.cpp` `sendFramed`: the clock is read as a pad's
+  published `MSG_GAMEPAD_DATA` packet leaves `sendto()`, and the mark is taken with that
+  time once the session's send gate is let go. Stage 1 = this Δ on one thread.
 - `shouldArmPing()` / `addRttSample()` — `send_path.cpp` heartbeat send and
   `receive_path.cpp` ack receive. Stage 2 RTT measured on the device clock; one-way ≈ RTT/2.
 
@@ -231,3 +232,82 @@ wait for each other on the global `input.devices` and on `session.turn`: in S6 t
 waited on the device lock in 691 of its 750 reports and on the turn in 651, up to 60 us each,
 and its median report costs 46 us against A's 20. The mic thread holds `session.audio` for up to
 0.26 ms across an Opus encode, which nothing on the input path shares.
+
+### After: no lock on the input path, host numbers
+
+The same bench after the optimisation commits (`7991ca80` to `74604c45`): sessions and slots in
+fixed hot tables behind the send gate, one hold of the gate per URB, the bridge and speaker-audio
+hand-offs on lock-free rings, a native receive thread per session and an output worker per USB
+pad. Host numbers again; the phone run is still owed (below). Same machine and settings,
+2026-11-02 09:41Z, with nothing else running (no compiler, CMake or Gradle process; CPU load 0 to
+4%). "Before" here is the bench at `cdf665eb` run on the same machine at 2% load at the start of
+this work, not the loaded run above.
+
+| scenario | stream | role | reports | p50 us before | p50 us after | p99 us before | p99 us after | p99.9 us before | p99.9 us after | max us before | max us after |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| S1 | A | UsbPoller | 3000 | 16.0 | 16.1 | 30.7 | 30.7 | 54.1 | 57.6 | 126.8 | 86.7 |
+| S2 | A | UsbPoller | 3000 | 16.3 | 16.6 | 51.8 | 58.0 | 71.8 | 79.5 | 113.1 | 191.2 |
+| S2 | B | UsbPoller | 750 | 26.7 | 31.2 | 59.6 | 61.6 | 92.5 | 132.0 | 92.5 | 132.0 |
+| S3 | A | UsbPoller | 3000 | 17.8 | 17.3 | 80.2 | 65.1 | 96.8 | 91.2 | 325.4 | 257.1 |
+| S3 | B | UsbPoller | 750 | 39.1 | 32.1 | 91.5 | 85.0 | 120.7 | 129.8 | 120.7 | 129.8 |
+| S3 | UI | UiInput | 750 | 50.7 | 40.9 | 95.3 | 85.4 | 137.0 | 151.3 | 137.0 | 151.3 |
+| S4 | A | UsbPoller | 3000 | 16.2 | 16.1 | 69.0 | 72.6 | 86.7 | 93.9 | 150.0 | 148.3 |
+| S4 | B | UsbPoller | 750 | 28.8 | 34.2 | 80.0 | 86.4 | 110.1 | 108.6 | 110.1 | 108.6 |
+| S4 | UI | UiInput | 750 | 41.3 | 43.7 | 78.8 | 89.5 | 134.3 | 103.5 | 134.3 | 103.5 |
+| S5 | A | UsbPoller | 3000 | 17.1 | 19.5 | 75.9 | 65.5 | 92.8 | 94.8 | 170.9 | 123.2 |
+| S5 | B | UsbPoller | 750 | 38.8 | 29.1 | 92.1 | 74.0 | 102.5 | 100.6 | 102.5 | 100.6 |
+| S5 | UI | UiInput | 750 | 46.6 | 42.4 | 94.5 | 80.6 | 123.9 | 98.2 | 123.9 | 98.2 |
+| S6 | A | UsbPoller | 3000 | 15.7 | 16.7 | 56.6 | 58.9 | 83.4 | 81.3 | 104.9 | 102.6 |
+| S6 | B | UsbPoller | 750 | 22.3 | 33.0 | 74.5 | 84.2 | 115.2 | 106.6 | 115.2 | 106.6 |
+| S6 | UI | UiInput | 750 | 33.8 | 36.4 | 76.9 | 82.5 | 163.4 | 99.1 | 163.4 | 99.1 |
+| S7 | A | UsbPoller | 3000 | 15.3 | 16.1 | 27.6 | 32.3 | 35.3 | 59.4 | 124.5 | 159.9 |
+| S7 | A, 3-datagram reports to the last send | UsbPoller | 160 / 129 | 27.1 | 38.4 | 82.7 | 72.4 | 106.9 | 118.5 | 106.9 | 118.5 |
+
+With the mic at 1000 frames a second (`--mic-hz 1000`, S4 to S6), before and after on the same
+idle machine:
+
+| scenario | stream | role | reports | p50 us before | p50 us after | p99 us before | p99 us after | p99.9 us before | p99.9 us after | max us before | max us after |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| S4 | A | UsbPoller | 3000 | 18.9 | 16.9 | 81.8 | 58.0 | 94.6 | 82.6 | 127.2 | 144.0 |
+| S4 | B | UsbPoller | 750 | 27.9 | 22.3 | 92.2 | 71.4 | 98.8 | 200.9 | 98.8 | 200.9 |
+| S4 | UI | UiInput | 750 | 50.1 | 43.5 | 103.1 | 82.2 | 149.2 | 188.5 | 149.2 | 188.5 |
+| S5 | A | UsbPoller | 3000 | 17.5 | 16.7 | 77.4 | 59.5 | 102.8 | 78.9 | 122.9 | 98.9 |
+| S5 | B | UsbPoller | 750 | 26.8 | 30.4 | 86.3 | 82.4 | 103.8 | 91.6 | 103.8 | 91.6 |
+| S5 | UI | UiInput | 750 | 46.0 | 41.2 | 89.7 | 79.5 | 107.8 | 97.6 | 107.8 | 97.6 |
+| S6 | A | UsbPoller | 3000 | 17.1 | 16.4 | 68.4 | 51.8 | 109.7 | 80.6 | 124.9 | 170.3 |
+| S6 | B | UsbPoller | 750 | 19.9 | 29.5 | 85.2 | 74.4 | 96.4 | 209.2 | 96.4 | 209.2 |
+| S6 | UI | UiInput | 750 | 39.6 | 34.3 | 81.3 | 78.4 | 148.1 | 201.1 | 148.1 | 201.1 |
+
+The locks of the reported runs of S1, S6 and S7 from one `bench_send_path_lockstats` invocation
+with the same settings. Every lock left belongs to a thread off the input path: open and close
+(`session.table`, on the bench's own thread), the mic encoder (`session.audio`) and the binding
+thread (`input.bindings`).
+
+| scenario | lock | role | acquisitions | contended | failed tries | max wait us | p99 wait us | max hold us |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| S1 | session.table | Other | 2 | 0 | 0 | 0.1 | 0.1 | 0.2 |
+| S1 | session.audio | Other | 1 | 0 | 0 | 0.0 | 0.0 | 0.3 |
+| S6 | session.table | Other | 2 | 0 | 0 | 0.2 | 0.3 | 0.2 |
+| S6 | session.audio | MicCapture | 150 | 0 | 0 | 0.6 | 0.5 | 293.2 |
+| S6 | session.audio | Other | 1 | 0 | 0 | 0.0 | 0.0 | 11.0 |
+| S6 | input.bindings | Binding | 14 | 0 | 0 | 0.2 | 0.3 | 0.5 |
+| S7 | session.table | Other | 2 | 0 | 0 | 0.1 | 0.1 | 0.3 |
+| S7 | session.audio | Other | 1 | 0 | 0 | 0.1 | 0.1 | 0.1 |
+
+No input thread takes a lock any more, and the lock laws (`lock_laws_test.cpp`) now list nothing
+for the USB pollers, the UI thread and the receive thread, nothing held across a blocking call and
+no nesting. In S6 the UI thread no longer waits on the device lock or a send turn, as it did in
+691 and 651 of its 750 reports before. On this host that shows mostly where frames meet: the UI
+thread's median falls by 4 to 10 us in S3 and S5 and most p99s fall, most clearly with the mic at
+1000 frames a second, while a lone stream's median stays at 16 to 17 us, the seal plus a loopback
+`sendto` that dominates the path. Between runs the 250 Hz streams' medians and every stream's
+tail move by 10 us or more either way (S2 B and S6 B here), so single differences of that size are
+noise. The S7 three-datagram row only counts the reports whose motion and touch both fall due (78
+to 375 of them, depending on the run): three runs after read 38.4, 34.9 and 35.1 us at p50
+against 27.1 here and 36.2 in the loaded run above, which a paired rerun on an idle machine should
+settle.
+
+The device run is still owed. Take stage 1 as in "Running it" above, with a DualSense in
+USB-direct mode (each of its URBs carries a report, motion and touch), on a build from before
+these commits and on one from after, about 30 s each while a second pad or the on-screen pad also
+streams, and compare `stage1_hotpath_us`.
