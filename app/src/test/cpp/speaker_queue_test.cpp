@@ -60,7 +60,7 @@ class SpeakerQueueTest : public ::testing::Test {
         handle = table.open("127.0.0.1", 9);
         ASSERT_GT(handle, 0);
         uint8_t key[32] = {};
-        dish_session::setConnectionParams(*table.get(handle), kToken, key, 3);
+        dish_session::setConnectionParams(table.find(handle), kToken, key, 3);
         encoder = dish_audio::OpusStreamEncoder::create(dish_audio::Stream::Speaker);
         ASSERT_NE(encoder, nullptr);
     }

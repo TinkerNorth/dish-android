@@ -2,11 +2,10 @@
 
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <mutex>
-#include <unordered_map>
 
 #include "bridge_connection_ids.h"
 #include "gamepad_input.h"
@@ -15,8 +14,11 @@
 #include "tracked_mutex.h"
 
 // Every physical pad's state and the slot it is bound to: a satellite session's controller, or a
-// Bluetooth or Moonlight connection the JNI layer's bridge thread serves.
+// Bluetooth or Moonlight connection the bridge thread serves.
 namespace dish_slots {
+
+// The pads the app tracks at once.
+inline constexpr size_t MAX_SLOTS = 16;
 
 enum SlotKind : uint8_t {
     SLOT_NONE = 0,
@@ -29,8 +31,7 @@ struct SlotBinding {
     SlotKind kind = SLOT_NONE;
     int sessionHandle = -1;
     int controllerIndex = -1;
-    dish_bridge::BridgeConnectionId bridgeConnectionId;
-    // Names bridgeConnectionId in the reports; 0 when there is none.
+    // Names the bind's connection id in its bridge reports; 0 when there is none.
     uint32_t bridgeConnection = 0;
 };
 
@@ -66,6 +67,32 @@ class BridgeSink {
     ~BridgeSink() = default;
 };
 
+inline constexpr size_t STATE_WORDS =
+    (sizeof(gamepad::DeviceState) + sizeof(uint64_t) - 1) / sizeof(uint64_t);
+
+// One pad's slot. Its plain fields belong to the pad's one reporting thread (its USB poller, or
+// the UI thread for a framework pad) while that thread is inside its bracket (epoch odd), and to a
+// cold writer while the generation is odd. Each side stores its own word, fences, then loads the
+// other's, so the two never hold the slot at once.
+struct HotSlot {
+    alignas(64) std::atomic<uint32_t> gen{0};
+    alignas(64) std::atomic<uint64_t> epoch{0};
+
+    // The slot is taken, by the pad deviceId names.
+    alignas(64) bool held = false;
+    int32_t deviceId = 0;
+    // The pad's state exists: prewarmed, configured or reported since its last forget.
+    bool hasState = false;
+    SlotBinding binding;
+    gamepad::DeviceState state;
+
+    // Read without either side: the UI thread's count of the framework events it applied, and,
+    // while the inspector is open, the state under a seqlock of its own.
+    std::atomic<uint64_t> frameworkEvents{0};
+    std::atomic<uint32_t> mirrorGen{0};
+    std::atomic<uint64_t> mirror[STATE_WORDS] = {};
+};
+
 class SlotTable {
   public:
     SlotTable(dish_session::SessionTable& sessions, BridgeSink& bridge)
@@ -73,20 +100,23 @@ class SlotTable {
     SlotTable(const SlotTable&) = delete;
     SlotTable& operator=(const SlotTable&) = delete;
 
-    // The USB reader thread's entry points (dispatch.h).
-    void prewarmDevice(int32_t deviceId);
+    // The reporting thread's entry points: the USB poller's (dispatch.h) and the UI thread's. No
+    // lock and no heap; a report that meets a cold write waits for it to close.
     void applyUsbReport(int32_t deviceId, const gamepad::DeviceState& nu);
-    void resetAndPublish(int32_t deviceId);
-    void forgetDevice(int32_t deviceId);
     void applyUsbMotion(int32_t deviceId, const dish_send::MotionSample& sample);
     void applyUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_t eventTimeMs);
-
     // A framework key event; true when the key is the pad's to consume.
     bool applyFrameworkKey(int32_t deviceId, int32_t keyCode, int32_t action);
     // A framework joystick event; action is already masked.
     void applyFrameworkMotion(int32_t deviceId, int32_t action,
                               const gamepad::FrameworkAxes& sample);
-    // Each device is reset and sent on its own, so no send happens under the device lock.
+
+    // The cold path. A pad is known from its prewarm (USB attach), its configuration or its bind;
+    // reports for a pad the table does not know are dropped.
+    void prewarmDevice(int32_t deviceId);
+    void resetAndPublish(int32_t deviceId);
+    void forgetDevice(int32_t deviceId);
+    // Each device is reset and sent on its own.
     void releaseAll();
 
     void bindSatellite(int32_t deviceId, int sessionHandle, int controllerIndex);
@@ -97,10 +127,11 @@ class SlotTable {
 
     void setDeadzones(int32_t deviceId, float flatX, float flatY, float flatZ, float flatRZ);
     void setQuirk(int32_t deviceId, uint8_t quirk);
-    // Diagnostics-only mirror gate: motion/touch land in the device state solely for the inspector
-    // snapshot, and only while an inspector screen is open.
+    // Diagnostics-only mirror gate: motion/touch land in the device state, and the state in the
+    // inspector's mirror, solely while an inspector screen is open.
     void setInspecting(bool on);
-    // formatDeviceStateJson of the device's state; 0 for an unknown device.
+    // formatDeviceStateJson of the device's state as the inspector last saw it; 0 for an unknown
+    // device.
     size_t formatDeviceState(int32_t deviceId, char* buf, size_t cap);
     uint64_t frameworkEventCount(int32_t deviceId);
 
@@ -109,42 +140,33 @@ class SlotTable {
     dish_bridge::BridgeConnectionId bridgeConnectionId(uint32_t connection);
 
   private:
-    void publishIfChanged(int32_t deviceId, gamepad::DeviceState& s,
-                          dish_send::PendingDatagram& out);
-    void publishGamepadToSatellite(const SlotBinding& binding, const gamepad::DeviceState& s,
-                                   dish_send::PendingDatagram& out);
-    void publishGamepadToBridge(const SlotBinding& binding, const gamepad::DeviceState& s);
-    void syncSlotBaseline(int32_t deviceId);
-    void routeUsbMotion(int32_t deviceId, const dish_send::MotionSample& sample,
-                        dish_send::PendingDatagram& out);
-    void publishMotionToBridge(const SlotBinding& binding, const dish_send::MotionSample& m);
-    void publishMotionToSatellite(const SlotBinding& binding, const dish_send::MotionSample& m,
-                                  dish_send::PendingDatagram& out);
-    void routeUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_t eventTimeMs,
-                          dish_send::PendingDatagram& out);
-    void publishTouchToBridge(const SlotBinding& binding, const gamepad::TouchpadState& t);
-    void publishTouchToSatellite(const SlotBinding& binding, const gamepad::TouchpadState& t,
-                                 uint32_t eventTimeMs, dish_send::PendingDatagram& out);
-    uint8_t quirkFor(int32_t deviceId);
+    int find(int32_t deviceId) const;
+    int findOrTake(int32_t deviceId);
+    void unbindLocked(size_t index);
+    void freeSlot(size_t index);
     uint32_t nextBridgeConnection();
-    void stageFrameworkKey(int32_t deviceId, int32_t keyCode, int32_t action,
-                           dish_send::PendingDatagram& out);
-    bool filterFrameworkKey(int32_t deviceId, int32_t keyCode, int32_t action,
-                            dish_send::PendingDatagram& out);
-    void stageFrameworkMotion(int32_t deviceId, int32_t action,
-                              const gamepad::FrameworkAxes& sample,
-                              dish_send::PendingDatagram& out);
+
+    void publishIfChanged(HotSlot& slot);
+    void publishGamepadToBridge(const SlotBinding& binding, const gamepad::DeviceState& s);
+    void publishMotionToBridge(const SlotBinding& binding, const dish_send::MotionSample& m);
+    void publishTouchToBridge(const SlotBinding& binding, const gamepad::TouchpadState& t);
+    void syncSlotBaseline(HotSlot& slot);
+    void resetToNeutral(HotSlot& slot);
+    void applyKeyEdge(HotSlot& slot, int32_t keyCode, int32_t action);
+    void mirrorIfInspecting(HotSlot& slot);
 
     dish_session::SessionTable& sessions_;
     BridgeSink& bridge_;
 
-    TrackedMutex devicesMtx_{"input.devices"};
-    std::unordered_map<int32_t, gamepad::DeviceState> devices_;
-    std::unordered_map<int32_t, uint64_t> frameworkEventCounts_;
-
-    TrackedMutex slotsMtx_{"input.slots"};
-    std::unordered_map<int32_t, SlotBinding> slots_;
+    // The cold path's: which pad holds which slot, and each bind's connection id and number.
+    TrackedMutex bindingsMtx_{"input.bindings"};
+    std::array<dish_bridge::BridgeConnectionId, MAX_SLOTS> connectionIds_ = {};
+    std::array<uint32_t, MAX_SLOTS> connectionNumbers_ = {};
     uint32_t lastBridgeConnection_ = 0;
+
+    // The packed line the reporting threads scan: a held slot's deviceId, tagged; 0 when free.
+    std::array<std::atomic<uint64_t>, MAX_SLOTS> ids_ = {};
+    std::array<HotSlot, MAX_SLOTS> slots_;
 
     // Off costs one relaxed load per report, the same budget as the latency bench markers.
     std::atomic<bool> inspect_{false};

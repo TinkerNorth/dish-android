@@ -17,6 +17,7 @@
 #include <set>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "fake_satellite.h"
@@ -129,15 +130,30 @@ constexpr auto kBlockedSenderWait = std::chrono::milliseconds(200);
 constexpr int kConcurrentSenders = 4;
 constexpr int kDatagramsPerSender = 2000;
 constexpr int kReceiveTimeoutMs = 5000;
+constexpr int kReKeySenders = 3;
+constexpr int kTornReads = 200000;
 
-bool isFreeFromAnotherThread(TrackedMutex& mtx) {
+bool gateIsFreeFromAnotherThread(dish_session::SendGate& gate) {
     bool free = false;
-    std::thread probe([&mtx, &free] {
-        free = mtx.try_lock();
-        if (free) mtx.unlock();
+    std::thread probe([&gate, &free] {
+        free = gate.tryHold();
+        if (free) gate.release();
     });
     probe.join();
     return free;
+}
+
+Bytes openWith(const uint8_t key[32], const Bytes& datagram) {
+    uint8_t nonce[12] = {};
+    memcpy(nonce + 8, datagram.data() + 4, 4);
+    Bytes inner(datagram.size());
+    unsigned long long innerLen = 0;
+    const int opened = crypto_aead_chacha20poly1305_ietf_decrypt(
+        inner.data(), &innerLen, nullptr, datagram.data() + dish_wire::OUTER_HEADER_BYTES,
+        datagram.size() - dish_wire::OUTER_HEADER_BYTES, datagram.data(), 4, nonce, key);
+    if (opened != 0) return Bytes();
+    inner.resize((size_t)innerLen);
+    return inner;
 }
 
 } // namespace
@@ -185,7 +201,7 @@ TEST_F(SendPath, AnOnScreenPadReportIsThePinnedBytesAndIsCountedForItsController
     report.sThumbLY = -32768;
     report.sThumbRX = 0;
     report.sThumbRY = -1;
-    dish_send::sendGamepadReport(session, 0, report);
+    EXPECT_TRUE(dish_send::sendGamepadReport(session, 0, report));
     EXPECT_EQ(sentBytes(), std::vector<Bytes>{bytesOf(wire_vectors::kScreenGamepad)});
     EXPECT_EQ(session->sentByCtrl[0].load(), 1u);
 }
@@ -203,7 +219,7 @@ TEST_F(SendPath, AMicFrameIsFramedAsThePinnedBytes) {
 TEST_F(SendPath, TheHeartbeatThreadSendsThePinnedPingAndCountsItMissedUntilAcked) {
     counterAt(bytesOf(wire_vectors::kHeartbeatPing));
     const std::atomic<int> intervalMs{kFastHeartbeatMs};
-    const std::shared_ptr<dish_session::Session> s = session;
+    const dish_session::SessionRef s = session;
     s->heartbeat.start([s, &intervalMs] { dish_send::runHeartbeat(s, intervalMs); });
     const auto deadline = std::chrono::steady_clock::now() + kWaitLimit;
     std::vector<Bytes> sent;
@@ -216,6 +232,22 @@ TEST_F(SendPath, TheHeartbeatThreadSendsThePinnedPingAndCountsItMissedUntilAcked
     EXPECT_EQ(sent.front(), bytesOf(wire_vectors::kHeartbeatPing));
     EXPECT_GE(s->rtt.pings.load(), 1u);
     EXPECT_GE(s->missedAcks.load(), 1);
+}
+
+TEST_F(SendPath, AHeartbeatWhoseSessionClosedEndsInsteadOfPingingTheNextOne) {
+    const dish_session::SessionRef s = session;
+    const std::atomic<int> intervalMs{kFastHeartbeatMs};
+    table.close(handle);
+    std::atomic<bool> ended{false};
+    std::thread heartbeat([&] {
+        s->heartbeat.start([] {});
+        dish_send::runHeartbeat(s, intervalMs);
+        ended = true;
+    });
+    heartbeat.join();
+    s->heartbeat.stop();
+    EXPECT_TRUE(ended.load());
+    EXPECT_TRUE(sentBytes().empty());
 }
 
 TEST_F(SendPath, AMicFrameIsOneOpusPacketBehindItsControllerAndSequence) {
@@ -258,28 +290,25 @@ TEST_F(SendPath, AnyOtherSendErrorFailsAndSpendsItsCounter) {
     EXPECT_EQ(session->counter.load(), before + 1);
 }
 
-TEST_F(SendPath, AnExhaustedCounterGoesSilentAndGivesTheTurnBack) {
+TEST_F(SendPath, AnExhaustedCounterGoesSilentAndGivesTheGateBack) {
     session->counter.store(wire_vectors::kLastCounter);
     EXPECT_TRUE(dish_send::sendEncrypted(session, dish_wire::MSG_HEARTBEAT_PING, nullptr, 0));
     EXPECT_EQ(sentBytes(), std::vector<Bytes>{bytesOf(wire_vectors::kLastCounterPing)});
     for (int i = 0; i < 3; i++) {
         EXPECT_FALSE(dish_send::sendEncrypted(session, dish_wire::MSG_HEARTBEAT_PING, nullptr, 0));
         EXPECT_TRUE(sentBytes().empty());
-        EXPECT_TRUE(isFreeFromAnotherThread(session->sendTurnMtx));
+        EXPECT_TRUE(gateIsFreeFromAnotherThread(session->gate));
         EXPECT_EQ(dish_counter::sendCounterView(session->counter), 0xFFFFFFFFu);
     }
 }
 
-TEST_F(SendPath, AClosedSessionStagesNothingButSpendsTheCounterItDrew) {
-    const std::shared_ptr<dish_session::Session> held = session;
+TEST_F(SendPath, AClosedSessionSendsNothingAndDrawsNoCounter) {
+    const dish_session::SessionRef held = session;
     table.close(handle);
     const uint64_t before = held->counter.load();
-    dish_send::PendingDatagram datagram;
-    EXPECT_FALSE(
-        dish_send::stageDatagram(held, dish_wire::MSG_HEARTBEAT_PING, nullptr, 0, datagram));
-    EXPECT_FALSE(datagram.turn.owns_lock());
-    EXPECT_EQ(held->counter.load(), before + 1);
-    EXPECT_FALSE(dish_send::transmitDatagram(datagram));
+    EXPECT_FALSE(dish_send::sendEncrypted(held, dish_wire::MSG_HEARTBEAT_PING, nullptr, 0));
+    EXPECT_EQ(held->counter.load(), before);
+    EXPECT_TRUE(gateIsFreeFromAnotherThread(held->gate));
     EXPECT_TRUE(sentBytes().empty());
 }
 
@@ -301,16 +330,40 @@ TEST_F(SendPath, AFullCeilingPayloadIsExactlyOneDatagramCeiling) {
     EXPECT_EQ(sent[0].size(), dish_wire::MAX_DATAGRAM_BYTES);
 }
 
-TEST_F(SendPath, ADatagramNeverStagedTransmitsNothing) {
-    dish_send::PendingDatagram datagram;
-    EXPECT_FALSE(dish_send::transmitDatagram(datagram));
+TEST_F(SendPath, AnEmptyBatchSendsNothing) {
+    EXPECT_EQ(dish_send::sendFramed(session, nullptr, 0), 0u);
+    EXPECT_EQ(dish_send::sendFramed(dish_session::SessionRef{}, nullptr, 1), 0u);
     EXPECT_TRUE(sentBytes().empty());
 }
 
-TEST_F(SendPath, ASecondSenderDrawsNoCounterWhileTheFirstHasNotLeftTheWire) {
-    dish_send::PendingDatagram first;
-    ASSERT_TRUE(
-        dish_send::stageDatagram(session, dish_wire::MSG_HEARTBEAT_PING, nullptr, 0, first));
+TEST_F(SendPath, ABatchGoesOutUnderConsecutiveCountersInTheOrderItWasFramed) {
+    dish_send::Framed batch[3];
+    dish_send::frameGamepadReport(batch[0], 1, dish_send::XUSB_REPORT{});
+    dish_send::frameMotion(batch[1], 1, dish_send::MotionSample{{1, 2, 3}, {4, 5, 6}, 7});
+    ASSERT_TRUE(dish_send::frame(batch[2], dish_wire::MSG_HEARTBEAT_PING, nullptr, 0));
+    const uint64_t first = session->counter.load();
+    EXPECT_EQ(dish_send::sendFramed(session, batch, 3), 3u);
+    const std::vector<Bytes> sent = sentBytes();
+    ASSERT_EQ(sent.size(), 3u);
+    const uint16_t types[3] = {dish_wire::MSG_GAMEPAD_DATA, dish_wire::MSG_MOTION,
+                               dish_wire::MSG_HEARTBEAT_PING};
+    for (size_t i = 0; i < 3; i++) {
+        EXPECT_EQ(counterOf(sent[i]), first + i);
+        const Bytes inner = openAsTheSatellite(sent[i]);
+        ASSERT_GE(inner.size(), 2u);
+        EXPECT_EQ(inner[0] << 8 | inner[1], types[i]);
+    }
+    EXPECT_EQ(session->sentByCtrl[1].load(), 1u);
+    EXPECT_EQ(session->motionByCtrl[1].load(), 1u);
+}
+
+TEST_F(SendPath, ASecondSenderDrawsNoCounterWhileTheFirstHoldsTheGate) {
+    recording::HeldPort held;
+    held.attachTo(*session);
+    held.holdNext();
+    std::thread first(
+        [this] { dish_send::sendEncrypted(session, dish_wire::MSG_HEARTBEAT_PING, nullptr, 0); });
+    ASSERT_TRUE(held.waitUntilHolding());
     const uint64_t afterFirst = session->counter.load();
     std::atomic<bool> secondDone{false};
     std::thread second([this, &secondDone] {
@@ -320,9 +373,10 @@ TEST_F(SendPath, ASecondSenderDrawsNoCounterWhileTheFirstHasNotLeftTheWire) {
     std::this_thread::sleep_for(kBlockedSenderWait);
     EXPECT_FALSE(secondDone.load());
     EXPECT_EQ(session->counter.load(), afterFirst);
-    EXPECT_TRUE(dish_send::transmitDatagram(first));
+    held.letGo();
+    first.join();
     second.join();
-    const std::vector<Bytes> sent = sentBytes();
+    const std::vector<Bytes> sent = held.taken();
     ASSERT_EQ(sent.size(), 2u);
     EXPECT_EQ(counterOf(sent[1]), counterOf(sent[0]) + 1);
 }
@@ -349,31 +403,116 @@ TEST_F(SendPath, ConcurrentSendersReachTheWireInTheOrderTheirCountersWereDrawn) 
     EXPECT_EQ(threads.size(), (size_t)kConcurrentSenders);
 }
 
-TEST_F(SendPath, OnlyAGamepadReportClosesTheStage1BenchWindow) {
-    hotpath::setEnabled(true);
-    hotpath::statsJson(true);
-    hotpath::markInputRead(1);
-    dish_send::PendingDatagram motion;
-    const dish_send::MotionSample sample{{1, 2, 3}, {4, 5, 6}, 7};
-    dish_send::stageMotion(session, 0, sample, motion);
-    dish_send::transmitPublished(motion);
-    const std::string afterMotion = hotpath::statsJson(false);
-    dish_send::PendingDatagram gamepad;
-    dish_send::stageGamepadReport(session, 0, dish_send::XUSB_REPORT{}, gamepad);
-    dish_send::transmitPublished(gamepad);
-    const std::string afterGamepad = hotpath::statsJson(true);
-    hotpath::setEnabled(false);
-    EXPECT_NE(afterMotion.find("\"stage1_hotpath_us\":{\"n\":0}"), std::string::npos)
-        << afterMotion;
-    EXPECT_NE(afterGamepad.find("\"stage1_hotpath_us\":{\"n\":1,"), std::string::npos)
-        << afterGamepad;
+// Closing waits for the send in flight, which completes, and every send after it is refused.
+TEST_F(SendPath, ClosingASessionLetsTheSendInFlightFinishThenRefusesTheNext) {
+    recording::HeldPort held;
+    held.attachTo(*session);
+    held.holdNext();
+    const dish_session::SessionRef s = session;
+    std::thread sender([s] {
+        EXPECT_TRUE(dish_send::sendEncrypted(s, dish_wire::MSG_HEARTBEAT_PING, nullptr, 0));
+    });
+    ASSERT_TRUE(held.waitUntilHolding());
+    std::atomic<bool> closed{false};
+    std::thread closer([this, &closed] {
+        table.close(handle);
+        closed = true;
+    });
+    std::this_thread::sleep_for(kBlockedSenderWait);
+    EXPECT_FALSE(closed.load());
+    held.letGo();
+    sender.join();
+    closer.join();
+    EXPECT_EQ(held.taken().size(), 1u);
+    EXPECT_FALSE(dish_send::sendEncrypted(s, dish_wire::MSG_HEARTBEAT_PING, nullptr, 0));
+    EXPECT_TRUE(held.taken().empty());
+}
+
+// Senders stream while the session is re-keyed: every datagram opens under exactly one of the two
+// keys, the old key's all reach the wire before the new key's first, and the new key's counters
+// start over at 1. So no counter the new key restarts is ever sealed under the old one.
+TEST_F(SendPath, AReKeyMidStreamNeverSealsARestartedCounterUnderTheOldKey) {
+    const vector_session::Key oldKey = vector_session::vectorKey();
+    vector_session::Key newKey{};
+    for (int i = 0; i < 32; i++) newKey.bytes[i] = (uint8_t)(0xE0 + i);
+    std::atomic<bool> stop{false};
+    std::vector<std::thread> senders;
+    for (int i = 0; i < kReKeySenders; i++) {
+        senders.emplace_back([this, &stop] {
+            const uint8_t payload[dish_send::GAMEPAD_PAYLOAD_BYTES] = {};
+            while (!stop.load()) {
+                dish_send::sendEncrypted(session, dish_wire::MSG_GAMEPAD_DATA, payload,
+                                         sizeof(payload));
+            }
+        });
+    }
+    std::this_thread::sleep_for(kBlockedSenderWait);
+    dish_session::setConnectionParams(session, wire_vectors::kToken, newKey.bytes, 1);
+    std::this_thread::sleep_for(kBlockedSenderWait);
+    stop = true;
+    for (std::thread& sender : senders) sender.join();
+
+    const std::vector<Bytes> sent = sentBytes();
+    size_t oldCount = 0;
+    size_t newCount = 0;
+    uint32_t lastOld = 0;
+    uint32_t lastNew = 0;
+    for (const Bytes& datagram : sent) {
+        const bool opensOld = !openWith(oldKey.bytes, datagram).empty();
+        const bool opensNew = !openWith(newKey.bytes, datagram).empty();
+        ASSERT_NE(opensOld, opensNew) << "a datagram must open under exactly one key";
+        const uint32_t counter = counterOf(datagram);
+        if (opensOld) {
+            ASSERT_EQ(newCount, 0u) << "an old-key datagram after a new-key one";
+            ASSERT_GT(counter, lastOld);
+            lastOld = counter;
+            oldCount++;
+            continue;
+        }
+        ASSERT_EQ(counter, newCount == 0 ? 1u : lastNew + 1);
+        lastNew = counter;
+        newCount++;
+    }
+    EXPECT_GT(oldCount, 0u);
+    EXPECT_GT(newCount, 0u);
+}
+
+// The receive thread reads the material without the gate: under a cold path that keeps
+// re-keying, every read is one whole (token, key) pair, never half of one and half of the other.
+TEST_F(SendPath, AMaterialReadRacingAReKeyIsNeverTorn) {
+    const uint8_t tokenA[4] = {0xA1, 0xA2, 0xA3, 0xA4};
+    const uint8_t tokenB[4] = {0xB1, 0xB2, 0xB3, 0xB4};
+    uint8_t keyA[32];
+    uint8_t keyB[32];
+    memset(keyA, 0xAA, sizeof(keyA));
+    memset(keyB, 0xBB, sizeof(keyB));
+    std::atomic<bool> stop{false};
+    std::thread rekeyer([&] {
+        for (bool a = true; !stop.load(); a = !a) {
+            dish_session::setConnectionParams(session, a ? tokenA : tokenB, a ? keyA : keyB, 1);
+        }
+    });
+    size_t torn = 0;
+    for (int i = 0; i < kTornReads; i++) {
+        const dish_session::Material m = dish_session::readMaterial(*session);
+        const bool isA = memcmp(m.token, tokenA, 4) == 0 && memcmp(m.key, keyA, 32) == 0;
+        const bool isB = memcmp(m.token, tokenB, 4) == 0 && memcmp(m.key, keyB, 32) == 0;
+        const bool isFirst = memcmp(m.token, wire_vectors::kToken, 4) == 0;
+        if (!isA && !isB && !isFirst) torn++;
+    }
+    stop = true;
+    rekeyer.join();
+    EXPECT_EQ(torn, 0u);
 }
 
 TEST_F(SendPath, TheSocketPortPutsThePinnedBytesOnTheWire) {
     fake_satellite::Peer satellite;
-    session->port = dish_net::DatagramPort{};
-    ASSERT_TRUE(dish_net::ipv4Destination("127.0.0.1", satellite.port(), session->dest));
-    counterAt(bytesOf(wire_vectors::kHeartbeatPing));
-    EXPECT_TRUE(dish_send::sendEncrypted(session, dish_wire::MSG_HEARTBEAT_PING, nullptr, 0));
+    const int toSatellite = table.open("127.0.0.1", satellite.port());
+    const dish_session::SessionRef s = table.find(toSatellite);
+    const vector_session::Key key = vector_session::vectorKey();
+    dish_session::setConnectionParams(s, wire_vectors::kToken, key.bytes, 1);
+    s->counter.store(counterOf(bytesOf(wire_vectors::kHeartbeatPing)));
+    EXPECT_TRUE(dish_send::sendEncrypted(s, dish_wire::MSG_HEARTBEAT_PING, nullptr, 0));
     EXPECT_EQ(satellite.receive(kReceiveTimeoutMs), bytesOf(wire_vectors::kHeartbeatPing));
+    table.close(toSatellite);
 }

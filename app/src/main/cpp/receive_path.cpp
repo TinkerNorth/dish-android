@@ -13,7 +13,9 @@
 
 namespace dish_receive {
 
+using dish_session::Material;
 using dish_session::Session;
+using dish_session::SessionRef;
 
 namespace {
 
@@ -49,11 +51,16 @@ void handleHeartbeatAck(Session& s, const uint8_t* decrypted, const uint16_t msg
     }
 }
 
+int handleWith(const SessionRef& session, const Material& m, const uint8_t* buf, size_t n,
+               FeedbackSink& sink);
+
 } // namespace
 
 int receiveDatagram(dish_session::SessionTable& sessions, const int handle, FeedbackSink& sink) {
-    auto s = sessions.get(handle);
-    if (!s || s->udpSock < 0) return -1;
+    const SessionRef s = sessions.find(handle);
+    if (!s) return -1;
+    const Material m = dish_session::readMaterial(*s);
+    if (m.handle != handle || m.sock < 0) return -1;
     // A whole datagram: MSG_SPEAKER_AUDIO carries an Opus packet, and a short
     // read would truncate the ciphertext into an AEAD failure rather than an
     // honest error (satellite docs/contract.md §Packet format).
@@ -61,22 +68,34 @@ int receiveDatagram(dish_session::SessionTable& sessions, const int handle, Feed
     static_assert(sizeof(buf) >= dish_wire::OUTER_HEADER_BYTES + dish_wire::INNER_HEADER_BYTES +
                                      dish_wire::MAX_INNER_PAYLOAD_BYTES + dish_wire::AEAD_TAG_BYTES,
                   "recv buffer must hold a maximal datagram, framing and tag included");
-    const ssize_t n = dish_net::receiveDatagram(s->udpSock, buf, sizeof(buf));
+    const ssize_t n = dish_net::receiveDatagram(m.sock, buf, sizeof(buf));
     if (n < 0) {
         // The SO_RCVTIMEO tick (or a signal) is routine pacing. Any other
         // recv error returns instantly and would do so forever, so the Kotlin
         // drain loop must treat it as terminal or it busy-spins a core.
         return (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) ? 0 : -1;
     }
-    return handleDatagram(s, handle, buf, (size_t)n, sink);
+    return handleWith(s, m, buf, (size_t)n, sink);
 }
 
-int handleDatagram(const std::shared_ptr<Session>& session, const int handle, const uint8_t* buf,
-                   const size_t n, FeedbackSink& sink) {
+int handleDatagram(const SessionRef& session, const uint8_t* buf, const size_t n,
+                   FeedbackSink& sink) {
+    if (!session) return 0;
+    const Material m = dish_session::readMaterial(*session);
+    if (m.handle != session.handle) return 0;
+    return handleWith(session, m, buf, n, sink);
+}
+
+namespace {
+
+// The material is the one this datagram's session published, read once for the whole pass.
+int handleWith(const SessionRef& session, const Material& m, const uint8_t* buf, const size_t n,
+               FeedbackSink& sink) {
     Session& s = *session;
+    const int handle = session.handle;
     if (n < 8 || n > dish_wire::MAX_DATAGRAM_BYTES) return 0;
 
-    if (memcmp(buf, s.token, 4) != 0) return 0;
+    if (memcmp(buf, m.token, 4) != 0) return 0;
 
     uint32_t ctr = ((uint32_t)buf[4] << 24) | ((uint32_t)buf[5] << 16) | ((uint32_t)buf[6] << 8) |
                    (uint32_t)buf[7];
@@ -95,7 +114,7 @@ int handleDatagram(const std::shared_ptr<Session>& session, const int handle, co
     unsigned long long decLen = 0;
     size_t cipherLen = n - 8;
     if (crypto_aead_chacha20poly1305_ietf_decrypt(decrypted, &decLen, nullptr, buf + 8, cipherLen,
-                                                  s.token, 4, nonce, s.key) != 0) {
+                                                  m.token, 4, nonce, m.key) != 0) {
         return 0;
     }
     s.lastRxCounter.store(ctr, std::memory_order_relaxed);
@@ -157,14 +176,19 @@ int handleDatagram(const std::shared_ptr<Session>& session, const int handle, co
     return 1;
 }
 
+} // namespace
+
 // Runs entirely under the session's audio lock so the window's event pointers
 // (which alias its own storage) stay valid; the JVM upcalls deliberately happen
 // after it is released, so a blocking AudioTrack cannot hold up mic capture.
-int decodeSpeakerAudio(Session& session, const uint8_t ctrlIdx, const int lane, const uint16_t seq,
-                       const uint8_t* opus, const size_t opusLen, std::vector<int16_t>& pcm,
+int decodeSpeakerAudio(const SessionRef& session, const uint8_t ctrlIdx, const int lane,
+                       const uint16_t seq, const uint8_t* opus, const size_t opusLen,
+                       std::vector<int16_t>& pcm,
                        bool concealed[dish_audio::AUDIO_JITTER_MAX_EVENTS_PER_PUSH]) {
-    std::lock_guard<TrackedMutex> lock(session.audioMtx);
-    dish_session::ControllerAudio& ca = session.audio[ctrlIdx];
+    if (!session) return 0;
+    std::lock_guard<TrackedMutex> lock(session->audioMtx);
+    if (session->audioHandle != session.handle) return 0;
+    dish_session::ControllerAudio& ca = session->audio[ctrlIdx];
     // The haptic lane is the speaker's wire format, so one decoder shape
     // serves both; only the state is per lane.
     const bool haptics = lane == AUDIO_LANE_HAPTICS;

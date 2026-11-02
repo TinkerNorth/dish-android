@@ -6,7 +6,6 @@
 #include <sodium.h>
 
 #include <cstdint>
-#include <memory>
 #include <vector>
 
 #include "recording_sinks.h"
@@ -43,9 +42,9 @@ class VectorSession : public ::testing::Test {
     void SetUp() override {
         handle = table.open("127.0.0.1", 9);
         ASSERT_GT(handle, 0);
-        session = table.get(handle);
+        session = table.find(handle);
         const Key key = vectorKey();
-        dish_session::setConnectionParams(*session, wire_vectors::kToken, key.bytes, 1);
+        dish_session::setConnectionParams(session, wire_vectors::kToken, key.bytes, 1);
         session->counter.store(wire_vectors::kFirstCounter);
         port.attachTo(*session);
     }
@@ -60,7 +59,7 @@ class VectorSession : public ::testing::Test {
 
     dish_session::SessionTable table;
     int handle = -1;
-    std::shared_ptr<dish_session::Session> session;
+    dish_session::SessionRef session;
     recording::Port port;
 };
 

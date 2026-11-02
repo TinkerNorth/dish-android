@@ -60,39 +60,18 @@ struct LockPair {
     Allowance why;
 };
 
-// A report is published under the device lock, staged under the slot lock, and draws its counter
-// under the session's send turn after looking the session up in the table.
-const std::vector<LockName> USB_POLLER_MAY_ACQUIRE = {
-    {"input.devices", Allowance::Debt},
-    {"input.slots", Allowance::Debt},
-    {"session.table", Allowance::Debt},
-    {"session.turn", Allowance::Debt},
-};
+// A report reads its slot and its session from the hot tables and sends under the session's gate,
+// none of which is a lock.
+const std::vector<LockName> USB_POLLER_MAY_ACQUIRE = {};
 
-const std::vector<LockName> UI_INPUT_MAY_ACQUIRE = {
-    {"input.devices", Allowance::Debt},
-    {"input.slots", Allowance::Debt},
-    {"session.table", Allowance::Debt},
-    {"session.turn", Allowance::Debt},
-};
+const std::vector<LockName> UI_INPUT_MAY_ACQUIRE = {};
 
-// Every pass of the receive loop looks its session up.
-const std::vector<LockName> RECEIVE_MAY_ACQUIRE = {
-    {"session.table", Allowance::Debt},
-};
+// The receive loop finds its session in the hot table and hands speaker audio to a lock-free ring.
+const std::vector<LockName> RECEIVE_MAY_ACQUIRE = {};
 
-const std::vector<LockPair> BLOCKING_MAY_HOLD = {
-    {"net.close", "session.turn", Allowance::ByDesign},
-    {"net.sendto", "session.turn", Allowance::Debt},
-};
+const std::vector<LockPair> BLOCKING_MAY_HOLD = {};
 
-const std::vector<LockPair> ORDER_MAY_NEST = {
-    {"input.devices", "input.slots", Allowance::Debt},
-    {"input.devices", "session.table", Allowance::Debt},
-    {"input.devices", "session.turn", Allowance::Debt},
-    {"input.slots", "session.table", Allowance::Debt},
-    {"input.slots", "session.turn", Allowance::Debt},
-};
+const std::vector<LockPair> ORDER_MAY_NEST = {};
 
 using Clock = std::chrono::steady_clock;
 using NameSet = std::set<std::string>;
@@ -196,7 +175,37 @@ struct SatelliteTally {
     std::atomic<uint64_t> acked{0};
     std::atomic<uint64_t> feedbackSent{0};
     std::atomic<uint64_t> speakerSent{0};
+    // What the client's datagrams carried: gamepad reports per controller, and the rest by type.
+    std::atomic<uint64_t> gamepadByController[4] = {};
+    std::atomic<uint64_t> motion{0};
+    std::atomic<uint64_t> touch{0};
+    std::atomic<uint64_t> battery{0};
+    std::atomic<uint64_t> mic{0};
 };
+
+void tallyClientDatagram(const fake_satellite::Inner& inner, SatelliteTally& tally) {
+    switch (inner.msgType) {
+    case dish_wire::MSG_GAMEPAD_DATA:
+        if (!inner.payload.empty() && inner.payload[0] < 4) {
+            tally.gamepadByController[inner.payload[0]]++;
+        }
+        return;
+    case dish_wire::MSG_MOTION:
+        tally.motion++;
+        return;
+    case dish_wire::MSG_TOUCHPAD:
+        tally.touch++;
+        return;
+    case dish_wire::MSG_BATTERY:
+        tally.battery++;
+        return;
+    case dish_wire::MSG_MIC_AUDIO:
+        tally.mic++;
+        return;
+    default:
+        return;
+    }
+}
 
 // One 20 ms frame of silence as the satellite encodes speaker audio, behind its wire header.
 fake_satellite::Bytes speakerPayload(const uint16_t seq) {
@@ -230,6 +239,7 @@ void runSatellite(fake_satellite::Peer& peer, const uint8_t key[32], const std::
             tally.received++;
             const auto inner =
                 fake_satellite::openFromClient(TOKEN, key, datagram.data(), datagram.size());
+            if (inner) tallyClientDatagram(*inner, tally);
             if (inner && inner->msgType == dish_wire::MSG_HEARTBEAT_PING) {
                 const uint8_t ack[dish_wire::HEARTBEAT_ACK_ENRICHED_BYTES] = {1, 3, 0, 1, 0, 7};
                 peer.reply(fake_satellite::sealToClient(
@@ -356,8 +366,8 @@ void runEveryRole(LawRun& run) {
     lockstats::reset();
     const int handle = table.open("127.0.0.1", peer.port());
     ASSERT_GT(handle, 0);
-    const std::shared_ptr<dish_session::Session> session = table.get(handle);
-    dish_session::setConnectionParams(*session, TOKEN, key, 3);
+    const dish_session::SessionRef session = table.find(handle);
+    dish_session::setConnectionParams(session, TOKEN, key, 3);
     slots.bindSatellite(DEVICE_A, handle, 0);
     slots.bindSatellite(DEVICE_B, handle, 1);
     slots.bindSatellite(DEVICE_UI, handle, 2);
@@ -594,13 +604,16 @@ std::unique_ptr<LawRun> LockLaws::run;
 
 TEST_F(LockLaws, TheRunReachedEveryRoleAndEveryPath) {
     const lockstats::Snapshot& snap = run->snap;
-    EXPECT_GT(acquisitions(snap, "session.turn", ThreadRole::UsbPoller), 0u);
-    EXPECT_GT(acquisitions(snap, "session.turn", ThreadRole::UiInput), 0u);
-    EXPECT_GT(acquisitions(snap, "session.turn", ThreadRole::Heartbeat), 0u);
-    EXPECT_GT(acquisitions(snap, "session.turn", ThreadRole::Battery), 0u);
+    const SatelliteTally& satellite = run->satellite;
+    EXPECT_GT(satellite.gamepadByController[0].load(), 0u);
+    EXPECT_GT(satellite.gamepadByController[1].load(), 0u);
+    EXPECT_GT(satellite.gamepadByController[2].load(), 0u);
+    EXPECT_GT(satellite.motion.load(), 0u);
+    EXPECT_GT(satellite.touch.load(), 0u);
+    EXPECT_GT(satellite.battery.load(), 0u);
+    EXPECT_GT(satellite.mic.load(), 0u);
     EXPECT_GT(acquisitions(snap, "session.audio", ThreadRole::MicCapture), 0u);
-    EXPECT_GT(acquisitions(snap, "input.slots", ThreadRole::Binding), 0u);
-    EXPECT_GT(acquisitions(snap, "session.table", ThreadRole::Receive), 0u);
+    EXPECT_GT(acquisitions(snap, "input.bindings", ThreadRole::Binding), 0u);
     EXPECT_GT(regionHits(snap, "net.sendto"), 0u);
     EXPECT_GT(run->tally.micFrames.load(), 0u);
     EXPECT_GT(run->tally.binds.load(), 0u);

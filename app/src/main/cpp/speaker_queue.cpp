@@ -42,10 +42,9 @@ size_t SpeakerQueue::drain(dish_session::SessionTable& sessions, SpeakerSink& si
     SpeakerFrame frame;
     while (frames_.tryPop(frame)) {
         taken++;
-        const auto session = sessions.get(frame.handle);
-        if (!session || session->closed.load(std::memory_order_acquire)) continue;
-        const int produced = decodeSpeakerAudio(*session, frame.ctrlIdx, frame.lane, frame.seq,
-                                                frame.opus, frame.opusLen, pcm_, concealed_);
+        const int produced =
+            decodeSpeakerAudio(sessions.find(frame.handle), frame.ctrlIdx, frame.lane, frame.seq,
+                               frame.opus, frame.opusLen, pcm_, concealed_);
         for (int i = 0; i < produced; i++) {
             sink.pcm(frame.handle, frame.ctrlIdx, frame.lane,
                      pcm_.data() + static_cast<size_t>(i) * dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES,

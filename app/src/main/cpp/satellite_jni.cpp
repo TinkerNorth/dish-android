@@ -428,12 +428,12 @@ static ThreadRole uiOrResend() {
     return gettid() == getpid() ? ThreadRole::UiInput : ThreadRole::Resend;
 }
 
-static void heartbeatThread(const std::shared_ptr<dish_session::Session>& s) {
+static void heartbeatThread(const dish_session::SessionRef& s) {
     const ScopedThreadRole role(ThreadRole::Heartbeat);
-    // Each ping holds its session's send turn, which the input threads wait on, so the thread runs
+    // Each ping holds its session's send gate, which the input threads wait on, so the thread runs
     // at their priority: a ping descheduled mid-send would hold every sender of the session.
     dish::elevateCurrentThreadToInputPriority();
-    LOGI("Heartbeat thread started (sock=%d)", s->udpSock);
+    LOGI("Heartbeat thread started (sock=%d)", dish_session::readMaterial(*s).sock);
     dish_send::runHeartbeat(s, g_heartbeatIntervalMs);
     LOGI("Heartbeat thread stopped");
 }
@@ -487,6 +487,16 @@ void android_main(struct android_app* app) {
     LOGI("android_main: destroy requested, exiting");
 }
 
+// A getter's read of an open session's state: the fallback for a handle that is not open, or that
+// was closed while it read.
+template <typename T, typename Read>
+static T readOpenSession(const jint handle, const T fallback, Read&& read) {
+    const dish_session::SessionRef s = g_sessionTable.find(handle);
+    if (!s) return fallback;
+    const T value = read(*s);
+    return g_sessionTable.stillOpen(s) ? value : fallback;
+}
+
 extern "C" {
 
 static std::once_flag g_sodiumInit;
@@ -520,24 +530,25 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_setConne
     JNIEnv* env, jobject, jint handle, jbyteArray tokenArr, jbyteArray keyArr,
     jint protocolVersion) {
     ensureSodiumInit();
-    auto s = g_sessionTable.get(handle);
+    const dish_session::SessionRef s = g_sessionTable.find(handle);
     if (!s) return;
     jbyte* tokenBytes = env->GetByteArrayElements(tokenArr, nullptr);
     jbyte* keyBytes = env->GetByteArrayElements(keyArr, nullptr);
-    dish_session::setConnectionParams(*s, reinterpret_cast<const uint8_t*>(tokenBytes),
+    dish_session::setConnectionParams(s, reinterpret_cast<const uint8_t*>(tokenBytes),
                                       reinterpret_cast<const uint8_t*>(keyBytes),
                                       (int32_t)protocolVersion);
     env->ReleaseByteArrayElements(tokenArr, tokenBytes, JNI_ABORT);
     env->ReleaseByteArrayElements(keyArr, keyBytes, JNI_ABORT);
-    LOGI("Session %d params set (token=%02x%02x%02x%02x, protocol=%d)", handle, s->token[0],
-         s->token[1], s->token[2], s->token[3], (int)protocolVersion);
+    const dish_session::Material m = dish_session::readMaterial(*s);
+    LOGI("Session %d params set (token=%02x%02x%02x%02x, protocol=%d)", handle, m.token[0],
+         m.token[1], m.token[2], m.token[3], (int)protocolVersion);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendReport(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jint wB, jint bLT, jint bRT, jint sLX,
     jint sLY, jint sRX, jint sRY) {
     const ScopedThreadRole role(&uiOrResend);
-    auto s = g_sessionTable.get(handle);
+    const dish_session::SessionRef s = g_sessionTable.find(handle);
     if (!s) return;
     dish_send::XUSB_REPORT report{};
     report.wButtons = (uint16_t)(wB & 0xFFFF);
@@ -554,7 +565,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendM
     JNIEnv*, jobject, jint handle, jint controllerIndex, jshort gyroX, jshort gyroY, jshort gyroZ,
     jshort accelX, jshort accelY, jshort accelZ, jint timestampDeltaUs) {
     const ScopedThreadRole role(ThreadRole::Sensor);
-    auto s = g_sessionTable.get(handle);
+    const dish_session::SessionRef s = g_sessionTable.find(handle);
     if (!s) return;
     const dish_send::MotionSample sample{{(int16_t)gyroX, (int16_t)gyroY, (int16_t)gyroZ},
                                          {(int16_t)accelX, (int16_t)accelY, (int16_t)accelZ},
@@ -565,7 +576,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendM
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendBattery(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jint level, jint status) {
     const ScopedThreadRole role(ThreadRole::Battery);
-    auto s = g_sessionTable.get(handle);
+    const dish_session::SessionRef s = g_sessionTable.find(handle);
     if (!s) return;
     dish_send::sendBattery(s, controllerIndex, level, status);
 }
@@ -576,7 +587,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendT
     jshort f0x, jshort f0y, jint f1TrackingId, jshort f1x, jshort f1y, jlong eventTimeMs,
     jshort scrollDelta) {
     const ScopedThreadRole role(&uiOrResend);
-    auto s = g_sessionTable.get(handle);
+    const dish_session::SessionRef s = g_sessionTable.find(handle);
     if (!s) return;
     gamepad::TouchpadState t;
     t.f0Active = f0Active == JNI_TRUE;
@@ -599,7 +610,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendT
 JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendMicFrame(
     JNIEnv* env, jobject, jint handle, jint controllerIndex, jshortArray pcmMono) {
     const ScopedThreadRole role(ThreadRole::MicCapture);
-    auto s = g_sessionTable.get(handle);
+    const dish_session::SessionRef s = g_sessionTable.find(handle);
     if (!s || pcmMono == nullptr) return JNI_FALSE;
     if (env->GetArrayLength(pcmMono) != dish_audio::AUDIO_FRAME_SAMPLES) return JNI_FALSE;
     int16_t pcm[dish_audio::AUDIO_FRAME_SAMPLES];
@@ -611,7 +622,7 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_s
 
 JNIEXPORT void JNICALL
 Java_com_tinkernorth_dish_core_jni_SessionNative_startHeartbeat(JNIEnv*, jobject, jint handle) {
-    auto s = g_sessionTable.get(handle);
+    const dish_session::SessionRef s = g_sessionTable.find(handle);
     if (!s) return;
     if (s->heartbeat.running()) return;
     s->missedAcks.store(0);
@@ -622,58 +633,58 @@ Java_com_tinkernorth_dish_core_jni_SessionNative_startHeartbeat(JNIEnv*, jobject
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_stopHeartbeat(JNIEnv*,
                                                                                       jobject,
                                                                                       jint handle) {
-    auto s = g_sessionTable.get(handle);
+    const dish_session::SessionRef s = g_sessionTable.find(handle);
     if (!s) return;
     s->heartbeat.stop();
 }
 
 JNIEXPORT jboolean JNICALL
 Java_com_tinkernorth_dish_core_jni_SessionNative_isConnectionAlive(JNIEnv*, jobject, jint handle) {
-    auto s = g_sessionTable.get(handle);
-    if (!s) return JNI_FALSE;
-    return s->connectionAlive.load() ? JNI_TRUE : JNI_FALSE;
+    return readOpenSession<jboolean>(handle, JNI_FALSE, [](const dish_session::Session& s) {
+        return s.connectionAlive.load() ? JNI_TRUE : JNI_FALSE;
+    });
 }
 
 JNIEXPORT jint JNICALL
 Java_com_tinkernorth_dish_core_jni_SessionNative_getServerEpoch(JNIEnv*, jobject, jint handle) {
-    auto s = g_sessionTable.get(handle);
-    if (!s) return -1;
-    return s->serverEpoch.load(std::memory_order_acquire);
+    return readOpenSession<jint>(handle, -1, [](const dish_session::Session& s) {
+        return s.serverEpoch.load(std::memory_order_acquire);
+    });
 }
 
 JNIEXPORT jint JNICALL
 Java_com_tinkernorth_dish_core_jni_SessionNative_getActiveBitmap(JNIEnv*, jobject, jint handle) {
-    auto s = g_sessionTable.get(handle);
-    if (!s) return -1;
-    return s->activeBitmap.load(std::memory_order_acquire);
+    return readOpenSession<jint>(handle, -1, [](const dish_session::Session& s) {
+        return s.activeBitmap.load(std::memory_order_acquire);
+    });
 }
 
 JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_getSessionCloseReason(
     JNIEnv*, jobject, jint handle) {
-    auto s = g_sessionTable.get(handle);
-    if (!s) return -1;
-    return s->closeReason.load(std::memory_order_acquire);
+    return readOpenSession<jint>(handle, -1, [](const dish_session::Session& s) {
+        return s.closeReason.load(std::memory_order_acquire);
+    });
 }
 
 JNIEXPORT jlong JNICALL
 Java_com_tinkernorth_dish_core_jni_SessionNative_getSendCounter(JNIEnv*, jobject, jint handle) {
-    auto s = g_sessionTable.get(handle);
-    if (!s) return 0;
-    return (jlong)dish_counter::sendCounterView(s->counter);
+    return readOpenSession<jlong>(handle, 0, [](const dish_session::Session& s) {
+        return (jlong)dish_counter::sendCounterView(s.counter);
+    });
 }
 
 JNIEXPORT jint JNICALL
 Java_com_tinkernorth_dish_core_jni_SessionNative_getVigemAvailable(JNIEnv*, jobject, jint handle) {
-    auto s = g_sessionTable.get(handle);
-    if (!s) return -1;
-    return (jint)s->vigemAvailable.load(std::memory_order_acquire);
+    return readOpenSession<jint>(handle, -1, [](const dish_session::Session& s) {
+        return (jint)s.vigemAvailable.load(std::memory_order_acquire);
+    });
 }
 
 JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_getActiveControllerCount(
     JNIEnv*, jobject, jint handle) {
-    auto s = g_sessionTable.get(handle);
-    if (!s) return -1;
-    return (jint)s->activeControllerCount.load(std::memory_order_acquire);
+    return readOpenSession<jint>(handle, -1, [](const dish_session::Session& s) {
+        return (jint)s.activeControllerCount.load(std::memory_order_acquire);
+    });
 }
 
 JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_receiveAck(JNIEnv* env,
@@ -1153,7 +1164,7 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_dev
 
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_sessionStatsJson(
     JNIEnv* env, jobject, jint handle) {
-    auto s = g_sessionTable.get(handle);
+    const dish_session::SessionRef s = g_sessionTable.find(handle);
     if (!s) return env->NewStringUTF("");
     return env->NewStringUTF(
         hotpath::sessionStatsJson(s->rtt, s->missedAcks.load(std::memory_order_relaxed)).c_str());
@@ -1161,17 +1172,18 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_sessi
 
 JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_getSlotSendCount(
     JNIEnv*, jobject, jint handle, jint controllerIndex) {
-    auto s = g_sessionTable.get(handle);
-    if (!s) return 0;
-    return (jlong)s->sentByCtrl[controllerIndex & CTRL_INDEX_MASK].load(std::memory_order_relaxed);
+    return readOpenSession<jlong>(handle, 0, [controllerIndex](const dish_session::Session& s) {
+        return (jlong)s.sentByCtrl[controllerIndex & CTRL_INDEX_MASK].load(
+            std::memory_order_relaxed);
+    });
 }
 
 JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_getSlotMotionCount(
     JNIEnv*, jobject, jint handle, jint controllerIndex) {
-    auto s = g_sessionTable.get(handle);
-    if (!s) return 0;
-    return (jlong)s->motionByCtrl[controllerIndex & CTRL_INDEX_MASK].load(
-        std::memory_order_relaxed);
+    return readOpenSession<jlong>(handle, 0, [controllerIndex](const dish_session::Session& s) {
+        return (jlong)s.motionByCtrl[controllerIndex & CTRL_INDEX_MASK].load(
+            std::memory_order_relaxed);
+    });
 }
 
 // Opt-in hot-path latency benchmark (stage 1 USB-direct + stage 2 heartbeat RTT).

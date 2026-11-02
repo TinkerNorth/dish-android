@@ -4,6 +4,8 @@
 
 #include <errno.h>
 
+#include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -61,6 +63,58 @@ class Port {
     std::mutex mtx_;
     std::vector<Sent> sent_;
     int refuseErrno_ = 0;
+};
+
+// A socket whose next send blocks, holding its sender inside sendto (and so inside the gate),
+// until the test lets it go; every datagram is recorded in the order it reached the socket.
+class HeldPort {
+  public:
+    void attachTo(dish_session::Session& s) {
+        s.port = dish_net::DatagramPort{&HeldPort::send, this};
+    }
+
+    void holdNext() {
+        std::lock_guard<std::mutex> lock(mtx_);
+        holdNext_ = true;
+    }
+
+    bool waitUntilHolding() {
+        std::unique_lock<std::mutex> lock(mtx_);
+        return cv_.wait_for(lock, std::chrono::seconds(5), [this] { return holding_; });
+    }
+
+    void letGo() {
+        std::lock_guard<std::mutex> lock(mtx_);
+        released_ = true;
+        cv_.notify_all();
+    }
+
+    std::vector<Bytes> taken() {
+        std::lock_guard<std::mutex> lock(mtx_);
+        return std::exchange(sent_, {});
+    }
+
+  private:
+    static ssize_t send(void* context, int, const uint8_t* packet, const size_t len,
+                        const sockaddr_in&) {
+        HeldPort& self = *static_cast<HeldPort*>(context);
+        std::unique_lock<std::mutex> lock(self.mtx_);
+        self.sent_.emplace_back(packet, packet + len);
+        if (self.holdNext_) {
+            self.holdNext_ = false;
+            self.holding_ = true;
+            self.cv_.notify_all();
+            self.cv_.wait(lock, [&self] { return self.released_; });
+        }
+        return static_cast<ssize_t>(len);
+    }
+
+    std::mutex mtx_;
+    std::condition_variable cv_;
+    std::vector<Bytes> sent_;
+    bool holdNext_ = false;
+    bool holding_ = false;
+    bool released_ = false;
 };
 
 class Bridge final : public dish_slots::BridgeSink {

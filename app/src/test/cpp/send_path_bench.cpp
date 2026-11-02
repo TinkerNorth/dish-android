@@ -703,7 +703,7 @@ bool sleepToward(const TimePoint due, const std::atomic<bool>& stop) {
 
 // Cold senders at their own schedules until stop. Battery: one datagram per controller at the
 // start, every 30 s, and once more at the burst, as Kotlin's battery source polls every slot.
-void runBattery(const std::shared_ptr<dish_session::Session>& session, const TimePoint start,
+void runBattery(const dish_session::SessionRef& session, const TimePoint start,
                 const double burstSecs, const std::atomic<bool>& stop) {
     const ScopedThreadRole role(ThreadRole::Battery);
     double periodicSecs = 0.0;
@@ -723,8 +723,8 @@ void runBattery(const std::shared_ptr<dish_session::Session>& session, const Tim
     }
 }
 
-void runMic(const std::shared_ptr<dish_session::Session>& session, const TimePoint start,
-            const int micHz, const std::atomic<bool>& stop) {
+void runMic(const dish_session::SessionRef& session, const TimePoint start, const int micHz,
+            const std::atomic<bool>& stop) {
     const ScopedThreadRole role(ThreadRole::MicCapture);
     const DeadlineWait wait;
     const std::vector<int16_t> tone = micTone();
@@ -760,8 +760,8 @@ ScenarioResult runScenario(const Scenario& scenario, const RunPlan& plan) {
     dish_slots::SlotTable slots(table, bridge);
 
     const int handle = table.open("127.0.0.1", peer.port());
-    const std::shared_ptr<dish_session::Session> session = table.get(handle);
-    dish_session::setConnectionParams(*session, TOKEN, key, 3);
+    const dish_session::SessionRef session = table.find(handle);
+    dish_session::setConnectionParams(session, TOKEN, key, 3);
     session->port = dish_net::DatagramPort{&watchedSend, nullptr};
     slots.bindSatellite(DEVICE_A, handle, CONTROLLER_A);
     if (scenario.secondPoller) slots.bindSatellite(DEVICE_B, handle, CONTROLLER_B);

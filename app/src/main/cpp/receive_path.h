@@ -4,7 +4,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <vector>
 
 #include "audio_codec.h"
@@ -43,15 +42,15 @@ class FeedbackSink {
 int receiveDatagram(dish_session::SessionTable& sessions, int handle, FeedbackSink& sink);
 
 // The open-and-dispatch half for a datagram already in hand: 0 or 1 as above.
-int handleDatagram(const std::shared_ptr<dish_session::Session>& session, int handle,
-                   const uint8_t* buf, size_t n, FeedbackSink& sink);
+int handleDatagram(const dish_session::SessionRef& session, const uint8_t* buf, size_t n,
+                   FeedbackSink& sink);
 
 // Reorder + decode one received speaker or haptic frame into `pcm` (which holds up to
 // AUDIO_JITTER_MAX_EVENTS_PER_PUSH consecutive interleaved-stereo frames). Returns how many frames
 // it produced and, per frame, whether it was concealed rather than decoded from a packet that
-// actually arrived.
-int decodeSpeakerAudio(dish_session::Session& session, uint8_t ctrlIdx, int lane, uint16_t seq,
-                       const uint8_t* opus, size_t opusLen, std::vector<int16_t>& pcm,
+// actually arrived; nothing for a session that is no longer open.
+int decodeSpeakerAudio(const dish_session::SessionRef& session, uint8_t ctrlIdx, int lane,
+                       uint16_t seq, const uint8_t* opus, size_t opusLen, std::vector<int16_t>& pcm,
                        bool concealed[dish_audio::AUDIO_JITTER_MAX_EVENTS_PER_PUSH]);
 
 } // namespace dish_receive

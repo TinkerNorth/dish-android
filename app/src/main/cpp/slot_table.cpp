@@ -4,13 +4,16 @@
 
 #include <string.h>
 
+#include <mutex>
+#include <thread>
 #include <utility>
-#include <vector>
+
+#include "hotpath_latency.h"
+#include "log_port.h"
 
 namespace dish_slots {
 
 using dish_send::MotionSample;
-using dish_send::PendingDatagram;
 using gamepad::DeviceState;
 
 namespace {
@@ -70,20 +73,166 @@ void applyJoystickSample(DeviceState& state, const gamepad::FrameworkAxes& sampl
                        reduced.rt, sample.hatX, sample.hatY);
 }
 
-} // namespace
-
-void SlotTable::publishGamepadToSatellite(const SlotBinding& binding, const DeviceState& s,
-                                          PendingDatagram& out) {
-    auto session = sessions_.get(binding.sessionHandle);
-    if (!session) return;
-    dish_send::stageGamepadReport(session, binding.controllerIndex, dish_send::xusbReportOf(s),
-                                  out);
+uint64_t tagOf(const int32_t deviceId) {
+    return (uint64_t{1} << 32) | static_cast<uint32_t>(deviceId);
 }
 
-// Bluetooth and Moonlight both leave through Kotlin, so the state is queued for the bridge thread
-// rather than written here: this call holds the slot lock and must not make a JVM upcall under it.
+// The reporting thread inside its slot: odd epoch, a full fence, then the generation. A cold write
+// that is open is waited out with the bracket closed, so its own wait for the bracket returns.
+class Reporting {
+  public:
+    explicit Reporting(HotSlot& slot) : slot_(slot) {
+        for (;;) {
+            step();
+            std::atomic_thread_fence(std::memory_order_seq_cst);
+            const uint32_t gen = slot_.gen.load(std::memory_order_acquire);
+            if ((gen & 1u) == 0) return;
+            step();
+            while (slot_.gen.load(std::memory_order_acquire) == gen) std::this_thread::yield();
+        }
+    }
+    ~Reporting() { step(); }
+    Reporting(const Reporting&) = delete;
+    Reporting& operator=(const Reporting&) = delete;
+
+  private:
+    // The reporting thread is the epoch's one writer.
+    void step() {
+        slot_.epoch.store(slot_.epoch.load(std::memory_order_relaxed) + 1,
+                          std::memory_order_release);
+    }
+
+    HotSlot& slot_;
+};
+
+// A cold write: the generation turned odd by compare-exchange, so two cold writers of one slot
+// exclude each other, then a full fence and the reporting thread's bracket waited out. Waiting for
+// the epoch to change, rather than to turn even, means a stream of reports cannot starve it.
+class ColdWrite {
+  public:
+    explicit ColdWrite(HotSlot& slot) : slot_(slot) {
+        uint32_t gen = slot_.gen.load(std::memory_order_relaxed);
+        for (;;) {
+            if ((gen & 1u) != 0) {
+                std::this_thread::yield();
+                gen = slot_.gen.load(std::memory_order_relaxed);
+                continue;
+            }
+            if (slot_.gen.compare_exchange_weak(gen, gen + 1, std::memory_order_acq_rel,
+                                                std::memory_order_relaxed)) {
+                break;
+            }
+        }
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+        const uint64_t seen = slot_.epoch.load(std::memory_order_acquire);
+        if ((seen & 1u) == 0) return;
+        while (slot_.epoch.load(std::memory_order_acquire) == seen) std::this_thread::yield();
+    }
+    ~ColdWrite() { slot_.gen.fetch_add(1, std::memory_order_release); }
+    ColdWrite(const ColdWrite&) = delete;
+    ColdWrite& operator=(const ColdWrite&) = delete;
+
+  private:
+    HotSlot& slot_;
+};
+
+// The slot's holder is the mirror's one writer.
+void mirrorState(HotSlot& slot) {
+    uint64_t raw[STATE_WORDS] = {};
+    memcpy(raw, &slot.state, sizeof(slot.state));
+    const uint32_t gen = slot.mirrorGen.load(std::memory_order_relaxed);
+    slot.mirrorGen.store(gen + 1, std::memory_order_relaxed);
+    std::atomic_thread_fence(std::memory_order_release);
+    for (size_t i = 0; i < STATE_WORDS; i++)
+        slot.mirror[i].store(raw[i], std::memory_order_relaxed);
+    slot.mirrorGen.store(gen + 2, std::memory_order_release);
+}
+
+DeviceState readMirror(const HotSlot& slot) {
+    for (;;) {
+        const uint32_t before = slot.mirrorGen.load(std::memory_order_acquire);
+        if ((before & 1u) != 0) {
+            std::this_thread::yield();
+            continue;
+        }
+        uint64_t raw[STATE_WORDS];
+        for (size_t i = 0; i < STATE_WORDS; i++) {
+            raw[i] = slot.mirror[i].load(std::memory_order_relaxed);
+        }
+        std::atomic_thread_fence(std::memory_order_acquire);
+        if (slot.mirrorGen.load(std::memory_order_relaxed) != before) continue;
+        DeviceState s;
+        memcpy(&s, raw, sizeof(s));
+        return s;
+    }
+}
+
+// The UI thread is the count's one writer while it reports; a cold writer zeroes it only while it
+// holds the slot.
+void countFrameworkEvent(HotSlot& slot) {
+    slot.frameworkEvents.store(slot.frameworkEvents.load(std::memory_order_relaxed) + 1,
+                               std::memory_order_relaxed);
+}
+
+// Whether the slot still belongs to the pad its reporter found it for.
+bool holds(const HotSlot& slot, const int32_t deviceId) {
+    return slot.held && slot.deviceId == deviceId;
+}
+
+bool consumedWithoutState(const int32_t keyCode, const int32_t action) {
+    return gamepad::keyVerdict(keyCode, 0, action) != gamepad::KeyVerdict::PASS;
+}
+
+} // namespace
+
+int SlotTable::find(const int32_t deviceId) const {
+    const uint64_t tag = tagOf(deviceId);
+    for (size_t i = 0; i < MAX_SLOTS; i++) {
+        if (ids_[i].load(std::memory_order_acquire) == tag) return static_cast<int>(i);
+    }
+    return -1;
+}
+
+// Caller holds bindingsMtx_. The pad's slot, taken from the free ones when it has none; -1 with
+// every slot held.
+int SlotTable::findOrTake(const int32_t deviceId) {
+    const int found = find(deviceId);
+    if (found >= 0) return found;
+    for (size_t i = 0; i < MAX_SLOTS; i++) {
+        if (ids_[i].load(std::memory_order_relaxed) != 0) continue;
+        HotSlot& slot = slots_[i];
+        {
+            const ColdWrite write(slot);
+            slot.held = true;
+            slot.deviceId = deviceId;
+            slot.hasState = false;
+            slot.binding = SlotBinding{};
+            slot.state = DeviceState{};
+            slot.frameworkEvents.store(0, std::memory_order_relaxed);
+        }
+        ids_[i].store(tagOf(deviceId), std::memory_order_release);
+        return static_cast<int>(i);
+    }
+    dish_log::error("input: all %u slots are held, device %d is not tracked", (unsigned)MAX_SLOTS,
+                    (int)deviceId);
+    return -1;
+}
+
+// Caller holds bindingsMtx_ and the slot's cold write. A report already past the scan finds the
+// slot no longer its own once the write closes.
+void SlotTable::freeSlot(const size_t index) {
+    ids_[index].store(0, std::memory_order_release);
+    slots_[index].held = false;
+}
+
+// Caller holds bindingsMtx_. Never 0, which names no connection.
+uint32_t SlotTable::nextBridgeConnection() {
+    if (++lastBridgeConnection_ == 0) ++lastBridgeConnection_;
+    return lastBridgeConnection_;
+}
+
 void SlotTable::publishGamepadToBridge(const SlotBinding& binding, const DeviceState& s) {
-    if (!binding.bridgeConnectionId) return;
+    if (binding.bridgeConnection == 0) return;
     BridgeReport r{};
     r.kind = binding.kind;
     r.payload = BridgeReport::GAMEPAD;
@@ -99,91 +248,105 @@ void SlotTable::publishGamepadToBridge(const SlotBinding& binding, const DeviceS
     bridge_.push(r);
 }
 
-// Lock order: devices < slots < (sessions | btQueue | a session's send turn). The datagram is
-// staged here, under both locks, so a slot's reports take their counters in the order its latch
-// consumed them; the caller seals and sends it with transmitPublished after letting the locks go.
-void SlotTable::publishIfChanged(const int32_t deviceId, DeviceState& s, PendingDatagram& out) {
-    std::lock_guard<TrackedMutex> lock(slotsMtx_);
-    auto it = slots_.find(deviceId);
-    if (it == slots_.end()) return;
-    // Bind-check before consume: a sample dropped for lack of a slot must not burn the latch, or
-    // the slot it later binds to never sees that state.
-    if (!gamepad::consumePublishIfChanged(s)) return;
-
-    const SlotBinding& binding = it->second;
+// The slot's holder. Bind-check before consume: a sample dropped for lack of a slot must not burn
+// the latch, or the slot it later binds to never sees that state.
+void SlotTable::publishIfChanged(HotSlot& slot) {
+    const SlotBinding& binding = slot.binding;
+    if (binding.kind == SLOT_NONE) return;
+    if (!gamepad::consumePublishIfChanged(slot.state)) return;
     switch (binding.kind) {
-    case SLOT_SATELLITE:
-        publishGamepadToSatellite(binding, s, out);
+    case SLOT_SATELLITE: {
+        const bool sent = dish_send::sendGamepadReport(sessions_.find(binding.sessionHandle),
+                                                       binding.controllerIndex,
+                                                       dish_send::xusbReportOf(slot.state));
+        if (sent) hotpath::markGamepadSent(); // stage-1 end: the packet has left sendto()
         return;
+    }
     case SLOT_BLUETOOTH:
     case SLOT_MOONLIGHT:
-        publishGamepadToBridge(binding, s);
+        publishGamepadToBridge(binding, slot.state);
         return;
     case SLOT_NONE:
         return;
     }
 }
 
-// deviceId is reused across reconnects, so the new pad would inherit stale held inputs; reset and
-// re-arm so it syncs to neutral. Call without the slot lock held: publishIfChanged retakes it.
-void SlotTable::syncSlotBaseline(const int32_t deviceId) {
-    PendingDatagram datagram;
-    {
-        std::lock_guard<TrackedMutex> lock(devicesMtx_);
-        auto it = devices_.find(deviceId);
-        if (it == devices_.end()) return;
-        gamepad::resetState(it->second);
-        gamepad::resetPublishLatch(it->second);
-        publishIfChanged(deviceId, it->second, datagram);
-    }
-    dish_send::transmitPublished(datagram);
+void SlotTable::mirrorIfInspecting(HotSlot& slot) {
+    if (inspect_.load(std::memory_order_relaxed)) mirrorState(slot);
+}
+
+// Inside a cold write. deviceId is reused across reconnects, so the new pad would inherit stale
+// held inputs; reset and re-arm so it syncs to neutral.
+void SlotTable::syncSlotBaseline(HotSlot& slot) {
+    if (!slot.hasState) return;
+    gamepad::resetState(slot.state);
+    gamepad::resetPublishLatch(slot.state);
+    mirrorIfInspecting(slot);
+    publishIfChanged(slot);
+}
+
+// Inside a cold write.
+void SlotTable::resetToNeutral(HotSlot& slot) {
+    if (!slot.hasState) return;
+    gamepad::resetState(slot.state);
+    mirrorIfInspecting(slot);
+    publishIfChanged(slot);
 }
 
 void SlotTable::prewarmDevice(const int32_t deviceId) {
-    std::lock_guard<TrackedMutex> lock(devicesMtx_);
-    devices_[deviceId];
+    const std::lock_guard<TrackedMutex> lock(bindingsMtx_);
+    const int index = findOrTake(deviceId);
+    if (index < 0) return;
+    HotSlot& slot = slots_[static_cast<size_t>(index)];
+    const ColdWrite write(slot);
+    slot.hasState = true;
 }
 
 void SlotTable::applyUsbReport(const int32_t deviceId, const DeviceState& nu) {
-    PendingDatagram datagram;
-    {
-        std::lock_guard<TrackedMutex> lock(devicesMtx_);
-        auto& s = devices_[deviceId];
-        copyPadAxes(nu, s);
-        applyUsbStickDeadzone(s.sLX, s.sLY);
-        applyUsbStickDeadzone(s.sRX, s.sRY);
-        const bool inspecting = inspect_.load(std::memory_order_relaxed);
-        if (inspecting) {
-            mirrorMotionForInspector(nu, s);
-            mirrorTouchForInspector(nu, s);
-        }
-        publishIfChanged(deviceId, s, datagram);
+    const int index = find(deviceId);
+    if (index < 0) return;
+    HotSlot& slot = slots_[static_cast<size_t>(index)];
+    const Reporting reporting(slot);
+    if (!holds(slot, deviceId)) return;
+    DeviceState& s = slot.state;
+    slot.hasState = true;
+    copyPadAxes(nu, s);
+    applyUsbStickDeadzone(s.sLX, s.sLY);
+    applyUsbStickDeadzone(s.sRX, s.sRY);
+    if (inspect_.load(std::memory_order_relaxed)) {
+        mirrorMotionForInspector(nu, s);
+        mirrorTouchForInspector(nu, s);
+        mirrorState(slot);
     }
-    dish_send::transmitPublished(datagram);
+    publishIfChanged(slot);
 }
 
 void SlotTable::resetAndPublish(const int32_t deviceId) {
-    PendingDatagram datagram;
-    {
-        std::lock_guard<TrackedMutex> lock(devicesMtx_);
-        auto it = devices_.find(deviceId);
-        if (it == devices_.end()) return;
-        gamepad::resetState(it->second);
-        publishIfChanged(deviceId, it->second, datagram);
-    }
-    dish_send::transmitPublished(datagram);
+    std::unique_lock<TrackedMutex> lock(bindingsMtx_);
+    const int index = find(deviceId);
+    if (index < 0) return;
+    HotSlot& slot = slots_[static_cast<size_t>(index)];
+    const ColdWrite write(slot);
+    lock.unlock();
+    resetToNeutral(slot);
 }
 
 void SlotTable::forgetDevice(const int32_t deviceId) {
-    std::lock_guard<TrackedMutex> lock(devicesMtx_);
-    devices_.erase(deviceId);
-    frameworkEventCounts_.erase(deviceId);
+    const std::lock_guard<TrackedMutex> lock(bindingsMtx_);
+    const int index = find(deviceId);
+    if (index < 0) return;
+    HotSlot& slot = slots_[static_cast<size_t>(index)];
+    const ColdWrite write(slot);
+    slot.hasState = false;
+    slot.state = DeviceState{};
+    slot.frameworkEvents.store(0, std::memory_order_relaxed);
+    if (slot.binding.kind == SLOT_NONE) freeSlot(static_cast<size_t>(index));
 }
 
 // Kotlin translates to CONTROLLER_MOTION and drops samples the host never asked for (MOTION_EVENT
 // gate), so this stays fire-and-forget.
 void SlotTable::publishMotionToBridge(const SlotBinding& binding, const MotionSample& m) {
-    if (!binding.bridgeConnectionId) return;
+    if (binding.bridgeConnection == 0) return;
     BridgeReport r{};
     r.kind = SLOT_MOONLIGHT;
     r.payload = BridgeReport::MOTION;
@@ -195,37 +358,25 @@ void SlotTable::publishMotionToBridge(const SlotBinding& binding, const MotionSa
     bridge_.push(r);
 }
 
-void SlotTable::publishMotionToSatellite(const SlotBinding& binding, const MotionSample& m,
-                                         PendingDatagram& out) {
-    auto session = sessions_.get(binding.sessionHandle);
-    if (!session) return;
-    dish_send::stageMotion(session, binding.controllerIndex, m, out);
-}
-
-// Stages under the slot lock, so the caller sends out once the lock is let go.
-void SlotTable::routeUsbMotion(const int32_t deviceId, const MotionSample& sample,
-                               PendingDatagram& out) {
-    std::lock_guard<TrackedMutex> lock(slotsMtx_);
-    auto it = slots_.find(deviceId);
-    if (it == slots_.end()) return;
-    const SlotBinding& binding = it->second;
+void SlotTable::applyUsbMotion(const int32_t deviceId, const MotionSample& sample) {
+    const int index = find(deviceId);
+    if (index < 0) return;
+    HotSlot& slot = slots_[static_cast<size_t>(index)];
+    const Reporting reporting(slot);
+    if (!holds(slot, deviceId)) return;
+    const SlotBinding& binding = slot.binding;
     switch (binding.kind) {
     case SLOT_MOONLIGHT:
         publishMotionToBridge(binding, sample);
         return;
     case SLOT_SATELLITE:
-        publishMotionToSatellite(binding, sample, out);
+        dish_send::sendMotion(sessions_.find(binding.sessionHandle), binding.controllerIndex,
+                              sample);
         return;
     case SLOT_BLUETOOTH:
     case SLOT_NONE:
         return;
     }
-}
-
-void SlotTable::applyUsbMotion(const int32_t deviceId, const MotionSample& sample) {
-    PendingDatagram datagram;
-    routeUsbMotion(deviceId, sample, datagram);
-    dish_send::transmitDatagram(datagram);
 }
 
 // The Bluetooth HID descriptor is a plain gamepad, so touch has nowhere to go on that
@@ -234,7 +385,7 @@ void SlotTable::applyUsbMotion(const int32_t deviceId, const MotionSample& sampl
 // satellite receiver's job, declared per slot in the descriptor.
 // eventTimeMs is not carried: Moonlight re-times these events on the reliable control stream.
 void SlotTable::publishTouchToBridge(const SlotBinding& binding, const gamepad::TouchpadState& t) {
-    if (!binding.bridgeConnectionId) return;
+    if (binding.bridgeConnection == 0) return;
     BridgeReport r{};
     r.kind = SLOT_MOONLIGHT;
     r.payload = BridgeReport::TOUCH;
@@ -245,28 +396,22 @@ void SlotTable::publishTouchToBridge(const SlotBinding& binding, const gamepad::
 }
 
 // A pad's own trackpad carries no mouse buttons and no wheel.
-void SlotTable::publishTouchToSatellite(const SlotBinding& binding, const gamepad::TouchpadState& t,
-                                        const uint32_t eventTimeMs, PendingDatagram& out) {
-    auto session = sessions_.get(binding.sessionHandle);
-    if (!session) return;
-    const uint8_t idx = (uint8_t)(binding.controllerIndex & 0xFF);
-    dish_send::stageTouchpadFrame(session, idx, t, false, false, eventTimeMs, 0, out);
-}
-
-// Stages under the slot lock, so the caller sends out once the lock is let go.
-void SlotTable::routeUsbTouchpad(const int32_t deviceId, const gamepad::TouchpadState& t,
-                                 const uint32_t eventTimeMs, PendingDatagram& out) {
-    std::lock_guard<TrackedMutex> lock(slotsMtx_);
-    auto it = slots_.find(deviceId);
-    if (it == slots_.end()) return;
-
-    const SlotBinding& binding = it->second;
+void SlotTable::applyUsbTouchpad(const int32_t deviceId, const gamepad::TouchpadState& t,
+                                 const uint32_t eventTimeMs) {
+    const int index = find(deviceId);
+    if (index < 0) return;
+    HotSlot& slot = slots_[static_cast<size_t>(index)];
+    const Reporting reporting(slot);
+    if (!holds(slot, deviceId)) return;
+    const SlotBinding& binding = slot.binding;
     switch (binding.kind) {
     case SLOT_MOONLIGHT:
         publishTouchToBridge(binding, t);
         return;
     case SLOT_SATELLITE:
-        publishTouchToSatellite(binding, t, eventTimeMs, out);
+        dish_send::sendTouchpadFrame(sessions_.find(binding.sessionHandle),
+                                     (uint8_t)(binding.controllerIndex & 0xFF), t, false, false,
+                                     eventTimeMs, 0);
         return;
     case SLOT_BLUETOOTH:
     case SLOT_NONE:
@@ -274,163 +419,173 @@ void SlotTable::routeUsbTouchpad(const int32_t deviceId, const gamepad::Touchpad
     }
 }
 
-void SlotTable::applyUsbTouchpad(const int32_t deviceId, const gamepad::TouchpadState& t,
-                                 const uint32_t eventTimeMs) {
-    PendingDatagram datagram;
-    routeUsbTouchpad(deviceId, t, eventTimeMs, datagram);
-    dish_send::transmitDatagram(datagram);
+// The slot's holder; action is a down or up edge, the events keyVerdict answers APPLY.
+void SlotTable::applyKeyEdge(HotSlot& slot, const int32_t keyCode, const int32_t action) {
+    countFrameworkEvent(slot);
+    slot.hasState = true;
+    if (!gamepad::applyKey(slot.state, keyCode, action == gamepad::KEY_ACTION_DOWN)) return;
+    mirrorIfInspecting(slot);
+    publishIfChanged(slot);
 }
 
-// Caller holds the device lock. An unknown device has no quirks yet, which is the standard layout.
-uint8_t SlotTable::quirkFor(const int32_t deviceId) {
-    auto it = devices_.find(deviceId);
-    if (it == devices_.end()) return 0;
-    return it->second.quirk;
-}
-
-// Caller holds the device lock; action is a down or up edge, the events keyVerdict answers APPLY.
-void SlotTable::stageFrameworkKey(const int32_t deviceId, const int32_t keyCode,
-                                  const int32_t action, PendingDatagram& out) {
-    frameworkEventCounts_[deviceId]++;
-    auto& state = devices_[deviceId];
-    if (gamepad::applyKey(state, keyCode, action == gamepad::KEY_ACTION_DOWN)) {
-        publishIfChanged(deviceId, state, out);
-    }
-}
-
-// True when the key is the pad's to consume. Stages under the device lock, so the caller sends out
-// once the lock is let go.
-bool SlotTable::filterFrameworkKey(const int32_t deviceId, const int32_t keyCode,
-                                   const int32_t action, PendingDatagram& out) {
-    std::lock_guard<TrackedMutex> lock(devicesMtx_);
-    const gamepad::KeyVerdict verdict = gamepad::keyVerdict(keyCode, quirkFor(deviceId), action);
-    if (verdict == gamepad::KeyVerdict::PASS) return false;
-    if (verdict == gamepad::KeyVerdict::APPLY) stageFrameworkKey(deviceId, keyCode, action, out);
-    return true;
-}
-
+// A pad the table does not know has no quirks yet, which is the standard layout, and no state to
+// apply the key to.
 bool SlotTable::applyFrameworkKey(const int32_t deviceId, const int32_t keyCode,
                                   const int32_t action) {
-    PendingDatagram datagram;
-    const bool consumed = filterFrameworkKey(deviceId, keyCode, action, datagram);
-    dish_send::transmitPublished(datagram);
-    return consumed;
-}
-
-// Stages under the device lock, so the caller sends out once the lock is let go.
-void SlotTable::stageFrameworkMotion(const int32_t deviceId, const int32_t action,
-                                     const gamepad::FrameworkAxes& sample, PendingDatagram& out) {
-    std::lock_guard<TrackedMutex> lock(devicesMtx_);
-    auto& state = devices_[deviceId];
-
-    if (action == gamepad::MOTION_ACTION_CANCEL) {
-        gamepad::resetState(state);
-        publishIfChanged(deviceId, state, out);
-        return;
-    }
-    if (action != gamepad::MOTION_ACTION_MOVE) return;
-
-    frameworkEventCounts_[deviceId]++;
-    applyJoystickSample(state, sample);
-    publishIfChanged(deviceId, state, out);
+    const int index = find(deviceId);
+    if (index < 0) return consumedWithoutState(keyCode, action);
+    HotSlot& slot = slots_[static_cast<size_t>(index)];
+    const Reporting reporting(slot);
+    if (!holds(slot, deviceId)) return consumedWithoutState(keyCode, action);
+    const gamepad::KeyVerdict verdict = gamepad::keyVerdict(keyCode, slot.state.quirk, action);
+    if (verdict == gamepad::KeyVerdict::PASS) return false;
+    if (verdict == gamepad::KeyVerdict::APPLY) applyKeyEdge(slot, keyCode, action);
+    return true;
 }
 
 void SlotTable::applyFrameworkMotion(const int32_t deviceId, const int32_t action,
                                      const gamepad::FrameworkAxes& sample) {
-    PendingDatagram datagram;
-    stageFrameworkMotion(deviceId, action, sample, datagram);
-    dish_send::transmitPublished(datagram);
+    const int index = find(deviceId);
+    if (index < 0) return;
+    HotSlot& slot = slots_[static_cast<size_t>(index)];
+    const Reporting reporting(slot);
+    if (!holds(slot, deviceId)) return;
+    slot.hasState = true;
+    if (action == gamepad::MOTION_ACTION_CANCEL) {
+        gamepad::resetState(slot.state);
+        mirrorIfInspecting(slot);
+        publishIfChanged(slot);
+        return;
+    }
+    if (action != gamepad::MOTION_ACTION_MOVE) return;
+    countFrameworkEvent(slot);
+    applyJoystickSample(slot.state, sample);
+    mirrorIfInspecting(slot);
+    publishIfChanged(slot);
 }
 
 void SlotTable::releaseAll() {
-    std::vector<int32_t> deviceIds;
-    {
-        std::lock_guard<TrackedMutex> lock(devicesMtx_);
-        deviceIds.reserve(devices_.size());
-        for (const auto& kv : devices_) deviceIds.push_back(kv.first);
+    for (size_t i = 0; i < MAX_SLOTS; i++) {
+        std::unique_lock<TrackedMutex> lock(bindingsMtx_);
+        if (ids_[i].load(std::memory_order_relaxed) == 0) continue;
+        HotSlot& slot = slots_[i];
+        const ColdWrite write(slot);
+        lock.unlock();
+        resetToNeutral(slot);
     }
-    for (const int32_t deviceId : deviceIds) resetAndPublish(deviceId);
 }
 
 void SlotTable::bindSatellite(const int32_t deviceId, const int sessionHandle,
                               const int controllerIndex) {
-    {
-        std::lock_guard<TrackedMutex> lock(slotsMtx_);
-        auto& b = slots_[deviceId];
-        b.kind = SLOT_SATELLITE;
-        b.sessionHandle = sessionHandle;
-        b.controllerIndex = controllerIndex;
-        b.bridgeConnectionId.reset();
-        b.bridgeConnection = 0;
-    }
-    syncSlotBaseline(deviceId);
+    std::unique_lock<TrackedMutex> lock(bindingsMtx_);
+    const int index = findOrTake(deviceId);
+    if (index < 0) return;
+    HotSlot& slot = slots_[static_cast<size_t>(index)];
+    const ColdWrite write(slot);
+    slot.binding = SlotBinding{SLOT_SATELLITE, sessionHandle, controllerIndex, 0};
+    connectionIds_[static_cast<size_t>(index)].reset();
+    connectionNumbers_[static_cast<size_t>(index)] = 0;
+    lock.unlock();
+    syncSlotBaseline(slot);
 }
 
 void SlotTable::bindBridge(const int32_t deviceId, dish_bridge::BridgeConnectionId connectionId,
                            const SlotKind kind, const int controllerIndex) {
-    {
-        std::lock_guard<TrackedMutex> lock(slotsMtx_);
-        auto& b = slots_[deviceId];
-        b.kind = kind;
-        b.sessionHandle = -1;
-        b.controllerIndex = controllerIndex;
-        b.bridgeConnection = connectionId ? nextBridgeConnection() : 0;
-        b.bridgeConnectionId = std::move(connectionId);
-    }
-    syncSlotBaseline(deviceId);
+    std::unique_lock<TrackedMutex> lock(bindingsMtx_);
+    const int index = findOrTake(deviceId);
+    if (index < 0) return;
+    HotSlot& slot = slots_[static_cast<size_t>(index)];
+    const ColdWrite write(slot);
+    const uint32_t connection = connectionId ? nextBridgeConnection() : 0;
+    slot.binding = SlotBinding{kind, -1, controllerIndex, connection};
+    connectionIds_[static_cast<size_t>(index)] = std::move(connectionId);
+    connectionNumbers_[static_cast<size_t>(index)] = connection;
+    lock.unlock();
+    syncSlotBaseline(slot);
+}
+
+// Caller holds bindingsMtx_.
+void SlotTable::unbindLocked(const size_t index) {
+    HotSlot& slot = slots_[index];
+    const ColdWrite write(slot);
+    slot.binding = SlotBinding{};
+    connectionIds_[index].reset();
+    connectionNumbers_[index] = 0;
+    if (!slot.hasState) freeSlot(index);
 }
 
 void SlotTable::unbind(const int32_t deviceId) {
-    std::lock_guard<TrackedMutex> lock(slotsMtx_);
-    slots_.erase(deviceId);
+    const std::lock_guard<TrackedMutex> lock(bindingsMtx_);
+    const int index = find(deviceId);
+    if (index < 0) return;
+    unbindLocked(static_cast<size_t>(index));
 }
 
 void SlotTable::clearAll() {
-    std::lock_guard<TrackedMutex> lock(slotsMtx_);
-    slots_.clear();
+    const std::lock_guard<TrackedMutex> lock(bindingsMtx_);
+    for (size_t i = 0; i < MAX_SLOTS; i++) {
+        if (ids_[i].load(std::memory_order_relaxed) != 0) unbindLocked(i);
+    }
 }
 
 void SlotTable::setDeadzones(const int32_t deviceId, const float flatX, const float flatY,
                              const float flatZ, const float flatRZ) {
-    std::lock_guard<TrackedMutex> lock(devicesMtx_);
-    auto& s = devices_[deviceId];
-    s.flatX = flatX;
-    s.flatY = flatY;
-    s.flatZ = flatZ;
-    s.flatRZ = flatRZ;
+    const std::lock_guard<TrackedMutex> lock(bindingsMtx_);
+    const int index = findOrTake(deviceId);
+    if (index < 0) return;
+    HotSlot& slot = slots_[static_cast<size_t>(index)];
+    const ColdWrite write(slot);
+    slot.hasState = true;
+    slot.state.flatX = flatX;
+    slot.state.flatY = flatY;
+    slot.state.flatZ = flatZ;
+    slot.state.flatRZ = flatRZ;
 }
 
 void SlotTable::setQuirk(const int32_t deviceId, const uint8_t quirk) {
-    std::lock_guard<TrackedMutex> lock(devicesMtx_);
-    devices_[deviceId].quirk = quirk;
+    const std::lock_guard<TrackedMutex> lock(bindingsMtx_);
+    const int index = findOrTake(deviceId);
+    if (index < 0) return;
+    HotSlot& slot = slots_[static_cast<size_t>(index)];
+    const ColdWrite write(slot);
+    slot.hasState = true;
+    slot.state.quirk = quirk;
 }
 
-void SlotTable::setInspecting(const bool on) { inspect_.store(on, std::memory_order_relaxed); }
+// Opening the inspector refreshes every slot's mirror once, so a pad that is not reporting still
+// shows its current state.
+void SlotTable::setInspecting(const bool on) {
+    inspect_.store(on, std::memory_order_relaxed);
+    if (!on) return;
+    for (size_t i = 0; i < MAX_SLOTS; i++) {
+        const std::lock_guard<TrackedMutex> lock(bindingsMtx_);
+        if (ids_[i].load(std::memory_order_relaxed) == 0) continue;
+        const ColdWrite write(slots_[i]);
+        mirrorState(slots_[i]);
+    }
+}
 
 size_t SlotTable::formatDeviceState(const int32_t deviceId, char* buf, const size_t cap) {
-    std::lock_guard<TrackedMutex> lock(devicesMtx_);
-    auto it = devices_.find(deviceId);
-    if (it == devices_.end()) return 0;
-    return gamepad::formatDeviceStateJson(it->second, buf, cap);
+    const int index = find(deviceId);
+    if (index < 0) return 0;
+    const DeviceState s = readMirror(slots_[static_cast<size_t>(index)]);
+    if (find(deviceId) != index) return 0;
+    return gamepad::formatDeviceStateJson(s, buf, cap);
 }
 
 uint64_t SlotTable::frameworkEventCount(const int32_t deviceId) {
-    std::lock_guard<TrackedMutex> lock(devicesMtx_);
-    auto it = frameworkEventCounts_.find(deviceId);
-    return it == frameworkEventCounts_.end() ? 0 : it->second;
-}
-
-// Caller holds the slot lock. Never 0, which names no connection.
-uint32_t SlotTable::nextBridgeConnection() {
-    if (++lastBridgeConnection_ == 0) ++lastBridgeConnection_;
-    return lastBridgeConnection_;
+    const int index = find(deviceId);
+    if (index < 0) return 0;
+    const uint64_t count =
+        slots_[static_cast<size_t>(index)].frameworkEvents.load(std::memory_order_relaxed);
+    return find(deviceId) == index ? count : 0;
 }
 
 dish_bridge::BridgeConnectionId SlotTable::bridgeConnectionId(const uint32_t connection) {
     if (connection == 0) return nullptr;
-    std::lock_guard<TrackedMutex> lock(slotsMtx_);
-    for (const auto& kv : slots_) {
-        if (kv.second.bridgeConnection == connection) return kv.second.bridgeConnectionId;
+    const std::lock_guard<TrackedMutex> lock(bindingsMtx_);
+    for (size_t i = 0; i < MAX_SLOTS; i++) {
+        if (connectionNumbers_[i] == connection) return connectionIds_[i];
     }
     return nullptr;
 }

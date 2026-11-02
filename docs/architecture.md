@@ -83,11 +83,16 @@ The Kotlin → JNI → `sendto()` chain runs at gamepad polling rate
 - No allocations per event: the JNI uses a preallocated
   `XUSB_REPORT` and a packed `Int` for HID button + hat (a `Pair`
   would burn ~6 KB/s of garbage at 250 Hz).
-- The send path takes the device and slot locks, the session map's
-  briefly, and its session's send turn. A physical pad's datagram
-  takes its counter under the device and slot locks and is encrypted
-  and sent after they are released, with only the turn held, which
-  keeps the counters in order on the wire.
+- The send path takes no lock. A pad's slot and its session live in
+  fixed hot tables (`slot_table.h`, `session_table.h`) that the
+  reporting thread finds by scanning one packed line; the pad's one
+  reporting thread (its USB poller, or the UI thread for a framework
+  pad) holds its slot through an epoch, which the cold path (binds,
+  resets, configuration) waits out under a generation of its own. The
+  datagram is framed on the stack, then sealed and sent holding the
+  session's send gate (a compare-and-swap, yielded on), which keeps the
+  counters in order on the wire; a close or a re-key takes the same
+  gate, so neither ever overlaps a send under the old socket or key.
 - `IP_TOS = 0xB8` (DSCP EF) and `MSG_DONTWAIT` stay set on every
   send.
 
@@ -520,10 +525,11 @@ can't reach are still unit-testable from a host build:
   haptic Opus packets, drop-oldest) and a wake that costs a producer one load
   while its worker is busy and a semaphore post only when it sleeps.
 - `session_table.{cpp,h}`, `slot_table.{cpp,h}`, `send_path.{cpp,h}` and
-  `receive_path.{cpp,h}`: the native hot path, JNI-free. The session map and
-  its sockets; every pad's state, its slot binding and the send-on-change
-  latch; framing, the send turn, sealing and `sendto`; opening and
-  dispatching what the satellite sends back. What leaves through Kotlin goes
+  `receive_path.{cpp,h}`: the native hot path, JNI-free. The fixed session
+  table (eight entries) and its sockets, keys and send gates; the fixed slot
+  table (sixteen pads), with every pad's state, its slot binding and the
+  send-on-change latch; framing, sealing and `sendto` under the gate; opening
+  and dispatching what the satellite sends back. What leaves through Kotlin goes
   through a sink the JNI layer implements (`BridgeSink` for Bluetooth and
   Moonlight slots, `FeedbackSink` for rumble, LEDs and audio), and the
   socket calls through `udp_socket.h`, so the host tests drive them on a

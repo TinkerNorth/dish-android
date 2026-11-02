@@ -45,11 +45,18 @@ class ReceivePath : public ::testing::Test {
     void SetUp() override {
         handle = table.open("127.0.0.1", 9);
         ASSERT_GT(handle, 0);
-        session = table.get(handle);
-        dish_session::setConnectionParams(*session, kToken, key.bytes, 3);
+        session = table.find(handle);
+        dish_session::setConnectionParams(session, kToken, key.bytes, 3);
     }
 
     void TearDown() override { table.close(handle); }
+
+    // A second session of the same token and key, aimed at a peer on loopback.
+    dish_session::SessionRef sessionTo(const fake_satellite::Peer& peer) {
+        const dish_session::SessionRef s = table.find(table.open("127.0.0.1", peer.port()));
+        dish_session::setConnectionParams(s, kToken, key.bytes, 3);
+        return s;
+    }
 
     Bytes fromSatellite(const uint32_t counter, const uint16_t msgType, const Bytes& payload) {
         return fake_satellite::sealToClient(kToken, key.bytes, counter, msgType, payload.data(),
@@ -57,14 +64,13 @@ class ReceivePath : public ::testing::Test {
     }
 
     int deliver(const Bytes& datagram) {
-        return dish_receive::handleDatagram(session, handle, datagram.data(), datagram.size(),
-                                            sink);
+        return dish_receive::handleDatagram(session, datagram.data(), datagram.size(), sink);
     }
 
     const Key key = sessionKey();
     dish_session::SessionTable table;
     int handle = -1;
-    std::shared_ptr<dish_session::Session> session;
+    dish_session::SessionRef session;
     recording::Feedback sink;
 };
 
@@ -188,10 +194,9 @@ TEST_F(ReceivePath, AForgedDatagramIsDroppedWithoutMovingTheReplayGuard) {
 }
 
 TEST_F(ReceivePath, TheClientsOwnDirectionDoesNotOpen) {
-    session->port = dish_net::DatagramPort{};
     fake_satellite::Peer echo;
-    ASSERT_TRUE(dish_net::ipv4Destination("127.0.0.1", echo.port(), session->dest));
-    ASSERT_TRUE(dish_send::sendEncrypted(session, dish_wire::MSG_HEARTBEAT_ACK, nullptr, 0));
+    const dish_session::SessionRef toEcho = sessionTo(echo);
+    ASSERT_TRUE(dish_send::sendEncrypted(toEcho, dish_wire::MSG_HEARTBEAT_ACK, nullptr, 0));
     const Bytes ownDirection = echo.receive(kReceiveTimeoutMs);
     ASSERT_FALSE(ownDirection.empty());
     EXPECT_EQ(deliver(ownDirection), 0);
@@ -220,12 +225,11 @@ TEST_F(ReceivePath, ARuntAnOversizeDatagramAndAHeaderlessMessageAreDropped) {
 
 TEST_F(ReceivePath, TheReceiveLoopReadsWhatTheSatelliteSendsBack) {
     fake_satellite::Peer satellite;
-    session->port = dish_net::DatagramPort{};
-    ASSERT_TRUE(dish_net::ipv4Destination("127.0.0.1", satellite.port(), session->dest));
-    ASSERT_TRUE(dish_send::sendEncrypted(session, dish_wire::MSG_HEARTBEAT_PING, nullptr, 0));
+    const dish_session::SessionRef toSatellite = sessionTo(satellite);
+    ASSERT_TRUE(dish_send::sendEncrypted(toSatellite, dish_wire::MSG_HEARTBEAT_PING, nullptr, 0));
     ASSERT_FALSE(satellite.receive(kReceiveTimeoutMs).empty());
     ASSERT_TRUE(satellite.reply(fromSatellite(1, dish_wire::MSG_RUMBLE, {1, 0, 9, 0, 8, 0, 7})));
-    EXPECT_EQ(dish_receive::receiveDatagram(table, handle, sink), 1);
+    EXPECT_EQ(dish_receive::receiveDatagram(table, toSatellite.handle, sink), 1);
     ASSERT_EQ(sink.rumbles.size(), 1u);
     EXPECT_EQ(sink.rumbles[0].strong, 9);
 }
@@ -259,7 +263,7 @@ TEST_F(ReceivePath, SpeakerFramesDecodeInOrderOnTheirOwnLane) {
             encoder->encode(stereo.data(), dish_audio::AUDIO_FRAME_SAMPLES, packet, sizeof(packet));
         ASSERT_GT(len, 0u);
         const int frames = dish_receive::decodeSpeakerAudio(
-            *session, 1, dish_receive::AUDIO_LANE_HAPTICS, seq, packet, len, pcm, concealed);
+            session, 1, dish_receive::AUDIO_LANE_HAPTICS, seq, packet, len, pcm, concealed);
         for (int i = 0; i < frames; i++) EXPECT_FALSE(concealed[i]);
         produced += frames;
     }

@@ -5,15 +5,13 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <memory>
-#include <mutex>
 
 #include "gamepad_input.h"
 #include "session_table.h"
 #include "wire_encoders.h"
 
-// Every datagram a session sends: framed, given the session's next counter under its send turn,
-// sealed and put on the wire through the session's DatagramPort.
+// Every datagram a session sends: framed on the sender's stack, then, holding the session's send
+// gate, given the session's next counter, sealed and put on the wire through its DatagramPort.
 namespace dish_send {
 
 #pragma pack(push, 1)
@@ -39,42 +37,37 @@ inline constexpr int HEARTBEAT_INTERVAL_DEFAULT_MS = 2000;
 inline constexpr int HEARTBEAT_INTERVAL_PROBE_MS = 250;
 inline constexpr int HEARTBEAT_DEATH_TIMEOUT_MS = 10000;
 
-// One datagram's plaintext and counter, waiting to be sealed and sent, holding its session's turn
-// and a reference that keeps the session, and so the turn's mutex, alive until then.
-struct PendingDatagram {
-    std::shared_ptr<dish_session::Session> session;
-    std::unique_lock<TrackedMutex> turn;
-    uint32_t counter = 0;
+// Which per-controller tally a datagram counts toward once it reaches its session.
+enum class Tally : uint8_t { None, Gamepad, Motion };
+
+// One datagram's plaintext, framed and waiting for its counter.
+struct Framed {
     uint16_t msgType = 0;
     uint16_t innerLen = 0;
+    Tally tally = Tally::None;
+    uint8_t controller = 0;
     uint8_t inner[dish_wire::INNER_HEADER_BYTES + dish_wire::MAX_INNER_PAYLOAD_BYTES];
 };
 
-// Frames one datagram's plaintext into out and takes the session's turn and its next counter, held
-// until transmitDatagram has sent it; false, with nothing held, for a payload past the contract's
-// ceiling, an exhausted counter or a closed socket. A thread stages at most one datagram of a
-// session before sending it: a second would wait on the turn the thread already holds.
-bool stageDatagram(const std::shared_ptr<dish_session::Session>& session, uint16_t msgType,
-                   const uint8_t* payload, uint16_t payloadLen, PendingDatagram& out);
+// Frames one datagram's plaintext into out; false for a payload past the contract's ceiling.
+bool frame(Framed& out, uint16_t msgType, const uint8_t* payload, uint16_t payloadLen);
 
-// Seals a staged datagram under its counter, sends it and gives the session's turn back; one never
-// staged sends nothing. A send the socket refuses for lack of buffer space is a soft drop: true,
-// with its counter spent.
-bool transmitDatagram(PendingDatagram& datagram);
+// Seals the framed datagrams under consecutive counters and sends them back to back, holding the
+// session's gate once for all of them. Answers how many the socket took: a send refused for lack
+// of buffer space is a soft drop that counts as taken, with its counter spent. Nothing leaves a
+// session that is closed or whose counter is exhausted.
+size_t sendFramed(const dish_session::SessionRef& session, const Framed* datagrams, size_t count);
 
-bool sendEncrypted(const std::shared_ptr<dish_session::Session>& session, uint16_t msgType,
+bool sendEncrypted(const dish_session::SessionRef& session, uint16_t msgType,
                    const uint8_t* payload, uint16_t payloadLen);
-
-// A physical pad's datagram, staged under the device and slot locks, is sealed and sent once the
-// caller has let them go; a gamepad report also closes the stage-1 bench window.
-void transmitPublished(PendingDatagram& datagram);
 
 XUSB_REPORT xusbReportOf(const gamepad::DeviceState& s);
 
-void stageGamepadReport(const std::shared_ptr<dish_session::Session>& session, int controllerIndex,
-                        const XUSB_REPORT& report, PendingDatagram& out);
+// Frames a MSG_GAMEPAD_DATA for one controller: its slot byte, then the wire XUSB report.
+void frameGamepadReport(Framed& out, int controllerIndex, const XUSB_REPORT& report);
 
-void sendGamepadReport(const std::shared_ptr<dish_session::Session>& session, int controllerIndex,
+// True when the report left for the session.
+bool sendGamepadReport(const dish_session::SessionRef& session, int controllerIndex,
                        const XUSB_REPORT& report);
 
 struct MotionSample {
@@ -83,32 +76,29 @@ struct MotionSample {
     uint32_t timestampDeltaUs;
 };
 
-// A USB-direct pad's motion: counted, then staged.
-void stageMotion(const std::shared_ptr<dish_session::Session>& session, int controllerIndex,
-                 const MotionSample& m, PendingDatagram& out);
+void frameMotion(Framed& out, int controllerIndex, const MotionSample& m);
 
-// A framework pad's motion from the sensor thread: sent, then counted.
-void sendMotion(const std::shared_ptr<dish_session::Session>& session, int controllerIndex,
+void sendMotion(const dish_session::SessionRef& session, int controllerIndex,
                 const MotionSample& m);
 
-void sendBattery(const std::shared_ptr<dish_session::Session>& session, int controllerIndex,
-                 int level, int status);
+void sendBattery(const dish_session::SessionRef& session, int controllerIndex, int level,
+                 int status);
 
-void stageTouchpadFrame(const std::shared_ptr<dish_session::Session>& session, uint8_t idx,
-                        const gamepad::TouchpadState& t, bool rightPressed, bool middlePressed,
-                        uint32_t eventTimeMs, int16_t scrollDelta, PendingDatagram& out);
+// Protocol 2 widened the payload with the mouse buttons and the wheel; a protocol 1 satellite
+// still gets the 16-byte form, which has neither.
+void frameTouchpad(Framed& out, int32_t protocolVersion, uint8_t idx,
+                   const gamepad::TouchpadState& t, bool rightPressed, bool middlePressed,
+                   uint32_t eventTimeMs, int16_t scrollDelta);
 
-void sendTouchpadFrame(const std::shared_ptr<dish_session::Session>& session, uint8_t idx,
+void sendTouchpadFrame(const dish_session::SessionRef& session, uint8_t idx,
                        const gamepad::TouchpadState& t, bool rightPressed, bool middlePressed,
                        uint32_t eventTimeMs, int16_t scrollDelta);
 
 // One 20 ms mono window (dish_audio::AUDIO_FRAME_SAMPLES samples) encoded and sent as
 // MSG_MIC_AUDIO; false when nothing left the device.
-bool sendMicFrame(const std::shared_ptr<dish_session::Session>& session, uint8_t idx,
-                  const int16_t* pcm);
+bool sendMicFrame(const dish_session::SessionRef& session, uint8_t idx, const int16_t* pcm);
 
 // The heartbeat thread's body: a ping per interval until the session's heartbeat stops.
-void runHeartbeat(const std::shared_ptr<dish_session::Session>& session,
-                  const std::atomic<int>& intervalMs);
+void runHeartbeat(const dish_session::SessionRef& session, const std::atomic<int>& intervalMs);
 
 } // namespace dish_send
