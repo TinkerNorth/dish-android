@@ -523,6 +523,12 @@ can't reach are still unit-testable from a host build:
   socket calls through `udp_socket.h`, so the host tests drive them on a
   loopback socket (`send_path_test` holds them to the bytes pinned in
   `wire_vectors.h`).
+- `tracked_mutex.h`: every hot-path mutex is a named `TrackedMutex` and every
+  thread that takes one runs in a `ThreadRole`. In the app they are a
+  `std::mutex` and nothing; in the host build's `DISH_LOCK_STATS` variant they
+  count each lock's acquisitions, waits and holds per role, which
+  `lock_laws_test` holds to lists that only shrink and `bench_send_path_lockstats`
+  reports (`tools/bench/README.md`, "Host bench").
 - `satellite_jni.cpp`: the Android-only glue. Argument marshalling, the
   Kotlin upcalls, the bridge and speaker-audio dispatch threads that make
   them, the GameActivity filters and the JNI registration. This file does
