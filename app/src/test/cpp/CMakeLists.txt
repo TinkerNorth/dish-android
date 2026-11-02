@@ -240,19 +240,28 @@ if(WIN32)
 else()
     list(APPEND DISH_CORE_SOURCES "${SATELLITE_CPP}/udp_socket.cpp")
 endif()
+# dish_core_lockstats is the same units in the DISH_LOCK_STATS build: every named lock counts its
+# acquisitions per thread role (tracked_mutex.h).
 add_library(dish_core STATIC ${DISH_CORE_SOURCES})
-target_include_directories(dish_core PUBLIC "${SATELLITE_CPP}")
-target_compile_options(dish_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
-target_link_libraries(dish_core PUBLIC sodium_host opus Threads::Threads)
-if(WIN32)
-    target_link_libraries(dish_core PUBLIC ws2_32)
-endif()
+add_library(dish_core_lockstats STATIC ${DISH_CORE_SOURCES})
+target_compile_definitions(dish_core_lockstats PUBLIC DISH_LOCK_STATS)
+foreach(core dish_core dish_core_lockstats)
+    target_include_directories(${core} PUBLIC "${SATELLITE_CPP}")
+    target_compile_options(${core} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_link_libraries(${core} PUBLIC sodium_host opus Threads::Threads)
+    if(WIN32)
+        target_link_libraries(${core} PUBLIC ws2_32)
+    endif()
+endforeach()
 
 # The satellite's end of a session on loopback, for the tests that put datagrams on a socket.
 add_library(fake_satellite STATIC fake_satellite.cpp)
-target_include_directories(fake_satellite PUBLIC "${CMAKE_SOURCE_DIR}")
+target_include_directories(fake_satellite PUBLIC "${CMAKE_SOURCE_DIR}" "${SATELLITE_CPP}")
 target_compile_options(fake_satellite PRIVATE -Wall -Wextra -Wpedantic -Werror)
-target_link_libraries(fake_satellite PUBLIC dish_core)
+target_link_libraries(fake_satellite PUBLIC sodium_host)
+if(WIN32)
+    target_link_libraries(fake_satellite PUBLIC ws2_32)
+endif()
 
 # tracked_mutex.h as the app builds it, and in the DISH_LOCK_STATS build the lock laws and the
 # bench's lock table read.
@@ -270,8 +279,13 @@ foreach(unit_test udp_socket_test session_table_test send_path_test slot_table_t
                   receive_path_test)
     add_executable(${unit_test} ${unit_test}.cpp)
     target_compile_options(${unit_test} PRIVATE -Wall -Wextra -Wpedantic -Werror)
-    target_link_libraries(${unit_test} PRIVATE GTest::gtest_main fake_satellite)
+    target_link_libraries(${unit_test} PRIVATE GTest::gtest_main fake_satellite dish_core)
 endforeach()
+
+# Which locks each thread role takes on the hot path, held to lists that only shrink.
+add_executable(lock_laws_test lock_laws_test.cpp)
+target_compile_options(lock_laws_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_link_libraries(lock_laws_test PRIVATE GTest::gtest_main fake_satellite dish_core_lockstats)
 
 include(GoogleTest)
 
@@ -296,6 +310,7 @@ gtest_discover_tests(slot_table_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(receive_path_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(tracked_mutex_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(tracked_mutex_stats_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(lock_laws_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(audio_jitter_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(heartbeat_thread_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(hotpath_latency_test DISCOVERY_MODE PRE_TEST)
