@@ -7,7 +7,7 @@
 #            cmake --build build/native-test
 #            ctest --test-dir build/native-test --output-on-failure
 cmake_minimum_required(VERSION 3.22)
-project(satellite_host_tests CXX)
+project(satellite_host_tests C CXX)
 
 # Extracted archives take the extraction time, as the app build's CMakeLists also asks: the
 # FetchContent tarballs below are content-addressed by URL_HASH, so a changed URL rebuilds.
@@ -35,6 +35,84 @@ enable_testing()
 find_package(Threads REQUIRED)
 
 set(SATELLITE_CPP "${CMAKE_SOURCE_DIR}/../../main/cpp")
+
+# The pinned libsodium the app seals with (src/main/cpp/CMakeLists.txt), built from the same
+# release tarball, so the send path's bytes and its seal cost are those of the one that ships.
+FetchContent_Declare(
+    libsodium
+    URL      https://download.libsodium.org/libsodium/releases/libsodium-1.0.20-stable.tar.gz
+    URL_HASH SHA256=b6b1d2a8802cd8bfa611638c0e9ce31d14ef324e16062c39a76854091cba6d7f
+)
+FetchContent_MakeAvailable(libsodium)
+set(SODIUM_SRC ${libsodium_SOURCE_DIR}/src/libsodium)
+file(WRITE ${SODIUM_SRC}/include/sodium/version.h
+"#ifndef sodium_version_H\n\
+#define sodium_version_H\n\
+#include \"export.h\"\n\
+#define SODIUM_VERSION_STRING \"1.0.20\"\n\
+#define SODIUM_LIBRARY_VERSION_MAJOR 26\n\
+#define SODIUM_LIBRARY_VERSION_MINOR 2\n\
+SODIUM_EXPORT const char *sodium_version_string(void);\n\
+SODIUM_EXPORT int sodium_library_version_major(void);\n\
+SODIUM_EXPORT int sodium_library_version_minor(void);\n\
+SODIUM_EXPORT int sodium_library_minimal(void);\n\
+#endif\n")
+file(GLOB_RECURSE SODIUM_SOURCES ${SODIUM_SRC}/*.c)
+add_library(sodium_host STATIC ${SODIUM_SOURCES})
+target_include_directories(sodium_host SYSTEM
+    PUBLIC  ${SODIUM_SRC}/include
+    PRIVATE ${SODIUM_SRC}/include/sodium
+)
+target_compile_definitions(sodium_host
+    PUBLIC  SODIUM_STATIC=1
+    PRIVATE CONFIGURED=1 NATIVE_LITTLE_ENDIAN=1 HAVE_INLINE_ASM=1 HAVE_ATOMIC_OPS=1
+            __STDC_LIMIT_MACROS=1 __STDC_CONSTANT_MACROS=1)
+# The app's POSIX feature set on a POSIX host; a Windows host takes libsodium's own _WIN32 paths
+# (VirtualLock, RtlGenRandom from advapi32) instead. PE has no symbol visibility, so there the
+# software AES takes its static lookup table rather than the hidden-visibility one.
+if(WIN32)
+    target_link_libraries(sodium_host PUBLIC advapi32)
+    target_compile_definitions(sodium_host PRIVATE FAVOR_PERFORMANCE=1)
+else()
+    target_compile_definitions(sodium_host PRIVATE
+        HAVE_WEAK_SYMBOLS=1 HAVE_ALLOCA_H=1 HAVE_MMAP=1 HAVE_MLOCK=1 HAVE_MADVISE=1
+        HAVE_MPROTECT=1 HAVE_POSIX_MEMALIGN=1 HAVE_SYS_MMAN_H=1 HAVE_SYSCONF=1)
+endif()
+# libsodium's 128-bit field arithmetic where its own configure would enable it: the app build's
+# probe, unchanged.
+function(check_sodium_ti_mode)
+    include(CheckCSourceCompiles)
+    set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+    set(CMAKE_REQUIRED_DEFINITIONS -DNATIVE_LITTLE_ENDIAN=1)
+    check_c_source_compiles([=[
+#if !defined(__clang__) && !defined(__GNUC__) && !defined(__SIZEOF_INT128__)
+# error mode(TI) is a gcc extension, and __int128 is not available
+#endif
+#if defined(__clang__) && !defined(__x86_64__) && !defined(__aarch64__)
+# error clang does not properly handle the 128-bit type on 32-bit systems
+#endif
+#ifndef NATIVE_LITTLE_ENDIAN
+# error libsodium currently expects a little endian CPU for the 128-bit type
+#endif
+#include <stddef.h>
+#include <stdint.h>
+#if defined(__SIZEOF_INT128__)
+typedef unsigned __int128 uint128_t;
+#else
+typedef unsigned uint128_t __attribute__((mode(TI)));
+#endif
+void fcontract(uint128_t *t) {
+  *t += 0x8000000000000 - 1;
+  *t *= *t;
+  *t >>= 84;
+}
+]=] SODIUM_HOST_HAVE_TI_MODE)
+endfunction()
+check_sodium_ti_mode()
+if(SODIUM_HOST_HAVE_TI_MODE)
+    target_compile_definitions(sodium_host PRIVATE HAVE_TI_MODE=1)
+endif()
+target_compile_options(sodium_host PRIVATE -O3)
 
 add_executable(gamepad_input_test
     gamepad_input_test.cpp
@@ -103,6 +181,14 @@ target_include_directories(bridge_connection_ids_test PRIVATE "${SATELLITE_CPP}"
 target_compile_options(bridge_connection_ids_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(bridge_connection_ids_test PRIVATE GTest::gtest_main)
 
+# The datagrams the send path puts on the wire, pinned byte for byte (wire_vectors.h).
+add_executable(send_path_test
+    send_path_test.cpp
+)
+target_include_directories(send_path_test PRIVATE "${SATELLITE_CPP}")
+target_compile_options(send_path_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_link_libraries(send_path_test PRIVATE GTest::gtest_main sodium_host)
+
 add_executable(heartbeat_thread_test
     heartbeat_thread_test.cpp
 )
@@ -161,6 +247,7 @@ gtest_discover_tests(wire_encoders_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(usb_parsers_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(usb_hid_descriptor_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(send_counter_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(send_path_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(audio_jitter_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(heartbeat_thread_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(hotpath_latency_test DISCOVERY_MODE PRE_TEST)
