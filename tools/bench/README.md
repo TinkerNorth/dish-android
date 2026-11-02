@@ -308,10 +308,29 @@ to 375 of them, depending on the run): three runs after read 38.4, 34.9 and 35.1
 against 27.1 here and 36.2 in the loaded run above, which a paired rerun on an idle machine should
 settle.
 
-The device run is still owed. Take stage 1 as in "Running it" above, with a DualSense in
-USB-direct mode (each of its URBs carries a report, motion and touch), on a build from before
-these commits and on one from after, about 30 s each while a second pad or the on-screen pad also
-streams, and compare `stage1_hotpath_us`.
+### On the device: a Switch Pro on a Pixel 8, before and after
+
+The first device record, 2026-11-02. Pixel 8 (Android 17), a Nintendo Switch Pro controller on USB
+in Direct mode, streaming over Wi-Fi to a Satellite 2.1.11 on a Windows 11 PC. Each build is the
+`benchmark` build type (release-grade native, debug-signed, the bench compiled in), armed with
+`am broadcast -a com.tinkernorth.dish.HOTPATH_BENCH -p com.tinkernorth.dish --ez on true` and read
+from the `DishHotpathBench` log lines. "Before" is `cdf665eb`, the measurement layer on the old
+lock chain; "after" is this branch. One pad, one session, sticks moving; the pad reports every
+16 ms (`urb_gap_us` p50 15.95 ms on both builds) and carries its IMU in every report, so each
+URB sends a gamepad report when it changed and a motion sample. Stage 1 is the URB in hand to
+the gamepad datagram leaving `sendto`.
+
+| build | reports | p50 us | p90 us | p99 us | max us |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| before (`cdf665eb`) | 641 | 391.7 | 536.5 | 1053.4 | 5129.1 |
+| after (this branch) | 1881 | 369.0 | 502.4 | 900.6 | 2203.5 |
+
+A lone 62 Hz pad contends with nothing, and the core sleeps for most of each 16 ms, so the median
+is Android's `sendto` on a core that has just woken rather than anything the lock chain cost; the
+tail is where the locks were, and it tightens. The heartbeat round trip read 3 to 13 ms at the
+median on both builds, with the same occasional spike and the same one-in-six lost ack on both, so
+those belong to the Wi-Fi link. Still owed: a pad that reports at 1 kHz (a DualSense), and two
+pads at once, which is where the host bench shows the difference.
 
 ## Release measurements
 
