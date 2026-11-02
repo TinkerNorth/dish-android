@@ -450,12 +450,14 @@ run. Waits and holds in microseconds.
 Stream A's median stays between 11 and 17 us in every scenario and its p99 between 23 and 50 us;
 with the mic at 1000 frames a second its median in S4 to S6 rises from 12 to 15 us to 16 to 17
 us. The tails are the runner's. S1, one poller alone with no lock on its path, had one report of
-3.2 ms against a p99.9 of 33 us. S4 to S6 put seven to nine threads on the four hardware threads,
-and there the worst of a 250 Hz stream's 750 reports (its p99.9) reaches 0.6 ms (S5 B with the
-1 kHz mic) while those streams' p99s stay between 54 and 74 us. The harness counted what it
-counted on the desktop: in S4 to S6 the fake satellite received 2 pings, 150 mic frames (3000 at
-1 kHz) and 6 battery datagrams; in S5 and S6 it sent 303 rumble and 31 lightbar datagrams, of
-which the receive loop handed on 301 and 30 before it stopped, and S6 rebound B's slot 7 times
-(hence B's 400 datagrams). S7 carried input, motion and touch in 171 of its reports. The locks
-left are the desktop's: the bench's own thread closing the session, the mic encoder holding
-`session.audio` for up to 0.5 ms across an encode, and the binding thread.
+3.2 ms against a p99.9 of 33 us; the branch's next run (run 41429083038, `70e3c0be` into `main`,
+the same image) had S1's worst report at 69.0 us, its p99 at 17.8 us and its median at 10.0 us,
+with stream A's median between 10 and 17 us everywhere. S4 to S6 put seven to nine threads on the
+four hardware threads, and there the worst of a 250 Hz stream's 750 reports (its p99.9) reaches
+0.6 ms (S5 B with the 1 kHz mic) while those streams' p99s stay between 54 and 74 us. The harness
+counted what it counted on the desktop: in S4 to S6 the fake satellite received 2 pings, 150 mic
+frames (3000 at 1 kHz) and 6 battery datagrams; in S5 and S6 it sent 303 rumble and 31 lightbar
+datagrams, of which the receive loop handed on 301 and 30 before it stopped, and S6 rebound B's
+slot 7 times (hence B's 400 datagrams). S7 carried input, motion and touch in 171 of its reports.
+The locks left are the desktop's: the bench's own thread closing the session, the mic encoder
+holding `session.audio` for up to 0.5 ms across an encode, and the binding thread.
