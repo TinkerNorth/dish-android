@@ -287,6 +287,28 @@ add_executable(lock_laws_test lock_laws_test.cpp)
 target_compile_options(lock_laws_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(lock_laws_test PRIVATE GTest::gtest_main fake_satellite dish_core_lockstats)
 
+# The host bench (tools/bench/README.md, "Host bench"). Its --smoke runs every scenario briefly and
+# fails only on the harness's own accounting, never on a latency.
+option(DISH_BENCH "Build bench_send_path and run its --smoke under ctest" ON)
+option(DISH_BENCH_LOCKSTATS "Build bench_send_path_lockstats, the bench with lock statistics" OFF)
+if(DISH_BENCH)
+    add_executable(bench_send_path send_path_bench.cpp)
+    target_link_libraries(bench_send_path PRIVATE fake_satellite dish_core)
+    add_test(NAME send_path_bench_smoke COMMAND bench_send_path --smoke)
+endif()
+if(DISH_BENCH_LOCKSTATS)
+    add_executable(bench_send_path_lockstats send_path_bench.cpp)
+    target_link_libraries(bench_send_path_lockstats PRIVATE fake_satellite dish_core_lockstats)
+    add_test(NAME send_path_bench_lockstats_smoke
+             COMMAND bench_send_path_lockstats --smoke
+                     --json "${CMAKE_BINARY_DIR}/send_path_bench_lockstats_smoke.json")
+endif()
+foreach(bench bench_send_path bench_send_path_lockstats)
+    if(TARGET ${bench})
+        target_compile_options(${bench} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    endif()
+endforeach()
+
 include(GoogleTest)
 
 # DISCOVERY_MODE PRE_TEST, not the default POST_BUILD: CMake 4.x names the
