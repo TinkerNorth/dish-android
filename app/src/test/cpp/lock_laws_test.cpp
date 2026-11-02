@@ -140,17 +140,20 @@ int64_t nowNs() {
         .count();
 }
 
-// What usb_host.cpp's poller does with one decoded report: the report, then motion at its own
-// cadence, then touch through the send-on-change gate.
+// What usb_host.cpp's poller does with one decoded report: the report, motion at its own cadence
+// and touch through the send-on-change gate, handed over as one URB.
 void publishLikeThePoller(dish_slots::SlotTable& slots, const int32_t device, const uint64_t k,
                           gamepad::TouchpadGate& gate) {
-    slots.applyUsbReport(device, usbReport(k));
-    if (k % MOTION_EVERY == 0) {
-        const dish_send::MotionSample motion{{(int16_t)k, 2, 3}, {4, 5, 6}, 8000};
-        slots.applyUsbMotion(device, motion);
+    const gamepad::DeviceState report = usbReport(k);
+    dish_slots::UsbFrame frame;
+    frame.report = &report;
+    const dish_send::MotionSample motion{{(int16_t)k, 2, 3}, {4, 5, 6}, 8000};
+    if (k % MOTION_EVERY == 0) frame.motion = &motion;
+    if (gate.decide(movingFinger(k), nowNs()) != gamepad::TouchpadSend::SKIP) {
+        frame.touch = &gate.lastSent();
+        frame.touchEventTimeMs = (uint32_t)gate.lastEventTimeMs();
     }
-    if (gate.decide(movingFinger(k), nowNs()) == gamepad::TouchpadSend::SKIP) return;
-    slots.applyUsbTouchpad(device, gate.lastSent(), (uint32_t)gate.lastEventTimeMs());
+    slots.applyUsbFrame(device, frame);
 }
 
 gamepad::FrameworkAxes frameworkSample(const uint64_t k) {

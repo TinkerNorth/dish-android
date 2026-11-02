@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "gamepad_input.h"
+#include "slot_table.h"
 
 namespace dispatch {
 
@@ -16,10 +17,9 @@ void resetAndPublish(int32_t deviceId);
 
 void forgetDevice(int32_t deviceId);
 
-void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyroZ, int16_t accelX,
-                    int16_t accelY, int16_t accelZ, uint32_t timestampDeltaUs);
-
-void applyUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_t eventTimeMs);
+// Everything one URB produced: the pad state, a motion sample due at its cadence and a touch frame
+// the send-on-change gate let through, sent under one hold of the session's gate.
+void applyUsbFrame(int32_t deviceId, const dish_slots::UsbFrame& frame);
 
 // The pad's own mic-mute button flipped its latch. The wire bit rides the ordinary input report
 // (the decoder already folded it in); this only mirrors the new state up to Kotlin, where the

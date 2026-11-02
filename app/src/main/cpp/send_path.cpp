@@ -118,10 +118,12 @@ bool frame(Framed& out, const uint16_t msgType, const uint8_t* payload, const ui
     return true;
 }
 
+// The bench's mark is taken after the gate is let go: only the time it closes at is read under it.
 size_t sendFramed(const SessionRef& ref, const Framed* datagrams, const size_t count) {
     if (!ref || count == 0) return 0;
     Session& s = *ref.entry;
     size_t taken = 0;
+    int64_t stage1SentNs = 0;
     s.gate.hold();
     const Material m = dish_session::materialUnderGate(s);
     const bool open = m.handle == ref.handle && m.sock >= 0;
@@ -130,8 +132,12 @@ size_t sendFramed(const SessionRef& ref, const Framed* datagrams, const size_t c
         if (!dish_counter::acquireSendCounter(s.counter, &counter)) break;
         countFor(s, datagrams[i]);
         if (sealAndSend(s, m, counter, datagrams[i])) taken++;
+        if (datagrams[i].closesStage1 && hotpath::enabled()) {
+            stage1SentNs = hotpath::nowMonotonicNs();
+        }
     }
     s.gate.release();
+    if (stage1SentNs != 0) hotpath::markGamepadSentAt(stage1SentNs);
     return taken;
 }
 

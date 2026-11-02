@@ -156,19 +156,24 @@ void publishMicMuteEdge(DeviceCtx& ctx, bool& lastMicMuted) {
     dispatch::applyPadMicMute(ctx.syntheticDeviceId, lastMicMuted);
 }
 
-void publishMotion(DeviceCtx& ctx, const gamepad::DeviceState& scratch, const int64_t nowNs) {
+// The motion sample this report is due to carry, no closer than kMotionMinIntervalNs to the last.
+bool dueMotion(DeviceCtx& ctx, const gamepad::DeviceState& scratch, const int64_t nowNs,
+               dish_send::MotionSample& out) {
     const bool isFirstSample = ctx.lastMotionNs == 0;
     const bool intervalElapsed = nowNs - ctx.lastMotionNs >= kMotionMinIntervalNs;
-    if (!isFirstSample && !intervalElapsed) return;
+    if (!isFirstSample && !intervalElapsed) return false;
 
     const uint32_t deltaUs = isFirstSample ? 0 : (uint32_t)((nowNs - ctx.lastMotionNs) / 1000);
     ctx.lastMotionNs = nowNs;
     ctx.motionCount.fetch_add(1, std::memory_order_relaxed);
-    dispatch::applyUsbMotion(ctx.syntheticDeviceId, scratch.gyroX, scratch.gyroY, scratch.gyroZ,
-                             scratch.accelX, scratch.accelY, scratch.accelZ, deltaUs);
+    out = dish_send::MotionSample{{scratch.gyroX, scratch.gyroY, scratch.gyroZ},
+                                  {scratch.accelX, scratch.accelY, scratch.accelZ},
+                                  deltaUs};
+    return true;
 }
 
-void publishTouch(DeviceCtx& ctx, const gamepad::DeviceState& scratch, const int64_t nowNs) {
+// Whether the send-on-change gate lets this report's touch frame (its lastSent) through.
+bool dueTouch(DeviceCtx& ctx, const gamepad::DeviceState& scratch, const int64_t nowNs) {
     gamepad::TouchpadState cur;
     cur.f0Active = scratch.touch0Active;
     cur.f1Active = scratch.touch1Active;
@@ -179,10 +184,7 @@ void publishTouch(DeviceCtx& ctx, const gamepad::DeviceState& scratch, const int
     cur.f0Y = scratch.touch0Y;
     cur.f1X = scratch.touch1X;
     cur.f1Y = scratch.touch1Y;
-    const bool worthSending = ctx.touchGate.decide(cur, nowNs) != gamepad::TouchpadSend::SKIP;
-    if (!worthSending) return;
-    dispatch::applyUsbTouchpad(ctx.syntheticDeviceId, ctx.touchGate.lastSent(),
-                               (uint32_t)ctx.touchGate.lastEventTimeMs());
+    return ctx.touchGate.decide(cur, nowNs) != gamepad::TouchpadSend::SKIP;
 }
 
 int64_t monotonicNowNs() {
@@ -191,15 +193,22 @@ int64_t monotonicNowNs() {
     return (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
 }
 
+// One URB, one hold of the session's gate: the report, then the motion and touch it carried.
 void publishDecodedReport(DeviceCtx& ctx, const gamepad::DeviceState& scratch, bool& lastMicMuted) {
-    dispatch::applyUsbReport(ctx.syntheticDeviceId, scratch);
-    publishMicMuteEdge(ctx, lastMicMuted);
-    publishBattery(ctx, scratch);
-
     const bool needsTimestamp = scratch.motionValid || scratch.touchValid;
     const int64_t nowNs = needsTimestamp ? monotonicNowNs() : 0;
-    if (scratch.motionValid) publishMotion(ctx, scratch, nowNs);
-    if (scratch.touchValid) publishTouch(ctx, scratch, nowNs);
+    dish_send::MotionSample motion{};
+    const bool hasMotion = scratch.motionValid && dueMotion(ctx, scratch, nowNs, motion);
+    const bool hasTouch = scratch.touchValid && dueTouch(ctx, scratch, nowNs);
+
+    dish_slots::UsbFrame frame;
+    frame.report = &scratch;
+    frame.motion = hasMotion ? &motion : nullptr;
+    frame.touch = hasTouch ? &ctx.touchGate.lastSent() : nullptr;
+    frame.touchEventTimeMs = (uint32_t)ctx.touchGate.lastEventTimeMs();
+    dispatch::applyUsbFrame(ctx.syntheticDeviceId, frame);
+    publishMicMuteEdge(ctx, lastMicMuted);
+    publishBattery(ctx, scratch);
 }
 
 // Both directions publish neutral: a departed pad must not keep its last input latched, and a

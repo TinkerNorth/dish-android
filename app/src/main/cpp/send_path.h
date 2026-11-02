@@ -46,6 +46,8 @@ struct Framed {
     uint16_t innerLen = 0;
     Tally tally = Tally::None;
     uint8_t controller = 0;
+    // A pad's published report: the stage-1 bench window closes when it leaves sendto.
+    bool closesStage1 = false;
     uint8_t inner[dish_wire::INNER_HEADER_BYTES + dish_wire::MAX_INNER_PAYLOAD_BYTES];
 };
 

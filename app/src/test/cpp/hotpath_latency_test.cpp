@@ -292,6 +292,21 @@ TEST(MarkGamepadSent, ASecondSendForTheSameReadRecordsNothing) {
     EXPECT_EQ(sampleCount(hotpath::statsJson(false), "stage1_hotpath_us"), 1);
 }
 
+// A sender that read the clock as the report left sendto closes the window at that time, not at
+// the later moment it gets round to the mark.
+TEST(MarkGamepadSent, AtATimeClosesTheWindowAtThatTime) {
+    constexpr int64_t kLaterUs = 500;
+    primeThread(kDeviceA);
+    hotpath::markInputRead(kDeviceA);
+    const int64_t sentNs = hotpath::nowMonotonicNs() + kLaterUs * kNsPerUs;
+    hotpath::markGamepadSentAt(sentNs);
+    const std::string window = objectOf(hotpath::statsJson(false), "stage1_hotpath_us");
+    ASSERT_EQ(sampleCount(hotpath::statsJson(false), "stage1_hotpath_us"), 1) << window;
+    const size_t at = window.find("\"min\":");
+    ASSERT_NE(at, std::string::npos) << window;
+    EXPECT_GE(std::stod(window.substr(at + 6)), (double)kLaterUs) << window;
+}
+
 TEST(MarkGamepadSent, DisabledRecordsNothing) {
     primeThread(kDeviceA);
     hotpath::setEnabled(false);

@@ -67,6 +67,15 @@ class BridgeSink {
     ~BridgeSink() = default;
 };
 
+// What one URB of a USB pad carries: its pad state, when it decoded to one; a motion sample due at
+// the motion cadence; a touch frame the send-on-change gate let through.
+struct UsbFrame {
+    const gamepad::DeviceState* report = nullptr;
+    const dish_send::MotionSample* motion = nullptr;
+    const gamepad::TouchpadState* touch = nullptr;
+    uint32_t touchEventTimeMs = 0;
+};
+
 inline constexpr size_t STATE_WORDS =
     (sizeof(gamepad::DeviceState) + sizeof(uint64_t) - 1) / sizeof(uint64_t);
 
@@ -102,6 +111,9 @@ class SlotTable {
 
     // The reporting thread's entry points: the USB poller's (dispatch.h) and the UI thread's. No
     // lock and no heap; a report that meets a cold write waits for it to close.
+    // Everything one URB produced, sent back to back under one hold of the session's gate, its
+    // counters consecutive: the gamepad report when it changed, then motion, then touch.
+    void applyUsbFrame(int32_t deviceId, const UsbFrame& frame);
     void applyUsbReport(int32_t deviceId, const gamepad::DeviceState& nu);
     void applyUsbMotion(int32_t deviceId, const dish_send::MotionSample& sample);
     void applyUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_t eventTimeMs);
@@ -147,6 +159,9 @@ class SlotTable {
     uint32_t nextBridgeConnection();
 
     void publishIfChanged(HotSlot& slot);
+    bool takeUsbReport(HotSlot& slot, const gamepad::DeviceState& nu);
+    void sendUsbFrame(HotSlot& slot, const UsbFrame& frame, bool withGamepad);
+    void pushUsbFrame(HotSlot& slot, const UsbFrame& frame, bool withGamepad);
     void publishGamepadToBridge(const SlotBinding& binding, const gamepad::DeviceState& s);
     void publishMotionToBridge(const SlotBinding& binding, const dish_send::MotionSample& m);
     void publishTouchToBridge(const SlotBinding& binding, const gamepad::TouchpadState& t);

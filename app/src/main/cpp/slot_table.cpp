@@ -8,7 +8,6 @@
 #include <thread>
 #include <utility>
 
-#include "hotpath_latency.h"
 #include "log_port.h"
 
 namespace dish_slots {
@@ -256,10 +255,11 @@ void SlotTable::publishIfChanged(HotSlot& slot) {
     if (!gamepad::consumePublishIfChanged(slot.state)) return;
     switch (binding.kind) {
     case SLOT_SATELLITE: {
-        const bool sent = dish_send::sendGamepadReport(sessions_.find(binding.sessionHandle),
-                                                       binding.controllerIndex,
-                                                       dish_send::xusbReportOf(slot.state));
-        if (sent) hotpath::markGamepadSent(); // stage-1 end: the packet has left sendto()
+        dish_send::Framed report;
+        dish_send::frameGamepadReport(report, binding.controllerIndex,
+                                      dish_send::xusbReportOf(slot.state));
+        report.closesStage1 = true;
+        dish_send::sendFramed(sessions_.find(binding.sessionHandle), &report, 1);
         return;
     }
     case SLOT_BLUETOOTH:
@@ -302,12 +302,9 @@ void SlotTable::prewarmDevice(const int32_t deviceId) {
     slot.hasState = true;
 }
 
-void SlotTable::applyUsbReport(const int32_t deviceId, const DeviceState& nu) {
-    const int index = find(deviceId);
-    if (index < 0) return;
-    HotSlot& slot = slots_[static_cast<size_t>(index)];
-    const Reporting reporting(slot);
-    if (!holds(slot, deviceId)) return;
+// The slot's reporter: the report taken into the pad's state, and whether it changed what the bound
+// slot last published (bind-check before consume, as publishIfChanged).
+bool SlotTable::takeUsbReport(HotSlot& slot, const DeviceState& nu) {
     DeviceState& s = slot.state;
     slot.hasState = true;
     copyPadAxes(nu, s);
@@ -318,7 +315,67 @@ void SlotTable::applyUsbReport(const int32_t deviceId, const DeviceState& nu) {
         mirrorTouchForInspector(nu, s);
         mirrorState(slot);
     }
-    publishIfChanged(slot);
+    return slot.binding.kind != SLOT_NONE && gamepad::consumePublishIfChanged(s);
+}
+
+// A pad's own trackpad carries no mouse buttons and no wheel.
+void SlotTable::sendUsbFrame(HotSlot& slot, const UsbFrame& frame, const bool withGamepad) {
+    const SlotBinding& binding = slot.binding;
+    const dish_session::SessionRef session = sessions_.find(binding.sessionHandle);
+    if (!session) return;
+    dish_send::Framed batch[3];
+    size_t count = 0;
+    if (withGamepad) {
+        dish_send::frameGamepadReport(batch[count], binding.controllerIndex,
+                                      dish_send::xusbReportOf(slot.state));
+        batch[count++].closesStage1 = true;
+    }
+    if (frame.motion != nullptr) {
+        dish_send::frameMotion(batch[count++], binding.controllerIndex, *frame.motion);
+    }
+    if (frame.touch != nullptr) {
+        dish_send::frameTouchpad(batch[count++],
+                                 session->protocolVersion.load(std::memory_order_relaxed),
+                                 (uint8_t)(binding.controllerIndex & 0xFF), *frame.touch, false,
+                                 false, frame.touchEventTimeMs, 0);
+    }
+    dish_send::sendFramed(session, batch, count);
+}
+
+// The Bluetooth HID descriptor is a plain gamepad, so motion and touch have nowhere to go on that
+// transport; Moonlight takes all three through the bridge.
+void SlotTable::pushUsbFrame(HotSlot& slot, const UsbFrame& frame, const bool withGamepad) {
+    const SlotBinding& binding = slot.binding;
+    if (withGamepad) publishGamepadToBridge(binding, slot.state);
+    if (binding.kind != SLOT_MOONLIGHT) return;
+    if (frame.motion != nullptr) publishMotionToBridge(binding, *frame.motion);
+    if (frame.touch != nullptr) publishTouchToBridge(binding, *frame.touch);
+}
+
+void SlotTable::applyUsbFrame(const int32_t deviceId, const UsbFrame& frame) {
+    const int index = find(deviceId);
+    if (index < 0) return;
+    HotSlot& slot = slots_[static_cast<size_t>(index)];
+    const Reporting reporting(slot);
+    if (!holds(slot, deviceId)) return;
+    const bool withGamepad = frame.report != nullptr && takeUsbReport(slot, *frame.report);
+    switch (slot.binding.kind) {
+    case SLOT_SATELLITE:
+        sendUsbFrame(slot, frame, withGamepad);
+        return;
+    case SLOT_BLUETOOTH:
+    case SLOT_MOONLIGHT:
+        pushUsbFrame(slot, frame, withGamepad);
+        return;
+    case SLOT_NONE:
+        return;
+    }
+}
+
+void SlotTable::applyUsbReport(const int32_t deviceId, const DeviceState& nu) {
+    UsbFrame frame;
+    frame.report = &nu;
+    applyUsbFrame(deviceId, frame);
 }
 
 void SlotTable::resetAndPublish(const int32_t deviceId) {
@@ -359,31 +416,15 @@ void SlotTable::publishMotionToBridge(const SlotBinding& binding, const MotionSa
 }
 
 void SlotTable::applyUsbMotion(const int32_t deviceId, const MotionSample& sample) {
-    const int index = find(deviceId);
-    if (index < 0) return;
-    HotSlot& slot = slots_[static_cast<size_t>(index)];
-    const Reporting reporting(slot);
-    if (!holds(slot, deviceId)) return;
-    const SlotBinding& binding = slot.binding;
-    switch (binding.kind) {
-    case SLOT_MOONLIGHT:
-        publishMotionToBridge(binding, sample);
-        return;
-    case SLOT_SATELLITE:
-        dish_send::sendMotion(sessions_.find(binding.sessionHandle), binding.controllerIndex,
-                              sample);
-        return;
-    case SLOT_BLUETOOTH:
-    case SLOT_NONE:
-        return;
-    }
+    UsbFrame frame;
+    frame.motion = &sample;
+    applyUsbFrame(deviceId, frame);
 }
 
-// The Bluetooth HID descriptor is a plain gamepad, so touch has nowhere to go on that
-// transport. Satellite gets the full-state frame; Moonlight gets it via the bridge, where
-// Kotlin diffs it into CONTROLLER_TOUCH events. Routing (ds4 pad vs mouse vs off) is the
-// satellite receiver's job, declared per slot in the descriptor.
-// eventTimeMs is not carried: Moonlight re-times these events on the reliable control stream.
+// Satellite gets the full-state touch frame; Moonlight gets it via the bridge, where Kotlin diffs
+// it into CONTROLLER_TOUCH events. Routing (ds4 pad vs mouse vs off) is the satellite receiver's
+// job, declared per slot in the descriptor. eventTimeMs is not carried: Moonlight re-times these
+// events on the reliable control stream.
 void SlotTable::publishTouchToBridge(const SlotBinding& binding, const gamepad::TouchpadState& t) {
     if (binding.bridgeConnection == 0) return;
     BridgeReport r{};
@@ -395,28 +436,12 @@ void SlotTable::publishTouchToBridge(const SlotBinding& binding, const gamepad::
     bridge_.push(r);
 }
 
-// A pad's own trackpad carries no mouse buttons and no wheel.
 void SlotTable::applyUsbTouchpad(const int32_t deviceId, const gamepad::TouchpadState& t,
                                  const uint32_t eventTimeMs) {
-    const int index = find(deviceId);
-    if (index < 0) return;
-    HotSlot& slot = slots_[static_cast<size_t>(index)];
-    const Reporting reporting(slot);
-    if (!holds(slot, deviceId)) return;
-    const SlotBinding& binding = slot.binding;
-    switch (binding.kind) {
-    case SLOT_MOONLIGHT:
-        publishTouchToBridge(binding, t);
-        return;
-    case SLOT_SATELLITE:
-        dish_send::sendTouchpadFrame(sessions_.find(binding.sessionHandle),
-                                     (uint8_t)(binding.controllerIndex & 0xFF), t, false, false,
-                                     eventTimeMs, 0);
-        return;
-    case SLOT_BLUETOOTH:
-    case SLOT_NONE:
-        return;
-    }
+    UsbFrame frame;
+    frame.touch = &t;
+    frame.touchEventTimeMs = eventTimeMs;
+    applyUsbFrame(deviceId, frame);
 }
 
 // The slot's holder; action is a down or up edge, the events keyVerdict answers APPLY.

@@ -475,3 +475,114 @@ TEST_F(Slots, EveryRoleSendingOnOneSessionReachesTheWireInCounterOrder) {
     }
     EXPECT_GE(threads.size(), 5u);
 }
+
+namespace {
+
+dish_slots::UsbFrame fullUrb(const gamepad::DeviceState& report,
+                             const dish_send::MotionSample& motion,
+                             const gamepad::TouchpadState& touch) {
+    dish_slots::UsbFrame frame;
+    frame.report = &report;
+    frame.motion = &motion;
+    frame.touch = &touch;
+    frame.touchEventTimeMs = 0x89ABCDEFu;
+    return frame;
+}
+
+const dish_send::MotionSample kPinnedMotion{{100, -200, 300}, {-400, 500, -600}, 7777};
+
+} // namespace
+
+// One URB of a DualSense: its report, motion and touch leave back to back under consecutive
+// counters, byte for byte the datagrams the three separate calls sent before.
+TEST_F(Slots, AUrbCarryingAllThreeSendsThePinnedBytesUnderConsecutiveCounters) {
+    slots->bindSatellite(wire_vectors::kUsbDevice, handle, wire_vectors::kUsbController);
+    const gamepad::DeviceState report = pinnedUsbReport();
+    const gamepad::TouchpadState touch = pinnedTouch();
+    slots->applyUsbFrame(wire_vectors::kUsbDevice, fullUrb(report, kPinnedMotion, touch));
+    EXPECT_EQ(sentBytes(), (std::vector<Bytes>{bytesOf(wire_vectors::kUsbGamepad),
+                                               bytesOf(wire_vectors::kUsbMotion),
+                                               bytesOf(wire_vectors::kUsbTouchpadV1)}));
+    EXPECT_EQ(session->sentByCtrl[wire_vectors::kUsbController].load(), 1u);
+    EXPECT_EQ(session->motionByCtrl[wire_vectors::kUsbController].load(), 1u);
+}
+
+TEST_F(Slots, AUrbWithOnlyAGamepadChangeSendsOneDatagram) {
+    slots->bindSatellite(1, handle, 0);
+    const gamepad::DeviceState report = buttons(0x0001);
+    dish_slots::UsbFrame frame;
+    frame.report = &report;
+    slots->applyUsbFrame(1, frame);
+    EXPECT_EQ(sentButtons(), std::vector<uint16_t>{0x0001});
+}
+
+TEST_F(Slots, AUrbWhoseReportDidNotChangeSendsOnlyWhatElseItCarries) {
+    slots->bindSatellite(1, handle, 0);
+    const gamepad::DeviceState report = buttons(0x0001);
+    const gamepad::TouchpadState touch = pinnedTouch();
+    slots->applyUsbReport(1, report);
+    ASSERT_EQ(sentBytes().size(), 1u);
+    slots->applyUsbFrame(1, fullUrb(report, kPinnedMotion, touch));
+    const vector_session::Key key = vector_session::vectorKey();
+    std::vector<uint16_t> types;
+    for (const Bytes& sent : sentBytes()) {
+        const auto inner = fake_satellite::openFromClient(wire_vectors::kToken, key.bytes,
+                                                          sent.data(), sent.size());
+        ASSERT_TRUE(inner.has_value());
+        types.push_back(inner->msgType);
+    }
+    EXPECT_EQ(types, (std::vector<uint16_t>{dish_wire::MSG_MOTION, dish_wire::MSG_TOUCHPAD}));
+}
+
+// The URB holds the gate once: another sender that arrives while its first datagram is in sendto
+// goes out after all three.
+TEST_F(Slots, NoOtherSenderGetsBetweenTheDatagramsOfOneUrb) {
+    slots->bindSatellite(1, handle, 0);
+    recording::HeldPort held;
+    held.attachTo(*session);
+    held.holdNext();
+    const gamepad::DeviceState report = buttons(0x0001);
+    const gamepad::TouchpadState touch = pinnedTouch();
+    std::thread poller([&] { slots->applyUsbFrame(1, fullUrb(report, kPinnedMotion, touch)); });
+    ASSERT_TRUE(held.waitUntilHolding());
+    std::thread heartbeat(
+        [this] { dish_send::sendEncrypted(session, dish_wire::MSG_HEARTBEAT_PING, nullptr, 0); });
+    std::this_thread::sleep_for(kStillWaiting);
+    held.letGo();
+    poller.join();
+    heartbeat.join();
+    const vector_session::Key key = vector_session::vectorKey();
+    std::vector<uint16_t> types;
+    uint32_t expected = 0;
+    for (const Bytes& sent : held.taken()) {
+        const auto inner = fake_satellite::openFromClient(wire_vectors::kToken, key.bytes,
+                                                          sent.data(), sent.size());
+        ASSERT_TRUE(inner.has_value());
+        types.push_back(inner->msgType);
+        if (expected != 0) { EXPECT_EQ(vector_session::counterOf(sent), expected); }
+        expected = vector_session::counterOf(sent) + 1;
+    }
+    EXPECT_EQ(types,
+              (std::vector<uint16_t>{dish_wire::MSG_GAMEPAD_DATA, dish_wire::MSG_MOTION,
+                                     dish_wire::MSG_TOUCHPAD, dish_wire::MSG_HEARTBEAT_PING}));
+}
+
+TEST_F(Slots, AMoonlightUrbHandsAllThreeToTheBridgeInOrderAndBluetoothOnlyTheGamepad) {
+    const dish_bridge::BridgeConnectionId moonlight =
+        std::make_shared<const std::string>("moonlight-urb");
+    const dish_bridge::BridgeConnectionId bluetooth = std::make_shared<const std::string>("bt-urb");
+    slots->bindBridge(1, moonlight, dish_slots::SLOT_MOONLIGHT, 0);
+    slots->bindBridge(2, bluetooth, dish_slots::SLOT_BLUETOOTH, -1);
+    const gamepad::DeviceState report = buttons(0x0010);
+    const gamepad::TouchpadState touch = pinnedTouch();
+    slots->applyUsbFrame(1, fullUrb(report, kPinnedMotion, touch));
+    slots->applyUsbFrame(2, fullUrb(report, kPinnedMotion, touch));
+    const std::vector<dish_slots::BridgeReport> reports = bridge.taken();
+    ASSERT_EQ(reports.size(), 4u);
+    EXPECT_EQ(reports[0].payload, dish_slots::BridgeReport::GAMEPAD);
+    EXPECT_EQ(reports[1].payload, dish_slots::BridgeReport::MOTION);
+    EXPECT_EQ(reports[2].payload, dish_slots::BridgeReport::TOUCH);
+    EXPECT_EQ(reports[3].kind, dish_slots::SLOT_BLUETOOTH);
+    EXPECT_EQ(reports[3].payload, dish_slots::BridgeReport::GAMEPAD);
+    EXPECT_TRUE(sentBytes().empty());
+}

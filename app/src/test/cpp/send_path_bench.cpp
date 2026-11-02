@@ -394,21 +394,27 @@ std::vector<int16_t> micTone() {
 }
 
 // usb_host.cpp's publishDecodedReport for a DualSense report with motion and a moving finger: the
-// report, then motion no closer than 8 ms, then touch through the send-on-change gate.
+// report, motion no closer than 8 ms and touch through the send-on-change gate, as one URB.
 class DualSensePoller {
   public:
     void publish(dish_slots::SlotTable& slots, const uint64_t k, const int64_t nowNs) {
-        slots.applyUsbReport(DEVICE_A, padReport(k));
+        const gamepad::DeviceState report = padReport(k);
+        dish_slots::UsbFrame frame;
+        frame.report = &report;
+        dish_send::MotionSample motion{};
         const bool firstMotion = lastMotionNs_ < 0;
         if (firstMotion || nowNs - lastMotionNs_ >= USB_MOTION_MIN_INTERVAL_NS) {
             const uint32_t deltaUs = firstMotion ? 0 : (uint32_t)((nowNs - lastMotionNs_) / 1000);
             lastMotionNs_ = nowNs;
-            const dish_send::MotionSample motion{
-                {(int16_t)k, (int16_t)-k, 3}, {100, 200, 16384}, deltaUs};
-            slots.applyUsbMotion(DEVICE_A, motion);
+            motion =
+                dish_send::MotionSample{{(int16_t)k, (int16_t)-k, 3}, {100, 200, 16384}, deltaUs};
+            frame.motion = &motion;
         }
-        if (gate_.decide(fingerAt(k), nowNs) == gamepad::TouchpadSend::SKIP) return;
-        slots.applyUsbTouchpad(DEVICE_A, gate_.lastSent(), (uint32_t)gate_.lastEventTimeMs());
+        if (gate_.decide(fingerAt(k), nowNs) != gamepad::TouchpadSend::SKIP) {
+            frame.touch = &gate_.lastSent();
+            frame.touchEventTimeMs = (uint32_t)gate_.lastEventTimeMs();
+        }
+        slots.applyUsbFrame(DEVICE_A, frame);
     }
 
   private:
