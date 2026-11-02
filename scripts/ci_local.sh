@@ -78,6 +78,15 @@ else
   echo "::notice:: g++-arm-linux-gnueabihf and qemu-user not installed; CI runs this lane. Skipping locally."
 fi
 
+step "Native C++ tests and bench smoke (host, with the lock-statistics bench)"
+HOST_GENERATOR=()
+if [ "${OS:-}" = "Windows_NT" ]; then HOST_GENERATOR=(-G Ninja); fi
+cmake -S app/src/test/cpp -B build/native-test-host ${HOST_GENERATOR[@]+"${HOST_GENERATOR[@]}"} \
+  -DDISH_BENCH_LOCKSTATS=ON
+cmake --build build/native-test-host --parallel
+ctest --test-dir build/native-test-host --output-on-failure --no-tests=error
+build/native-test-host/bench_send_path --smoke
+
 step "Assemble debug APKs (github + play + amazon flavors)"
 $GRADLE :app:assembleGithubDebug :app:assemblePlayDebug :app:assembleAmazonDebug $GRADLE_ARGS
 

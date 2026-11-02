@@ -212,6 +212,28 @@ jobs:
       - name: Run under qemu-arm
         run: ctest --test-dir build/native-test-armv7 --output-on-failure --no-tests=error
 
+  # The host tests and the host bench with the runner's own g++, the lock-statistics build
+  # included, so the lock laws and both bench smokes run on x86_64 as well as under qemu.
+  native-x86_64:
+    name: C++ host tests and bench smoke (x86_64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configure
+        run: cmake -S app/src/test/cpp -B build/native-test -DDISH_BENCH_LOCKSTATS=ON
+
+      - name: Build
+        run: cmake --build build/native-test --parallel
+
+      - name: Run the host tests
+        run: ctest --test-dir build/native-test --output-on-failure --no-tests=error
+
+      - name: Bench smoke
+        run: build/native-test/bench_send_path --smoke
+
   # The amazon APK has no 32-bit x86 library, so this x86 image (ABIs x86, armeabi-v7a, armeabi)
   # installs it as armeabi-v7a and runs libsatellite.so through its ARM translation, as on a 32-bit
   # Fire tablet.

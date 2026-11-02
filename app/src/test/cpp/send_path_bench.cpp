@@ -142,7 +142,7 @@ class DeadlineWait {
         if (timer_ != nullptr) CloseHandle(timer_);
     }
 #else
-    DeadlineWait() = default;
+    DeadlineWait() {}
 #endif
     DeadlineWait(const DeadlineWait&) = delete;
     DeadlineWait& operator=(const DeadlineWait&) = delete;
