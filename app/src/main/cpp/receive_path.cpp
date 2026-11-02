@@ -163,7 +163,7 @@ int handleDatagram(const std::shared_ptr<Session>& session, const int handle, co
 int decodeSpeakerAudio(Session& session, const uint8_t ctrlIdx, const int lane, const uint16_t seq,
                        const uint8_t* opus, const size_t opusLen, std::vector<int16_t>& pcm,
                        bool concealed[dish_audio::AUDIO_JITTER_MAX_EVENTS_PER_PUSH]) {
-    std::lock_guard<std::mutex> lock(session.audioMtx);
+    std::lock_guard<TrackedMutex> lock(session.audioMtx);
     dish_session::ControllerAudio& ca = session.audio[ctrlIdx];
     // The haptic lane is the speaker's wire format, so one decoder shape
     // serves both; only the state is per lane.

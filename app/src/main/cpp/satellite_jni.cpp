@@ -40,6 +40,7 @@
 #include "session_table.h"
 #include "slot_table.h"
 #include "thread_priority.h"
+#include "tracked_mutex.h"
 #include "usb_host.h"
 #include "usb_parsers.h"
 #include "wire_encoders.h"
@@ -78,8 +79,8 @@ static jmethodID g_speakerAudioFrameMethod = nullptr;
 static jclass g_micMuteBridgeClass = nullptr;
 static jmethodID g_micMutePadMethod = nullptr;
 
-static std::mutex g_bridgeQueueMtx;
-static std::condition_variable g_bridgeQueueCv;
+static TrackedMutex g_bridgeQueueMtx{"bridge.queue"};
+static std::condition_variable_any g_bridgeQueueCv;
 static std::deque<BridgeReport> g_bridgeQueue;
 static std::thread g_bridgeDispatchThread;
 static std::atomic<bool> g_bridgeDispatchRunning{false};
@@ -93,7 +94,7 @@ static std::deque<std::pair<int32_t, bool>> g_micMuteQueue;
 
 static void enqueueBridgeReport(BridgeReport&& r) {
     {
-        std::lock_guard<std::mutex> lock(g_bridgeQueueMtx);
+        std::lock_guard<TrackedMutex> lock(g_bridgeQueueMtx);
         if (g_bridgeQueue.size() >= BRIDGE_QUEUE_MAX) g_bridgeQueue.pop_front();
         g_bridgeQueue.push_back(std::move(r));
     }
@@ -214,7 +215,7 @@ enum class BridgeWork { Report, Mute, Nothing, Stop };
 // JVM upcall. Mute edges come first: they are rarer and they gate capture, so they must not wait
 // behind a queue of input reports.
 static BridgeWork takeNextBridgeWork(BridgeReport& report, std::pair<int32_t, bool>& mute) {
-    std::unique_lock<std::mutex> lock(g_bridgeQueueMtx);
+    std::unique_lock<TrackedMutex> lock(g_bridgeQueueMtx);
     g_bridgeQueueCv.wait(lock, bridgeHasWork);
     if (bridgeIsDrainedAndStopping()) return BridgeWork::Stop;
     if (!g_micMuteQueue.empty()) {
@@ -229,6 +230,7 @@ static BridgeWork takeNextBridgeWork(BridgeReport& report, std::pair<int32_t, bo
 }
 
 static void bridgeDispatchLoop() {
+    const ScopedThreadRole role(ThreadRole::Bridge);
     JNIEnv* env = attachDispatchThread("bridgeDispatchLoop");
     if (env == nullptr) return;
     dish::elevateCurrentThreadToInputPriority();
@@ -284,8 +286,8 @@ struct SpeakerFrame {
     std::vector<uint8_t> opus;
 };
 
-static std::mutex g_audioQueueMtx;
-static std::condition_variable g_audioQueueCv;
+static TrackedMutex g_audioQueueMtx{"audio.queue"};
+static std::condition_variable_any g_audioQueueCv;
 static std::deque<SpeakerFrame> g_audioQueue;
 static std::thread g_audioDispatchThread;
 static std::atomic<bool> g_audioDispatchRunning{false};
@@ -295,7 +297,7 @@ static constexpr size_t AUDIO_QUEUE_MAX = 8;
 
 static void enqueueSpeakerFrame(SpeakerFrame&& f) {
     {
-        std::lock_guard<std::mutex> lock(g_audioQueueMtx);
+        std::lock_guard<TrackedMutex> lock(g_audioQueueMtx);
         if (g_audioQueue.size() >= AUDIO_QUEUE_MAX) g_audioQueue.pop_front();
         g_audioQueue.push_back(std::move(f));
     }
@@ -333,7 +335,7 @@ static bool audioIsDrainedAndStopping() {
 // Answers whether a frame was taken. False means the loop has been stopped and the queue is
 // empty, so there is nothing left to deliver.
 static bool takeNextSpeakerFrame(SpeakerFrame& out) {
-    std::unique_lock<std::mutex> lock(g_audioQueueMtx);
+    std::unique_lock<TrackedMutex> lock(g_audioQueueMtx);
     g_audioQueueCv.wait(lock, audioHasWork);
     if (audioIsDrainedAndStopping()) return false;
     out = std::move(g_audioQueue.front());
@@ -350,6 +352,7 @@ static void deliverSpeakerFrames(JNIEnv* env, const SpeakerFrame& f, const int16
 }
 
 static void audioDispatchLoop() {
+    const ScopedThreadRole role(ThreadRole::AudioDispatch);
     JNIEnv* env = attachDispatchThread("audioDispatchLoop");
     if (env == nullptr) return;
     // Named for its first caller; the value it sets is URGENT_AUDIO niceness, which is exactly
@@ -470,7 +473,7 @@ void forgetDevice(int32_t deviceId) { g_slotTable.forgetDevice(deviceId); }
 // is already in the report the decoder produced.
 void applyPadMicMute(int32_t deviceId, bool muted) {
     {
-        std::lock_guard<std::mutex> lock(g_bridgeQueueMtx);
+        std::lock_guard<TrackedMutex> lock(g_bridgeQueueMtx);
         g_micMuteQueue.emplace_back(deviceId, muted);
     }
     g_bridgeQueueCv.notify_one();
@@ -509,6 +512,7 @@ static_assert(gamepad::MOTION_ACTION_MOVE == AMOTION_EVENT_ACTION_MOVE &&
 
 static bool gamepadKeyFilter(const GameActivityKeyEvent* ev) {
     if (!isGamepadSource(ev->source)) return false;
+    const ScopedThreadRole role(ThreadRole::UiInput);
     return g_slotTable.applyFrameworkKey(ev->deviceId, ev->keyCode, ev->action);
 }
 
@@ -528,6 +532,7 @@ static bool gamepadMotionFilter(const GameActivityMotionEvent* ev) {
     const bool isJoystick = (ev->source & AINPUT_SOURCE_JOYSTICK) == AINPUT_SOURCE_JOYSTICK;
     if (!isJoystick) return false;
     const int32_t action = ev->action & AMOTION_EVENT_ACTION_MASK;
+    const ScopedThreadRole role(ThreadRole::UiInput);
     g_slotTable.applyFrameworkMotion(ev->deviceId, action, joystickSampleOf(ev));
     return true;
 }
@@ -538,7 +543,14 @@ static uint64_t nowMs() {
     return (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
 }
 
+// The on-screen pad and the captured touchpad send from the UI thread and heal from their own
+// resend threads through the same entry points; the UI thread is the process's first, tid == pid.
+static ThreadRole uiOrResend() {
+    return gettid() == getpid() ? ThreadRole::UiInput : ThreadRole::Resend;
+}
+
 static void heartbeatThread(const std::shared_ptr<dish_session::Session>& s) {
+    const ScopedThreadRole role(ThreadRole::Heartbeat);
     // Each ping holds its session's send turn, which the input threads wait on, so the thread runs
     // at their priority: a ping descheduled mid-send would hold every sender of the session.
     dish::elevateCurrentThreadToInputPriority();
@@ -645,6 +657,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_setConne
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendReport(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jint wB, jint bLT, jint bRT, jint sLX,
     jint sLY, jint sRX, jint sRY) {
+    const ScopedThreadRole role(&uiOrResend);
     auto s = g_sessionTable.get(handle);
     if (!s) return;
     dish_send::XUSB_REPORT report{};
@@ -661,6 +674,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendR
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendMotion(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jshort gyroX, jshort gyroY, jshort gyroZ,
     jshort accelX, jshort accelY, jshort accelZ, jint timestampDeltaUs) {
+    const ScopedThreadRole role(ThreadRole::Sensor);
     auto s = g_sessionTable.get(handle);
     if (!s) return;
     const dish_send::MotionSample sample{{(int16_t)gyroX, (int16_t)gyroY, (int16_t)gyroZ},
@@ -671,6 +685,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendM
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendBattery(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jint level, jint status) {
+    const ScopedThreadRole role(ThreadRole::Battery);
     auto s = g_sessionTable.get(handle);
     if (!s) return;
     dish_send::sendBattery(s, controllerIndex, level, status);
@@ -681,6 +696,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendT
     jboolean buttonPressed, jboolean rightPressed, jboolean middlePressed, jint f0TrackingId,
     jshort f0x, jshort f0y, jint f1TrackingId, jshort f1x, jshort f1y, jlong eventTimeMs,
     jshort scrollDelta) {
+    const ScopedThreadRole role(&uiOrResend);
     auto s = g_sessionTable.get(handle);
     if (!s) return;
     gamepad::TouchpadState t;
@@ -703,6 +719,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendT
 // (Opus encode included) happens there rather than on the caller's.
 JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendMicFrame(
     JNIEnv* env, jobject, jint handle, jint controllerIndex, jshortArray pcmMono) {
+    const ScopedThreadRole role(ThreadRole::MicCapture);
     auto s = g_sessionTable.get(handle);
     if (!s || pcmMono == nullptr) return JNI_FALSE;
     if (env->GetArrayLength(pcmMono) != dish_audio::AUDIO_FRAME_SAMPLES) return JNI_FALSE;
@@ -783,6 +800,7 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_getActiv
 JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_receiveAck(JNIEnv* env,
                                                                                    jobject,
                                                                                    jint handle) {
+    const ScopedThreadRole role(ThreadRole::Receive);
     JniFeedbackSink sink(env);
     return dish_receive::receiveDatagram(g_sessionTable, handle, sink);
 }
@@ -844,6 +862,7 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_disco
 JNIEXPORT void JNICALL
 Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_bindPhysicalSlotSatellite(
     JNIEnv*, jobject, jint deviceId, jint sessionHandle, jint controllerIndex) {
+    const ScopedThreadRole role(ThreadRole::Binding);
     g_slotTable.bindSatellite(deviceId, sessionHandle, controllerIndex);
 }
 
@@ -855,6 +874,7 @@ static BridgeConnectionId bridgeConnectionIdOf(const char* utf) {
 
 static void bindPhysicalSlotBridge(JNIEnv* env, jint deviceId, jstring connectionId, SlotKind kind,
                                    jint controllerIndex) {
+    const ScopedThreadRole role(ThreadRole::Binding);
     const char* cstr = env->GetStringUTFChars(connectionId, nullptr);
     BridgeConnectionId id = bridgeConnectionIdOf(cstr);
     if (cstr) env->ReleaseStringUTFChars(connectionId, cstr);
@@ -876,11 +896,13 @@ Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_bindPhysicalSlotMoonlight(
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_unbindPhysicalSlot(
     JNIEnv*, jobject, jint deviceId) {
+    const ScopedThreadRole role(ThreadRole::Binding);
     g_slotTable.unbind(deviceId);
 }
 
 JNIEXPORT void JNICALL
 Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_clearAllPhysicalSlots(JNIEnv*, jobject) {
+    const ScopedThreadRole role(ThreadRole::Binding);
     g_slotTable.clearAll();
 }
 
@@ -905,6 +927,7 @@ JNIEXPORT jboolean JNICALL
 Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_processGamepadKeyEvent(
     JNIEnv*, jobject, jint deviceId, jint /*source*/, jint action, jint keyCode) {
     // Source bits are unreliable; gate on the mapped-keycode check instead.
+    const ScopedThreadRole role(ThreadRole::UiInput);
     const bool consumed = g_slotTable.applyFrameworkKey(deviceId, keyCode, action);
     return consumed ? JNI_TRUE : JNI_FALSE;
 }
@@ -918,12 +941,14 @@ Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_processGamepadMotionEvent(
     const int32_t maskedAction = action & AMOTION_EVENT_ACTION_MASK;
     const gamepad::FrameworkAxes sample{x,    y,    z,        rz,       rx,    ry,
                                         hatX, hatY, lTrigger, rTrigger, brake, gas};
+    const ScopedThreadRole role(ThreadRole::UiInput);
     g_slotTable.applyFrameworkMotion(deviceId, maskedAction, sample);
     return JNI_TRUE;
 }
 
 JNIEXPORT void JNICALL
 Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_releaseAllPhysicalReports(JNIEnv*, jobject) {
+    const ScopedThreadRole role(ThreadRole::UiInput);
     g_slotTable.releaseAll();
 }
 

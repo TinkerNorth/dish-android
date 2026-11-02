@@ -12,6 +12,7 @@
 #include "audio_jitter.h"
 #include "heartbeat_thread.h"
 #include "hotpath_latency.h"
+#include "tracked_mutex.h"
 #include "udp_socket.h"
 
 namespace dish_session {
@@ -47,7 +48,7 @@ struct Session {
     std::atomic<uint64_t> counter{1};
     // Held from a datagram's counter until it has left sendto (dish_counter::takeTurnAndCounter);
     // the socket, the token, the key and the counter change only under it.
-    std::mutex sendTurnMtx;
+    TrackedMutex sendTurnMtx{"session.turn"};
     dish_net::DatagramPort port;
 
     dish::HeartbeatThread heartbeat;
@@ -81,7 +82,7 @@ struct Session {
     // thread (encode) and the audio dispatch thread (decode), never by the
     // receive thread, so one lock covers it: at 50 frames/s per direction the
     // two threads are each inside for well under a millisecond a second.
-    std::mutex audioMtx;
+    TrackedMutex audioMtx{"session.audio"};
     std::unordered_map<uint8_t, ControllerAudio> audio;
     // Set by closeSocket. Queued speaker frames hold a strong reference to this
     // session, so they can outlive it by a few milliseconds; decoding into a
@@ -107,7 +108,7 @@ class SessionTable {
     void clearRtt();
 
   private:
-    std::mutex mtx_;
+    TrackedMutex mtx_{"session.table"};
     std::unordered_map<int, std::shared_ptr<Session>> sessions_;
     std::atomic<int> nextHandle_{1};
 };

@@ -12,6 +12,7 @@
 #include "gamepad_input.h"
 #include "send_path.h"
 #include "session_table.h"
+#include "tracked_mutex.h"
 
 // Every physical pad's state and the slot it is bound to: a satellite session's controller, or a
 // Bluetooth or Moonlight connection the JNI layer's bridge thread serves.
@@ -128,11 +129,11 @@ class SlotTable {
     dish_session::SessionTable& sessions_;
     BridgeSink& bridge_;
 
-    std::mutex devicesMtx_;
+    TrackedMutex devicesMtx_{"input.devices"};
     std::unordered_map<int32_t, gamepad::DeviceState> devices_;
     std::unordered_map<int32_t, uint64_t> frameworkEventCounts_;
 
-    std::mutex slotsMtx_;
+    TrackedMutex slotsMtx_{"input.slots"};
     std::unordered_map<int32_t, SlotBinding> slots_;
 
     // Off costs one relaxed load per report, the same budget as the latency bench markers.

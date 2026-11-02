@@ -254,6 +254,17 @@ target_include_directories(fake_satellite PUBLIC "${CMAKE_SOURCE_DIR}")
 target_compile_options(fake_satellite PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(fake_satellite PUBLIC dish_core)
 
+# tracked_mutex.h as the app builds it, and in the DISH_LOCK_STATS build the lock laws and the
+# bench's lock table read.
+add_executable(tracked_mutex_test tracked_mutex_test.cpp)
+add_executable(tracked_mutex_stats_test tracked_mutex_test.cpp)
+target_compile_definitions(tracked_mutex_stats_test PRIVATE DISH_LOCK_STATS)
+foreach(mutex_test tracked_mutex_test tracked_mutex_stats_test)
+    target_include_directories(${mutex_test} PRIVATE "${SATELLITE_CPP}")
+    target_compile_options(${mutex_test} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_link_libraries(${mutex_test} PRIVATE GTest::gtest_main Threads::Threads)
+endforeach()
+
 # send_path_test also holds the units to the bytes pinned in wire_vectors.h.
 foreach(unit_test udp_socket_test session_table_test send_path_test slot_table_test
                   receive_path_test)
@@ -283,6 +294,8 @@ gtest_discover_tests(udp_socket_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(session_table_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(slot_table_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(receive_path_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(tracked_mutex_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(tracked_mutex_stats_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(audio_jitter_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(heartbeat_thread_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(hotpath_latency_test DISCOVERY_MODE PRE_TEST)

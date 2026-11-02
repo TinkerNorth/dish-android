@@ -21,6 +21,7 @@
 #include "gamepad_input.h"
 #include "hotpath_latency.h"
 #include "thread_priority.h"
+#include "tracked_mutex.h"
 #include "usb_parsers.h"
 
 #define TAG "SatelliteUsbHost"
@@ -60,7 +61,7 @@ struct DeviceCtx {
     // Serialises the send* paths' writes to the device against each other and against the
     // detach that closes fd; outSeq is the output report
     // counter for protocols that carry one (Xbox One serial, Switch Pro packet number).
-    std::mutex outMtx;
+    TrackedMutex outMtx{"usb.out"};
     uint8_t outSeq = 0;
     usbparsers::FeedbackState feedback; // guarded by outMtx
 
@@ -68,7 +69,7 @@ struct DeviceCtx {
     std::thread poller;
 };
 
-std::mutex g_mtx;
+TrackedMutex g_mtx{"usb.devices"};
 std::unordered_map<int32_t, std::shared_ptr<DeviceCtx>> g_devices;
 std::atomic<int32_t> g_nextSyntheticId{-1000};
 
@@ -222,7 +223,7 @@ void ackGipReport(DeviceCtx& ctx, const uint8_t* report, const size_t len) {
     uint8_t ack[usbparsers::kGipAckBytes];
     const size_t n = usbparsers::buildGipAck(report, len, ack, sizeof(ack));
     if (n == 0) return;
-    std::lock_guard<std::mutex> lock(ctx.outMtx);
+    std::lock_guard<TrackedMutex> lock(ctx.outMtx);
     usbparsers::writeOutReport(ctx.fd, ctx.epOut, ack, n);
 }
 
@@ -314,6 +315,7 @@ PollOutcome waitForUrbCompletion(DeviceCtx& ctx) {
 }
 
 void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
+    const ScopedThreadRole role(ThreadRole::UsbPoller);
     dish::elevateCurrentThreadToInputPriority();
     std::unique_ptr<UrbSlot> slotStorage[kInFlightUrbs];
     UrbSlot* slots[kInFlightUrbs];
@@ -365,7 +367,7 @@ void shutdownLocked(const std::shared_ptr<DeviceCtx>& ctx) {
         ctx->poller.join();
     }
     // outMtx so an in-flight sendRumble finishes before the fd it is writing to is closed.
-    std::lock_guard<std::mutex> lock(ctx->outMtx);
+    std::lock_guard<TrackedMutex> lock(ctx->outMtx);
     usbparsers::runTeardown(ctx->fd, ctx->interfaceNumber, ctx->parser);
     releaseAndReattach(ctx->fd, ctx->interfaceNumber);
     if (ctx->fd >= 0) {
@@ -544,7 +546,7 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
     }
 
     {
-        std::lock_guard<std::mutex> lock(g_mtx);
+        std::lock_guard<TrackedMutex> lock(g_mtx);
         g_devices[ctx->syntheticDeviceId] = ctx;
     }
 
@@ -563,7 +565,7 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
 void detachDevice(int32_t syntheticDeviceId) {
     std::shared_ptr<DeviceCtx> ctx;
     {
-        std::lock_guard<std::mutex> lock(g_mtx);
+        std::lock_guard<TrackedMutex> lock(g_mtx);
         auto it = g_devices.find(syntheticDeviceId);
         if (it == g_devices.end()) return;
         ctx = it->second;
@@ -578,21 +580,21 @@ void detachDevice(int32_t syntheticDeviceId) {
 }
 
 uint64_t getUrbCount(int32_t deviceId) {
-    std::lock_guard<std::mutex> lock(g_mtx);
+    std::lock_guard<TrackedMutex> lock(g_mtx);
     auto it = g_devices.find(deviceId);
     if (it == g_devices.end()) return 0;
     return it->second->urbCount.load(std::memory_order_relaxed);
 }
 
 uint64_t getUrbErrorCount(int32_t deviceId) {
-    std::lock_guard<std::mutex> lock(g_mtx);
+    std::lock_guard<TrackedMutex> lock(g_mtx);
     auto it = g_devices.find(deviceId);
     if (it == g_devices.end()) return 0;
     return it->second->urbErrorCount.load(std::memory_order_relaxed);
 }
 
 int32_t getPadBattery(int32_t deviceId) {
-    std::lock_guard<std::mutex> lock(g_mtx);
+    std::lock_guard<TrackedMutex> lock(g_mtx);
     auto it = g_devices.find(deviceId);
     if (it == g_devices.end()) return -1;
     return it->second->lastBattery.load(std::memory_order_relaxed);
@@ -627,7 +629,7 @@ static void appendJsonString(std::string& out, const std::string& value) {
 std::string deviceInfoJson(int32_t deviceId) {
     std::shared_ptr<DeviceCtx> ctx;
     {
-        std::lock_guard<std::mutex> lock(g_mtx);
+        std::lock_guard<TrackedMutex> lock(g_mtx);
         auto it = g_devices.find(deviceId);
         if (it == g_devices.end()) return "";
         ctx = it->second;
@@ -647,14 +649,14 @@ std::string deviceInfoJson(int32_t deviceId) {
 }
 
 uint64_t getMotionCount(int32_t deviceId) {
-    std::lock_guard<std::mutex> lock(g_mtx);
+    std::lock_guard<TrackedMutex> lock(g_mtx);
     auto it = g_devices.find(deviceId);
     if (it == g_devices.end()) return 0;
     return it->second->motionCount.load(std::memory_order_relaxed);
 }
 
 static std::shared_ptr<DeviceCtx> ctxFor(int32_t syntheticDeviceId) {
-    std::lock_guard<std::mutex> lock(g_mtx);
+    std::lock_guard<TrackedMutex> lock(g_mtx);
     auto it = g_devices.find(syntheticDeviceId);
     return it == g_devices.end() ? nullptr : it->second;
 }
@@ -662,7 +664,7 @@ static std::shared_ptr<DeviceCtx> ctxFor(int32_t syntheticDeviceId) {
 void sendRumble(int32_t syntheticDeviceId, uint16_t strong, uint16_t weak) {
     auto ctx = ctxFor(syntheticDeviceId);
     if (!ctx) return;
-    std::lock_guard<std::mutex> lock(ctx->outMtx);
+    std::lock_guard<TrackedMutex> lock(ctx->outMtx);
     if (ctx->fd < 0) return;
     ctx->feedback.strong = strong;
     ctx->feedback.weak = weak;
@@ -673,7 +675,7 @@ void sendRumble(int32_t syntheticDeviceId, uint16_t strong, uint16_t weak) {
 void sendTriggerRumble(int32_t syntheticDeviceId, uint16_t left, uint16_t right) {
     auto ctx = ctxFor(syntheticDeviceId);
     if (!ctx) return;
-    std::lock_guard<std::mutex> lock(ctx->outMtx);
+    std::lock_guard<TrackedMutex> lock(ctx->outMtx);
     if (ctx->fd < 0) return;
     if (!usbparsers::parserHasTriggerRumble(ctx->parser)) return;
     ctx->feedback.leftTrigger = left;
@@ -685,7 +687,7 @@ void sendTriggerRumble(int32_t syntheticDeviceId, uint16_t left, uint16_t right)
 void sendLightbar(int32_t syntheticDeviceId, uint8_t r, uint8_t g, uint8_t b) {
     auto ctx = ctxFor(syntheticDeviceId);
     if (!ctx) return;
-    std::lock_guard<std::mutex> lock(ctx->outMtx);
+    std::lock_guard<TrackedMutex> lock(ctx->outMtx);
     if (ctx->fd < 0) return;
     usbparsers::runLightbar(ctx->fd, ctx->epOut, ctx->parser, ctx->feedback, r, g, b);
 }
@@ -693,7 +695,7 @@ void sendLightbar(int32_t syntheticDeviceId, uint8_t r, uint8_t g, uint8_t b) {
 void sendPlayerLeds(int32_t syntheticDeviceId, uint8_t ledMask) {
     auto ctx = ctxFor(syntheticDeviceId);
     if (!ctx) return;
-    std::lock_guard<std::mutex> lock(ctx->outMtx);
+    std::lock_guard<TrackedMutex> lock(ctx->outMtx);
     if (ctx->fd < 0) return;
     uint8_t seq = ctx->outSeq++;
     usbparsers::runPlayerLeds(ctx->fd, ctx->epOut, ctx->parser, ctx->feedback, ledMask, seq);
@@ -702,7 +704,7 @@ void sendPlayerLeds(int32_t syntheticDeviceId, uint8_t ledMask) {
 void sendTriggerEffects(int32_t syntheticDeviceId, const uint8_t* left, const uint8_t* right) {
     auto ctx = ctxFor(syntheticDeviceId);
     if (!ctx) return;
-    std::lock_guard<std::mutex> lock(ctx->outMtx);
+    std::lock_guard<TrackedMutex> lock(ctx->outMtx);
     if (ctx->fd < 0) return;
     usbparsers::runTriggerEffects(ctx->fd, ctx->epOut, ctx->parser, ctx->feedback, left, right);
 }
@@ -710,7 +712,7 @@ void sendTriggerEffects(int32_t syntheticDeviceId, const uint8_t* left, const ui
 void sendMicMuteLed(int32_t syntheticDeviceId, uint8_t state) {
     auto ctx = ctxFor(syntheticDeviceId);
     if (!ctx) return;
-    std::lock_guard<std::mutex> lock(ctx->outMtx);
+    std::lock_guard<TrackedMutex> lock(ctx->outMtx);
     if (ctx->fd < 0) return;
     usbparsers::runMicMuteLed(ctx->fd, ctx->epOut, ctx->parser, ctx->feedback, state);
 }

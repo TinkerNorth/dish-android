@@ -130,7 +130,7 @@ constexpr int kConcurrentSenders = 4;
 constexpr int kDatagramsPerSender = 2000;
 constexpr int kReceiveTimeoutMs = 5000;
 
-bool isFreeFromAnotherThread(std::mutex& mtx) {
+bool isFreeFromAnotherThread(TrackedMutex& mtx) {
     bool free = false;
     std::thread probe([&mtx, &free] {
         free = mtx.try_lock();

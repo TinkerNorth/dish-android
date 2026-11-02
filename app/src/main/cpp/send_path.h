@@ -43,7 +43,7 @@ inline constexpr int HEARTBEAT_DEATH_TIMEOUT_MS = 10000;
 // and a reference that keeps the session, and so the turn's mutex, alive until then.
 struct PendingDatagram {
     std::shared_ptr<dish_session::Session> session;
-    std::unique_lock<std::mutex> turn;
+    std::unique_lock<TrackedMutex> turn;
     uint32_t counter = 0;
     uint16_t msgType = 0;
     uint16_t innerLen = 0;

@@ -5,13 +5,14 @@
 #include <string.h>
 
 #include "log_port.h"
+#include "tracked_mutex.h"
 
 namespace dish_session {
 
 void setConnectionParams(Session& s, const uint8_t token[4], const uint8_t key[32],
                          const int32_t protocolVersion) {
     {
-        std::lock_guard<std::mutex> turn(s.sendTurnMtx);
+        std::lock_guard<TrackedMutex> turn(s.sendTurnMtx);
         memcpy(s.token, token, 4);
         memcpy(s.key, key, 32);
         // Counters restart with each (token, sessionKey) pair (contract §Crypto).
@@ -29,7 +30,7 @@ void setConnectionParams(Session& s, const uint8_t token[4], const uint8_t key[3
     // over and the old reorder window would read the new stream's first second
     // as ancient history.
     {
-        std::lock_guard<std::mutex> audioLock(s.audioMtx);
+        std::lock_guard<TrackedMutex> audioLock(s.audioMtx);
         s.audio.clear();
     }
 }
@@ -50,7 +51,7 @@ int SessionTable::open(const char* ip, const int port) {
 
     const int handle = nextHandle_.fetch_add(1, std::memory_order_relaxed);
     {
-        std::lock_guard<std::mutex> lock(mtx_);
+        std::lock_guard<TrackedMutex> lock(mtx_);
         sessions_[handle] = session;
     }
     dish_log::info("UDP session %d opened -> port %d (TOS=0x%02X)", handle, port,
@@ -61,7 +62,7 @@ int SessionTable::open(const char* ip, const int port) {
 void SessionTable::close(const int handle) {
     std::shared_ptr<Session> s;
     {
-        std::lock_guard<std::mutex> lock(mtx_);
+        std::lock_guard<TrackedMutex> lock(mtx_);
         auto it = sessions_.find(handle);
         if (it == sessions_.end()) return;
         s = it->second;
@@ -73,12 +74,13 @@ void SessionTable::close(const int handle) {
     // slot that no longer exists.
     s->closed.store(true, std::memory_order_release);
     {
-        std::lock_guard<std::mutex> audioLock(s->audioMtx);
+        std::lock_guard<TrackedMutex> audioLock(s->audioMtx);
         s->audio.clear();
     }
     {
-        std::lock_guard<std::mutex> turn(s->sendTurnMtx);
+        std::lock_guard<TrackedMutex> turn(s->sendTurnMtx);
         if (s->udpSock >= 0) {
+            blockingRegion("net.close");
             dish_net::closeSocket(s->udpSock);
             s->udpSock = -1;
         }
@@ -87,13 +89,13 @@ void SessionTable::close(const int handle) {
 }
 
 std::shared_ptr<Session> SessionTable::get(const int handle) {
-    std::lock_guard<std::mutex> lock(mtx_);
+    std::lock_guard<TrackedMutex> lock(mtx_);
     auto it = sessions_.find(handle);
     return it == sessions_.end() ? nullptr : it->second;
 }
 
 void SessionTable::clearRtt() {
-    std::lock_guard<std::mutex> lock(mtx_);
+    std::lock_guard<TrackedMutex> lock(mtx_);
     for (auto& kv : sessions_) hotpath::clearRtt(kv.second->rtt);
 }
 

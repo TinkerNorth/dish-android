@@ -103,7 +103,7 @@ void SlotTable::publishGamepadToBridge(const SlotBinding& binding, const DeviceS
 // staged here, under both locks, so a slot's reports take their counters in the order its latch
 // consumed them; the caller seals and sends it with transmitPublished after letting the locks go.
 void SlotTable::publishIfChanged(const int32_t deviceId, DeviceState& s, PendingDatagram& out) {
-    std::lock_guard<std::mutex> lock(slotsMtx_);
+    std::lock_guard<TrackedMutex> lock(slotsMtx_);
     auto it = slots_.find(deviceId);
     if (it == slots_.end()) return;
     // Bind-check before consume: a sample dropped for lack of a slot must not burn the latch, or
@@ -129,7 +129,7 @@ void SlotTable::publishIfChanged(const int32_t deviceId, DeviceState& s, Pending
 void SlotTable::syncSlotBaseline(const int32_t deviceId) {
     PendingDatagram datagram;
     {
-        std::lock_guard<std::mutex> lock(devicesMtx_);
+        std::lock_guard<TrackedMutex> lock(devicesMtx_);
         auto it = devices_.find(deviceId);
         if (it == devices_.end()) return;
         gamepad::resetState(it->second);
@@ -140,14 +140,14 @@ void SlotTable::syncSlotBaseline(const int32_t deviceId) {
 }
 
 void SlotTable::prewarmDevice(const int32_t deviceId) {
-    std::lock_guard<std::mutex> lock(devicesMtx_);
+    std::lock_guard<TrackedMutex> lock(devicesMtx_);
     devices_[deviceId];
 }
 
 void SlotTable::applyUsbReport(const int32_t deviceId, const DeviceState& nu) {
     PendingDatagram datagram;
     {
-        std::lock_guard<std::mutex> lock(devicesMtx_);
+        std::lock_guard<TrackedMutex> lock(devicesMtx_);
         auto& s = devices_[deviceId];
         copyPadAxes(nu, s);
         applyUsbStickDeadzone(s.sLX, s.sLY);
@@ -165,7 +165,7 @@ void SlotTable::applyUsbReport(const int32_t deviceId, const DeviceState& nu) {
 void SlotTable::resetAndPublish(const int32_t deviceId) {
     PendingDatagram datagram;
     {
-        std::lock_guard<std::mutex> lock(devicesMtx_);
+        std::lock_guard<TrackedMutex> lock(devicesMtx_);
         auto it = devices_.find(deviceId);
         if (it == devices_.end()) return;
         gamepad::resetState(it->second);
@@ -175,7 +175,7 @@ void SlotTable::resetAndPublish(const int32_t deviceId) {
 }
 
 void SlotTable::forgetDevice(const int32_t deviceId) {
-    std::lock_guard<std::mutex> lock(devicesMtx_);
+    std::lock_guard<TrackedMutex> lock(devicesMtx_);
     devices_.erase(deviceId);
     frameworkEventCounts_.erase(deviceId);
 }
@@ -205,7 +205,7 @@ void SlotTable::publishMotionToSatellite(const SlotBinding& binding, const Motio
 // Stages under the slot lock, so the caller sends out once the lock is let go.
 void SlotTable::routeUsbMotion(const int32_t deviceId, const MotionSample& sample,
                                PendingDatagram& out) {
-    std::lock_guard<std::mutex> lock(slotsMtx_);
+    std::lock_guard<TrackedMutex> lock(slotsMtx_);
     auto it = slots_.find(deviceId);
     if (it == slots_.end()) return;
     const SlotBinding& binding = it->second;
@@ -256,7 +256,7 @@ void SlotTable::publishTouchToSatellite(const SlotBinding& binding, const gamepa
 // Stages under the slot lock, so the caller sends out once the lock is let go.
 void SlotTable::routeUsbTouchpad(const int32_t deviceId, const gamepad::TouchpadState& t,
                                  const uint32_t eventTimeMs, PendingDatagram& out) {
-    std::lock_guard<std::mutex> lock(slotsMtx_);
+    std::lock_guard<TrackedMutex> lock(slotsMtx_);
     auto it = slots_.find(deviceId);
     if (it == slots_.end()) return;
 
@@ -302,7 +302,7 @@ void SlotTable::stageFrameworkKey(const int32_t deviceId, const int32_t keyCode,
 // once the lock is let go.
 bool SlotTable::filterFrameworkKey(const int32_t deviceId, const int32_t keyCode,
                                    const int32_t action, PendingDatagram& out) {
-    std::lock_guard<std::mutex> lock(devicesMtx_);
+    std::lock_guard<TrackedMutex> lock(devicesMtx_);
     const gamepad::KeyVerdict verdict = gamepad::keyVerdict(keyCode, quirkFor(deviceId), action);
     if (verdict == gamepad::KeyVerdict::PASS) return false;
     if (verdict == gamepad::KeyVerdict::APPLY) stageFrameworkKey(deviceId, keyCode, action, out);
@@ -320,7 +320,7 @@ bool SlotTable::applyFrameworkKey(const int32_t deviceId, const int32_t keyCode,
 // Stages under the device lock, so the caller sends out once the lock is let go.
 void SlotTable::stageFrameworkMotion(const int32_t deviceId, const int32_t action,
                                      const gamepad::FrameworkAxes& sample, PendingDatagram& out) {
-    std::lock_guard<std::mutex> lock(devicesMtx_);
+    std::lock_guard<TrackedMutex> lock(devicesMtx_);
     auto& state = devices_[deviceId];
 
     if (action == gamepad::MOTION_ACTION_CANCEL) {
@@ -345,7 +345,7 @@ void SlotTable::applyFrameworkMotion(const int32_t deviceId, const int32_t actio
 void SlotTable::releaseAll() {
     std::vector<int32_t> deviceIds;
     {
-        std::lock_guard<std::mutex> lock(devicesMtx_);
+        std::lock_guard<TrackedMutex> lock(devicesMtx_);
         deviceIds.reserve(devices_.size());
         for (const auto& kv : devices_) deviceIds.push_back(kv.first);
     }
@@ -355,7 +355,7 @@ void SlotTable::releaseAll() {
 void SlotTable::bindSatellite(const int32_t deviceId, const int sessionHandle,
                               const int controllerIndex) {
     {
-        std::lock_guard<std::mutex> lock(slotsMtx_);
+        std::lock_guard<TrackedMutex> lock(slotsMtx_);
         auto& b = slots_[deviceId];
         b.kind = SLOT_SATELLITE;
         b.sessionHandle = sessionHandle;
@@ -368,7 +368,7 @@ void SlotTable::bindSatellite(const int32_t deviceId, const int sessionHandle,
 void SlotTable::bindBridge(const int32_t deviceId, dish_bridge::BridgeConnectionId connectionId,
                            const SlotKind kind, const int controllerIndex) {
     {
-        std::lock_guard<std::mutex> lock(slotsMtx_);
+        std::lock_guard<TrackedMutex> lock(slotsMtx_);
         auto& b = slots_[deviceId];
         b.kind = kind;
         b.sessionHandle = -1;
@@ -379,18 +379,18 @@ void SlotTable::bindBridge(const int32_t deviceId, dish_bridge::BridgeConnection
 }
 
 void SlotTable::unbind(const int32_t deviceId) {
-    std::lock_guard<std::mutex> lock(slotsMtx_);
+    std::lock_guard<TrackedMutex> lock(slotsMtx_);
     slots_.erase(deviceId);
 }
 
 void SlotTable::clearAll() {
-    std::lock_guard<std::mutex> lock(slotsMtx_);
+    std::lock_guard<TrackedMutex> lock(slotsMtx_);
     slots_.clear();
 }
 
 void SlotTable::setDeadzones(const int32_t deviceId, const float flatX, const float flatY,
                              const float flatZ, const float flatRZ) {
-    std::lock_guard<std::mutex> lock(devicesMtx_);
+    std::lock_guard<TrackedMutex> lock(devicesMtx_);
     auto& s = devices_[deviceId];
     s.flatX = flatX;
     s.flatY = flatY;
@@ -399,21 +399,21 @@ void SlotTable::setDeadzones(const int32_t deviceId, const float flatX, const fl
 }
 
 void SlotTable::setQuirk(const int32_t deviceId, const uint8_t quirk) {
-    std::lock_guard<std::mutex> lock(devicesMtx_);
+    std::lock_guard<TrackedMutex> lock(devicesMtx_);
     devices_[deviceId].quirk = quirk;
 }
 
 void SlotTable::setInspecting(const bool on) { inspect_.store(on, std::memory_order_relaxed); }
 
 size_t SlotTable::formatDeviceState(const int32_t deviceId, char* buf, const size_t cap) {
-    std::lock_guard<std::mutex> lock(devicesMtx_);
+    std::lock_guard<TrackedMutex> lock(devicesMtx_);
     auto it = devices_.find(deviceId);
     if (it == devices_.end()) return 0;
     return gamepad::formatDeviceStateJson(it->second, buf, cap);
 }
 
 uint64_t SlotTable::frameworkEventCount(const int32_t deviceId) {
-    std::lock_guard<std::mutex> lock(devicesMtx_);
+    std::lock_guard<TrackedMutex> lock(devicesMtx_);
     auto it = frameworkEventCounts_.find(deviceId);
     return it == frameworkEventCounts_.end() ? 0 : it->second;
 }

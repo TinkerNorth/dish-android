@@ -12,6 +12,7 @@
 #include "hotpath_latency.h"
 #include "log_port.h"
 #include "send_counter.h"
+#include "tracked_mutex.h"
 
 namespace dish_send {
 
@@ -111,6 +112,7 @@ bool transmitDatagram(PendingDatagram& datagram) {
                                               datagram.innerLen, s.token, 4, nullptr, nonce, s.key);
 
     const size_t totalLen = 8 + (size_t)cipherLen;
+    blockingRegion("net.sendto");
     const ssize_t sent = s.port.send(s.port.context, s.udpSock, packet, totalLen, s.dest);
     const int sendErrno = errno;
     datagram.turn.unlock();
@@ -237,7 +239,7 @@ bool sendMicFrame(const std::shared_ptr<Session>& session, const uint8_t idx, co
     size_t opusBytes = 0;
     uint16_t seq = 0;
     {
-        std::lock_guard<std::mutex> lock(s.audioMtx);
+        std::lock_guard<TrackedMutex> lock(s.audioMtx);
         dish_session::ControllerAudio& ca = s.audio[idx];
         if (!ca.micEncoder) {
             ca.micEncoder = dish_audio::OpusStreamEncoder::create(dish_audio::Stream::Mic);
