@@ -1,5 +1,5 @@
 Dish 2.5.0: gleichmäßigere Eingabe, wenn mehrere Controller, das Bildschirm-Pad und der Sprachchat zugleich laufen.
 
-• Jeder Tastendruck eines Controllers oder des Bildschirm-Pads geht sofort und der Reihe nach hinaus, ohne auf einen anderen Controller oder das Mikrofon zu warten.
+• Jeder Tastendruck geht sofort und der Reihe nach hinaus, ohne auf einen anderen Controller oder das Mikrofon zu warten.
 • Vibration und Leuchten eines USB-Controllers schreibt ein eigener Helfer, sodass ein langsamer Schreibvorgang keine Nachricht vom PC mehr aufhält.
 • Nachrichten vom PC kommen auf einem eigenen Thread mit hoher Priorität an.
