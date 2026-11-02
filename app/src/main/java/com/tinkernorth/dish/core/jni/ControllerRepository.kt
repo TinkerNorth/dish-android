@@ -139,5 +139,7 @@ class ControllerRepository
 
         fun isConnectionAlive(handle: Int): Boolean = SessionNative.isConnectionAlive(handle)
 
-        fun receiveAck(handle: Int): Int = SessionNative.receiveAck(handle)
+        fun startReceive(handle: Int) {
+            SessionNative.startReceive(handle)
+        }
     }

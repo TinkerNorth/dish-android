@@ -51,10 +51,9 @@ object SessionNative {
 
     external fun getActiveControllerCount(handle: Int): Int
 
-    // Blocks ≤500ms (socket recv timeout); call from background. Returns
-    // 1 = datagram consumed, 0 = timeout/rejected datagram, -1 = session or
-    // socket dead (terminal: the caller's drain loop must stop).
-    external fun receiveAck(handle: Int): Int
+    // Starts the session's native receive thread, which drains acks, feedback and the close
+    // notify until closeSocket stops it. A second call while it runs does nothing.
+    external fun startReceive(handle: Int)
 
     // One session's own RTT window plus ping/ack/missed tallies; empty for an unknown handle.
     external fun sessionStatsJson(handle: Int): String

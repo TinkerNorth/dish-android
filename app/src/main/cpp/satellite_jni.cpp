@@ -421,6 +421,18 @@ static ThreadRole uiOrResend() {
     return gettid() == getpid() ? ThreadRole::UiInput : ThreadRole::Resend;
 }
 
+// The session's receive thread: attached to the JVM once for the feedback upcalls, at input
+// priority, draining the socket until closeSocket stops it.
+static void receiveThread(const dish_session::SessionRef& s) {
+    const ScopedThreadRole role(ThreadRole::Receive);
+    JNIEnv* env = attachDispatchThread("receiveThread");
+    if (env == nullptr) return;
+    dish::elevateCurrentThreadToInputPriority();
+    JniFeedbackSink sink(env);
+    dish_receive::runReceiveLoop(g_sessionTable, s, sink);
+    g_jvm->DetachCurrentThread();
+}
+
 static void heartbeatThread(const dish_session::SessionRef& s) {
     const ScopedThreadRole role(ThreadRole::Heartbeat);
     // Each ping holds its session's send gate, which the input threads wait on, so the thread runs
@@ -680,12 +692,12 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_getActiv
     });
 }
 
-JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_receiveAck(JNIEnv* env,
-                                                                                   jobject,
-                                                                                   jint handle) {
-    const ScopedThreadRole role(ThreadRole::Receive);
-    JniFeedbackSink sink(env);
-    return dish_receive::receiveDatagram(g_sessionTable, handle, sink);
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_startReceive(JNIEnv*,
+                                                                                     jobject,
+                                                                                     jint handle) {
+    const dish_session::SessionRef s = g_sessionTable.find(handle);
+    if (!s) return;
+    s->receiver.start([s] { receiveThread(s); });
 }
 
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_discoverServers(

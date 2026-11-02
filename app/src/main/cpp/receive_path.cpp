@@ -78,6 +78,13 @@ int receiveDatagram(dish_session::SessionTable& sessions, const int handle, Feed
     return handleWith(s, m, buf, (size_t)n, sink);
 }
 
+void runReceiveLoop(dish_session::SessionTable& sessions, const SessionRef& session,
+                    FeedbackSink& sink) {
+    while (session->receiver.running()) {
+        if (receiveDatagram(sessions, session.handle, sink) < 0) return;
+    }
+}
+
 int handleDatagram(const SessionRef& session, const uint8_t* buf, const size_t n,
                    FeedbackSink& sink) {
     if (!session) return 0;

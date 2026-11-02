@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <thread>
 #include <vector>
 
 #include "audio_codec.h"
@@ -270,4 +271,31 @@ TEST_F(ReceivePath, SpeakerFramesDecodeInOrderOnTheirOwnLane) {
     EXPECT_EQ(produced, 3);
     EXPECT_NE(session->audio[1].hapticDecoder, nullptr);
     EXPECT_EQ(session->audio[1].speakerDecoder, nullptr);
+}
+
+// The session's receive thread as the JNI layer starts it: it hands on what the satellite sends,
+// updates the session from an ack, and closing the session stops it before the socket goes.
+TEST_F(ReceivePath, TheReceiveThreadHandsOnWhatArrivesAndEndsWithItsSession) {
+    fake_satellite::Peer satellite;
+    const dish_session::SessionRef s = sessionTo(satellite);
+    s->receiver.start([this, s] { dish_receive::runReceiveLoop(table, s, sink); });
+    ASSERT_TRUE(dish_send::sendEncrypted(s, dish_wire::MSG_HEARTBEAT_PING, nullptr, 0));
+    ASSERT_FALSE(satellite.receive(kReceiveTimeoutMs).empty());
+    ASSERT_TRUE(
+        satellite.reply(fromSatellite(1, dish_wire::MSG_HEARTBEAT_ACK, {1, 3, 0, 9, 0, 5})));
+    ASSERT_TRUE(satellite.reply(fromSatellite(2, dish_wire::MSG_RUMBLE, {1, 0, 9, 0, 8, 0, 7})));
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (sink.calls() == 0 && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::yield();
+    }
+    EXPECT_EQ(s->serverEpoch.load(), 9);
+    EXPECT_EQ(s->activeBitmap.load(), 5);
+
+    const auto closing = std::chrono::steady_clock::now();
+    table.close(s.handle);
+    const auto closeTook = std::chrono::steady_clock::now() - closing;
+    EXPECT_FALSE(s->receiver.running());
+    EXPECT_LT(closeTook, std::chrono::seconds(2));
+    ASSERT_EQ(sink.rumbles.size(), 1u);
+    EXPECT_EQ(sink.rumbles[0].strong, 9);
 }

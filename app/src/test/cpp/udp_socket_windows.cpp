@@ -102,6 +102,9 @@ ssize_t receiveDatagram(const int sock, uint8_t* buf, const size_t cap) {
                               static_cast<int>(cap), 0, reinterpret_cast<sockaddr*>(&from), &fl));
 }
 
+// Winsock does not wake a receive on an unconnected socket this way; it returns at its timeout.
+void wakeReceiver(const int sock) { shutdown(static_cast<SOCKET>(sock), SD_RECEIVE); }
+
 bool ipv4Destination(const char* ip, const int port, sockaddr_in& out) {
     out.sin_family = AF_INET;
     out.sin_port = htons(static_cast<u_short>(port));

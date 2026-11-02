@@ -48,6 +48,10 @@ ssize_t sendDatagram(int sock, const uint8_t* packet, size_t len, const sockaddr
 // or EWOULDBLOCK once the timeout passes).
 ssize_t receiveDatagram(int sock, uint8_t* buf, size_t cap);
 
+// Ends the socket's receiving, so a receive waiting on it returns now rather than at its timeout;
+// sending is untouched.
+void wakeReceiver(int sock);
+
 // false for anything but an IPv4 literal, such as an IPv6 literal from mDNS.
 bool ipv4Destination(const char* ip, int port, sockaddr_in& out);
 

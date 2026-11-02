@@ -274,7 +274,6 @@ void runSatellite(fake_satellite::Peer& peer, const uint8_t key[32], const std::
 }
 
 struct RunTally {
-    std::atomic<uint64_t> received{0};
     std::atomic<uint64_t> micFrames{0};
     std::atomic<uint64_t> binds{0};
     std::atomic<uint64_t> unbinds{0};
@@ -290,6 +289,7 @@ struct LawRun {
     RunTally tally;
     size_t rumbles = 0;
     size_t lightbars = 0;
+    int32_t serverEpoch = -1;
 };
 
 // The receive thread's feedback as the JNI layer hands it on: the upcalls recorded, speaker audio
@@ -453,18 +453,16 @@ void runEveryRole(LawRun& run) {
             run.tally.binds++;
         });
     });
-    std::thread receive([&] {
+    session->receiver.start([&table, session, &feedback] {
         const ScopedThreadRole role(ThreadRole::Receive);
-        while (!stop.load()) {
-            if (dish_receive::receiveDatagram(table, handle, feedback) == 1) run.tally.received++;
-        }
+        dish_receive::runReceiveLoop(table, session, feedback);
     });
 
     std::this_thread::sleep_for(RUN_TIME);
     stop = true;
     for (std::thread& role : roles) role.join();
     session->heartbeat.stop();
-    receive.join();
+    run.serverEpoch = session->serverEpoch.load();
     satelliteStop = true;
     satellite.join();
     bridge.stop();
@@ -622,7 +620,7 @@ TEST_F(LockLaws, TheRunReachedEveryRoleAndEveryPath) {
     EXPECT_GT(run->tally.binds.load(), 0u);
     EXPECT_GT(run->tally.unbinds.load(), 0u);
     EXPECT_GT(run->satellite.acked.load(), 0u);
-    EXPECT_GT(run->tally.received.load(), run->satellite.acked.load());
+    EXPECT_EQ(run->serverEpoch, 1);
     EXPECT_GT(run->rumbles, 0u);
     EXPECT_GT(run->lightbars, 0u);
     EXPECT_GT(run->tally.bridgeReports.load(), 0u);

@@ -112,6 +112,9 @@ struct Session {
     hotpath::RttStats rtt;
 
     dish::HeartbeatThread heartbeat;
+    // The receive thread: started once the session is live, stopped by close before the socket
+    // goes, so a receive never reads a closed or reused descriptor.
+    dish::HeartbeatThread receiver;
 
     // Per-controller audio state, keyed by ctrlIdx. Touched by the mic capture
     // thread (encode) and the audio dispatch thread (decode), never by the

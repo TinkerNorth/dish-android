@@ -52,6 +52,10 @@ ssize_t receiveDatagram(const int sock, uint8_t* buf, const size_t cap) {
     return recvfrom(sock, buf, cap, 0, (struct sockaddr*)&from, &fl);
 }
 
+// On an unconnected UDP socket Linux answers ENOTCONN but still marks the receive side shut and
+// wakes the waiting recvfrom, which then returns 0.
+void wakeReceiver(const int sock) { shutdown(sock, SHUT_RD); }
+
 bool ipv4Destination(const char* ip, const int port, sockaddr_in& out) {
     out.sin_family = AF_INET;
     out.sin_port = htons((uint16_t)port);

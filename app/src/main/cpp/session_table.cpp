@@ -37,6 +37,7 @@ void storeMaterial(Session& s, const Material& m) {
 // checks the handle before it trusts the rest.
 void restartEntry(Session& s, const int32_t handle, const int sock, const sockaddr_in& dest) {
     s.heartbeat.stop();
+    s.receiver.stop();
     s.missedAcks.store(0);
     s.connectionAlive.store(true);
     s.lastPingNs.store(0);
@@ -188,6 +189,8 @@ void SessionTable::close(const int handle) {
     }
     Session& s = sessions_[static_cast<size_t>(index)];
     s.heartbeat.stop();
+    dish_net::wakeReceiver(readMaterial(s).sock);
+    s.receiver.stop();
     // Before the socket goes: a speaker frame already queued must not decode into a session that
     // no longer exists.
     {

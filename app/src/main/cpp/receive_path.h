@@ -41,6 +41,11 @@ class FeedbackSink {
 // foreign, replayed or forged, 1 for a datagram opened and handled.
 int receiveDatagram(dish_session::SessionTable& sessions, int handle, FeedbackSink& sink);
 
+// The receive thread's body: passes of receiveDatagram until the session's receiver stops or the
+// session is gone.
+void runReceiveLoop(dish_session::SessionTable& sessions, const dish_session::SessionRef& session,
+                    FeedbackSink& sink);
+
 // The open-and-dispatch half for a datagram already in hand: 0 or 1 as above.
 int handleDatagram(const dish_session::SessionRef& session, const uint8_t* buf, size_t n,
                    FeedbackSink& sink);

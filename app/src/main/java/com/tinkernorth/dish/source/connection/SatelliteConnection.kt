@@ -40,7 +40,6 @@ class SatelliteConnection(
     server: DiscoveredServer,
     private val scope: CoroutineScope,
     private val controllerRepo: ControllerRepository,
-    private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO,
     private val hooks: Hooks = Hooks(),
     private val motionBackendStatusStore: SatelliteMotionBackendStatusStore? = null,
 ) : TelemetrySink {
@@ -154,7 +153,6 @@ class SatelliteConnection(
     }
 
     private var aliveJob: Job? = null
-    private var ackJob: Job? = null
 
     fun updateServer(server: DiscoveredServer) {
         _server.value = server
@@ -187,16 +185,9 @@ class SatelliteConnection(
         this.mouseControlGranted = grant.mouseControlGranted
         applyResults(grant.applied, grant.descriptors, callbacks.onApplyFailures)
         _state.value = SatelliteSessionState.Live
-        // Drain the downstream socket (acks, rumble, close-notify); receiveAck
-        // blocks ≤500 ms. Negative status = socket gone and every further call
-        // returns instantly: exit, don't busy-spin; aliveJob owns death detection.
-        ackJob =
-            scope.launch(ioDispatcher) {
-                var status = 0
-                while (isActive && status >= 0) {
-                    status = controllerRepo.receiveAck(handle)
-                }
-            }
+        // The native receive thread drains the downstream socket (acks, feedback, close-notify)
+        // until closeSocket stops it; aliveJob owns death detection.
+        controllerRepo.startReceive(handle)
         controllerRepo.startHeartbeat(handle)
         aliveJob =
             scope.launch {
@@ -285,8 +276,6 @@ class SatelliteConnection(
         if (_state.value == SatelliteSessionState.Idle && snap == null) return
         aliveJob?.cancel()
         aliveJob = null
-        ackJob?.cancel()
-        ackJob = null
         lastAppliedEpoch = -1
         mouseControlGranted = false
         if (snap != null) {
