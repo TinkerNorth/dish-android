@@ -1,0 +1,5 @@
+Dish 2.5.0: steadier input when several controllers, the on-screen pad and voice chat are in use at once.
+
+• A press from any controller or the on-screen pad goes straight out, in order, without waiting behind another controller or the microphone.
+• Rumble and lights on a USB controller are written by a helper of their own, so a slow write never delays the next message from your PC.
+• Messages from the PC arrive on a dedicated high-priority thread.

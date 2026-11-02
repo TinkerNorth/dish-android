@@ -7,7 +7,7 @@ computer. Those lines say "update Satellite too".
 
 ---
 
-## [Unreleased]
+## [2.5.0] - 2026-11-02
 
 Steadier input when several controllers, the on-screen pad and voice chat are
 in use at once.

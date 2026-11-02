@@ -1,0 +1,5 @@
+Dish 2.5.0: entrada mais estável quando vários controles, o controle na tela e o chat de voz são usados ao mesmo tempo.
+
+• Um toque em qualquer controle ou no controle na tela sai na hora e em ordem, sem esperar atrás de outro controle ou do microfone.
+• A vibração e as luzes de um controle USB são escritas por um auxiliar próprio, então uma escrita lenta nunca atrasa a próxima mensagem do PC.
+• As mensagens do PC chegam em uma thread dedicada de alta prioridade.
