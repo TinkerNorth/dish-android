@@ -234,6 +234,7 @@ set(DISH_CORE_SOURCES
     "${SATELLITE_CPP}/receive_path.cpp"
     "${SATELLITE_CPP}/bridge_queue.cpp"
     "${SATELLITE_CPP}/speaker_queue.cpp"
+    "${SATELLITE_CPP}/usb_output.cpp"
     "${SATELLITE_CPP}/gamepad_input.cpp"
     "${SATELLITE_CPP}/hotpath_latency.cpp"
     "${SATELLITE_CPP}/audio_codec.cpp"
@@ -277,9 +278,8 @@ foreach(mutex_test tracked_mutex_test tracked_mutex_stats_test)
     target_link_libraries(${mutex_test} PRIVATE GTest::gtest_main Threads::Threads)
 endforeach()
 
-# The lock-free ring and the worker wake the hand-off queues are built on, and the USB pads' fixed
-# table: header-only.
-foreach(primitive_test mpmc_ring_test worker_wake_test usb_device_table_test)
+# The lock-free ring and the worker wake the hand-off queues are built on: header-only.
+foreach(primitive_test mpmc_ring_test worker_wake_test)
     add_executable(${primitive_test} ${primitive_test}.cpp)
     target_include_directories(${primitive_test} PRIVATE "${SATELLITE_CPP}")
     target_compile_options(${primitive_test} PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -288,7 +288,8 @@ endforeach()
 
 # send_path_test also holds the units to the bytes pinned in wire_vectors.h.
 foreach(unit_test udp_socket_test session_table_test send_path_test slot_table_test
-                  receive_path_test bridge_queue_test speaker_queue_test)
+                  receive_path_test bridge_queue_test speaker_queue_test usb_device_table_test
+                  usb_output_test)
     add_executable(${unit_test} ${unit_test}.cpp)
     target_compile_options(${unit_test} PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_link_libraries(${unit_test} PRIVATE GTest::gtest_main fake_satellite dish_core)
@@ -347,6 +348,7 @@ gtest_discover_tests(speaker_queue_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(mpmc_ring_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(worker_wake_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(usb_device_table_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(usb_output_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(tracked_mutex_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(tracked_mutex_stats_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(lock_laws_test DISCOVERY_MODE PRE_TEST)

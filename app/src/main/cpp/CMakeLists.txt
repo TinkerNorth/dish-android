@@ -139,6 +139,7 @@ add_library(satellite SHARED
     audio_codec.cpp
     gamepad_input.cpp
     usb_host.cpp
+    usb_output.cpp
     usb_parsers.cpp
     usb_hid_descriptor.cpp
     hotpath_latency.cpp)

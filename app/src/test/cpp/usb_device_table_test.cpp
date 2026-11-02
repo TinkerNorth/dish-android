@@ -26,10 +26,10 @@ uint64_t urbsOf(const dish_usb::UsbDeviceTable& table, const int32_t pad) {
 
 TEST(UsbDeviceTable, AClaimedPadsCountersReadBackAndAnUnknownPadReadsTheFallback) {
     dish_usb::UsbDeviceTable table;
-    dish_usb::UsbDeviceStats* stats = table.claim(kPad);
-    ASSERT_NE(stats, nullptr);
-    dish_usb::bump(stats->urbCount);
-    dish_usb::bump(stats->urbCount);
+    dish_usb::UsbDevice* device = table.claim(kPad);
+    ASSERT_NE(device, nullptr);
+    dish_usb::bump(device->stats.urbCount);
+    dish_usb::bump(device->stats.urbCount);
     EXPECT_EQ(urbsOf(table, kPad), 2u);
     EXPECT_EQ(urbsOf(table, kOtherPad), 0u);
     EXPECT_EQ(table.read<int32_t>(kPad, -7,
@@ -41,15 +41,15 @@ TEST(UsbDeviceTable, AClaimedPadsCountersReadBackAndAnUnknownPadReadsTheFallback
 
 TEST(UsbDeviceTable, AGivenBackEntryReadsTheFallbackAndIsClaimedAgainAtZero) {
     dish_usb::UsbDeviceTable table;
-    dish_usb::UsbDeviceStats* first = table.claim(kPad);
-    first->urbErrorCount.store(5);
-    first->lastBattery.store(0x6402);
+    dish_usb::UsbDevice* first = table.claim(kPad);
+    first->stats.urbErrorCount.store(5);
+    first->stats.lastBattery.store(0x6402);
     table.release(kPad);
     EXPECT_EQ(urbsOf(table, kPad), 0u);
-    dish_usb::UsbDeviceStats* second = table.claim(kOtherPad);
+    dish_usb::UsbDevice* second = table.claim(kOtherPad);
     ASSERT_EQ(second, first);
-    EXPECT_EQ(second->urbErrorCount.load(), 0u);
-    EXPECT_EQ(second->lastBattery.load(), -1);
+    EXPECT_EQ(second->stats.urbErrorCount.load(), 0u);
+    EXPECT_EQ(second->stats.lastBattery.load(), -1);
 }
 
 TEST(UsbDeviceTable, AFullTableRefusesTheNextPad) {
@@ -72,8 +72,8 @@ TEST(UsbDeviceTable, AReaderRacingTurnoversNeverAnswersWithAnotherPadsCounters) 
     std::thread turnover([&] {
         for (int i = 1; i <= kTurnovers; i++) {
             const int32_t pad = kPad - i;
-            dish_usb::UsbDeviceStats* stats = table.claim(pad);
-            stats->urbCount.store(markerOf(pad), std::memory_order_relaxed);
+            dish_usb::UsbDevice* device = table.claim(pad);
+            device->stats.urbCount.store(markerOf(pad), std::memory_order_relaxed);
             newest.store(pad);
             table.release(pad);
         }
