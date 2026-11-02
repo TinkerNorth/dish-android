@@ -181,14 +181,6 @@ target_include_directories(bridge_connection_ids_test PRIVATE "${SATELLITE_CPP}"
 target_compile_options(bridge_connection_ids_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(bridge_connection_ids_test PRIVATE GTest::gtest_main)
 
-# The datagrams the send path puts on the wire, pinned byte for byte (wire_vectors.h).
-add_executable(send_path_test
-    send_path_test.cpp
-)
-target_include_directories(send_path_test PRIVATE "${SATELLITE_CPP}")
-target_compile_options(send_path_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
-target_link_libraries(send_path_test PRIVATE GTest::gtest_main sodium_host)
-
 add_executable(heartbeat_thread_test
     heartbeat_thread_test.cpp
 )
@@ -231,6 +223,45 @@ target_include_directories(audio_codec_test PRIVATE "${SATELLITE_CPP}")
 target_compile_options(audio_codec_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(audio_codec_test PRIVATE GTest::gtest_main opus)
 
+# The JNI-free units the JNI layer drives: sessions, slots, the send path and the receive path.
+# Their socket calls go through udp_socket.h, POSIX on a POSIX host and Winsock through the
+# test-side udp_socket_windows.cpp on a Windows one.
+set(DISH_CORE_SOURCES
+    "${SATELLITE_CPP}/session_table.cpp"
+    "${SATELLITE_CPP}/slot_table.cpp"
+    "${SATELLITE_CPP}/send_path.cpp"
+    "${SATELLITE_CPP}/receive_path.cpp"
+    "${SATELLITE_CPP}/gamepad_input.cpp"
+    "${SATELLITE_CPP}/hotpath_latency.cpp"
+    "${SATELLITE_CPP}/audio_codec.cpp"
+)
+if(WIN32)
+    list(APPEND DISH_CORE_SOURCES udp_socket_windows.cpp)
+else()
+    list(APPEND DISH_CORE_SOURCES "${SATELLITE_CPP}/udp_socket.cpp")
+endif()
+add_library(dish_core STATIC ${DISH_CORE_SOURCES})
+target_include_directories(dish_core PUBLIC "${SATELLITE_CPP}")
+target_compile_options(dish_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_link_libraries(dish_core PUBLIC sodium_host opus Threads::Threads)
+if(WIN32)
+    target_link_libraries(dish_core PUBLIC ws2_32)
+endif()
+
+# The satellite's end of a session on loopback, for the tests that put datagrams on a socket.
+add_library(fake_satellite STATIC fake_satellite.cpp)
+target_include_directories(fake_satellite PUBLIC "${CMAKE_SOURCE_DIR}")
+target_compile_options(fake_satellite PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_link_libraries(fake_satellite PUBLIC dish_core)
+
+# send_path_test also holds the units to the bytes pinned in wire_vectors.h.
+foreach(unit_test udp_socket_test session_table_test send_path_test slot_table_test
+                  receive_path_test)
+    add_executable(${unit_test} ${unit_test}.cpp)
+    target_compile_options(${unit_test} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_link_libraries(${unit_test} PRIVATE GTest::gtest_main fake_satellite)
+endforeach()
+
 include(GoogleTest)
 
 # DISCOVERY_MODE PRE_TEST, not the default POST_BUILD: CMake 4.x names the
@@ -248,6 +279,10 @@ gtest_discover_tests(usb_parsers_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(usb_hid_descriptor_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(send_counter_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(send_path_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(udp_socket_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(session_table_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(slot_table_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(receive_path_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(audio_jitter_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(heartbeat_thread_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(hotpath_latency_test DISCOVERY_MODE PRE_TEST)

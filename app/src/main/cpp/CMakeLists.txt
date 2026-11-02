@@ -129,6 +129,11 @@ FetchContent_MakeAvailable(opus)
 # ── Main satellite library ──────────────────────────────────────────────────
 add_library(satellite SHARED
     satellite_jni.cpp
+    session_table.cpp
+    slot_table.cpp
+    send_path.cpp
+    receive_path.cpp
+    udp_socket.cpp
     audio_codec.cpp
     gamepad_input.cpp
     usb_host.cpp

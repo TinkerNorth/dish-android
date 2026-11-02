@@ -513,10 +513,21 @@ can't reach are still unit-testable from a host build:
   and its queued reports are gone. JNI-free (the refs are a template
   parameter), so `bridge_connection_ids_test` proves the one-string-per-bind
   rule with a fake JVM.
-- `satellite_jni.cpp`: the Android-only glue. Owns sockets, libsodium,
-  the session map, the rumble + Bluetooth callbacks, the speaker-audio
-  dispatch thread, and the JNI registration. This file does **not** ship
-  pure helpers: anything testable belongs in one of the files above.
+- `session_table.{cpp,h}`, `slot_table.{cpp,h}`, `send_path.{cpp,h}` and
+  `receive_path.{cpp,h}`: the native hot path, JNI-free. The session map and
+  its sockets; every pad's state, its slot binding and the send-on-change
+  latch; framing, the send turn, sealing and `sendto`; opening and
+  dispatching what the satellite sends back. What leaves through Kotlin goes
+  through a sink the JNI layer implements (`BridgeSink` for Bluetooth and
+  Moonlight slots, `FeedbackSink` for rumble, LEDs and audio), and the
+  socket calls through `udp_socket.h`, so the host tests drive them on a
+  loopback socket (`send_path_test` holds them to the bytes pinned in
+  `wire_vectors.h`).
+- `satellite_jni.cpp`: the Android-only glue. Argument marshalling, the
+  Kotlin upcalls, the bridge and speaker-audio dispatch threads that make
+  them, the GameActivity filters and the JNI registration. This file does
+  **not** ship pure helpers: anything testable belongs in one of the files
+  above.
 
 The split is the reason `gamepad_input.h` mirrors Android keycodes
 as integer constants instead of including `<android/keycodes.h>`:

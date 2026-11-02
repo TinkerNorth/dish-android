@@ -27,6 +27,36 @@ inline constexpr bool innerPayloadFits(const size_t payloadLen) {
     return payloadLen <= MAX_INNER_PAYLOAD_BYTES;
 }
 
+// Topology mutation is REST-only (satellite docs/contract.md): the native
+// layer carries streams + the two authenticated notifications, nothing else.
+inline constexpr uint16_t MSG_GAMEPAD_DATA = 0x0001;
+inline constexpr uint16_t MSG_HEARTBEAT_PING = 0x0002;
+inline constexpr uint16_t MSG_HEARTBEAT_ACK = 0x0003;
+inline constexpr uint16_t MSG_RUMBLE = 0x0009;
+inline constexpr uint16_t MSG_MOTION = 0x000A;
+inline constexpr uint16_t MSG_BATTERY = 0x000B;
+inline constexpr uint16_t MSG_TOUCHPAD = 0x000C;
+inline constexpr uint16_t MSG_LIGHTBAR = 0x000D;
+inline constexpr uint16_t MSG_SESSION_CLOSE = 0x000F;
+inline constexpr uint16_t MSG_TRIGGER_EFFECTS = 0x0010;
+inline constexpr uint16_t MSG_PLAYER_LEDS = 0x0011;
+// Controller audio: the emulated pad's OWN endpoints, never the host's game
+// audio. The two stream messages share one payload shape (below);
+// MSG_MIC_LED is the mute lamp the game asked for, coalesced like MSG_LIGHTBAR.
+inline constexpr uint16_t MSG_MIC_AUDIO = 0x0012;
+inline constexpr uint16_t MSG_SPEAKER_AUDIO = 0x0013;
+inline constexpr uint16_t MSG_MIC_LED = 0x0014;
+// Protocol 3: the DualSense's haptic lanes, the speaker stream's exact shape.
+inline constexpr uint16_t MSG_HAPTIC_AUDIO = 0x0015;
+
+// Nonce direction byte: the two directions of one session key never share a
+// nonce (contract §Crypto).
+inline constexpr uint8_t CRYPTO_DIR_CLIENT_TO_SERVER = 0x00;
+inline constexpr uint8_t CRYPTO_DIR_SERVER_TO_CLIENT = 0x01;
+
+// Protocol 2 carries the pointer frame (mouse buttons and wheel) in MSG_TOUCHPAD.
+inline constexpr int32_t PROTOCOL_VERSION_TOUCHPAD_V2 = 2;
+
 // Inner payload sizes (satellite docs/contract.md §Messages): the encoders below take arrays of
 // exactly these lengths, the send path sizes its buffers from them, and the receive arms match
 // msgLen against them.

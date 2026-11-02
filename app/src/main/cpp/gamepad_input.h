@@ -221,6 +221,9 @@ bool consumesKey(int32_t androidKeycode, uint8_t quirk);
 // they agree.
 constexpr int32_t KEY_ACTION_DOWN = 0;
 constexpr int32_t KEY_ACTION_UP = 1;
+// Mirrored the same way from AMOTION_EVENT_ACTION_MOVE / _CANCEL.
+constexpr int32_t MOTION_ACTION_MOVE = 2;
+constexpr int32_t MOTION_ACTION_CANCEL = 3;
 
 // What a JNI key entry point does with one framework key event: hand it back to the framework,
 // consume it without touching the pad, or consume it and apply it with applyKey.
