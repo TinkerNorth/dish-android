@@ -489,8 +489,7 @@ class CountingFeedback final : public dish_receive::FeedbackSink {
     void triggerEffects(int, uint8_t, const uint8_t*) override { others++; }
     void playerLeds(int, const dish_wire::PlayerLedsPayload&) override { others++; }
     void micLed(int, const dish_wire::MicLedPayload&) override { others++; }
-    void audio(const std::shared_ptr<dish_session::Session>&, int, int,
-               const dish_wire::AudioFrameHeader&, const uint8_t*, size_t) override {
+    void audio(int, int, const dish_wire::AudioFrameHeader&, const uint8_t*, size_t) override {
         others++;
     }
 
@@ -501,7 +500,7 @@ class CountingFeedback final : public dish_receive::FeedbackSink {
 
 class NoBridge final : public dish_slots::BridgeSink {
   public:
-    void push(dish_slots::BridgeReport&&) override {}
+    void push(const dish_slots::BridgeReport&) override {}
 };
 
 struct Harness {

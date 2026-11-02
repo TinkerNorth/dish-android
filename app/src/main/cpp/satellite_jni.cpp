@@ -18,8 +18,6 @@
 #include <time.h>
 #include <stdint.h>
 #include <atomic>
-#include <condition_variable>
-#include <deque>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -31,6 +29,7 @@
 #include "audio_codec.h"
 #include "audio_jitter.h"
 #include "bridge_connection_ids.h"
+#include "bridge_queue.h"
 #include "dispatch.h"
 #include "gamepad_input.h"
 #include "hotpath_latency.h"
@@ -39,6 +38,7 @@
 #include "send_path.h"
 #include "session_table.h"
 #include "slot_table.h"
+#include "speaker_queue.h"
 #include "thread_priority.h"
 #include "tracked_mutex.h"
 #include "usb_host.h"
@@ -79,37 +79,18 @@ static jmethodID g_speakerAudioFrameMethod = nullptr;
 static jclass g_micMuteBridgeClass = nullptr;
 static jmethodID g_micMutePadMethod = nullptr;
 
-static TrackedMutex g_bridgeQueueMtx{"bridge.queue"};
-static std::condition_variable_any g_bridgeQueueCv;
-static std::deque<BridgeReport> g_bridgeQueue;
+// The input threads hand Bluetooth and Moonlight reports and the pads' mic-mute edges to the
+// bridge thread, and the receive thread hands speaker audio to the audio dispatch thread, through
+// the lock-free queues of bridge_queue.h and speaker_queue.h.
+static dish_bridge::BridgeQueue g_bridgeQueue;
+static dish_session::SessionTable g_sessionTable;
+static dish_slots::SlotTable g_slotTable(g_sessionTable, g_bridgeQueue);
+static dish_receive::SpeakerQueue g_speakerQueue;
+
 static std::thread g_bridgeDispatchThread;
 static std::atomic<bool> g_bridgeDispatchRunning{false};
-static constexpr size_t BRIDGE_QUEUE_MAX = 64;
-
-// A pad's mic-mute latch flipped. It shares the bridge thread (already attached to the JVM, and
-// the USB reader thread is not) but NOT the report queue: reports are drop-oldest because a stale
-// stick position is worth nothing, while a dropped mute edge would leave the app believing a muted
-// pad is live. One entry per button press, so the queue never grows.
-static std::deque<std::pair<int32_t, bool>> g_micMuteQueue;
-
-static void enqueueBridgeReport(BridgeReport&& r) {
-    {
-        std::lock_guard<TrackedMutex> lock(g_bridgeQueueMtx);
-        if (g_bridgeQueue.size() >= BRIDGE_QUEUE_MAX) g_bridgeQueue.pop_front();
-        g_bridgeQueue.push_back(std::move(r));
-    }
-    g_bridgeQueueCv.notify_one();
-}
-
-static bool bridgeHasWork() {
-    return !g_bridgeDispatchRunning.load(std::memory_order_relaxed) || !g_bridgeQueue.empty() ||
-           !g_micMuteQueue.empty();
-}
-
-static bool bridgeIsDrainedAndStopping() {
-    return !g_bridgeDispatchRunning.load(std::memory_order_relaxed) && g_bridgeQueue.empty() &&
-           g_micMuteQueue.empty();
-}
+static std::thread g_audioDispatchThread;
+static std::atomic<bool> g_audioDispatchRunning{false};
 
 static void callMicMuteUpcall(JNIEnv* env, const int32_t deviceId, const bool muted) {
     if (g_micMuteBridgeClass == nullptr || g_micMutePadMethod == nullptr) return;
@@ -188,7 +169,9 @@ static void dispatchBridgeReport(JNIEnv* env, const BridgeReport& r) {
     if (!bridgeTargetFor(r, cls, method)) return;
 
     JniConnectionRefs refs{env};
-    const jstring connId = g_bridgeConnectionRefs.refFor(r.connectionId, refs);
+    const jstring connId = g_bridgeConnectionRefs.refFor(
+        r.connection,
+        [](const uint32_t connection) { return g_slotTable.bridgeConnectionId(connection); }, refs);
     if (connId == nullptr) {
         if (env->ExceptionCheck()) env->ExceptionClear();
         return;
@@ -207,27 +190,20 @@ static JNIEnv* attachDispatchThread(const char* what) {
     return nullptr;
 }
 
-// What one wait on the bridge queue produced. Nothing means a spurious wake with both queues
-// empty, which is not a reason to stop.
-enum class BridgeWork { Report, Mute, Nothing, Stop };
+// The bridge queue's items, made into the Kotlin upcalls on the bridge thread.
+class JniBridgeConsumer final : public dish_bridge::BridgeConsumer {
+  public:
+    explicit JniBridgeConsumer(JNIEnv* env) : env_(env) {}
 
-// Both queues are drained under one lock, and the lock is gone by the time the caller makes its
-// JVM upcall. Mute edges come first: they are rarer and they gate capture, so they must not wait
-// behind a queue of input reports.
-static BridgeWork takeNextBridgeWork(BridgeReport& report, std::pair<int32_t, bool>& mute) {
-    std::unique_lock<TrackedMutex> lock(g_bridgeQueueMtx);
-    g_bridgeQueueCv.wait(lock, bridgeHasWork);
-    if (bridgeIsDrainedAndStopping()) return BridgeWork::Stop;
-    if (!g_micMuteQueue.empty()) {
-        mute = g_micMuteQueue.front();
-        g_micMuteQueue.pop_front();
-        return BridgeWork::Mute;
+    void report(const BridgeReport& report) override { dispatchBridgeReport(env_, report); }
+
+    void micMute(const int32_t deviceId, const bool muted) override {
+        callMicMuteUpcall(env_, deviceId, muted);
     }
-    if (g_bridgeQueue.empty()) return BridgeWork::Nothing;
-    report = std::move(g_bridgeQueue.front());
-    g_bridgeQueue.pop_front();
-    return BridgeWork::Report;
-}
+
+  private:
+    JNIEnv* const env_;
+};
 
 static void bridgeDispatchLoop() {
     const ScopedThreadRole role(ThreadRole::Bridge);
@@ -235,18 +211,8 @@ static void bridgeDispatchLoop() {
     if (env == nullptr) return;
     dish::elevateCurrentThreadToInputPriority();
     LOGI("Bridge dispatch thread started");
-    while (g_bridgeDispatchRunning.load(std::memory_order_relaxed)) {
-        BridgeReport report;
-        std::pair<int32_t, bool> mute{};
-        const BridgeWork work = takeNextBridgeWork(report, mute);
-        if (work == BridgeWork::Stop) break;
-        if (work == BridgeWork::Nothing) continue;
-        if (work == BridgeWork::Mute) {
-            callMicMuteUpcall(env, mute.first, mute.second);
-            continue;
-        }
-        dispatchBridgeReport(env, report);
-    }
+    JniBridgeConsumer consumer(env);
+    while (g_bridgeQueue.waitForWork()) g_bridgeQueue.drain(consumer);
     JniConnectionRefs refs{env};
     g_bridgeConnectionRefs.releaseAll(refs);
     g_jvm->DetachCurrentThread();
@@ -257,51 +223,6 @@ static void startBridgeDispatchThread() {
     bool was = g_bridgeDispatchRunning.exchange(true, std::memory_order_relaxed);
     if (was) return;
     g_bridgeDispatchThread = std::thread(bridgeDispatchLoop);
-}
-
-// The slot table's bridge kinds leave through the bridge thread's queue.
-class JniBridgeSink final : public dish_slots::BridgeSink {
-  public:
-    void push(BridgeReport&& report) override { enqueueBridgeReport(std::move(report)); }
-};
-
-// The inbound MSG_SPEAKER_AUDIO / MSG_HAPTIC_AUDIO path.
-//
-// Its own queue and thread rather than the input bridge's, for two reasons: an
-// audio frame must never evict a gamepad report from that queue, and the sink
-// at the far end is an AudioTrack whose write blocks until the buffer takes the
-// samples. The four other return-path arms upcall straight out of receiveAck
-// because they hand over a handful of bytes and return; doing that here would
-// let a full AudioTrack stall the session's entire UDP drain, heartbeat acks
-// included. So the receive thread only copies the Opus packet in: reorder
-// window, decode and concealment all run over here, off the socket.
-struct SpeakerFrame {
-    // Strong: the session's codecs must outlive a closeSocket that races a
-    // queued frame. `closed` is what stops us decoding into a dead session.
-    std::shared_ptr<dish_session::Session> session;
-    int handle = -1;
-    uint8_t ctrlIdx = 0;
-    int lane = dish_receive::AUDIO_LANE_SPEAKER;
-    uint16_t seq = 0;
-    std::vector<uint8_t> opus;
-};
-
-static TrackedMutex g_audioQueueMtx{"audio.queue"};
-static std::condition_variable_any g_audioQueueCv;
-static std::deque<SpeakerFrame> g_audioQueue;
-static std::thread g_audioDispatchThread;
-static std::atomic<bool> g_audioDispatchRunning{false};
-// 8 frames = 160 ms. A backlog past that is audio too old to play on time, and
-// dropping the oldest is exactly what the reorder window's gap handling covers.
-static constexpr size_t AUDIO_QUEUE_MAX = 8;
-
-static void enqueueSpeakerFrame(SpeakerFrame&& f) {
-    {
-        std::lock_guard<TrackedMutex> lock(g_audioQueueMtx);
-        if (g_audioQueue.size() >= AUDIO_QUEUE_MAX) g_audioQueue.pop_front();
-        g_audioQueue.push_back(std::move(f));
-    }
-    g_audioQueueCv.notify_one();
 }
 
 static void deliverSpeakerPcm(JNIEnv* env, int handle, uint8_t ctrlIdx, int lane,
@@ -324,32 +245,19 @@ static void deliverSpeakerPcm(JNIEnv* env, int handle, uint8_t ctrlIdx, int lane
     if (env->ExceptionCheck()) env->ExceptionClear();
 }
 
-static bool audioHasWork() {
-    return !g_audioDispatchRunning.load(std::memory_order_relaxed) || !g_audioQueue.empty();
-}
+// Decoded speaker and haptic audio, made into the Kotlin upcalls on the audio dispatch thread.
+class JniSpeakerSink final : public dish_receive::SpeakerSink {
+  public:
+    explicit JniSpeakerSink(JNIEnv* env) : env_(env) {}
 
-static bool audioIsDrainedAndStopping() {
-    return !g_audioDispatchRunning.load(std::memory_order_relaxed) && g_audioQueue.empty();
-}
-
-// Answers whether a frame was taken. False means the loop has been stopped and the queue is
-// empty, so there is nothing left to deliver.
-static bool takeNextSpeakerFrame(SpeakerFrame& out) {
-    std::unique_lock<TrackedMutex> lock(g_audioQueueMtx);
-    g_audioQueueCv.wait(lock, audioHasWork);
-    if (audioIsDrainedAndStopping()) return false;
-    out = std::move(g_audioQueue.front());
-    g_audioQueue.pop_front();
-    return true;
-}
-
-static void deliverSpeakerFrames(JNIEnv* env, const SpeakerFrame& f, const int16_t* pcm,
-                                 const bool* concealed, const int produced) {
-    for (int i = 0; i < produced; i++) {
-        deliverSpeakerPcm(env, f.handle, f.ctrlIdx, f.lane,
-                          pcm + i * dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES, concealed[i]);
+    void pcm(const int handle, const uint8_t ctrlIdx, const int lane, const int16_t* pcm,
+             const bool concealed) override {
+        deliverSpeakerPcm(env_, handle, ctrlIdx, lane, pcm, concealed);
     }
-}
+
+  private:
+    JNIEnv* const env_;
+};
 
 static void audioDispatchLoop() {
     const ScopedThreadRole role(ThreadRole::AudioDispatch);
@@ -359,19 +267,8 @@ static void audioDispatchLoop() {
     // what a 20 ms decode cadence wants.
     dish::elevateCurrentThreadToInputPriority();
     LOGI("Speaker audio dispatch thread started");
-    // Allocated once for the thread: one push can drain the whole window and conceal ahead of it,
-    // so this is sized for the worst case rather than reallocated.
-    std::vector<int16_t> pcm(static_cast<size_t>(dish_audio::AUDIO_JITTER_MAX_EVENTS_PER_PUSH) *
-                             dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES);
-    bool concealed[dish_audio::AUDIO_JITTER_MAX_EVENTS_PER_PUSH] = {};
-    while (g_audioDispatchRunning.load(std::memory_order_relaxed)) {
-        SpeakerFrame f;
-        if (!takeNextSpeakerFrame(f)) break;
-        if (!f.session || f.session->closed.load(std::memory_order_acquire)) continue;
-        const int produced = dish_receive::decodeSpeakerAudio(
-            *f.session, f.ctrlIdx, f.lane, f.seq, f.opus.data(), f.opus.size(), pcm, concealed);
-        deliverSpeakerFrames(env, f, pcm.data(), concealed, produced);
-    }
+    JniSpeakerSink sink(env);
+    while (g_speakerQueue.waitForWork()) g_speakerQueue.drain(g_sessionTable, sink);
     g_jvm->DetachCurrentThread();
     LOGI("Speaker audio dispatch thread stopped");
 }
@@ -383,7 +280,7 @@ static void startAudioDispatchThread() {
 }
 
 // The receive path's feedback, made into the Kotlin upcalls on the receive thread; audio is only
-// copied onto the audio dispatch thread's queue. A bridge Kotlin has not installed drops it.
+// copied onto the speaker queue. A bridge Kotlin has not installed drops it.
 class JniFeedbackSink final : public dish_receive::FeedbackSink {
   public:
     explicit JniFeedbackSink(JNIEnv* env) : env_(env) {}
@@ -434,27 +331,15 @@ class JniFeedbackSink final : public dish_receive::FeedbackSink {
 
     // With no playback engine installed there is nothing to decode FOR, so the frame is dropped
     // before it costs a copy.
-    void audio(const std::shared_ptr<dish_session::Session>& session, const int handle,
-               const int lane, const dish_wire::AudioFrameHeader& header, const uint8_t* opus,
-               const size_t opusLen) override {
+    void audio(const int handle, const int lane, const dish_wire::AudioFrameHeader& header,
+               const uint8_t* opus, const size_t opusLen) override {
         if (g_speakerAudioBridgeClass == nullptr) return;
-        SpeakerFrame f;
-        f.session = session;
-        f.handle = handle;
-        f.ctrlIdx = header.ctrlIdx;
-        f.lane = lane;
-        f.seq = header.seq;
-        f.opus.assign(opus, opus + opusLen);
-        enqueueSpeakerFrame(std::move(f));
+        g_speakerQueue.push(handle, lane, header, opus, opusLen);
     }
 
   private:
     JNIEnv* const env_;
 };
-
-static JniBridgeSink g_bridgeSink;
-static dish_session::SessionTable g_sessionTable;
-static dish_slots::SlotTable g_slotTable(g_sessionTable, g_bridgeSink);
 
 namespace dispatch {
 
@@ -471,13 +356,7 @@ void forgetDevice(int32_t deviceId) { g_slotTable.forgetDevice(deviceId); }
 // Called on the USB reader thread, which is not attached to the JVM: hand the edge to the bridge
 // thread (which is) rather than attaching per press. Nothing here touches the wire; the mute bit
 // is already in the report the decoder produced.
-void applyPadMicMute(int32_t deviceId, bool muted) {
-    {
-        std::lock_guard<TrackedMutex> lock(g_bridgeQueueMtx);
-        g_micMuteQueue.emplace_back(deviceId, muted);
-    }
-    g_bridgeQueueCv.notify_one();
-}
+void applyPadMicMute(int32_t deviceId, bool muted) { g_bridgeQueue.pushMicMute(deviceId, muted); }
 
 void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyroZ, int16_t accelX,
                     int16_t accelY, int16_t accelZ, uint32_t timestampDeltaUs) {

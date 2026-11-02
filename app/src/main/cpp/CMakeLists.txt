@@ -133,6 +133,8 @@ add_library(satellite SHARED
     slot_table.cpp
     send_path.cpp
     receive_path.cpp
+    bridge_queue.cpp
+    speaker_queue.cpp
     udp_socket.cpp
     audio_codec.cpp
     gamepad_input.cpp

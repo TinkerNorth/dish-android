@@ -168,7 +168,9 @@ TEST_F(Slots, AMoonlightSlotHandsEveryReportToTheBridgeAndNothingToTheWire) {
     ASSERT_EQ(reports.size(), 3u);
     EXPECT_EQ(reports[0].payload, dish_slots::BridgeReport::GAMEPAD);
     EXPECT_EQ(reports[0].kind, dish_slots::SLOT_MOONLIGHT);
-    EXPECT_EQ(reports[0].connectionId, id);
+    EXPECT_EQ(slots->bridgeConnectionId(reports[0].connection), id);
+    EXPECT_EQ(reports[1].connection, reports[0].connection);
+    EXPECT_EQ(reports[2].connection, reports[0].connection);
     EXPECT_EQ(reports[0].controllerNumber, 2);
     EXPECT_EQ(reports[0].wButtons, 0x1234);
     EXPECT_EQ(reports[0].sLX, -12345);
@@ -191,6 +193,20 @@ TEST_F(Slots, ABluetoothSlotCarriesTheGamepadAlone) {
     ASSERT_EQ(reports.size(), 1u);
     EXPECT_EQ(reports[0].kind, dish_slots::SLOT_BLUETOOTH);
     EXPECT_EQ(reports[0].wButtons, 0x0020);
+}
+
+TEST_F(Slots, ARebindNamesANewConnectionAndTheOldOneResolvesToNothing) {
+    const dish_bridge::BridgeConnectionId id = std::make_shared<const std::string>("moonlight-1");
+    slots->bindBridge(1, id, dish_slots::SLOT_MOONLIGHT, 0);
+    slots->applyUsbReport(1, buttons(0x0001));
+    slots->bindBridge(1, id, dish_slots::SLOT_MOONLIGHT, 0);
+    slots->applyUsbReport(1, buttons(0x0002));
+    const std::vector<dish_slots::BridgeReport> reports = bridge.taken();
+    ASSERT_EQ(reports.size(), 3u);
+    EXPECT_NE(reports[2].connection, reports[0].connection);
+    EXPECT_EQ(slots->bridgeConnectionId(reports[0].connection), nullptr);
+    EXPECT_EQ(slots->bridgeConnectionId(reports[2].connection), id);
+    EXPECT_EQ(slots->bridgeConnectionId(0), nullptr);
 }
 
 TEST_F(Slots, ABridgeSlotWithoutAConnectionPublishesNothing) {

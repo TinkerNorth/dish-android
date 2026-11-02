@@ -65,9 +65,9 @@ class Port {
 
 class Bridge final : public dish_slots::BridgeSink {
   public:
-    void push(dish_slots::BridgeReport&& report) override {
+    void push(const dish_slots::BridgeReport& report) override {
         std::lock_guard<std::mutex> lock(mtx_);
-        reports_.push_back(std::move(report));
+        reports_.push_back(report);
     }
 
     std::vector<dish_slots::BridgeReport> taken() {
@@ -121,9 +121,8 @@ class Feedback final : public dish_receive::FeedbackSink {
         std::lock_guard<std::mutex> lock(mtx_);
         micLeds.push_back(led);
     }
-    void audio(const std::shared_ptr<dish_session::Session>&, const int handle, const int lane,
-               const dish_wire::AudioFrameHeader& header, const uint8_t* opus,
-               const size_t opusLen) override {
+    void audio(const int handle, const int lane, const dish_wire::AudioFrameHeader& header,
+               const uint8_t* opus, const size_t opusLen) override {
         std::lock_guard<std::mutex> lock(mtx_);
         audioSeen.push_back(
             Audio{handle, lane, header.ctrlIdx, header.seq, Bytes(opus, opus + opusLen)});

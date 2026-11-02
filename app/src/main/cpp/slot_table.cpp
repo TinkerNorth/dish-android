@@ -87,7 +87,7 @@ void SlotTable::publishGamepadToBridge(const SlotBinding& binding, const DeviceS
     BridgeReport r{};
     r.kind = binding.kind;
     r.payload = BridgeReport::GAMEPAD;
-    r.connectionId = binding.bridgeConnectionId;
+    r.connection = binding.bridgeConnection;
     r.controllerNumber = binding.controllerIndex;
     r.wButtons = s.wButtons;
     r.bLT = s.bLT;
@@ -96,7 +96,7 @@ void SlotTable::publishGamepadToBridge(const SlotBinding& binding, const DeviceS
     r.sLY = s.sLY;
     r.sRX = s.sRX;
     r.sRY = s.sRY;
-    bridge_.push(std::move(r));
+    bridge_.push(r);
 }
 
 // Lock order: devices < slots < (sessions | btQueue | a session's send turn). The datagram is
@@ -187,12 +187,12 @@ void SlotTable::publishMotionToBridge(const SlotBinding& binding, const MotionSa
     BridgeReport r{};
     r.kind = SLOT_MOONLIGHT;
     r.payload = BridgeReport::MOTION;
-    r.connectionId = binding.bridgeConnectionId;
+    r.connection = binding.bridgeConnection;
     r.controllerNumber = binding.controllerIndex;
     memcpy(r.gyro, m.gyro, sizeof(r.gyro));
     memcpy(r.accel, m.accel, sizeof(r.accel));
     r.timestampDeltaUs = m.timestampDeltaUs;
-    bridge_.push(std::move(r));
+    bridge_.push(r);
 }
 
 void SlotTable::publishMotionToSatellite(const SlotBinding& binding, const MotionSample& m,
@@ -238,10 +238,10 @@ void SlotTable::publishTouchToBridge(const SlotBinding& binding, const gamepad::
     BridgeReport r{};
     r.kind = SLOT_MOONLIGHT;
     r.payload = BridgeReport::TOUCH;
-    r.connectionId = binding.bridgeConnectionId;
+    r.connection = binding.bridgeConnection;
     r.controllerNumber = binding.controllerIndex;
     r.touch = t;
-    bridge_.push(std::move(r));
+    bridge_.push(r);
 }
 
 // A pad's own trackpad carries no mouse buttons and no wheel.
@@ -361,6 +361,7 @@ void SlotTable::bindSatellite(const int32_t deviceId, const int sessionHandle,
         b.sessionHandle = sessionHandle;
         b.controllerIndex = controllerIndex;
         b.bridgeConnectionId.reset();
+        b.bridgeConnection = 0;
     }
     syncSlotBaseline(deviceId);
 }
@@ -373,6 +374,7 @@ void SlotTable::bindBridge(const int32_t deviceId, dish_bridge::BridgeConnection
         b.kind = kind;
         b.sessionHandle = -1;
         b.controllerIndex = controllerIndex;
+        b.bridgeConnection = connectionId ? nextBridgeConnection() : 0;
         b.bridgeConnectionId = std::move(connectionId);
     }
     syncSlotBaseline(deviceId);
@@ -416,6 +418,21 @@ uint64_t SlotTable::frameworkEventCount(const int32_t deviceId) {
     std::lock_guard<TrackedMutex> lock(devicesMtx_);
     auto it = frameworkEventCounts_.find(deviceId);
     return it == frameworkEventCounts_.end() ? 0 : it->second;
+}
+
+// Caller holds the slot lock. Never 0, which names no connection.
+uint32_t SlotTable::nextBridgeConnection() {
+    if (++lastBridgeConnection_ == 0) ++lastBridgeConnection_;
+    return lastBridgeConnection_;
+}
+
+dish_bridge::BridgeConnectionId SlotTable::bridgeConnectionId(const uint32_t connection) {
+    if (connection == 0) return nullptr;
+    std::lock_guard<TrackedMutex> lock(slotsMtx_);
+    for (const auto& kv : slots_) {
+        if (kv.second.bridgeConnection == connection) return kv.second.bridgeConnectionId;
+    }
+    return nullptr;
 }
 
 } // namespace dish_slots

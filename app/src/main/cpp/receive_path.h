@@ -20,7 +20,7 @@ inline constexpr int AUDIO_LANE_SPEAKER = 0;
 inline constexpr int AUDIO_LANE_HAPTICS = 1;
 
 // Where the receive thread hands each feedback datagram, in arrival order, on that thread: the
-// JNI layer upcalls into Kotlin for all but audio, which it queues for its own thread.
+// JNI layer upcalls into Kotlin for all but audio, which goes onto the SpeakerQueue.
 class FeedbackSink {
   public:
     virtual void rumble(int handle, uint8_t ctrlIdx, uint16_t strong, uint16_t weak,
@@ -30,9 +30,8 @@ class FeedbackSink {
     virtual void triggerEffects(int handle, uint8_t ctrlIdx, const uint8_t* blocks) = 0;
     virtual void playerLeds(int handle, const dish_wire::PlayerLedsPayload& leds) = 0;
     virtual void micLed(int handle, const dish_wire::MicLedPayload& led) = 0;
-    virtual void audio(const std::shared_ptr<dish_session::Session>& session, int handle, int lane,
-                       const dish_wire::AudioFrameHeader& header, const uint8_t* opus,
-                       size_t opusLen) = 0;
+    virtual void audio(int handle, int lane, const dish_wire::AudioFrameHeader& header,
+                       const uint8_t* opus, size_t opusLen) = 0;
 
   protected:
     ~FeedbackSink() = default;

@@ -30,33 +30,37 @@ struct SlotBinding {
     int sessionHandle = -1;
     int controllerIndex = -1;
     dish_bridge::BridgeConnectionId bridgeConnectionId;
+    // Names bridgeConnectionId in the reports; 0 when there is none.
+    uint32_t bridgeConnection = 0;
 };
 
 // Bridge kinds (Bluetooth, Moonlight) run off the UI thread: BluetoothHidDevice.sendReport is
 // Binder IPC, and the Moonlight path encrypts + frames in Kotlin. One queue + thread serves both;
 // the report's kind picks the Kotlin bridge to upcall.
 struct BridgeReport {
-    SlotKind kind;
+    SlotKind kind = SLOT_NONE;
     // What the report carries: the Moonlight lane also ferries motion and
     // touch samples off the USB reader thread (Bluetooth stays gamepad-only).
     enum Payload : uint8_t { GAMEPAD = 0, MOTION = 1, TOUCH = 2 };
     Payload payload = GAMEPAD;
-    dish_bridge::BridgeConnectionId connectionId;
-    int32_t controllerNumber;
-    uint16_t wButtons;
-    uint8_t bLT, bRT;
-    int16_t sLX, sLY, sRX, sRY;
-    int16_t gyro[3];
-    int16_t accel[3];
-    uint32_t timestampDeltaUs;
+    // The bind's connection number (SlotTable::bridgeConnectionId resolves it to the id): a number
+    // rather than the id itself, so a report copies whole through a lock-free ring.
+    uint32_t connection = 0;
+    int32_t controllerNumber = 0;
+    uint16_t wButtons = 0;
+    uint8_t bLT = 0, bRT = 0;
+    int16_t sLX = 0, sLY = 0, sRX = 0, sRY = 0;
+    int16_t gyro[3] = {};
+    int16_t accel[3] = {};
+    uint32_t timestampDeltaUs = 0;
     gamepad::TouchpadState touch;
 };
 
-// Where a bridge slot's reports go. Called with the slot lock held, so it hands the report on
-// and must not make a JVM upcall itself.
+// Where a bridge slot's reports go. Called on the input path, so it hands the report on and must
+// not make a JVM upcall itself.
 class BridgeSink {
   public:
-    virtual void push(BridgeReport&& report) = 0;
+    virtual void push(const BridgeReport& report) = 0;
 
   protected:
     ~BridgeSink() = default;
@@ -100,6 +104,10 @@ class SlotTable {
     size_t formatDeviceState(int32_t deviceId, char* buf, size_t cap);
     uint64_t frameworkEventCount(int32_t deviceId);
 
+    // The id a bridge report's connection number names while a slot is bound with it; null once
+    // the bind it came from is gone.
+    dish_bridge::BridgeConnectionId bridgeConnectionId(uint32_t connection);
+
   private:
     void publishIfChanged(int32_t deviceId, gamepad::DeviceState& s,
                           dish_send::PendingDatagram& out);
@@ -118,6 +126,7 @@ class SlotTable {
     void publishTouchToSatellite(const SlotBinding& binding, const gamepad::TouchpadState& t,
                                  uint32_t eventTimeMs, dish_send::PendingDatagram& out);
     uint8_t quirkFor(int32_t deviceId);
+    uint32_t nextBridgeConnection();
     void stageFrameworkKey(int32_t deviceId, int32_t keyCode, int32_t action,
                            dish_send::PendingDatagram& out);
     bool filterFrameworkKey(int32_t deviceId, int32_t keyCode, int32_t action,
@@ -135,6 +144,7 @@ class SlotTable {
 
     TrackedMutex slotsMtx_{"input.slots"};
     std::unordered_map<int32_t, SlotBinding> slots_;
+    uint32_t lastBridgeConnection_ = 0;
 
     // Off costs one relaxed load per report, the same budget as the latency bench markers.
     std::atomic<bool> inspect_{false};

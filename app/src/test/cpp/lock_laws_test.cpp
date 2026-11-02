@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "audio_codec.h"
+#include "bridge_queue.h"
 #include "fake_satellite.h"
 #include "gamepad_input.h"
 #include "receive_path.h"
@@ -32,6 +33,7 @@
 #include "send_path.h"
 #include "session_table.h"
 #include "slot_table.h"
+#include "speaker_queue.h"
 #include "tracked_mutex.h"
 #include "wire_encoders.h"
 
@@ -99,11 +101,14 @@ using PairSet = std::set<std::pair<std::string, std::string>>;
 constexpr auto RUN_TIME = std::chrono::milliseconds(1500);
 constexpr int POLLER_A_HZ = 1000;
 constexpr int POLLER_B_HZ = 250;
+constexpr int POLLER_MOONLIGHT_HZ = 250;
 constexpr int UI_INPUT_HZ = 250;
 constexpr int MIC_HZ = 50;
 constexpr int BATTERY_HZ = 10;
 constexpr int BINDING_HZ = 5;
 constexpr int FEEDBACK_HZ = 100;
+constexpr int SPEAKER_HZ = 50;
+constexpr uint64_t MUTE_EVERY = 50;
 constexpr uint64_t LIGHTBAR_EVERY = 10;
 constexpr int HEARTBEAT_INTERVAL_MS = 50;
 constexpr uint64_t MOTION_EVERY = 8;
@@ -112,6 +117,8 @@ constexpr int SATELLITE_POLL_MS = 1;
 constexpr int32_t DEVICE_A = 1;
 constexpr int32_t DEVICE_B = 2;
 constexpr int32_t DEVICE_UI = 3;
+constexpr int32_t DEVICE_MOONLIGHT = 4;
+constexpr uint8_t SPEAKER_CONTROLLER = 0;
 constexpr int32_t KEYCODE_BUTTON_A = 96;
 constexpr double PI = 3.141592653589793;
 constexpr double TONE_HZ = 440.0;
@@ -188,16 +195,34 @@ struct SatelliteTally {
     std::atomic<uint64_t> received{0};
     std::atomic<uint64_t> acked{0};
     std::atomic<uint64_t> feedbackSent{0};
+    std::atomic<uint64_t> speakerSent{0};
 };
 
+// One 20 ms frame of silence as the satellite encodes speaker audio, behind its wire header.
+fake_satellite::Bytes speakerPayload(const uint16_t seq) {
+    const std::unique_ptr<dish_audio::OpusStreamEncoder> encoder =
+        dish_audio::OpusStreamEncoder::create(dish_audio::Stream::Speaker);
+    const std::vector<int16_t> stereo(dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES, 0);
+    fake_satellite::Bytes payload(dish_wire::AUDIO_WIRE_HEADER_BYTES +
+                                  dish_wire::AUDIO_WIRE_MAX_OPUS_BYTES);
+    const size_t len = encoder->encode(stereo.data(), dish_audio::AUDIO_FRAME_SAMPLES,
+                                       payload.data() + dish_wire::AUDIO_WIRE_HEADER_BYTES,
+                                       dish_wire::AUDIO_WIRE_MAX_OPUS_BYTES);
+    payload.resize(dish_wire::AUDIO_WIRE_HEADER_BYTES + len);
+    dish_wire::encodeAudioFrameHeader(payload.data(), SPEAKER_CONTROLLER, seq);
+    return payload;
+}
+
 // The satellite's side: drains the client's datagrams, answers each ping with an enriched ack,
-// and sends rumble with a lightbar every tenth datagram at FEEDBACK_HZ once it knows the client.
+// and once it knows the client sends rumble with a lightbar every tenth datagram at FEEDBACK_HZ
+// and speaker audio at SPEAKER_HZ.
 void runSatellite(fake_satellite::Peer& peer, const uint8_t key[32], const std::atomic<bool>& stop,
                   SatelliteTally& tally) {
     uint32_t counter = 1;
     bool knowsClient = false;
     const Clock::time_point start = Clock::now();
     uint64_t nextFeedback = 0;
+    uint16_t nextSpeaker = 0;
     while (!stop.load()) {
         const fake_satellite::Bytes datagram = peer.receive(SATELLITE_POLL_MS);
         if (!datagram.empty()) {
@@ -211,6 +236,13 @@ void runSatellite(fake_satellite::Peer& peer, const uint8_t key[32], const std::
                     TOKEN, key, counter++, dish_wire::MSG_HEARTBEAT_ACK, ack, sizeof(ack)));
                 tally.acked++;
             }
+        }
+        const bool speakerDue = Clock::now() >= start + periodOf(SPEAKER_HZ) * (int64_t)nextSpeaker;
+        if (knowsClient && speakerDue) {
+            const fake_satellite::Bytes audio = speakerPayload(nextSpeaker++);
+            peer.reply(fake_satellite::sealToClient(
+                TOKEN, key, counter++, dish_wire::MSG_SPEAKER_AUDIO, audio.data(), audio.size()));
+            tally.speakerSent++;
         }
         const bool feedbackDue =
             Clock::now() >= start + periodOf(FEEDBACK_HZ) * (int64_t)nextFeedback;
@@ -233,6 +265,10 @@ struct RunTally {
     std::atomic<uint64_t> micFrames{0};
     std::atomic<uint64_t> binds{0};
     std::atomic<uint64_t> unbinds{0};
+    std::atomic<uint64_t> bridgeReports{0};
+    std::atomic<uint64_t> muteEdges{0};
+    std::atomic<uint64_t> resolvedConnections{0};
+    std::atomic<uint64_t> speakerFrames{0};
 };
 
 struct LawRun {
@@ -243,6 +279,68 @@ struct LawRun {
     size_t lightbars = 0;
 };
 
+// The receive thread's feedback as the JNI layer hands it on: the upcalls recorded, speaker audio
+// onto the queue the audio dispatch thread drains.
+class QueueingFeedback final : public dish_receive::FeedbackSink {
+  public:
+    explicit QueueingFeedback(dish_receive::SpeakerQueue& speaker) : speaker_(speaker) {}
+
+    void rumble(const int handle, const uint8_t ctrlIdx, const uint16_t strong, const uint16_t weak,
+                const uint16_t durationMs) override {
+        recorded.rumble(handle, ctrlIdx, strong, weak, durationMs);
+    }
+    void lightbar(const int handle, const dish_wire::LightbarPayload& lb) override {
+        recorded.lightbar(handle, lb);
+    }
+    void triggerEffects(const int handle, const uint8_t ctrlIdx, const uint8_t* blocks) override {
+        recorded.triggerEffects(handle, ctrlIdx, blocks);
+    }
+    void playerLeds(const int handle, const dish_wire::PlayerLedsPayload& leds) override {
+        recorded.playerLeds(handle, leds);
+    }
+    void micLed(const int handle, const dish_wire::MicLedPayload& led) override {
+        recorded.micLed(handle, led);
+    }
+    void audio(const int handle, const int lane, const dish_wire::AudioFrameHeader& header,
+               const uint8_t* opus, const size_t opusLen) override {
+        speaker_.push(handle, lane, header, opus, opusLen);
+    }
+
+    recording::Feedback recorded;
+
+  private:
+    dish_receive::SpeakerQueue& speaker_;
+};
+
+// The bridge thread's side of the JNI layer: each new connection number resolved once, as its
+// connection-id cache does, and every item counted.
+class CountingBridge final : public dish_bridge::BridgeConsumer {
+  public:
+    CountingBridge(dish_slots::SlotTable& slots, RunTally& tally) : slots_(slots), tally_(tally) {}
+
+    void report(const dish_slots::BridgeReport& r) override {
+        tally_.bridgeReports++;
+        if (r.connection == lastResolved_) return;
+        if (slots_.bridgeConnectionId(r.connection)) tally_.resolvedConnections++;
+        lastResolved_ = r.connection;
+    }
+    void micMute(int32_t, bool) override { tally_.muteEdges++; }
+
+  private:
+    dish_slots::SlotTable& slots_;
+    RunTally& tally_;
+    uint32_t lastResolved_ = 0;
+};
+
+class CountingSpeaker final : public dish_receive::SpeakerSink {
+  public:
+    explicit CountingSpeaker(RunTally& tally) : tally_(tally) {}
+    void pcm(int, uint8_t, int, const int16_t*, bool) override { tally_.speakerFrames++; }
+
+  private:
+    RunTally& tally_;
+};
+
 // Every role on its own thread, each driving the extracted units the way production does, for
 // RUN_TIME on one session over loopback; the session is closed before the snapshot.
 void runEveryRole(LawRun& run) {
@@ -250,8 +348,9 @@ void runEveryRole(LawRun& run) {
     for (int i = 0; i < 32; i++) key[i] = (uint8_t)(0xC0 + i);
     fake_satellite::Peer peer;
     dish_session::SessionTable table;
-    recording::Bridge bridge;
-    recording::Feedback feedback;
+    dish_bridge::BridgeQueue bridge;
+    dish_receive::SpeakerQueue speaker;
+    QueueingFeedback feedback(speaker);
     dish_slots::SlotTable slots(table, bridge);
 
     lockstats::reset();
@@ -262,6 +361,8 @@ void runEveryRole(LawRun& run) {
     slots.bindSatellite(DEVICE_A, handle, 0);
     slots.bindSatellite(DEVICE_B, handle, 1);
     slots.bindSatellite(DEVICE_UI, handle, 2);
+    slots.bindBridge(DEVICE_MOONLIGHT, std::make_shared<const std::string>("moonlight:laws"),
+                     dish_slots::SLOT_MOONLIGHT, 0);
 
     std::atomic<bool> satelliteStop{false};
     std::atomic<bool> stop{false};
@@ -273,12 +374,32 @@ void runEveryRole(LawRun& run) {
         dish_send::runHeartbeat(session, heartbeatMs);
     });
 
+    CountingBridge bridgeConsumer(slots, run.tally);
+    std::thread bridgeThread([&] {
+        const ScopedThreadRole role(ThreadRole::Bridge);
+        while (bridge.waitForWork()) bridge.drain(bridgeConsumer);
+    });
+    CountingSpeaker speakerSink(run.tally);
+    std::thread audioDispatch([&] {
+        const ScopedThreadRole role(ThreadRole::AudioDispatch);
+        while (speaker.waitForWork()) speaker.drain(table, speakerSink);
+    });
+
     std::vector<std::thread> roles;
     roles.emplace_back([&] {
         const ScopedThreadRole role(ThreadRole::UsbPoller);
         gamepad::TouchpadGate gate;
         paced(stop, POLLER_A_HZ,
               [&](uint64_t k) { publishLikeThePoller(slots, DEVICE_A, k, gate); });
+    });
+    roles.emplace_back([&] {
+        const ScopedThreadRole role(ThreadRole::UsbPoller);
+        gamepad::TouchpadGate gate;
+        paced(stop, POLLER_MOONLIGHT_HZ, [&](uint64_t k) {
+            publishLikeThePoller(slots, DEVICE_MOONLIGHT, k, gate);
+            if (k % MUTE_EVERY == 0)
+                bridge.pushMicMute(DEVICE_MOONLIGHT, (k / MUTE_EVERY) % 2 == 0);
+        });
     });
     roles.emplace_back([&] {
         const ScopedThreadRole role(ThreadRole::UsbPoller);
@@ -333,11 +454,15 @@ void runEveryRole(LawRun& run) {
     receive.join();
     satelliteStop = true;
     satellite.join();
+    bridge.stop();
+    bridgeThread.join();
+    speaker.stop();
+    audioDispatch.join();
     table.close(handle);
 
     run.snap = lockstats::snapshot();
-    run.rumbles = feedback.rumbles.size();
-    run.lightbars = feedback.lightbars.size();
+    run.rumbles = feedback.recorded.rumbles.size();
+    run.lightbars = feedback.recorded.lightbars.size();
 }
 
 NameSet locksTakenBy(const lockstats::Snapshot& snap, const ThreadRole role) {
@@ -484,6 +609,12 @@ TEST_F(LockLaws, TheRunReachedEveryRoleAndEveryPath) {
     EXPECT_GT(run->tally.received.load(), run->satellite.acked.load());
     EXPECT_GT(run->rumbles, 0u);
     EXPECT_GT(run->lightbars, 0u);
+    EXPECT_GT(run->tally.bridgeReports.load(), 0u);
+    EXPECT_GT(run->tally.muteEdges.load(), 0u);
+    EXPECT_EQ(run->tally.resolvedConnections.load(), 1u);
+    EXPECT_GT(run->satellite.speakerSent.load(), 0u);
+    EXPECT_GT(run->tally.speakerFrames.load(), 0u);
+    EXPECT_GT(acquisitions(snap, "session.audio", ThreadRole::AudioDispatch), 0u);
     EXPECT_EQ(snap.overflows, 0u);
 }
 

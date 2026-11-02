@@ -509,10 +509,16 @@ can't reach are still unit-testable from a host build:
   formats. Not header-only (it needs `<opus.h>`), but still host-buildable:
   `audio_codec_test` links the same pinned libopus the app does.
 - `bridge_connection_ids.h`: the bridge thread's Java string per bound
-  connection id, made on a bind's first report and released once the bind
-  and its queued reports are gone. JNI-free (the refs are a template
-  parameter), so `bridge_connection_ids_test` proves the one-string-per-bind
-  rule with a fake JVM.
+  connection id, made on a bind's first report (which names its bind by a
+  connection number) and released once the bind is gone. JNI-free (the refs
+  are a template parameter), so `bridge_connection_ids_test` proves the
+  one-string-per-bind rule with a fake JVM.
+- `mpmc_ring.h`, `worker_wake.h`, `bridge_queue.{cpp,h}` and
+  `speaker_queue.{cpp,h}`: the hand-offs to the two JVM-attached dispatch
+  threads. A bounded lock-free ring of fixed-size items (Bluetooth and
+  Moonlight reports, drop-oldest; mic-mute edges, never dropped; speaker and
+  haptic Opus packets, drop-oldest) and a wake that costs a producer one load
+  while its worker is busy and a semaphore post only when it sleeps.
 - `session_table.{cpp,h}`, `slot_table.{cpp,h}`, `send_path.{cpp,h}` and
   `receive_path.{cpp,h}`: the native hot path, JNI-free. The session map and
   its sockets; every pad's state, its slot binding and the send-on-change
@@ -530,8 +536,8 @@ can't reach are still unit-testable from a host build:
   `lock_laws_test` holds to lists that only shrink and `bench_send_path_lockstats`
   reports (`tools/bench/README.md`, "Host bench").
 - `satellite_jni.cpp`: the Android-only glue. Argument marshalling, the
-  Kotlin upcalls, the bridge and speaker-audio dispatch threads that make
-  them, the GameActivity filters and the JNI registration. This file does
+  Kotlin upcalls, the JVM attach of the bridge and speaker-audio dispatch
+  threads that make them, the GameActivity filters and the JNI registration. This file does
   **not** ship pure helpers: anything testable belongs in one of the files
   above.
 

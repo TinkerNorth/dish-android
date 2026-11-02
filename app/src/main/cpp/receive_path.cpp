@@ -136,14 +136,14 @@ int handleDatagram(const std::shared_ptr<Session>& session, const int handle, co
                 msgType == dish_wire::MSG_HAPTIC_AUDIO) &&
                msgLen >= dish_wire::AUDIO_WIRE_MIN_PAYLOAD_BYTES &&
                decLen >= 4 + (unsigned long long)msgLen) {
-        // Queued, not decoded here: see the audio dispatch thread. The haptic lane rides the
-        // same queue and thread: same shape, same cadence, its own window.
+        // Queued, not decoded here: see speaker_queue.h. The haptic lane rides the same queue
+        // and thread: same shape, same cadence, its own window.
         const dish_wire::AudioFrameHeader h = dish_wire::decodeAudioFrameHeader(decrypted + 4);
         const uint8_t* opus = decrypted + 4 + dish_wire::AUDIO_WIRE_HEADER_BYTES;
         const size_t opusLen = msgLen - dish_wire::AUDIO_WIRE_HEADER_BYTES;
         const int lane =
             msgType == dish_wire::MSG_HAPTIC_AUDIO ? AUDIO_LANE_HAPTICS : AUDIO_LANE_SPEAKER;
-        sink.audio(session, handle, lane, h, opus, opusLen);
+        sink.audio(handle, lane, h, opus, opusLen);
     } else if (msgType == dish_wire::MSG_MIC_LED && msgLen == dish_wire::MIC_LED_PAYLOAD_BYTES &&
                decLen >= 4 + dish_wire::MIC_LED_PAYLOAD_BYTES) {
         // Routed like the lightbar: the FeedbackRouter lands it on whichever
