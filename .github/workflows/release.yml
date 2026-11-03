@@ -88,19 +88,6 @@ on:
 #                                 device targeting stay console-only too.
 #                                 Unset, the job is skipped.
 #
-# Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
-#   actions/checkout                @ v7.0.1  → 3d3c42e5aac5ba805825da76410c181273ba90b1
-#   actions/setup-java              @ v6.0.1  → de7274f081f381c8f8158605e0321c36c376e2e6
-#   actions/upload-artifact         @ v7.0.1  → 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-#   actions/download-artifact       @ v8.0.1  → 3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-#   gradle/actions/setup-gradle     @ v6.4.0  → 3f5f9adaf7d9fecd50b5935e54106014257a94e6
-#   anchore/sbom-action             @ v0.24.3 → 66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c
-#   anchore/scan-action             @ v7.4.2  → 27805bf3b4e84b4a5c980df22ed233c00390a439
-#   github/codeql-action/upload-sarif @ v4.38.2 → 2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
-#   softprops/action-gh-release     @ v3.0.3  → efb35369e0ad2afab669f228072c1b0d510eae64
-#   slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml
-#                                   @ v2.1.0  → f7dd8c54c2067bafc12ca7a55595d5ee9b75204a
-#
 # cosign is installed directly from upstream (see harden job).
 
 permissions:

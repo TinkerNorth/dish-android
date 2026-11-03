@@ -13,9 +13,6 @@ name: Play Listing Sync
 #
 # Requires the PLAY_SERVICE_ACCOUNT_JSON secret (raw JSON key). The app
 # record and its first build must already exist in the Play Console.
-#
-# Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
-#   actions/checkout                @ v7.0.1  → 3d3c42e5aac5ba805825da76410c181273ba90b1
 
 on:
   workflow_dispatch:
