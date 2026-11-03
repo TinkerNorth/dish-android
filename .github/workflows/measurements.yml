@@ -1,10 +1,5 @@
 name: Measurements
 
-# Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
-#   actions/checkout           @ v7.0.1 → 3d3c42e5aac5ba805825da76410c181273ba90b1
-#   actions/upload-artifact    @ v7.0.2 → cf430e030ddbb5b0abf93d22962f4752f3646cd9
-#   actions/download-artifact  @ v8.0.2 → 9000827ccba6bdab643e8b6fd33ac0654aef8333
-
 # Runs the host bench (tools/bench/README.md, "Host bench") and its lock-statistics twin on a
 # hosted runner and turns their JSON into measurements-<version>.md (the job summary) and
 # measurements-<version>.json through scripts/measurements_report.py. release.yml runs it beside
