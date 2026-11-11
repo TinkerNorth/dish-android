@@ -171,18 +171,40 @@ class MoonlightLaunchRecordTest {
             cancelAsked.countDown()
             cancelAnswer.join()
         }
+        val probeAsked = CountDownLatch(1)
         val probeAnswer = CompletableFuture<MoonlightHttpGateway.Reply>()
-        every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } answers { probeAnswer.join() }
+        every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } answers {
+            probeAsked.countDown()
+            probeAnswer.join()
+        }
 
         manager.forget(host.id)
         assertTrue("the cancel is on the wire", cancelAsked.await(WAIT_MS, TimeUnit.MILLISECONDS))
         val probe = sessions.async { manager.probe(host) }
+        assertTrue("and so is the probe", probeAsked.await(WAIT_MS, TimeUnit.MILLISECONDS))
         cancelAnswer.complete(reply(CANCELLED))
         assertTrue("the forget is over", within(WAIT_MS) { host.id !in manager.sessionHostIds.value })
         probeAnswer.complete(reply(REBUILT_TRUSTING_INFO))
 
         assertEquals(MoonlightTrustState.NOT_PAIRED, runBlocking { probe.await() }.trust)
         assertFalse("the host is not verified", host.id in manager.verifiedHostIds.value)
+    }
+
+    // The forget is unilateral: the host still trusts this device, and a probe that begins once the
+    // forget is over asks it afresh and is told so.
+    @Test
+    fun `a host probed once its forget is over is asked afresh`() {
+        rows[host.id] = RememberedMoonlight(id = host.id, name = "PC", address = host.address, uniqueId = "host-2", paired = true)
+        manager.applyDesired(mapOf(host.id to listOf(PAD)))
+        assertTrue("the session is live", sessionRecorded.await(WAIT_MS, TimeUnit.MILLISECONDS))
+        assertTrue("and published", within(WAIT_MS) { host.id in manager.sessionHostIds.value })
+
+        manager.forget(host.id)
+        assertTrue("the forget is over", within(WAIT_MS) { host.id !in manager.sessionHostIds.value })
+        val probe = runBlocking { manager.probe(host) }
+
+        assertEquals(MoonlightTrustState.PAIRED, probe.trust)
+        assertTrue("the host is verified", host.id in manager.verifiedHostIds.value)
     }
 
     private fun launchReply() =
