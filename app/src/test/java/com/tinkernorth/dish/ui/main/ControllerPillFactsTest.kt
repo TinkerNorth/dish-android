@@ -80,6 +80,10 @@ class ControllerPillFactsTest {
         runtimeDown = CapabilitySet.EMPTY,
     )
 
+    private val rumbleOn = FunctionPillFact.Rumble(on = true)
+    private val rumbleSwitchOn = caps(userEnabled = setOf(Feature.RUMBLE))
+    private val rumbleSwitchOff = caps(userEnabled = emptySet())
+
     private fun row(
         slot: ControllerSlot = slot(),
         pathCard: PathCard? = null,
@@ -183,11 +187,21 @@ class ControllerPillFactsTest {
     @Test
     fun `the rumble pill follows the motor on the path the pad is on`() {
         val standardOnly = card(standardRumble = true, directRumble = false)
-        assertEquals(listOf(FunctionPillFact.Rumble), functionPillFacts(row(pathCard = standardOnly), summary()))
+        assertEquals(listOf(rumbleOn), functionPillFacts(row(pathCard = standardOnly, motionCap = rumbleSwitchOn), summary()))
         val directOnly = card(mode = InputPathMode.Direct, standardRumble = false, directRumble = true)
-        assertEquals(listOf(FunctionPillFact.Rumble), functionPillFacts(row(pathCard = directOnly), summary()))
+        assertEquals(listOf(rumbleOn), functionPillFacts(row(pathCard = directOnly, motionCap = rumbleSwitchOn), summary()))
         val directNoMotor = card(mode = InputPathMode.Direct, standardRumble = true, directRumble = false)
-        assertEquals(emptyList<FunctionPillFact>(), functionPillFacts(row(pathCard = directNoMotor), summary()))
+        assertEquals(
+            emptyList<FunctionPillFact>(),
+            functionPillFacts(row(pathCard = directNoMotor, motionCap = rumbleSwitchOn), summary()),
+        )
+    }
+
+    @Test
+    fun `a slot whose rumble switch is off does not read as on`() {
+        val standardOnly = card(standardRumble = true, directRumble = false)
+        val facts = functionPillFacts(row(pathCard = standardOnly, motionCap = rumbleSwitchOff), summary())
+        assertEquals(listOf(FunctionPillFact.Rumble(on = false)), facts)
     }
 
     @Test
@@ -250,12 +264,12 @@ class ControllerPillFactsTest {
             caps(
                 input = setOf(Feature.MOTION, Feature.LIGHTBAR, Feature.MIC),
                 type = setOf(Feature.MOTION, Feature.TOUCHPAD, Feature.LIGHTBAR, Feature.MIC),
-                userEnabled = setOf(Feature.MOTION, Feature.MIC),
+                userEnabled = setOf(Feature.MOTION, Feature.MIC, Feature.RUMBLE),
             )
         val rumbling = card(standardRumble = true)
         val expected =
             listOf(
-                FunctionPillFact.Rumble,
+                rumbleOn,
                 FunctionPillFact.Motion(on = true),
                 FunctionPillFact.Pointer(PointerPillFact.PAD_OFF),
                 FunctionPillFact.Feedback(FeedbackPillFact.LIGHTBAR),

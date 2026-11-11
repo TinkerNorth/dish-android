@@ -39,6 +39,9 @@ computer. Those lines say "update Satellite too".
   X-input, many phones never saw it at all: their Android is older than the
   Linux driver that knows this controller. Dish now recognises it and reads it
   in Direct mode on its own, the way it already reads the Ultimate 2C.
+- **The Rumble pill on a controller's card no longer says "on" when its rumble
+  switch is off.** It now dims, the way the Motion pill does, while the switch
+  is off.
 
 ## [2.5.0] - 2026-11-02
 

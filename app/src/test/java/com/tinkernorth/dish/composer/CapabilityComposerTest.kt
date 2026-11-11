@@ -115,6 +115,29 @@ class CapabilityComposerTest {
         }
 
     @Test
+    fun `a slot's rumble switch in the rumble store is what the composed user layer carries`() =
+        composerTest {
+            val devices = MutableStateFlow(mapOf(9 to device(9, hasRumble = true)))
+            val stores = StoreStates(rumbleEnabled = MutableStateFlow(mapOf("9" to false)))
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    stores = stores,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+            assertFalse(composer.capabilityFor("9").userWants(Feature.RUMBLE))
+
+            stores.rumbleEnabled.value = mapOf("9" to true)
+            testScheduler.runCurrent()
+            assertTrue(composer.capabilityFor("9").userWants(Feature.RUMBLE))
+        }
+
+    @Test
     fun `a USB-direct synthetic advertises rumble and motion from the model DB`() =
         composerTest {
             val devices =

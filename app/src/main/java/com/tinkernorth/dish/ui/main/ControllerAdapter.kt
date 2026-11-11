@@ -246,8 +246,12 @@ class ControllerAdapter(
                 FunctionPillFact.RumbleUnknown -> unknownFuncPill(R.string.binding_func_rumble, R.drawable.ic_rumble)
                 FunctionPillFact.GyroUnknown -> unknownFuncPill(R.string.binding_func_gyro, R.drawable.ic_motion)
                 FunctionPillFact.TouchpadUnknown -> unknownFuncPill(R.string.binding_func_touchpad, R.drawable.ic_touchpad)
-                FunctionPillFact.Rumble ->
-                    PillSpec(ctx.getString(R.string.binding_func_rumble), R.drawable.ic_rumble, PillTone.ON)
+                is FunctionPillFact.Rumble ->
+                    PillSpec(
+                        ctx.getString(R.string.binding_func_rumble),
+                        R.drawable.ic_rumble,
+                        if (fact.on) PillTone.ON else PillTone.OFF,
+                    )
                 is FunctionPillFact.Motion ->
                     PillSpec(
                         ctx.getString(R.string.binding_func_motion),
