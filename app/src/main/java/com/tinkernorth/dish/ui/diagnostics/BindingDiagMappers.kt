@@ -5,7 +5,6 @@ package com.tinkernorth.dish.ui.diagnostics
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.net.ControllerDescriptor
-import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 
 internal fun bindingDiag(
@@ -34,7 +33,7 @@ internal fun bindingDiag(
         packetsSent = packetsSent(slotId, host, snapshot, index, world),
         motionSent = index?.let { snapshot.slotMotion[it] },
         touchpadMode = touchpadMode(slotId),
-        batterySource = batterySource(device?.transport, isVirtual),
+        batterySource = batterySource(isVirtual),
         rumbleTarget = feedbackTarget(slotId),
         feedback = world.links.feedback[slotId],
         micState = micState(slotId, world),
@@ -85,15 +84,7 @@ private fun rttFor(
         ConnectionKind.BLUETOOTH -> null
     }
 
-internal fun batterySource(
-    transport: Transport?,
-    isVirtual: Boolean,
-): BatterySource =
-    when {
-        isVirtual -> BatterySource.PHONE
-        transport == Transport.Bluetooth -> BatterySource.LOWEST_OF_BOTH
-        else -> BatterySource.PHONE
-    }
+internal fun batterySource(isVirtual: Boolean): BatterySource = if (isVirtual) BatterySource.PHONE else BatterySource.LOWEST_OF_BOTH
 
 internal fun feedbackTarget(slotId: String): FeedbackTargetKind {
     if (slotId == VIRTUAL_SLOT_ID) return FeedbackTargetKind.PHONE

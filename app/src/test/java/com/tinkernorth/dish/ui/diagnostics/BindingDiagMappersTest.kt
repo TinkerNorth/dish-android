@@ -8,7 +8,6 @@ import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.net.ControllerDescriptor
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
-import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.audio.MicCapturePlan
 import com.tinkernorth.dish.source.audio.MicCaptureTarget
 import com.tinkernorth.dish.source.audio.SpeakerTarget
@@ -119,7 +118,7 @@ class BindingDiagMappersTest {
         assertEquals("ok", b.applyResult)
         assertEquals(4200L, b.packetsSent)
         assertEquals(300L, b.motionSent)
-        assertEquals(BatterySource.PHONE, b.batterySource)
+        assertEquals(BatterySource.LOWEST_OF_BOTH, b.batterySource)
         assertEquals(FeedbackTargetKind.PAD_DIRECT, b.rumbleTarget)
         assertEquals(FeedbackKind.LIGHTBAR, b.feedback?.lastKind)
         assertEquals(MicSlotState.ARMED_MUTED, b.micState)
@@ -281,9 +280,8 @@ class BindingDiagMappersTest {
 
     @Test
     fun `battery source and feedback target follow the slot kind`() {
-        assertEquals(BatterySource.LOWEST_OF_BOTH, batterySource(Transport.Bluetooth, isVirtual = false))
-        assertEquals(BatterySource.PHONE, batterySource(Transport.Usb, isVirtual = false))
-        assertEquals(BatterySource.PHONE, batterySource(null, isVirtual = true))
+        assertEquals(BatterySource.LOWEST_OF_BOTH, batterySource(isVirtual = false))
+        assertEquals(BatterySource.PHONE, batterySource(isVirtual = true))
         assertEquals(FeedbackTargetKind.PHONE, feedbackTarget(VIRTUAL_SLOT_ID))
         assertEquals(FeedbackTargetKind.PAD_FRAMEWORK, feedbackTarget("9"))
         assertEquals(FeedbackTargetKind.NONE, feedbackTarget("nope"))

@@ -9,6 +9,18 @@ computer. Those lines say "update Satellite too".
 
 ## [Unreleased]
 
+### Changed
+
+- **Your computer is told the lower of the controller's battery and the
+  phone's, for every controller.** A controller on a USB cable that reports
+  its own charge, such as a DualShock 4, DualSense or Switch Pro, used to send
+  only the phone's battery to Satellite and Moonlight, whatever the controller
+  said. It now counts the same as a Bluetooth one: the computer hears
+  whichever of the two is lower, so its warning is about whichever runs out
+  first. A controller with no battery still sends the phone's, the on-screen
+  pad still sends the phone's, and the controller card still shows the
+  controller's own charge.
+
 ### Fixed
 
 - **The 8BitDo Ultimate 2 Wireless works in X-input mode.** With its switch on

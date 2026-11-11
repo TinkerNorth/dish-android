@@ -149,7 +149,7 @@ class PhysicalBatterySource
             for ((deviceId, device) in devices) {
                 if (device.transitioning || device.isDisconnecting) continue
                 val slotId = deviceId.toString()
-                val routed = route(device.transport, reader.sample(device), phone)
+                val routed = route(reader.sample(device), phone)
                 publishDisplay(slotId, routed.display)
                 val conn = reachable[slotId] ?: continue
                 publishBatterySample(routed.wire) { s -> conn.sendBattery(slotId, s.level, s.status) }
