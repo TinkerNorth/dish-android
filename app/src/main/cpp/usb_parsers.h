@@ -24,6 +24,9 @@ enum class Parser : uint8_t {
     XINPUT_360_WIRELESS = 8,
     STEAM_CONTROLLER = 9,
     SWITCH_N64_USB = 10,
+    // The Steam Controller (2026, "Triton"): its own report ids, haptic rumble, and lizard mode
+    // under a firmware watchdog.
+    STEAM_TRITON = 11,
 };
 
 enum class InitKind : uint8_t {
@@ -35,6 +38,8 @@ enum class InitKind : uint8_t {
     // Steam Controller: stop the firmware's stand-alone keyboard/mouse emulation and enable the
     // IMU.
     STEAM_QUIET = 4,
+    // Steam Controller (2026): lizard mode off and the raw IMU on, one settings report each.
+    STEAM_TRITON_QUIET = 5,
 };
 
 // Which direction a Steam Controller config sequence runs. QUIET is sent at attach; RESTORE must
@@ -42,6 +47,14 @@ enum class InitKind : uint8_t {
 enum class SteamConfig : uint8_t {
     QUIET = 0,
     RESTORE = 1,
+};
+
+// One Steam Controller (2026) settings write, as SDL sends each: the lizard-mode switch its
+// firmware's watchdog turns back on unless it hears it again, or the IMU mode that streams raw
+// motion.
+enum class TritonSetting : uint8_t {
+    LIZARD_OFF = 0,
+    RAW_IMU = 1,
 };
 
 // Wireless dongle connect/disconnect events that arrive on the same endpoint as input reports.
@@ -64,6 +77,11 @@ constexpr uint8_t PAD_BATTERY_STATUS_UNKNOWN = 0;
 constexpr uint8_t PAD_BATTERY_STATUS_DISCHARGING = 1;
 constexpr uint8_t PAD_BATTERY_STATUS_CHARGING = 2;
 constexpr uint8_t PAD_BATTERY_STATUS_FULL = 3;
+
+// What FeedbackState holds for a write that has not happened, and what nextRefreshInMs answers for
+// a pad that never needs one repeated.
+inline constexpr int64_t NEVER_SENT_MS = INT64_MIN;
+inline constexpr uint32_t NO_REFRESH = UINT32_MAX;
 
 struct KnownDevice {
     uint16_t vid;
@@ -148,8 +166,8 @@ bool parserStreamsUnprompted(Parser p);
 
 bool probePermitsClaim(ProbeOutcome outcome, bool verifiedFastLane, Parser parser);
 
-// Whether releasing this model back to Standard produces a framework gamepad InputDevice (the
-// Steam Controller's stand-alone identity is a keyboard and mouse).
+// Whether releasing this model back to Standard produces a framework gamepad InputDevice (both
+// Steam Controllers' stand-alone identity is a keyboard and mouse).
 bool modelExpectsFrameworkGamepad(uint16_t vid, uint16_t pid);
 
 const char* parserName(Parser p);
@@ -200,7 +218,36 @@ struct FeedbackState {
     // were never asked about must keep whatever it had.
     uint8_t ds5MicMuteLed = MIC_MUTE_LED_OFF;
     bool ds5MicMuteLedSet = false;
+    // When the Steam Controller (2026) last heard its settings and its rumble, on the output
+    // worker's clock (dish_usb::outputClockMs); refreshDue reads them.
+    int64_t settingsSentMs = NEVER_SENT_MS;
+    int64_t rumbleSentMs = NEVER_SENT_MS;
 };
+
+// The writes a pad loses unless the host repeats them. The Steam Controller (2026) turns lizard
+// mode back on from a firmware watchdog and stops its motors after a ~50 ms safety timeout, so SDL
+// re-sends the lizard switch every 3 s and a running rumble every 40 ms.
+struct RefreshDue {
+    bool settings = false;
+    bool rumble = false;
+};
+
+// Pure: what the pad is owed at nowMs, from when FeedbackState says each was last written.
+RefreshDue refreshDue(Parser p, const FeedbackState& st, int64_t nowMs);
+
+// Pure: milliseconds from nowMs until refreshDue next owes anything; NO_REFRESH when it never will.
+uint32_t nextRefreshInMs(Parser p, const FeedbackState& st, int64_t nowMs);
+
+// How a family's output reports reach the pad: the interrupt OUT endpoint, or, for a HID family
+// whose interface has none, a SET_REPORT(Output) on the control pipe, which is where hidapi writes
+// an output report then. NONE refuses the write.
+enum class OutputRoute : uint8_t {
+    NONE = 0,
+    INTERRUPT_OUT = 1,
+    CONTROL_SET_REPORT = 2,
+};
+
+OutputRoute outputRouteFor(Parser p, uint8_t epOut);
 
 // Pure report builders over the merged state; each returns bytes written (0 = unsupported family
 // or out too small). Like buildRumbleReport the buffers are the full OUT transfer including the
@@ -241,16 +288,29 @@ bool writeOutReport(int fd, uint8_t epOut, const uint8_t* buf, size_t n);
 // SET_REPORT.
 size_t buildSteamConfigPacket(SteamConfig stage, int index, uint8_t* out, size_t outCap);
 
+// The Steam Controller (2026) settings feature report: report id 1, 64 bytes with the id.
+inline constexpr uint8_t TRITON_SETTINGS_REPORT_ID = 0x01;
+inline constexpr size_t TRITON_SETTINGS_REPORT_BYTES = 64;
+
+// Pure: one setting's whole SET_REPORT data stage, report id first; 0 when out is too small.
+size_t buildTritonSettingsReport(TritonSetting setting, uint8_t* out, size_t outCap);
+
 // Sends the attach-time init sequence InitKind names over the claimed interface.
 bool runInit(int fd, int interfaceNumber, uint8_t epOut, InitKind init);
 
-// Undoes runInit's device-side changes. No-op for families that never changed the device.
+// Undoes runInit's device-side changes. No-op for families that never changed the device, and for
+// the Steam Controller (2026), whose own watchdog restores lizard mode once the settings stop.
 void runTeardown(int fd, int interfaceNumber, Parser p);
 
-// Android write wrappers over the feedback builders. Each refuses a device
-// with no OUT endpoint before it builds, so a builder never records in FeedbackState a write that
-// cannot happen.
-bool runMergedRumble(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t seq);
+// Re-sends the settings refreshDue owes: the Steam Controller (2026)'s lizard switch, once, so a
+// refused write costs the output worker a single transfer. False for every other family.
+bool runSettingsRefresh(int fd, int interfaceNumber, Parser p);
+
+// Android write wrappers over the feedback builders. Each refuses a device it has no route to (no
+// OUT endpoint, and for rumble no control-pipe route either, outputRouteFor) before it builds, so a
+// builder never records in FeedbackState a write that cannot happen.
+bool runMergedRumble(int fd, int interfaceNumber, uint8_t epOut, Parser p, FeedbackState& st,
+                     uint8_t seq);
 bool runLightbar(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t r, uint8_t g,
                  uint8_t b);
 bool runPlayerLeds(int fd, uint8_t epOut, Parser p, const FeedbackState& st, uint8_t ledMask,
@@ -270,8 +330,12 @@ bool decodeReport(Parser p, const uint8_t* buf, size_t len, gamepad::DeviceState
                   ParserState* sticks);
 
 // Pure: classifies a report as a wireless connect/disconnect event for families that interleave
-// them with input (the Steam Controller dongle). NONE for every other parser and packet.
+// them with input (both Steam Controllers' dongles). NONE for every other parser and packet.
 WirelessEvent checkWirelessEvent(Parser p, const uint8_t* buf, size_t len);
+
+// Pure: the pad's own charge out of a report that carries nothing else, the Steam Controller
+// (2026)'s battery status. False, with s untouched, for every other report and parser.
+bool decodePadBatteryReport(Parser p, const uint8_t* buf, size_t len, gamepad::DeviceState& s);
 
 bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, gamepad::DeviceState& s);
 
@@ -307,6 +371,7 @@ inline constexpr uint8_t USB_REQUEST_TYPE_IN_CLASS_INTERFACE = 0xA1;
 inline constexpr uint8_t USB_REQUEST_GET_REPORT = 0x01;
 inline constexpr uint8_t USB_REQUEST_GET_DESCRIPTOR = 0x06;
 inline constexpr uint8_t USB_REQUEST_SET_REPORT = 0x09;
+inline constexpr uint8_t HID_REPORT_TYPE_OUTPUT = 0x02;
 inline constexpr uint8_t HID_REPORT_TYPE_FEATURE = 0x03;
 inline constexpr uint8_t HID_DESCRIPTOR_TYPE_REPORT = 0x22;
 inline constexpr unsigned USB_CONTROL_TIMEOUT_MS = 250;

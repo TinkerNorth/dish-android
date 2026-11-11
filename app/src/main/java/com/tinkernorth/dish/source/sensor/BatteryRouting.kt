@@ -2,23 +2,16 @@
 
 package com.tinkernorth.dish.source.sensor
 
-import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 
 val UNKNOWN_SAMPLE =
     BatterySample(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_UNKNOWN)
 
 fun route(
-    transport: Transport,
     device: BatterySample?,
     phone: BatterySample?,
 ): Routed {
-    val wire =
-        if (device == null || transport == Transport.Usb) {
-            phone ?: UNKNOWN_SAMPLE
-        } else {
-            lowest(device, phone)
-        }
+    val wire = if (device == null) phone ?: UNKNOWN_SAMPLE else lowest(device, phone)
     return Routed(display = device, wire = wire)
 }
 

@@ -148,7 +148,9 @@ Dongle connect/disconnect events (`ID_CONTROLLER_WIRELESS`, same endpoint as inp
 by `checkWirelessEvent`: a disconnect publishes a neutral state, since a powering-off pad would
 otherwise leave its last input latched on the wire, plausibly the held Steam button of the
 power-off gesture; a connect re-runs the quiet init, since the pad rebooted into stand-alone
-defaults and would stream without motion while its lizard keyboard leaked into the phone.
+defaults and would stream without motion while its lizard keyboard leaked into the phone. The
+re-init runs on the pad's output worker (`OutputWorker::postReconnected`), so the poller never
+waits on its control transfers.
 
 **Unverified and worth checking first:**
 - IMU axis order and signs. Gyro is mapped pitch/yaw/roll from raw X/Z/Y and accel from X/Z/-Y,
@@ -194,3 +196,86 @@ and the claim falls back to routed after roughly a second.
 **Acceptance:** A wired Steam Controller picked as Direct streams sticks, triggers, buttons and
 motion, drives nothing on the phone while claimed, and works as a desktop mouse again after being
 unplugged or switched back to Standard.
+
+---
+
+## 9. Steam Controller (2026, "Triton") (implemented from SDL, needs hardware verification)
+
+**Status:** Ported from SDL's `src/joystick/hidapi/SDL_hidapi_steam_triton.c` and the Valve headers
+beside it (see `THIRD_PARTY.md`), never run against the hardware. It covers the wired pad
+(28DE:1302) and both wireless dongles, the Proteus "Puck" (1304) and the Nereid (1305), on
+`Parser::STEAM_TRITON` and `InitKind::STEAM_TRITON_QUIET`. Listed in `kImported`, so Direct is opt-in
+and never auto-claimed.
+
+- **Init:** two settings feature reports (report id 1, `ID_SET_SETTINGS_VALUES`), lizard mode off
+  and then the IMU mode raw accel plus raw gyro, each exactly as SDL builds it
+  (`buildTritonSettingsReport`). SDL sends the second when an app enables sensors; here both go out
+  before the probe.
+- **Lizard watchdog:** the firmware turns lizard mode back on unless it hears the switch again, so
+  SDL re-sends it every 3 s while the pad is open. Here the pad's output worker does it
+  (`refreshDue` and `nextRefreshInMs`, `OutputDevice::refresh`, `WorkerWake::sleepUnlessFor`): the
+  worker sleeps no longer than the next refresh it owes, the poller never runs one, and a pad of any
+  other family still sleeps until something is posted. A refresh is one attempt, stamped when tried,
+  so a refused write waits for the next turn instead of spinning.
+- **Input** (`decodeSteamTriton`): the three state reports (0x42, 0x45 and the timestamped 0x47)
+  share the buttons, triggers and sticks, and the six IMU words sit at the same offsets in all three.
+  Buttons follow SDL's mapping onto XUSB positions, triggers scale SDL's 0..32767 onto a byte, the
+  sticks pass through (both Y axes are already up-positive), and gyro (x, z, -y) and accel
+  (x, z, -y) follow SDL's sensor block onto the wire's +-2000 deg/s and +-4 g.
+- **Battery** (`decodePadBatteryReport`): report 0x43 carries the charge state and the percent. It
+  never publishes as input (that would flash a neutral pad on the wire) and feeds the Direct battery
+  reading, so `BatteryRouting.route` weighs it against the phone's like any other pad's.
+- **Dongle events:** reports 0x79 and 0x46 carry connect and disconnect (`checkWirelessEvent`); a
+  disconnect publishes neutral and a connect re-runs the quiet init on the output worker, as for the
+  2015 pad.
+- **Rumble:** host `MSG_RUMBLE` becomes the haptic rumble output report 0x80 (`docs/rumble.md`),
+  re-sent every 40 ms while it is non-zero, inside the firmware's ~50 ms motor timeout.
+  `parserHasRumble` is true.
+- **Release:** mirrors SDL, whose close does nothing: no teardown is written, and the firmware's
+  watchdog restores lizard mode within about 3 s of the last refresh. `modelExpectsFrameworkGamepad`
+  is false, so the path FSM settles Standard at once (`frameworkExpected`), as for the 2015 pad.
+
+**Unverified and worth checking first:**
+- The interface pick. It assumes the lizard keyboard and mouse declare the HID boot subclass, as item
+  8 does for the 2015 pad; SDL accepts any interface of the wired pad and interfaces 2..5 of a
+  dongle, and names nothing else about the layout.
+- Whether the gamepad interface has an interrupt OUT endpoint. Rumble goes there when it does and as
+  a SET_REPORT(Output) on the control pipe when it does not (`outputRouteFor`), which is how hidapi
+  writes an output report; neither route has met the firmware.
+- The BACK and START mapping: SDL maps MENU to BACK and VIEW to START, the opposite of what the names
+  suggest on an Xbox pad, and this port follows SDL.
+- IMU axis order and signs, SDL's and unverified here, as for items 2 and 8.
+- That 3 s stays inside the firmware's watchdog for this pad (it is SDL's cadence, not a measured
+  margin), and that a running rumble refreshed every 40 ms feels continuous. The worker's timed
+  sleep takes a realtime deadline (`sem_timedwait` has no other clock everywhere this builds), so a
+  wall-clock step backwards during a wait can delay one refresh by the size of the step.
+- The battery percent's range. SDL passes it through; anything above 100 reads unknown here.
+- The dongle event framing and the reconnect re-init.
+
+**Known limitation, the dongle reaches one slot:** each paired controller is its own HID interface,
+numbered 2..5. As with the 2015 dongle, `findInterruptInPair` claims one interface up front, the
+first candidate, so only the first slot is ever reached (interface 2, if the dongle's other
+interfaces rank lower). A pad paired to another slot, or a dongle whose first slot is empty, fails
+`probeDecodable` and falls back to routed, which is safe but looks like "Direct failed". Reaching the
+others means attaching each candidate in turn.
+
+**Deliberately absent:**
+- Bluetooth LE (28DE:1303). The pad speaks Valve's own protocol over GATT, not HID over GATT, so it
+  never reaches the framework as a gamepad, and the Direct path is USB only.
+- The two trackpads over `MSG_TOUCHPAD` (the wire carries one surface per slot), the four back
+  paddles, QAM and the trigger and pad clicks (no XUSB button), the capacitive touches, and the
+  other haptic reports (pulse, tone, sweep, script).
+- Pausing the refresh while a dongle's pad is away. SDL stops writing until the pad comes back; here
+  the lizard switch keeps going to the dongle, one refused transfer every 3 s.
+
+**Where:** `app/src/main/cpp/usb_parsers.cpp` (`decodeSteamTriton`, `decodePadBatteryReport`,
+`checkWirelessEvent`, `buildTritonSettingsReport`, `refreshDue`, `nextRefreshInMs`,
+`outputRouteFor`, `runTritonQuietInit`, `runSettingsRefresh`, `runMergedRumble`),
+`app/src/main/cpp/usb_output.{h,cpp}` (`OutputDevice::refresh`, `postReconnected`),
+`app/src/main/cpp/worker_wake.h` (`sleepUnlessFor`), `app/src/main/cpp/usb_host.cpp` (`UsbOutput`,
+`publishCompletedUrb`, `publishWirelessEvent`).
+
+**Acceptance:** A wired Steam Controller (2026) picked as Direct streams sticks, triggers, buttons
+and motion for minutes with no lizard keyboard or mouse input reaching the phone, rumbles for as long
+as the game asks, shows its own battery on the card, and is a desktop mouse again a few seconds after
+being switched back to Standard or unplugged.

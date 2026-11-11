@@ -7,6 +7,39 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **The new Steam Controller (2026) can be tried in Direct mode.** On its
+  cable, or on its Puck or other wireless adapter, it can now be switched to
+  Direct: Dish turns off the controller's own keyboard-and-mouse mode and
+  sends the computer its sticks, triggers, buttons, motion and battery, and
+  plays the game's rumble on it. This follows SDL's support for the
+  controller and has not been tried on one yet, so Dish never picks Direct
+  for it on its own. Switched back to Standard, it is a keyboard and mouse
+  again within a few seconds. On a wireless adapter only the first paired
+  controller is reached, and Bluetooth is not supported.
+
+### Changed
+
+- **Your computer is told the lower of the controller's battery and the
+  phone's, for every controller.** A controller on a USB cable that reports
+  its own charge, such as a DualShock 4, DualSense or Switch Pro, used to send
+  only the phone's battery to Satellite and Moonlight, whatever the controller
+  said. It now counts the same as a Bluetooth one: the computer hears
+  whichever of the two is lower, so its warning is about whichever runs out
+  first. A controller with no battery still sends the phone's, the on-screen
+  pad still sends the phone's, and the controller card still shows the
+  controller's own charge.
+
+### Fixed
+
+- **The 8BitDo Ultimate 2 Wireless works in X-input mode.** With its switch on
+  X-input, many phones never saw it at all: their Android is older than the
+  Linux driver that knows this controller. Dish now recognises it and reads it
+  in Direct mode on its own, the way it already reads the Ultimate 2C.
+
 ## [2.5.0] - 2026-11-02
 
 Steadier input when several controllers, the on-screen pad and voice chat are

@@ -22,6 +22,10 @@ constexpr auto kWaitLimit = std::chrono::seconds(5);
 constexpr auto kQuiet = std::chrono::milliseconds(100);
 constexpr int kPosts = 1000;
 constexpr auto kPostBudget = std::chrono::milliseconds(50);
+constexpr uint32_t kRefreshEveryMs = 20;
+constexpr uint32_t kRefreshLongAfterMs = 60000;
+constexpr size_t kRefreshes = 3;
+constexpr auto kPromptWrite = std::chrono::seconds(1);
 
 // Records every write in order, and can hold the worker inside its next rumble write until the
 // test lets it go: an OUT transfer stuck for its whole timeout.
@@ -49,6 +53,29 @@ class FakeDevice final : public dish_usb::OutputDevice {
     }
     void micLed(const uint8_t state) override { record("mic " + std::to_string(state)); }
     void ack(const uint8_t* bytes, size_t) override { record("ack " + std::to_string(bytes[0])); }
+    void reconnected() override { record("reconnected"); }
+
+    uint32_t refresh(int64_t) override {
+        std::lock_guard<std::mutex> lock(mtx_);
+        refreshCalls_++;
+        cv_.notify_all();
+        return refreshEveryMs_;
+    }
+
+    void refreshEvery(const uint32_t ms) {
+        std::lock_guard<std::mutex> lock(mtx_);
+        refreshEveryMs_ = ms;
+    }
+
+    size_t refreshCalls() {
+        std::lock_guard<std::mutex> lock(mtx_);
+        return refreshCalls_;
+    }
+
+    bool waitForRefreshCalls(const size_t calls) {
+        std::unique_lock<std::mutex> lock(mtx_);
+        return cv_.wait_for(lock, kWaitLimit, [&] { return refreshCalls_ >= calls; });
+    }
 
     void holdNextRumble() {
         std::lock_guard<std::mutex> lock(mtx_);
@@ -91,6 +118,8 @@ class FakeDevice final : public dish_usb::OutputDevice {
     bool holdNextRumble_ = false;
     bool holding_ = false;
     bool released_ = false;
+    uint32_t refreshEveryMs_ = usbparsers::NO_REFRESH;
+    size_t refreshCalls_ = 0;
 };
 
 const uint8_t kAckA[1] = {1};
@@ -200,5 +229,56 @@ TEST(OutputWorker, NothingPostedAfterStopIsWrittenAndARestartServesTheNewPadOnly
     worker.start(kOtherPad, device);
     worker.postLightbar(kOtherPad, 4, 5, 6);
     EXPECT_EQ(device.writesUpTo("lightbar 4,5,6"), std::vector<std::string>{"lightbar 4,5,6"});
+    worker.stop();
+}
+
+TEST(OutputWorker, AReconnectIsWrittenForThePadItWasPostedFor) {
+    FakeDevice device;
+    dish_usb::OutputWorker worker;
+    worker.start(kPad, device);
+    worker.postReconnected(kOtherPad);
+    worker.postReconnected(kPad);
+    EXPECT_EQ(device.writesUpTo("reconnected"), std::vector<std::string>{"reconnected"});
+    worker.stop();
+}
+
+// The Steam Controller (2026) forgets lizard mode and its rumble unless they are re-sent, so a
+// device that asks is refreshed on its own cadence with nothing posted.
+TEST(OutputWorker, ADeviceThatAsksIsRefreshedOnItsCadenceWithNothingPosted) {
+    FakeDevice device;
+    device.refreshEvery(kRefreshEveryMs);
+    dish_usb::OutputWorker worker;
+    worker.start(kPad, device);
+    EXPECT_TRUE(device.waitForRefreshCalls(kRefreshes));
+    worker.stop();
+}
+
+// Every other family wants no refresh, and its worker sleeps until something is posted: asked
+// once when it starts and once after each write, never on a timer.
+TEST(OutputWorker, ADeviceThatWantsNoRefreshIsNeverWokenForOne) {
+    FakeDevice device;
+    dish_usb::OutputWorker worker;
+    worker.start(kPad, device);
+    ASSERT_TRUE(device.waitForRefreshCalls(1));
+    std::this_thread::sleep_for(kQuiet);
+    EXPECT_EQ(1u, device.refreshCalls());
+    worker.postMicLed(kPad, 1);
+    EXPECT_TRUE(device.waitForRefreshCalls(2));
+    std::this_thread::sleep_for(kQuiet);
+    EXPECT_EQ(2u, device.refreshCalls());
+    EXPECT_EQ(device.writes(), std::vector<std::string>{"mic 1"});
+    worker.stop();
+}
+
+TEST(OutputWorker, APostIsWrittenAtOnceWhileARefreshIsFarOff) {
+    FakeDevice device;
+    device.refreshEvery(kRefreshLongAfterMs);
+    dish_usb::OutputWorker worker;
+    worker.start(kPad, device);
+    ASSERT_TRUE(device.waitForRefreshCalls(1));
+    const Clock::time_point posted = Clock::now();
+    worker.postRumble(kPad, 7, 8);
+    EXPECT_EQ(device.writesUpTo("rumble 7/8"), std::vector<std::string>{"rumble 7/8"});
+    EXPECT_LT(Clock::now() - posted, kPromptWrite);
     worker.stop();
 }

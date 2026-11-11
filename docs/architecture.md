@@ -503,6 +503,15 @@ poller queues its GIP acks there too instead of writing them before it
 decodes. So no thread that hands the pad feedback, the receive thread and
 the poller included, ever waits on a USB transfer.
 
+A pad that forgets a write unless the host repeats it is refreshed by the
+same worker: the Steam Controller (2026) turns lizard mode back on from a
+firmware watchdog and stops its motors about 50 ms after the last rumble.
+After every pass the worker asks its device when it next owes a write
+(`OutputDevice::refresh`, `usbparsers::refreshDue`) and sleeps no longer than
+that, so the poller never runs a refresh; every other pad's worker sleeps
+until something is posted. A dongle's reconnect re-init is posted to the
+worker the same way.
+
 Pure rumble helpers (`rumbleMagnitudeTo255`, `rumbleSafeDurationMs`,
 `resolveSlotId`, `classifyTarget`) are covered by
 `RumbleBridgeHelpersTest.kt` and `RumbleRouterTest.kt`, the route snapshot
@@ -556,8 +565,9 @@ can't reach are still unit-testable from a host build:
 - `usb_device_table.h` and `usb_output.{cpp,h}`: the claimed USB pads' fixed
   table (their counters, read without a lock) and each pad's output worker,
   which owns its OUT endpoint: per-kind latest-value mailboxes whose values
-  name the pad they were posted for, a ring for GIP acks, and a fake device in
-  `usb_output_test` standing in for USBDEVFS.
+  name the pad they were posted for, a ring for GIP acks, a timed wake for a
+  device that owes refreshes, and a fake device in `usb_output_test` standing
+  in for USBDEVFS.
 - `tracked_mutex.h`: every hot-path mutex is a named `TrackedMutex` and every
   thread that takes one runs in a `ThreadRole`. In the app they are a
   `std::mutex` and nothing; in the host build's `DISH_LOCK_STATS` variant they

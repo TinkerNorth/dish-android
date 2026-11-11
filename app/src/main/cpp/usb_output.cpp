@@ -66,6 +66,11 @@ void OutputWorker::postMicLed(const int32_t deviceId, const uint8_t state) {
     announce(MIC_LED);
 }
 
+void OutputWorker::postReconnected(const int32_t deviceId) {
+    reconnected_.post(ReconnectedOut{deviceId});
+    announce(RECONNECTED);
+}
+
 void OutputWorker::postAck(const int32_t deviceId, const uint8_t* bytes, const size_t len) {
     AckOut ack;
     ack.deviceId = deviceId;
@@ -83,8 +88,13 @@ void OutputWorker::writeAcks() {
     }
 }
 
-// Each kind's newest value, written only for the pad this worker serves.
+// Each kind's newest value, written only for the pad this worker serves. A reconnect goes first:
+// the pad rebooted, and whatever else is pending is meant for it once it is set up again.
 void OutputWorker::writePending(const uint32_t kinds) {
+    if ((kinds & RECONNECTED) != 0) {
+        const ReconnectedOut v = reconnected_.read();
+        if (v.deviceId == deviceId_) device_->reconnected();
+    }
     if ((kinds & RUMBLE) != 0) {
         const RumbleOut v = rumble_.read();
         if (v.deviceId == deviceId_) device_->rumble(v.strong, v.weak);
@@ -111,17 +121,29 @@ void OutputWorker::writePending(const uint32_t kinds) {
     }
 }
 
-// Acks first: each one answers a packet the pad is waiting on.
+bool OutputWorker::hasWork() {
+    return !running_.load(std::memory_order_seq_cst) ||
+           pending_.load(std::memory_order_seq_cst) != 0 || !acks_.empty();
+}
+
+// Untimed while the device owes nothing on a timer, so a pad that needs no refresh only ever
+// wakes for what is posted.
+void OutputWorker::sleepUntilWorkOrRefresh(const uint32_t refreshInMs) {
+    const auto workArrived = [this] { return hasWork(); };
+    if (refreshInMs == usbparsers::NO_REFRESH) return wake_.sleepUnless(workArrived);
+    wake_.sleepUnlessFor(workArrived, refreshInMs);
+}
+
+// Acks first: each one answers a packet the pad is waiting on. The refresh comes last, after
+// whatever was posted, so a posted write is never held for it.
 void OutputWorker::run() {
-    const auto hasWork = [this] {
-        return !running_.load(std::memory_order_seq_cst) ||
-               pending_.load(std::memory_order_seq_cst) != 0 || !acks_.empty();
-    };
+    uint32_t refreshInMs = device_->refresh(outputClockMs());
     while (running_.load(std::memory_order_seq_cst)) {
-        wake_.sleepUnless(hasWork);
+        sleepUntilWorkOrRefresh(refreshInMs);
         writeAcks();
         const uint32_t kinds = pending_.exchange(0, std::memory_order_acq_rel);
         if (kinds != 0) writePending(kinds);
+        refreshInMs = device_->refresh(outputClockMs());
     }
 }
 

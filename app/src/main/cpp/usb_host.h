@@ -28,8 +28,8 @@ uint64_t getUrbErrorCount(int32_t deviceId);
 
 // The claimed pad's own charge, as its last report carried it: level << 8 | status in
 // usbparsers::PAD_BATTERY_* terms, or -1 when the device is gone or no report has carried a
-// reading yet. Kotlin's battery source polls this on its own 30 s cadence for the slot card; the
-// wire never carries it (a USB pad puts the phone battery on the wire).
+// reading yet. Kotlin's battery source polls this on its own 30 s cadence: the slot card shows it,
+// and the wire carries the lower of it and the phone's.
 int32_t getPadBattery(int32_t deviceId);
 
 // {"model","parser","init","reportBytes","endpointOut","lastUrbStatus"} for a claimed device.

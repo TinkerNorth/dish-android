@@ -2,7 +2,6 @@
 
 package com.tinkernorth.dish.source.sensor
 
-import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -10,6 +9,7 @@ import org.junit.Test
 
 class BatteryRoutingTest {
     private val phone = BatterySample(level = 55, status = BatteryValidator.STATUS_CHARGING)
+    private val unknownPhone = BatterySample(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_CHARGING)
 
     private fun device(
         level: Int,
@@ -17,105 +17,77 @@ class BatteryRoutingTest {
     ) = BatterySample(level, status)
 
     @Test
-    fun `usb pad without its own battery displays nothing and wires the phone`() {
-        val routed = route(Transport.Usb, device = null, phone = phone)
-        assertNull(routed.display)
-        assertEquals(phone, routed.wire)
-    }
-
-    @Test
-    fun `bluetooth pad without its own battery displays nothing and wires the phone`() {
-        val routed = route(Transport.Bluetooth, device = null, phone = phone)
-        assertNull(routed.display)
-        assertEquals(phone, routed.wire)
-    }
-
-    @Test
-    fun `usb pad with a battery displays the device but wires the phone`() {
+    fun `a pad lower than the phone wires the pad sample`() {
         val pad = device(level = 12)
-        val routed = route(Transport.Usb, device = pad, phone = phone)
-        assertEquals(pad, routed.display)
-        assertEquals(phone, routed.wire)
+        assertEquals(pad, route(device = pad, phone = phone).wire)
     }
 
     @Test
-    fun `bluetooth pad lower than the phone displays and wires the device`() {
-        val pad = device(level = 20)
-        val routed = route(Transport.Bluetooth, device = pad, phone = phone)
-        assertEquals(pad, routed.display)
-        assertEquals(pad, routed.wire)
-    }
-
-    @Test
-    fun `bluetooth pad higher than the phone displays the device but wires the phone`() {
+    fun `a pad higher than the phone wires the phone sample`() {
         val pad = device(level = 90)
-        val routed = route(Transport.Bluetooth, device = pad, phone = phone)
-        assertEquals(pad, routed.display)
-        assertEquals(phone, routed.wire)
+        assertEquals(phone, route(device = pad, phone = phone).wire)
     }
 
     @Test
-    fun `bluetooth level tie wires the device sample`() {
-        val pad = device(level = 55)
-        val routed = route(Transport.Bluetooth, device = pad, phone = phone)
-        assertEquals(pad, routed.wire)
+    fun `a pad with no battery of its own wires the phone sample`() {
+        assertEquals(phone, route(device = null, phone = phone).wire)
     }
 
     @Test
-    fun `bluetooth pad with unknown level loses the lowest pick to a known phone level`() {
-        val pad = device(level = BatteryValidator.LEVEL_UNKNOWN)
-        val routed = route(Transport.Bluetooth, device = pad, phone = phone)
-        assertEquals(phone, routed.wire)
-    }
-
-    @Test
-    fun `phone with unknown level loses the lowest pick to a known device level`() {
+    fun `an unknown phone level and a known pad level wire the pad sample`() {
         val pad = device(level = 97)
-        val unknownPhone =
-            BatterySample(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_CHARGING)
-        val routed = route(Transport.Bluetooth, device = pad, phone = unknownPhone)
-        assertEquals(pad, routed.wire)
+        assertEquals(pad, route(device = pad, phone = unknownPhone).wire)
     }
 
     @Test
-    fun `both levels unknown wires the device sample`() {
+    fun `a level tie wires the pad sample`() {
+        val pad = device(level = 55)
+        assertEquals(pad, route(device = pad, phone = phone).wire)
+    }
+
+    @Test
+    fun `the wire sample carries the status of whichever side won`() {
+        val lowPad = device(level = 20, status = BatteryValidator.STATUS_DISCHARGING)
+        assertEquals(BatteryValidator.STATUS_DISCHARGING, route(device = lowPad, phone = phone).wire.status)
+
+        val highPad = device(level = 80, status = BatteryValidator.STATUS_DISCHARGING)
+        assertEquals(BatteryValidator.STATUS_CHARGING, route(device = highPad, phone = phone).wire.status)
+    }
+
+    @Test
+    fun `a pad with an unknown level loses the lowest pick to a known phone level`() {
+        val pad = device(level = BatteryValidator.LEVEL_UNKNOWN)
+        assertEquals(phone, route(device = pad, phone = phone).wire)
+    }
+
+    @Test
+    fun `both levels unknown wire the pad sample`() {
         val pad = device(level = BatteryValidator.LEVEL_UNKNOWN, status = BatteryValidator.STATUS_UNKNOWN)
-        val unknownPhone =
-            BatterySample(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_CHARGING)
-        val routed = route(Transport.Bluetooth, device = pad, phone = unknownPhone)
-        assertEquals(pad, routed.wire)
+        assertEquals(pad, route(device = pad, phone = unknownPhone).wire)
     }
 
     @Test
-    fun `unreadable phone battery on usb wires the unknown sentinel`() {
+    fun `an unreadable phone battery wires the pad sample`() {
         val pad = device(level = 40)
-        val routed = route(Transport.Usb, device = pad, phone = null)
-        assertEquals(pad, routed.display)
-        assertEquals(UNKNOWN_SAMPLE, routed.wire)
+        assertEquals(pad, route(device = pad, phone = null).wire)
     }
 
     @Test
-    fun `unreadable phone battery without a device battery wires the unknown sentinel`() {
-        val routed = route(Transport.Usb, device = null, phone = null)
-        assertNull(routed.display)
-        assertEquals(UNKNOWN_SAMPLE, routed.wire)
+    fun `an unreadable phone battery and no pad battery wire the unknown sentinel`() {
+        assertEquals(UNKNOWN_SAMPLE, route(device = null, phone = null).wire)
     }
 
     @Test
-    fun `unreadable phone battery on bluetooth wires the device sample`() {
-        val pad = device(level = 40)
-        val routed = route(Transport.Bluetooth, device = pad, phone = null)
-        assertEquals(pad, routed.wire)
+    fun `a pad displays its own reading whichever side wins the wire`() {
+        val lowPad = device(level = 12)
+        assertEquals(lowPad, route(device = lowPad, phone = phone).display)
+        val highPad = device(level = 90)
+        assertEquals(highPad, route(device = highPad, phone = phone).display)
     }
 
     @Test
-    fun `wire sample carries the status of whichever side won the lowest pick`() {
-        val pad = device(level = 20, status = BatteryValidator.STATUS_DISCHARGING)
-        val routed = route(Transport.Bluetooth, device = pad, phone = phone)
-        assertEquals(BatteryValidator.STATUS_DISCHARGING, routed.wire.status)
-
-        val flipped = route(Transport.Bluetooth, device = device(level = 80), phone = phone)
-        assertEquals(BatteryValidator.STATUS_CHARGING, flipped.wire.status)
+    fun `a pad with no battery displays nothing`() {
+        assertNull(route(device = null, phone = phone).display)
     }
 
     @Test
@@ -140,14 +112,14 @@ class BatteryRoutingTest {
     fun `an unknown level never wins the comparison`() {
         val unknownPad = device(level = BatteryValidator.LEVEL_UNKNOWN)
         assertEquals(phone, lowest(unknownPad, phone))
-        val unknownPhone = BatterySample(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_UNKNOWN)
-        assertEquals(device(level = 5), lowest(device(level = 5), unknownPhone))
+        val unknownStatusPhone = BatterySample(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_UNKNOWN)
+        assertEquals(device(level = 5), lowest(device(level = 5), unknownStatusPhone))
     }
 
     @Test
     fun `two unknown levels keep the device`() {
         val unknownPad = device(level = BatteryValidator.LEVEL_UNKNOWN)
-        val unknownPhone = BatterySample(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_UNKNOWN)
-        assertEquals(unknownPad, lowest(unknownPad, unknownPhone))
+        val unknownStatusPhone = BatterySample(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_UNKNOWN)
+        assertEquals(unknownPad, lowest(unknownPad, unknownStatusPhone))
     }
 }

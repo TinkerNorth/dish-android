@@ -36,8 +36,7 @@ class PadBatteryReader
         }
 
         // A Direct-claimed pad has no InputDevice to ask; its own reader decoded the charge out
-        // of the last report, and the card shows that. (The wire is the USB rule's, see
-        // BatteryRouting: the phone battery, whatever the pad says.)
+        // of the last report, and the card shows that.
         fun sample(device: PhysicalGamepadRegistry.Device): BatterySample? =
             if (device.isUsbSynthetic) readDirectPadSample(device.id) else frameworkPadSample(device.id)
 

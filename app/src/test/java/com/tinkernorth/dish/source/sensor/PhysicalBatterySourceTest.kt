@@ -225,6 +225,40 @@ class PhysicalBatterySourceTest {
         verify(atLeast = 1) { native.getDirectPadBattery(-1000) }
     }
 
+    private fun phoneAt(level: Int): Intent =
+        mockk {
+            every { getIntExtra(BatteryManager.EXTRA_LEVEL, any()) } returns level
+            every { getIntExtra(BatteryManager.EXTRA_SCALE, any()) } returns PERCENT_SCALE
+            every { getIntExtra(BatteryManager.EXTRA_STATUS, any()) } returns BatteryManager.BATTERY_STATUS_CHARGING
+        }
+
+    private fun directPadOnTheWire(
+        padLevel: Int,
+        phoneLevel: Int,
+    ): TelemetrySink {
+        every { native.getDirectPadBattery(DIRECT_PAD) } returns ((padLevel shl 8) or BatteryValidator.STATUS_DISCHARGING)
+        every { context.registerReceiver(null, any()) } returns phoneAt(phoneLevel)
+        deviceFlow.value = mapOf(DIRECT_PAD to device(DIRECT_PAD, transport = Transport.Usb, synthetic = true))
+        val sink = mockk<TelemetrySink>(relaxed = true)
+        reachableFlow.value = mapOf(DIRECT_PAD.toString() to sink)
+        started()
+        return sink
+    }
+
+    @Test
+    fun `a wired pad below the phone puts its own charge on the wire`() {
+        val sink = directPadOnTheWire(padLevel = 20, phoneLevel = 80)
+        verify(atLeast = 1) { sink.sendBattery(DIRECT_PAD.toString(), 20, BatteryValidator.STATUS_DISCHARGING) }
+        verify(exactly = 0) { sink.sendBattery(DIRECT_PAD.toString(), 80, any()) }
+    }
+
+    @Test
+    fun `a wired pad above the phone puts the phone charge on the wire and still shows its own`() {
+        val sink = directPadOnTheWire(padLevel = 90, phoneLevel = 30)
+        verify(atLeast = 1) { sink.sendBattery(DIRECT_PAD.toString(), 30, BatteryValidator.STATUS_CHARGING) }
+        assertEquals(90, store.samples.value[DIRECT_PAD.toString()]?.level)
+    }
+
     @Test
     fun `only reachable slots reach the wire`() {
         pads[7] = pad(7)
@@ -262,5 +296,10 @@ class PhysicalBatterySourceTest {
         settle()
         assertEquals(listOf(7), lookups)
         assertEquals(50, store.samples.value["7"]?.level)
+    }
+
+    private companion object {
+        const val DIRECT_PAD = -1000
+        const val PERCENT_SCALE = 100
     }
 }

@@ -610,13 +610,15 @@ TEST(FeedbackCapability, PredicatesMatchTheBuilders) {
     using usbparsers::parserHasPlayerLeds;
     using usbparsers::parserHasTriggerEffects;
     using usbparsers::parserHasTriggerRumble;
-    for (auto p :
-         {Parser::NONE, Parser::XINPUT_360, Parser::XBOX_ONE_GIP, Parser::DUALSHOCK4,
-          Parser::DUALSENSE, Parser::SWITCH_PRO_USB, Parser::STADIA, Parser::GENERIC_HID_GAMEPAD,
-          Parser::XINPUT_360_WIRELESS, Parser::STEAM_CONTROLLER, Parser::SWITCH_N64_USB}) {
+    for (auto p : {Parser::NONE, Parser::XINPUT_360, Parser::XBOX_ONE_GIP, Parser::DUALSHOCK4,
+                   Parser::DUALSENSE, Parser::SWITCH_PRO_USB, Parser::STADIA,
+                   Parser::GENERIC_HID_GAMEPAD, Parser::XINPUT_360_WIRELESS,
+                   Parser::STEAM_CONTROLLER, Parser::SWITCH_N64_USB, Parser::STEAM_TRITON}) {
         usbparsers::FeedbackState st;
         uint8_t out[64];
         uint8_t block[11] = {};
+        EXPECT_EQ(parserHasRumble(p), buildRumbleReport(p, 1, 1, 0, out, sizeof(out)) != 0)
+            << usbparsers::parserName(p);
         EXPECT_EQ(parserHasLightbar(p),
                   usbparsers::buildLightbarReport(p, st, 0, 0, 0, out, sizeof(out)) != 0)
             << usbparsers::parserName(p);
@@ -645,6 +647,7 @@ TEST(RumbleCapability, FamiliesWithBuildersReportTrue) {
     EXPECT_TRUE(parserHasRumble(Parser::DUALSENSE));
     EXPECT_TRUE(parserHasRumble(Parser::SWITCH_PRO_USB));
     EXPECT_TRUE(parserHasRumble(Parser::SWITCH_N64_USB));
+    EXPECT_TRUE(parserHasRumble(Parser::STEAM_TRITON));
 }
 
 TEST(RumbleCapability, FamiliesWithoutBuildersReportFalse) {
@@ -771,6 +774,30 @@ TEST(KnownDevices, EightBitDoXinputRowsCarryTheXpadNames) {
     const usbparsers::KnownDevice* ultimate = usbparsers::lookupKnown(0x2DC8, 0x310A);
     ASSERT_NE(nullptr, ultimate);
     EXPECT_STREQ("8BitDo Ultimate 2C Wireless Controller", ultimate->name);
+}
+
+// The Ultimate 2 Wireless in X-input mode, the xpad identity Linux gained in April 2025: older
+// Android kernels never bind it, so the framework shows no gamepad and only Direct reads it.
+TEST(KnownDevices, EightBitDoUltimate2WirelessInXinputModeIsAVerifiedXinputRow) {
+    constexpr uint16_t kEightBitDo = 0x2DC8;
+    constexpr uint16_t kUltimate2WirelessXinput = 0x310B;
+    const usbparsers::KnownDevice* k =
+        usbparsers::lookupKnown(kEightBitDo, kUltimate2WirelessXinput);
+    ASSERT_NE(nullptr, k);
+    EXPECT_STREQ("8BitDo Ultimate 2 Wireless Controller", k->name);
+    EXPECT_EQ(Parser::XINPUT_360, k->parser);
+    EXPECT_EQ(InitKind::NONE, k->init);
+    EXPECT_TRUE(isVerifiedFastLane(kEightBitDo, kUltimate2WirelessXinput));
+
+    constexpr uint8_t kVendorClass = 0xFF;
+    constexpr uint8_t kXinputSubclass = 0x5D;
+    constexpr uint8_t kXinputProtocol = 0x01;
+    const usbparsers::Classification c = usbparsers::classifyDevice(
+        kEightBitDo, kUltimate2WirelessXinput, kVendorClass, kXinputSubclass, kXinputProtocol);
+    EXPECT_EQ(Parser::XINPUT_360, c.parser);
+    EXPECT_EQ(InitKind::NONE, c.init);
+    EXPECT_STREQ("8BitDo Ultimate 2 Wireless Controller", c.name);
+    EXPECT_TRUE(modelExpectsFrameworkGamepad(kEightBitDo, kUltimate2WirelessXinput));
 }
 
 TEST(KnownDevices, EightBitDoHidIdentitiesAreNoLongerXinputRows) {
@@ -1829,6 +1856,524 @@ TEST(SteamClassify, OnlySteamModelsSettleWithoutAFrameworkGamepad) {
     EXPECT_TRUE(modelExpectsFrameworkGamepad(0x1234, 0x5678));
 }
 
+// ---- the Steam Controller (2026, "Triton") --------------------------------------------------
+
+namespace {
+
+constexpr uint16_t kValve = 0x28DE;
+constexpr uint16_t kTritonWired = 0x1302;
+constexpr uint16_t kTritonBle = 0x1303;
+constexpr uint16_t kTritonProteusDongle = 0x1304;
+constexpr uint16_t kTritonNereidDongle = 0x1305;
+constexpr uint16_t kTritonUsbIdentities[] = {kTritonWired, kTritonProteusDongle,
+                                             kTritonNereidDongle};
+
+// SDL's report ids (controller_structs.h, ETritonReportIDTypes).
+constexpr uint8_t kTritonStateId = 0x42;
+constexpr uint8_t kTritonBatteryId = 0x43;
+constexpr uint8_t kTritonStateBleId = 0x45;
+constexpr uint8_t kTritonWirelessXId = 0x46;
+constexpr uint8_t kTritonStateTimestampId = 0x47;
+constexpr uint8_t kTritonWirelessId = 0x79;
+
+// SDL's TritonButtons.
+constexpr uint32_t kTritonA = 0x00000001;
+constexpr uint32_t kTritonB = 0x00000002;
+constexpr uint32_t kTritonX = 0x00000004;
+constexpr uint32_t kTritonY = 0x00000008;
+constexpr uint32_t kTritonQam = 0x00000010;
+constexpr uint32_t kTritonR3 = 0x00000020;
+constexpr uint32_t kTritonView = 0x00000040;
+constexpr uint32_t kTritonR4 = 0x00000080;
+constexpr uint32_t kTritonR5 = 0x00000100;
+constexpr uint32_t kTritonR = 0x00000200;
+constexpr uint32_t kTritonDpadDown = 0x00000400;
+constexpr uint32_t kTritonDpadRight = 0x00000800;
+constexpr uint32_t kTritonDpadLeft = 0x00001000;
+constexpr uint32_t kTritonDpadUp = 0x00002000;
+constexpr uint32_t kTritonMenu = 0x00004000;
+constexpr uint32_t kTritonL3 = 0x00008000;
+constexpr uint32_t kTritonSteam = 0x00010000;
+constexpr uint32_t kTritonL4 = 0x00020000;
+constexpr uint32_t kTritonL5 = 0x00040000;
+constexpr uint32_t kTritonL = 0x00080000;
+constexpr uint32_t kTritonRightStickTouch = 0x00100000;
+constexpr uint32_t kTritonRightPadTouch = 0x00200000;
+constexpr uint32_t kTritonRightPadClick = 0x00400000;
+constexpr uint32_t kTritonRightTriggerClick = 0x00800000;
+constexpr uint32_t kTritonLeftStickTouch = 0x01000000;
+constexpr uint32_t kTritonLeftPadTouch = 0x02000000;
+constexpr uint32_t kTritonLeftPadClick = 0x04000000;
+constexpr uint32_t kTritonLeftTriggerClick = 0x08000000;
+constexpr uint32_t kTritonRightGripTouch = 0x10000000;
+constexpr uint32_t kTritonLeftGripTouch = 0x20000000;
+
+// The report id, then SDL's packed TritonMTUNoQuat_t (or TritonMTUNoQuat32TS_t): the buttons at
+// 2, the triggers at 6 and 8, the sticks LX LY RX RY from 10, accel x y z from 34, gyro x y z from
+// 40, 46 bytes in all.
+constexpr size_t kTritonStateBytes = 46;
+constexpr size_t kTritonButtons = 2;
+constexpr size_t kTritonLeftTrigger = 6;
+constexpr size_t kTritonRightTrigger = 8;
+constexpr size_t kTritonSticks = 10;
+constexpr size_t kTritonAccel = 34;
+constexpr size_t kTritonGyro = 40;
+
+std::vector<uint8_t> tritonState(const uint8_t reportId = kTritonStateId,
+                                 const uint32_t buttons = 0) {
+    std::vector<uint8_t> r(kTritonStateBytes, 0);
+    r[0] = reportId;
+    for (size_t i = 0; i < 4; i++) r[kTritonButtons + i] = (uint8_t)(buttons >> (8 * i));
+    return r;
+}
+
+void setTritonImu(std::vector<uint8_t>& r, const int16_t (&accel)[3], const int16_t (&gyro)[3]) {
+    for (size_t axis = 0; axis < 3; axis++) {
+        setLe16(r, kTritonAccel + 2 * axis, accel[axis]);
+        setLe16(r, kTritonGyro + 2 * axis, gyro[axis]);
+    }
+}
+
+bool decodeTriton(const std::vector<uint8_t>& r, DeviceState& s) {
+    ParserState st;
+    return decodeReport(Parser::STEAM_TRITON, r.data(), r.size(), s, &st);
+}
+
+// SDL's TritonBatteryStatus_t after the id: the charge state, the percent, then seven u16
+// readings this port does not use.
+constexpr size_t kTritonBatteryBytes = 17;
+constexpr uint8_t kTritonChargeReset = 0;
+constexpr uint8_t kTritonChargeDischarging = 1;
+constexpr uint8_t kTritonChargeCharging = 2;
+constexpr uint8_t kTritonChargeSourceValidate = 3;
+constexpr uint8_t kTritonChargeDone = 4;
+
+std::vector<uint8_t> tritonBattery(const uint8_t chargeState, const uint8_t percent) {
+    std::vector<uint8_t> r(kTritonBatteryBytes, 0);
+    r[0] = kTritonBatteryId;
+    r[1] = chargeState;
+    r[2] = percent;
+    return r;
+}
+
+std::vector<uint8_t> tritonWireless(const uint8_t reportId, const uint8_t state) {
+    return {reportId, state};
+}
+
+constexpr uint8_t kTritonWirelessDisconnected = 1;
+constexpr uint8_t kTritonWirelessConnected = 2;
+
+} // namespace
+
+TEST(TritonClassify, TheWiredPadAndBothDonglesAreOptInRowsOnTheTritonParser) {
+    for (const uint16_t pid : kTritonUsbIdentities) {
+        const usbparsers::KnownDevice* k = usbparsers::lookupKnown(kValve, pid);
+        ASSERT_NE(nullptr, k) << pid;
+        EXPECT_EQ(Parser::STEAM_TRITON, k->parser) << pid;
+        EXPECT_EQ(InitKind::STEAM_TRITON_QUIET, k->init) << pid;
+        EXPECT_FALSE(isVerifiedFastLane(kValve, pid)) << pid;
+
+        const usbparsers::Classification c = usbparsers::classifyDevice(kValve, pid, 0x03, 0, 0);
+        EXPECT_EQ(Parser::STEAM_TRITON, c.parser) << pid;
+        EXPECT_EQ(InitKind::STEAM_TRITON_QUIET, c.init) << pid;
+    }
+    EXPECT_STREQ("Valve Steam Controller (2026)",
+                 usbparsers::lookupKnown(kValve, kTritonWired)->name);
+}
+
+// The Bluetooth LE identity speaks Valve's own GATT protocol and never reaches USB.
+TEST(TritonClassify, TheBluetoothIdentityIsNoUsbRow) {
+    EXPECT_EQ(nullptr, usbparsers::lookupKnown(kValve, kTritonBle));
+}
+
+TEST(TritonClassify, AdvertisesImuAndRumbleButNoTouchpad) {
+    EXPECT_TRUE(parserHasImu(Parser::STEAM_TRITON));
+    EXPECT_TRUE(parserHasRumble(Parser::STEAM_TRITON));
+    EXPECT_FALSE(parserHasTouchpad(Parser::STEAM_TRITON));
+    EXPECT_FALSE(parserFrameworkRumbleUnreliable(Parser::STEAM_TRITON));
+    EXPECT_FALSE(usbparsers::parserStreamsUnprompted(Parser::STEAM_TRITON));
+}
+
+// Released, the pad goes back to its lizard keyboard and mouse once the firmware's watchdog
+// fires, so no framework gamepad is worth waiting for.
+TEST(TritonClassify, SettlesWithoutAFrameworkGamepad) {
+    for (const uint16_t pid : kTritonUsbIdentities) {
+        EXPECT_FALSE(modelExpectsFrameworkGamepad(kValve, pid)) << pid;
+    }
+}
+
+TEST(TritonDecode, EveryStateReportIdDecodes) {
+    for (const uint8_t id : {kTritonStateId, kTritonStateBleId, kTritonStateTimestampId}) {
+        DeviceState s;
+        EXPECT_TRUE(decodeTriton(tritonState(id), s)) << (int)id;
+    }
+}
+
+TEST(TritonDecode, RejectsAShortStateAndEveryOtherReportId) {
+    DeviceState s;
+    auto shortState = tritonState();
+    shortState.resize(kTritonStateBytes - 1);
+    EXPECT_FALSE(decodeTriton(shortState, s));
+    for (const uint8_t id :
+         {kTritonBatteryId, kTritonWirelessXId, kTritonWirelessId, (uint8_t)0x01, (uint8_t)0x00}) {
+        EXPECT_FALSE(decodeTriton(tritonState(id), s)) << (int)id;
+    }
+}
+
+// SDL's mapping onto its gamepad buttons, which sit where XUSB's do: MENU is SDL's BACK and VIEW
+// its START.
+TEST(TritonDecode, EveryMappedButtonBitSetsItsXusbBit) {
+    struct WideBitCase {
+        uint32_t bit;
+        uint16_t expected;
+    };
+    const WideBitCase cases[] = {
+        {kTritonA, XUSB_A},
+        {kTritonB, XUSB_B},
+        {kTritonX, XUSB_X},
+        {kTritonY, XUSB_Y},
+        {kTritonL, XUSB_LB},
+        {kTritonR, XUSB_RB},
+        {kTritonMenu, XUSB_BACK},
+        {kTritonView, XUSB_START},
+        {kTritonSteam, XUSB_GUIDE},
+        {kTritonL3, XUSB_THUMB_L},
+        {kTritonR3, XUSB_THUMB_R},
+        {kTritonDpadUp, XUSB_DPAD_UP},
+        {kTritonDpadDown, XUSB_DPAD_DOWN},
+        {kTritonDpadLeft, XUSB_DPAD_LEFT},
+        {kTritonDpadRight, XUSB_DPAD_RIGHT},
+    };
+    for (const WideBitCase& c : cases) {
+        DeviceState s;
+        ASSERT_TRUE(decodeTriton(tritonState(kTritonStateId, c.bit), s));
+        EXPECT_EQ(c.expected, s.wButtons) << "bit 0x" << std::hex << c.bit;
+    }
+}
+
+TEST(TritonDecode, ButtonsWithNoXusbEquivalentPublishNoBit) {
+    for (const uint32_t bit :
+         {kTritonQam, kTritonR4, kTritonR5, kTritonL4, kTritonL5, kTritonRightStickTouch,
+          kTritonRightPadTouch, kTritonRightPadClick, kTritonRightTriggerClick,
+          kTritonLeftStickTouch, kTritonLeftPadTouch, kTritonLeftPadClick, kTritonLeftTriggerClick,
+          kTritonRightGripTouch, kTritonLeftGripTouch}) {
+        DeviceState s;
+        ASSERT_TRUE(decodeTriton(tritonState(kTritonStateId, bit), s));
+        EXPECT_EQ(0, s.wButtons) << "bit 0x" << std::hex << bit;
+    }
+}
+
+// SDL reads the triggers as 0..32767 (it sends raw * 2 - 32768); the wire's are a byte.
+TEST(TritonDecode, TriggersScaleTheirFifteenBitThrowOntoAByte) {
+    auto r = tritonState();
+    setLe16(r, kTritonLeftTrigger, 32767);
+    setLe16(r, kTritonRightTrigger, 16384);
+    DeviceState s;
+    ASSERT_TRUE(decodeTriton(r, s));
+    EXPECT_EQ(255, s.bLT);
+    EXPECT_EQ(127, s.bRT);
+
+    setLe16(r, kTritonLeftTrigger, 0);
+    setLe16(r, kTritonRightTrigger, -300);
+    ASSERT_TRUE(decodeTriton(r, s));
+    EXPECT_EQ(0, s.bLT);
+    EXPECT_EQ(0, s.bRT);
+}
+
+// SDL negates both Y axes into its down-positive convention, so the raw axes are up-positive,
+// which is the wire's own.
+TEST(TritonDecode, SticksAreLittleEndianAndUpPositiveLikeTheWire) {
+    auto r = tritonState();
+    setLe16(r, kTritonSticks, -8000);
+    setLe16(r, kTritonSticks + 2, 12000);
+    setLe16(r, kTritonSticks + 4, 32767);
+    setLe16(r, kTritonSticks + 6, -32768);
+    DeviceState s;
+    ASSERT_TRUE(decodeTriton(r, s));
+    EXPECT_EQ(-8000, s.sLX);
+    EXPECT_EQ(12000, s.sLY);
+    EXPECT_EQ(32767, s.sRX);
+    EXPECT_EQ(-32768, s.sRY);
+}
+
+// SDL: gyro (x, z, -y) over +-2000 deg/s and accel (x, z, -y) over +-2 g; the wire is +-2000 deg/s
+// and +-4 g on the same axes.
+TEST(TritonDecode, ImuRotatesOntoTheWireAxisOrderAndScale) {
+    auto r = tritonState();
+    setTritonImu(r, {1000, 2000, 3000}, {4000, 5000, 6000});
+    DeviceState s;
+    ASSERT_TRUE(decodeTriton(r, s));
+    EXPECT_TRUE(s.motionValid);
+    EXPECT_EQ(3999, s.gyroX);
+    EXPECT_EQ(5999, s.gyroY);
+    EXPECT_EQ(-4999, s.gyroZ);
+    EXPECT_EQ(499, s.accelX);
+    EXPECT_EQ(1499, s.accelY);
+    EXPECT_EQ(-999, s.accelZ);
+}
+
+// The timestamp report moves the trackpads and shortens the IMU timestamp, but the six IMU words
+// land where the plain state report has them.
+TEST(TritonDecode, TheTimestampReportReadsTheSameButtonsSticksAndImu) {
+    auto plain = tritonState(kTritonStateId, kTritonA | kTritonDpadUp);
+    auto stamped = tritonState(kTritonStateTimestampId, kTritonA | kTritonDpadUp);
+    for (auto* r : {&plain, &stamped}) {
+        setLe16(*r, kTritonSticks, 1234);
+        setTritonImu(*r, {-100, 200, -300}, {400, -500, 600});
+    }
+    DeviceState fromPlain;
+    DeviceState fromStamped;
+    ASSERT_TRUE(decodeTriton(plain, fromPlain));
+    ASSERT_TRUE(decodeTriton(stamped, fromStamped));
+    EXPECT_EQ(fromPlain.wButtons, fromStamped.wButtons);
+    EXPECT_EQ(fromPlain.sLX, fromStamped.sLX);
+    EXPECT_EQ(fromPlain.gyroX, fromStamped.gyroX);
+    EXPECT_EQ(fromPlain.gyroY, fromStamped.gyroY);
+    EXPECT_EQ(fromPlain.gyroZ, fromStamped.gyroZ);
+    EXPECT_EQ(fromPlain.accelZ, fromStamped.accelZ);
+    EXPECT_TRUE(fromStamped.motionValid);
+}
+
+TEST(TritonDecode, ASilentImuPublishesNoMotion) {
+    DeviceState s;
+    ASSERT_TRUE(decodeTriton(tritonState(kTritonStateId, kTritonA), s));
+    EXPECT_FALSE(s.motionValid);
+}
+
+TEST(TritonDecode, AStateReportCarriesNoBattery) {
+    DeviceState s;
+    ASSERT_TRUE(decodeTriton(tritonState(), s));
+    EXPECT_FALSE(s.batteryValid);
+}
+
+// SDL's charge states: discharging, charging and done are readings; reset and source-validate are
+// not, and SDL reports them as an unknown state with the percent beside it.
+TEST(TritonBattery, ReadsTheChargeStateAndThePercent) {
+    struct ChargeCase {
+        uint8_t chargeState;
+        uint8_t percent;
+        uint8_t level;
+        uint8_t status;
+    };
+    const ChargeCase cases[] = {
+        {kTritonChargeDischarging, 57, 57, usbparsers::PAD_BATTERY_STATUS_DISCHARGING},
+        {kTritonChargeCharging, 80, 80, usbparsers::PAD_BATTERY_STATUS_CHARGING},
+        {kTritonChargeDone, 100, 100, usbparsers::PAD_BATTERY_STATUS_FULL},
+        {kTritonChargeReset, 40, 40, usbparsers::PAD_BATTERY_STATUS_UNKNOWN},
+        {kTritonChargeSourceValidate, 40, 40, usbparsers::PAD_BATTERY_STATUS_UNKNOWN},
+        {(uint8_t)9, 40, 40, usbparsers::PAD_BATTERY_STATUS_UNKNOWN},
+    };
+    for (const ChargeCase& c : cases) {
+        const auto r = tritonBattery(c.chargeState, c.percent);
+        DeviceState s;
+        ASSERT_TRUE(usbparsers::decodePadBatteryReport(Parser::STEAM_TRITON, r.data(), r.size(), s))
+            << (int)c.chargeState;
+        EXPECT_TRUE(s.batteryValid);
+        EXPECT_EQ(c.level, s.batteryLevel) << (int)c.chargeState;
+        EXPECT_EQ(c.status, s.batteryStatus) << (int)c.chargeState;
+    }
+}
+
+TEST(TritonBattery, APercentPastAHundredIsAnUnknownLevel) {
+    const auto r = tritonBattery(kTritonChargeDischarging, 101);
+    DeviceState s;
+    ASSERT_TRUE(usbparsers::decodePadBatteryReport(Parser::STEAM_TRITON, r.data(), r.size(), s));
+    EXPECT_EQ(usbparsers::PAD_BATTERY_LEVEL_UNKNOWN, s.batteryLevel);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_DISCHARGING, s.batteryStatus);
+}
+
+// The battery arrives on its own report, so it must never publish as input (that would flash a
+// neutral pad on the wire), and nothing else is read as a battery.
+TEST(TritonBattery, IsNeverInputAndNothingElseReadsAsOne) {
+    const auto battery = tritonBattery(kTritonChargeDischarging, 50);
+    DeviceState s;
+    EXPECT_FALSE(decodeTriton(battery, s));
+
+    auto shortBattery = battery;
+    shortBattery.resize(kTritonBatteryBytes - 1);
+    EXPECT_FALSE(usbparsers::decodePadBatteryReport(Parser::STEAM_TRITON, shortBattery.data(),
+                                                    shortBattery.size(), s));
+    const auto state = tritonState();
+    EXPECT_FALSE(
+        usbparsers::decodePadBatteryReport(Parser::STEAM_TRITON, state.data(), state.size(), s));
+    EXPECT_FALSE(s.batteryValid);
+
+    for (const Parser p : {Parser::STEAM_CONTROLLER, Parser::DUALSENSE, Parser::NONE}) {
+        EXPECT_FALSE(usbparsers::decodePadBatteryReport(p, battery.data(), battery.size(), s));
+    }
+}
+
+TEST(TritonWireless, BothWirelessReportIdsClassifyConnectAndDisconnect) {
+    for (const uint8_t id : {kTritonWirelessId, kTritonWirelessXId}) {
+        const auto gone = tritonWireless(id, kTritonWirelessDisconnected);
+        EXPECT_EQ(WirelessEvent::DISCONNECT,
+                  checkWirelessEvent(Parser::STEAM_TRITON, gone.data(), gone.size()))
+            << (int)id;
+        const auto back = tritonWireless(id, kTritonWirelessConnected);
+        EXPECT_EQ(WirelessEvent::CONNECT,
+                  checkWirelessEvent(Parser::STEAM_TRITON, back.data(), back.size()))
+            << (int)id;
+    }
+}
+
+TEST(TritonWireless, AWirelessEventIsNeverInput) {
+    const auto back = tritonWireless(kTritonWirelessId, kTritonWirelessConnected);
+    DeviceState s;
+    EXPECT_FALSE(decodeTriton(back, s));
+}
+
+TEST(TritonWireless, RejectsMalformedEventsAndOtherReports) {
+    const std::vector<uint8_t> idOnly = {kTritonWirelessId};
+    EXPECT_EQ(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::STEAM_TRITON, idOnly.data(), idOnly.size()));
+    const auto unknownState = tritonWireless(kTritonWirelessId, 3);
+    EXPECT_EQ(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::STEAM_TRITON, unknownState.data(), unknownState.size()));
+    const auto state = tritonState(kTritonStateId, kTritonWirelessConnected);
+    EXPECT_EQ(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::STEAM_TRITON, state.data(), state.size()));
+    const auto battery = tritonBattery(kTritonWirelessConnected, kTritonWirelessConnected);
+    EXPECT_EQ(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::STEAM_TRITON, battery.data(), battery.size()));
+}
+
+// The two Steam Controllers frame their wireless events differently; neither parser reads the
+// other's.
+TEST(TritonWireless, TheTwoSteamControllersNeverReadEachOthersEvents) {
+    const auto triton = tritonWireless(kTritonWirelessId, kTritonWirelessConnected);
+    EXPECT_EQ(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, triton.data(), triton.size()));
+    const auto steam2015 = steamWirelessEvent(0x02);
+    EXPECT_EQ(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::STEAM_TRITON, steam2015.data(), steam2015.size()));
+}
+
+// SDL's DisableSteamTritonLizardMode and SetSensorsEnabled: a 64-byte feature report, id 1, then
+// ID_SET_SETTINGS_VALUES, one three-byte setting, its number and its u16 LE value.
+TEST(TritonSettings, TheLizardSwitchIsSdlsSettingsReport) {
+    uint8_t out[usbparsers::TRITON_SETTINGS_REPORT_BYTES];
+    memset(out, 0xEE, sizeof(out));
+    ASSERT_EQ(64u, usbparsers::buildTritonSettingsReport(usbparsers::TritonSetting::LIZARD_OFF, out,
+                                                         sizeof(out)));
+    EXPECT_EQ(0x01, out[0]);
+    EXPECT_EQ(0x87, out[1]);
+    EXPECT_EQ(0x03, out[2]);
+    EXPECT_EQ(0x09, out[3]); // SETTING_LIZARD_MODE
+    EXPECT_EQ(0x00, out[4]); // LIZARD_MODE_OFF
+    EXPECT_EQ(0x00, out[5]);
+    for (size_t i = 6; i < sizeof(out); i++) EXPECT_EQ(0x00, out[i]) << i;
+}
+
+TEST(TritonSettings, TheImuModeStreamsRawAccelAndGyro) {
+    uint8_t out[usbparsers::TRITON_SETTINGS_REPORT_BYTES];
+    ASSERT_EQ(64u, usbparsers::buildTritonSettingsReport(usbparsers::TritonSetting::RAW_IMU, out,
+                                                         sizeof(out)));
+    EXPECT_EQ(0x01, out[0]);
+    EXPECT_EQ(0x87, out[1]);
+    EXPECT_EQ(0x03, out[2]);
+    EXPECT_EQ(0x30, out[3]); // SETTING_IMU_MODE
+    EXPECT_EQ(0x18, out[4]); // SEND_RAW_ACCEL | SEND_RAW_GYRO
+    EXPECT_EQ(0x00, out[5]);
+}
+
+TEST(TritonSettings, RefusesASmallBuffer) {
+    uint8_t out[usbparsers::TRITON_SETTINGS_REPORT_BYTES - 1];
+    EXPECT_EQ(0u, usbparsers::buildTritonSettingsReport(usbparsers::TritonSetting::LIZARD_OFF, out,
+                                                        sizeof(out)));
+}
+
+// SDL's HIDAPI_DriverSteamTriton_RumbleJoystick: output report 0x80, type and intensity zero, the
+// low-frequency (strong) speed on the left and the high-frequency (weak) one on the right, each a
+// u16 LE beside a zero gain.
+TEST(TritonRumble, TheHapticRumbleReportCarriesBothSpeeds) {
+    uint8_t out[64];
+    ASSERT_EQ(10u, buildRumbleReport(Parser::STEAM_TRITON, 0x1234, 0xABCD, 7, out, sizeof(out)));
+    const uint8_t expected[10] = {0x80, 0x00, 0x00, 0x00, 0x34, 0x12, 0x00, 0xCD, 0xAB, 0x00};
+    EXPECT_EQ(0, memcmp(expected, out, sizeof(expected)));
+}
+
+TEST(TritonRumble, AStopIsAReportOfZeroSpeeds) {
+    uint8_t out[64];
+    ASSERT_EQ(10u, buildRumbleReport(Parser::STEAM_TRITON, 0, 0, 0, out, sizeof(out)));
+    const uint8_t expected[10] = {0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    EXPECT_EQ(0, memcmp(expected, out, sizeof(expected)));
+}
+
+TEST(TritonRumble, RefusesASmallBuffer) {
+    uint8_t out[9];
+    EXPECT_EQ(0u, buildRumbleReport(Parser::STEAM_TRITON, 1, 1, 0, out, sizeof(out)));
+}
+
+// hidapi writes an output report on the interrupt OUT endpoint when the interface has one, and as
+// a SET_REPORT on the control pipe when it does not; only a HID family can take the second.
+TEST(OutputRoute, AnOutEndpointCarriesEveryFamilysReports) {
+    using usbparsers::OutputRoute;
+    using usbparsers::outputRouteFor;
+    constexpr uint8_t kEpOut = 0x02;
+    EXPECT_EQ(OutputRoute::INTERRUPT_OUT, outputRouteFor(Parser::XINPUT_360, kEpOut));
+    EXPECT_EQ(OutputRoute::INTERRUPT_OUT, outputRouteFor(Parser::DUALSENSE, kEpOut));
+    EXPECT_EQ(OutputRoute::INTERRUPT_OUT, outputRouteFor(Parser::STEAM_TRITON, kEpOut));
+}
+
+TEST(OutputRoute, WithoutOneOnlyTheTritonFallsBackToTheControlPipe) {
+    using usbparsers::OutputRoute;
+    using usbparsers::outputRouteFor;
+    EXPECT_EQ(OutputRoute::CONTROL_SET_REPORT, outputRouteFor(Parser::STEAM_TRITON, 0));
+    for (const Parser p :
+         {Parser::XINPUT_360, Parser::XBOX_ONE_GIP, Parser::DUALSHOCK4, Parser::DUALSENSE,
+          Parser::SWITCH_PRO_USB, Parser::STEAM_CONTROLLER, Parser::NONE}) {
+        EXPECT_EQ(OutputRoute::NONE, outputRouteFor(p, 0)) << usbparsers::parserName(p);
+    }
+}
+
+// SDL re-sends the lizard switch every 3 s (the firmware's watchdog turns lizard mode back on
+// without it) and a running rumble every 40 ms (inside the firmware's ~50 ms motor timeout).
+TEST(TritonRefresh, TheLizardSwitchIsOwedAtOnceUntilSentThenEveryThreeSeconds) {
+    usbparsers::FeedbackState st;
+    EXPECT_TRUE(usbparsers::refreshDue(Parser::STEAM_TRITON, st, 0).settings);
+    EXPECT_EQ(0u, usbparsers::nextRefreshInMs(Parser::STEAM_TRITON, st, 0));
+
+    st.settingsSentMs = 1000;
+    EXPECT_FALSE(usbparsers::refreshDue(Parser::STEAM_TRITON, st, 3999).settings);
+    EXPECT_TRUE(usbparsers::refreshDue(Parser::STEAM_TRITON, st, 4000).settings);
+    EXPECT_EQ(3000u, usbparsers::nextRefreshInMs(Parser::STEAM_TRITON, st, 1000));
+    EXPECT_EQ(1u, usbparsers::nextRefreshInMs(Parser::STEAM_TRITON, st, 3999));
+    EXPECT_EQ(0u, usbparsers::nextRefreshInMs(Parser::STEAM_TRITON, st, 9000));
+}
+
+TEST(TritonRefresh, ARunningRumbleIsRepeatedEveryFortyMilliseconds) {
+    usbparsers::FeedbackState st;
+    st.settingsSentMs = 1000;
+    st.weak = 1;
+    st.rumbleSentMs = 1000;
+    EXPECT_FALSE(usbparsers::refreshDue(Parser::STEAM_TRITON, st, 1039).rumble);
+    EXPECT_TRUE(usbparsers::refreshDue(Parser::STEAM_TRITON, st, 1040).rumble);
+    EXPECT_EQ(40u, usbparsers::nextRefreshInMs(Parser::STEAM_TRITON, st, 1000));
+    EXPECT_EQ(15u, usbparsers::nextRefreshInMs(Parser::STEAM_TRITON, st, 1025));
+}
+
+TEST(TritonRefresh, AStoppedRumbleIsNeverRepeated) {
+    usbparsers::FeedbackState st;
+    st.settingsSentMs = 1000;
+    EXPECT_FALSE(usbparsers::refreshDue(Parser::STEAM_TRITON, st, 1000).rumble);
+    st.rumbleSentMs = 1000;
+    EXPECT_FALSE(usbparsers::refreshDue(Parser::STEAM_TRITON, st, 999999).rumble);
+    EXPECT_EQ(2000u, usbparsers::nextRefreshInMs(Parser::STEAM_TRITON, st, 2000));
+}
+
+TEST(TritonRefresh, NoOtherFamilyIsEverRefreshed) {
+    usbparsers::FeedbackState st;
+    st.strong = 0xFFFF;
+    for (const Parser p : {Parser::STEAM_CONTROLLER, Parser::XINPUT_360, Parser::DUALSENSE,
+                           Parser::SWITCH_PRO_USB, Parser::NONE}) {
+        const usbparsers::RefreshDue due = usbparsers::refreshDue(p, st, 0);
+        EXPECT_FALSE(due.settings) << usbparsers::parserName(p);
+        EXPECT_FALSE(due.rumble) << usbparsers::parserName(p);
+        EXPECT_EQ(usbparsers::NO_REFRESH, usbparsers::nextRefreshInMs(p, st, 0))
+            << usbparsers::parserName(p);
+    }
+}
+
 // ---- the pad's own battery ------------------------------------------------------------------
 
 namespace {
@@ -2590,7 +3135,8 @@ TEST(ParserName, EveryParserHasADistinctNonEmptyName) {
                           Parser::GENERIC_HID_GAMEPAD,
                           Parser::XINPUT_360_WIRELESS,
                           Parser::STEAM_CONTROLLER,
-                          Parser::SWITCH_N64_USB};
+                          Parser::SWITCH_N64_USB,
+                          Parser::STEAM_TRITON};
     for (const Parser a : all) {
         ASSERT_NE(nullptr, usbparsers::parserName(a));
         EXPECT_GT(strlen(usbparsers::parserName(a)), 0u);
