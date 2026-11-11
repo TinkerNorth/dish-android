@@ -565,18 +565,16 @@ class UsbGamepadManager
 
         // Ranked, not first-match: a composite 360 pad's audio/security interfaces also carry an interrupt-IN.
         private fun findInterruptInPair(device: UsbDevice): Triple<UsbInterface, UsbEndpoint, UsbEndpoint?>? {
-            var best: Triple<UsbInterface, UsbEndpoint, UsbEndpoint?>? = null
-            var bestRank = RANK_NONE
-            for (i in 0 until device.interfaceCount) {
-                val intf = device.getInterface(i)
-                val rank = gameInterfaceRank(intf.facts())
-                if (rank <= bestRank) continue
-                val pair = interruptInOutOf(intf) ?: continue
-                best = Triple(intf, pair.first, pair.second)
-                bestRank = rank
-            }
-            return best
+            val withEndpoints = interruptInPairs(device)
+            val candidates = withEndpoints.map { UsbInterfaceCandidate(it.first.id, it.first.facts()) }
+            val picked = pickGameInterface(device.vendorId, device.productId, candidates) ?: return null
+            return withEndpoints[picked]
         }
+
+        private fun interruptInPairs(device: UsbDevice): List<Triple<UsbInterface, UsbEndpoint, UsbEndpoint?>> =
+            (0 until device.interfaceCount)
+                .map(device::getInterface)
+                .mapNotNull { intf -> interruptInOutOf(intf)?.let { Triple(intf, it.first, it.second) } }
 
         private fun deviceFromIntent(intent: Intent): UsbDevice? =
             IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)

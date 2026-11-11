@@ -42,6 +42,11 @@ computer. Those lines say "update Satellite too".
 - **The Rumble pill on a controller's card no longer says "on" when its rumble
   switch is off.** It now dims, the way the Motion pill does, while the switch
   is off.
+- **The new Steam Controller's wireless adapters are read from the right
+  part.** On the Puck and the other adapter, Dish now uses only the parts of
+  the adapter that SDL and Steam read controllers from, instead of the first
+  one that looked like a controller. This follows SDL and Steam and has not
+  been tried on an adapter yet.
 
 ## [2.5.0] - 2026-11-02
 
