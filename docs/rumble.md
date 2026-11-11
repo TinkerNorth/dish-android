@@ -149,6 +149,14 @@ frequency, right), 0..65535. Layouts follow the Linux kernel drivers:
   report `0x10 <counter&0x0F> <left 4B> <right 4B>`. Each side is HD-
   rumble encoded at the neutral frequency from a coarse amplitude table.
   Vibration is enabled in `runInit` via subcommand `0x48`.
+- **Steam Controller (2026)** (`STEAM_TRITON`, SDL's
+  `SDL_hidapi_steam_triton.c`): 10-byte haptic rumble output report
+  `80 00 00 00 <strong LE16> 00 <weak LE16> 00`, the low-frequency speed on
+  the left. The firmware stops the motors about 50 ms after the last write,
+  so the output worker re-sends a non-zero rumble every 40 ms, as SDL does,
+  until the 0,0 stop. Without an interrupt OUT endpoint on the interface the
+  report goes as a SET_REPORT(Output) on the control pipe (`outputRouteFor`),
+  where hidapi would write it.
 
 Counters that the protocol carries (Xbox One serial, Switch Pro packet
 number) live in the pad's `UsbOutput.outSeq`. Every write is made by the
@@ -157,11 +165,13 @@ before the fd closes.
 
 **Sources:** `drivers/input/joystick/xpad.c` (`xpad_play_effect`),
 `drivers/hid/hid-playstation.c`, `drivers/hid/hid-nintendo.c`
-(`joycon_encode_rumble`, `joycon_rumble_amplitudes`).
+(`joycon_encode_rumble`, `joycon_rumble_amplitudes`), and SDL's
+`src/joystick/hidapi/SDL_hidapi_steam_triton.c`
+(`HIDAPI_DriverSteamTriton_RumbleJoystick`).
 
 **Not yet covered:** Stadia and the generic-HID parser have no rumble
 builder (Stadia rumble uses a SET_REPORT control transfer, not the
 interrupt OUT path, so it is left out rather than guessed).
 Trigger-motor haptics need FR-2. None of these report builders has
 been verified on hardware yet; see
-[`usb-direct-mode-followups.md`](usb-direct-mode-followups.md) item 7.
+[`usb-direct-mode-followups.md`](usb-direct-mode-followups.md) items 7 and 9.

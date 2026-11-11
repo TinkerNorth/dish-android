@@ -55,7 +55,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 Opus also carries a patent grant covering the Opus Interactive Audio Codec reference
 implementation; see the upstream `COPYING` file in the release tarball.
 
-## SDL (Simple DirectMedia Layer): controller IDs and Switch Pro motion scaling
+## SDL (Simple DirectMedia Layer): controller IDs, Switch Pro motion scaling, Steam Controller protocols
 
 The USB controller recognition table in `app/src/main/cpp/usb_parsers.cpp` (the `kImported`
 array) is a curated subset of the vendor/product IDs and controller-type classifications in
@@ -71,7 +71,7 @@ SDL is distributed under the zlib license.
 
 ```
 Simple DirectMedia Layer
-Copyright (C) 1997-2024 Sam Lantinga <slouken@libsdl.org>
+Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 Controller list portions Copyright (C) Valve Corporation
 
 This software is provided 'as-is', without any express or implied
@@ -97,8 +97,16 @@ SDL's `src/joystick/hidapi/SDL_hidapi_steam.c` and the Valve-authored headers be
 (`src/joystick/hidapi/steam/controller_structs.h` and `controller_constants.h`, Copyright (C)
 2020-2021 Valve Corporation). Protocol facts only; no SDL code is compiled in.
 
+The Steam Controller (2026, "Triton") support in the same file follows SDL's
+`src/joystick/hidapi/SDL_hidapi_steam_triton.c` and the same Valve headers: the vendor and product
+IDs and the dongles' controller interfaces, the report ids and the packed state, battery and
+wireless layouts, the button bits and their mapping, the settings message and the setting numbers
+and values that turn lizard mode off and the raw IMU on, the sensor axis order and full scales, the
+haptic rumble output report, and the 3 s and 40 ms re-send cadences. Protocol facts only; no SDL
+code is compiled in.
+
 Upstream: https://github.com/libsdl-org/SDL (`src/joystick/controller_list.h`,
-`src/joystick/hidapi/steam/`)
+`src/joystick/hidapi/steam/`, `src/joystick/hidapi/SDL_hidapi_steam_triton.c`)
 
 ## Linux kernel input/HID drivers: USB-direct rumble and motion math
 

@@ -4,8 +4,10 @@
 
 #include <errno.h>
 #include <semaphore.h>
+#include <time.h>
 
 #include <atomic>
+#include <cstdint>
 
 namespace dish_hot {
 
@@ -35,7 +37,32 @@ class WorkerWake {
         sleeping_.store(false, std::memory_order_seq_cst);
     }
 
+    // As sleepUnless, for no longer than timeoutMs. sem_timedwait takes its deadline on the
+    // realtime clock, the one clock it takes on every platform this builds for, so a wall-clock
+    // step stretches or cuts that one wait; the caller reads its own clock again on every wake.
+    template <typename HasWork> void sleepUnlessFor(HasWork&& hasWork, const uint32_t timeoutMs) {
+        sleeping_.store(true, std::memory_order_seq_cst);
+        if (!hasWork()) {
+            const timespec deadline = realtimeAfter(timeoutMs);
+            while (sem_timedwait(&wake_, &deadline) != 0 && errno == EINTR) {}
+        }
+        sleeping_.store(false, std::memory_order_seq_cst);
+    }
+
   private:
+    static timespec realtimeAfter(const uint32_t ms) {
+        constexpr int64_t kMsPerSecond = 1000;
+        constexpr int64_t kNsPerMs = 1000000;
+        constexpr int64_t kNsPerSecond = 1000000000;
+        timespec now{};
+        clock_gettime(CLOCK_REALTIME, &now);
+        const int64_t ns = (int64_t)now.tv_nsec + (int64_t)(ms % kMsPerSecond) * kNsPerMs;
+        timespec deadline{};
+        deadline.tv_sec = now.tv_sec + (time_t)(ms / kMsPerSecond) + (time_t)(ns / kNsPerSecond);
+        deadline.tv_nsec = (long)(ns % kNsPerSecond);
+        return deadline;
+    }
+
     sem_t wake_;
     std::atomic<bool> sleeping_{false};
 };

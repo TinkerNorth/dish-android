@@ -41,14 +41,14 @@ class UsbOutput final : public dish_usb::OutputDevice {
     void rumble(const uint16_t strong, const uint16_t weak) override {
         feedback.strong = strong;
         feedback.weak = weak;
-        usbparsers::runMergedRumble(fd, epOut, parser, feedback, outSeq++);
+        writeRumble(dish_usb::outputClockMs());
     }
 
     void triggerRumble(const uint16_t left, const uint16_t right) override {
         if (!usbparsers::parserHasTriggerRumble(parser)) return;
         feedback.leftTrigger = left;
         feedback.rightTrigger = right;
-        usbparsers::runMergedRumble(fd, epOut, parser, feedback, outSeq++);
+        writeRumble(dish_usb::outputClockMs());
     }
 
     void lightbar(const uint8_t r, const uint8_t g, const uint8_t b) override {
@@ -71,13 +71,39 @@ class UsbOutput final : public dish_usb::OutputDevice {
         usbparsers::writeOutReport(fd, epOut, bytes, len);
     }
 
+    // The reboot wiped the attach-time settings, so they go again or the pad streams without
+    // motion while its lizard keyboard leaks into the phone.
+    void reconnected() override {
+        usbparsers::runInit(fd, interfaceNumber, epOut, init);
+        feedback.settingsSentMs = dish_usb::outputClockMs();
+    }
+
+    // A write is stamped when it is attempted, so a pad that refuses one is not retried at once.
+    uint32_t refresh(const int64_t nowMs) override {
+        const usbparsers::RefreshDue due = usbparsers::refreshDue(parser, feedback, nowMs);
+        if (due.settings) {
+            usbparsers::runSettingsRefresh(fd, interfaceNumber, parser);
+            feedback.settingsSentMs = nowMs;
+        }
+        if (due.rumble) writeRumble(nowMs);
+        return usbparsers::nextRefreshInMs(parser, feedback, nowMs);
+    }
+
     int fd = -1;
+    int interfaceNumber = -1;
     uint8_t epOut = 0;
     usbparsers::Parser parser = usbparsers::Parser::NONE;
+    usbparsers::InitKind init = usbparsers::InitKind::NONE;
     usbparsers::FeedbackState feedback;
     // The output report counter for protocols that carry one (Xbox One serial, Switch Pro packet
     // number).
     uint8_t outSeq = 0;
+
+  private:
+    void writeRumble(const int64_t nowMs) {
+        usbparsers::runMergedRumble(fd, interfaceNumber, epOut, parser, feedback, outSeq++);
+        feedback.rumbleSentMs = nowMs;
+    }
 };
 
 struct DeviceCtx {
@@ -256,18 +282,15 @@ void publishDecodedReport(DeviceCtx& ctx, const gamepad::DeviceState& scratch, b
 }
 
 // Both directions publish neutral: a departed pad must not keep its last input latched, and a
-// returning pad rebooted, so any held stick memory is stale.
+// returning pad rebooted, so any held stick memory is stale. A returning pad's re-init is the
+// output worker's to run, so the poller never waits on its control transfers.
 void publishWirelessEvent(DeviceCtx& ctx, const usbparsers::WirelessEvent wev,
                           gamepad::DeviceState& scratch) {
     ctx.stickRange.steamStickX = 0;
     ctx.stickRange.steamStickY = 0;
     dispatch::applyUsbReport(ctx.syntheticDeviceId, scratch);
     if (wev != usbparsers::WirelessEvent::CONNECT) return;
-    // The reboot wiped the quiet-mode settings, so re-run the attach init or the pad streams
-    // without motion while its lizard keyboard leaks through. Written here rather than through the
-    // output worker: only the Steam Controller reports wireless events, its feedback builders send
-    // nothing, and init touches no FeedbackState, so there is nothing for the two to interleave.
-    usbparsers::runInit(ctx.fd, ctx.interfaceNumber, ctx.epOut, ctx.init);
+    ctx.entry->output.postReconnected(ctx.syntheticDeviceId);
 }
 
 void ackGipReport(DeviceCtx& ctx, const uint8_t* report, const size_t len) {
@@ -289,6 +312,13 @@ void publishCompletedUrb(DeviceCtx& ctx, const UrbSlot& completed, const int act
         usbparsers::checkWirelessEvent(ctx.parser, completed.buf.data(), (size_t)actualLength);
     if (wev != usbparsers::WirelessEvent::NONE) {
         publishWirelessEvent(ctx, wev, scratch);
+        return;
+    }
+    // A report that carries only the charge must not publish as input: that would be a neutral pad.
+    const bool isABatteryReport = usbparsers::decodePadBatteryReport(
+        ctx.parser, completed.buf.data(), (size_t)actualLength, scratch);
+    if (isABatteryReport) {
+        publishBattery(ctx, scratch);
         return;
     }
     const bool decoded = usbparsers::decodeReport(ctx.parser, completed.buf.data(),
@@ -552,6 +582,7 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
         ::close(fd);
         return out;
     }
+    const int64_t initSentMs = dish_usb::outputClockMs();
 
     usbparsers::ProbeOutcome probed = probeEndpoint(fd, epIn, epInMaxPacket, parser);
     if (!usbparsers::probePermitsClaim(probed, usbparsers::isVerifiedFastLane(vid, pid), parser)) {
@@ -612,8 +643,11 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
     dispatch::prewarmDevice(ctx->syntheticDeviceId);
 
     ctx->output.fd = fd;
+    ctx->output.interfaceNumber = interfaceNumber;
     ctx->output.epOut = epOut;
     ctx->output.parser = parser;
+    ctx->output.init = init;
+    ctx->output.feedback.settingsSentMs = initSentMs;
     ctx->entry->output.start(ctx->syntheticDeviceId, ctx->output);
     ctx->poller = std::thread(pollLoop, ctx);
 
@@ -671,6 +705,8 @@ static const char* initKindName(usbparsers::InitKind init) {
         return "Switch Pro handshake";
     case usbparsers::InitKind::STEAM_QUIET:
         return "Steam quiet mode";
+    case usbparsers::InitKind::STEAM_TRITON_QUIET:
+        return "Steam (2026) quiet mode";
     case usbparsers::InitKind::NONE:
     default:
         return "";

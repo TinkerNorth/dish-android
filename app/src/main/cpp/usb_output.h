@@ -3,6 +3,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -20,6 +21,12 @@ namespace dish_usb {
 
 inline constexpr size_t TRIGGER_EFFECT_BYTES = usbparsers::TRIGGER_EFFECT_BLOCK_LEN;
 
+// The clock a worker schedules its refreshes on, and the one a device stamps its writes with.
+inline int64_t outputClockMs() {
+    const auto sinceEpoch = std::chrono::steady_clock::now().time_since_epoch();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(sinceEpoch).count();
+}
+
 // The writes a pad's worker performs: over USBDEVFS in usb_host.cpp, recorded by a fake in tests.
 class OutputDevice {
   public:
@@ -30,6 +37,11 @@ class OutputDevice {
     virtual void triggerEffects(const uint8_t* left, const uint8_t* right) = 0;
     virtual void micLed(uint8_t state) = 0;
     virtual void ack(const uint8_t* bytes, size_t len) = 0;
+    // The pad is back on its dongle, rebooted into its stand-alone defaults.
+    virtual void reconnected() = 0;
+    // Re-sends what the pad forgets unless the host repeats it (usbparsers::refreshDue) at nowMs,
+    // and answers the milliseconds until it next owes a write, or usbparsers::NO_REFRESH.
+    virtual uint32_t refresh(int64_t nowMs) = 0;
 
   protected:
     ~OutputDevice() = default;
@@ -119,6 +131,10 @@ struct MicLedOut {
     uint8_t state = 0;
 };
 
+struct ReconnectedOut {
+    int32_t deviceId = 0;
+};
+
 // A GIP ack: each one acknowledges its own packet, so acks queue in order instead of coalescing.
 struct AckOut {
     int32_t deviceId = 0;
@@ -149,6 +165,8 @@ class OutputWorker {
     void postMicLed(int32_t deviceId, uint8_t state);
     // The poller's, for a report that asked for one; never blocks it.
     void postAck(int32_t deviceId, const uint8_t* bytes, size_t len);
+    // The poller's, for a dongle's connect event: the re-init it owes runs here, off the poller.
+    void postReconnected(int32_t deviceId);
 
     uint64_t droppedAcks() const { return droppedAcks_.load(std::memory_order_relaxed); }
 
@@ -160,9 +178,12 @@ class OutputWorker {
         PLAYER_LEDS = 1u << 3,
         TRIGGER_EFFECTS = 1u << 4,
         MIC_LED = 1u << 5,
+        RECONNECTED = 1u << 6,
     };
 
     void announce(uint32_t kind);
+    bool hasWork();
+    void sleepUntilWorkOrRefresh(uint32_t refreshInMs);
     void run();
     void writeAcks();
     void writePending(uint32_t kinds);
@@ -179,6 +200,7 @@ class OutputWorker {
     Mailbox<PlayerLedsOut> playerLeds_;
     Mailbox<TriggerEffectsOut> triggerEffects_;
     Mailbox<MicLedOut> micLed_;
+    Mailbox<ReconnectedOut> reconnected_;
     // The kinds posted since the worker last took them.
     std::atomic<uint32_t> pending_{0};
     dish_hot::MpmcRing<AckOut, ACKS> acks_;

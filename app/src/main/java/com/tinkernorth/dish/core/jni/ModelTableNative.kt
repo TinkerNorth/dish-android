@@ -63,7 +63,7 @@ object ModelTableNative {
         productId: Int,
     ): Boolean
 
-    // False for models whose Standard identity is a keyboard/mouse (the Steam Controller): no
+    // False for models whose Standard identity is a keyboard/mouse (either Steam Controller): no
     // framework gamepad re-enumerates after a release, so nothing should wait for one.
     external fun modelExpectsFrameworkGamepad(
         vendorId: Int,

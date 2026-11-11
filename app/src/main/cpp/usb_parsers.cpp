@@ -406,6 +406,16 @@ constexpr KnownDevice kImported[] = {
     {0x28DE, 0x1102, "Valve Steam Controller", Parser::STEAM_CONTROLLER, InitKind::STEAM_QUIET},
     {0x28DE, 0x1142, "Valve Steam Controller (dongle)", Parser::STEAM_CONTROLLER,
      InitKind::STEAM_QUIET},
+
+    // The Steam Controller (2026) wired, and its two wireless dongles, whose paired pads sit on
+    // HID interfaces 2..5 (SDL's HIDAPI_DriverSteamTriton_IsSupportedDevice). The Bluetooth LE
+    // identity, 0x1303, speaks Valve's own GATT protocol and never enumerates on USB.
+    {0x28DE, 0x1302, "Valve Steam Controller (2026)", Parser::STEAM_TRITON,
+     InitKind::STEAM_TRITON_QUIET},
+    {0x28DE, 0x1304, "Valve Steam Controller (2026, Proteus dongle)", Parser::STEAM_TRITON,
+     InitKind::STEAM_TRITON_QUIET},
+    {0x28DE, 0x1305, "Valve Steam Controller (2026, Nereid dongle)", Parser::STEAM_TRITON,
+     InitKind::STEAM_TRITON_QUIET},
 };
 
 namespace {
@@ -451,9 +461,17 @@ bool isVerifiedFastLane(const uint16_t vid, const uint16_t pid) {
     return k != nullptr && k->parser != Parser::NONE;
 }
 
+namespace {
+
+bool isASteamController(const Parser p) {
+    return p == Parser::STEAM_CONTROLLER || p == Parser::STEAM_TRITON;
+}
+
+} // namespace
+
 bool modelExpectsFrameworkGamepad(const uint16_t vid, const uint16_t pid) {
     const KnownDevice* k = lookupKnown(vid, pid);
-    return k == nullptr || k->parser != Parser::STEAM_CONTROLLER;
+    return k == nullptr || !isASteamController(k->parser);
 }
 
 bool parserStreamsUnprompted(const Parser p) {
@@ -510,6 +528,8 @@ const char* parserName(const Parser p) {
         return "Generic HID gamepad";
     case Parser::STEAM_CONTROLLER:
         return "Steam Controller protocol";
+    case Parser::STEAM_TRITON:
+        return "Steam Controller (2026) protocol";
     case Parser::NONE:
         return "Unknown";
     }
@@ -522,6 +542,7 @@ bool parserHasImu(const Parser p) {
     case Parser::DUALSHOCK4:
     case Parser::DUALSENSE:
     case Parser::STEAM_CONTROLLER:
+    case Parser::STEAM_TRITON:
         return true;
     case Parser::XINPUT_360:
     case Parser::XINPUT_360_WIRELESS:
@@ -544,6 +565,7 @@ bool parserHasRumble(const Parser p) {
     case Parser::DUALSENSE:
     case Parser::SWITCH_PRO_USB:
     case Parser::SWITCH_N64_USB:
+    case Parser::STEAM_TRITON:
         return true;
     // The Steam Controller has no rumble motors, only trackpad voice coils driven by pulse trains;
     // its simple-rumble command is Steam Deck firmware only.
@@ -600,23 +622,26 @@ bool bulkWrite(const int fd, const uint8_t epOut, const uint8_t* data, const siz
 
 constexpr size_t kFeatureReportBytes = 64;
 constexpr int kFeatureReportAttempts = 25;
+constexpr int kFeatureReportOneAttempt = 1;
 constexpr unsigned kFeatureReportRetryUs = 20000;
 constexpr uint8_t kSteamFeatureReportId = 0;
 
-// SET_REPORT(Feature, report id 0), always a full 64-byte buffer. EPIPE here is the wireless
-// dongle under load, not a real failure; SDL and hid-steam both retry it rather than give up.
-// hid-steam allows 50 tries; the cap is lower here so that even a wholly unresponsive device
-// finishes init and teardown well inside the Kotlin side's 4s path-transition timeout.
-bool sendFeatureReport(const int fd, const int interfaceNumber, const uint8_t* data,
-                       const size_t len) {
+// SET_REPORT(Feature), always a full 64-byte data stage: report id 0's payload as the 2015
+// Steam Controller takes it, or, for a numbered report, the id byte and its payload, as hidapi
+// sends one. EPIPE here is the wireless dongle under load, not a real failure; SDL and hid-steam
+// both retry it rather than give up. hid-steam allows 50 tries; the cap is lower here so that even
+// a wholly unresponsive device finishes init and teardown well inside the Kotlin side's 4s
+// path-transition timeout.
+bool sendFeatureReport(const int fd, const int interfaceNumber, const uint8_t reportId,
+                       const uint8_t* data, const size_t len, const int attempts) {
     if (interfaceNumber < 0 || len > kFeatureReportBytes) return false;
     uint8_t buf[kFeatureReportBytes] = {};
     memcpy(buf, data, len);
-    for (int attempt = 0; attempt < kFeatureReportAttempts; attempt++) {
+    for (int attempt = 0; attempt < attempts; attempt++) {
         struct usbdevfs_ctrltransfer ct = {};
         ct.bRequestType = USB_REQUEST_TYPE_OUT_CLASS_INTERFACE;
         ct.bRequest = USB_REQUEST_SET_REPORT;
-        ct.wValue = (uint16_t)((HID_REPORT_TYPE_FEATURE << 8) | kSteamFeatureReportId);
+        ct.wValue = (uint16_t)((HID_REPORT_TYPE_FEATURE << 8) | reportId);
         ct.wIndex = (uint16_t)interfaceNumber;
         ct.wLength = (uint16_t)sizeof(buf);
         ct.timeout = USB_CONTROL_TIMEOUT_MS;
@@ -628,6 +653,19 @@ bool sendFeatureReport(const int fd, const int interfaceNumber, const uint8_t* d
     }
     logError("SET_REPORT 0x%02X to iface %d failed: %s", data[0], interfaceNumber, strerror(errno));
     return false;
+}
+
+bool sendSteamFeatureReport(const int fd, const int interfaceNumber, const uint8_t* data,
+                            const size_t len) {
+    return sendFeatureReport(fd, interfaceNumber, kSteamFeatureReportId, data, len,
+                             kFeatureReportAttempts);
+}
+
+bool sendTritonSetting(const int fd, const int interfaceNumber, const TritonSetting setting,
+                       const int attempts) {
+    uint8_t buf[TRITON_SETTINGS_REPORT_BYTES];
+    const size_t n = buildTritonSettingsReport(setting, buf, sizeof(buf));
+    return sendFeatureReport(fd, interfaceNumber, TRITON_SETTINGS_REPORT_ID, buf, n, attempts);
 }
 #endif
 
@@ -654,6 +692,8 @@ uint32_t rdLe24(const uint8_t* b) {
     return (uint32_t)b[0] | ((uint32_t)b[1] << kHighByteShift) |
            ((uint32_t)b[2] << (2 * kHighByteShift));
 }
+
+uint32_t rdLe32(const uint8_t* b) { return rdLe24(b) | ((uint32_t)b[3] << (3 * kHighByteShift)); }
 
 // Two 12-bit values packed little-endian into three bytes: the first is [0] plus the low nibble of
 // [1], the second the high nibble of [1] plus [2].
@@ -1505,6 +1545,178 @@ bool decodeSteamController(const uint8_t* buf, const size_t len, DeviceState& s,
     return true;
 }
 
+// Steam Controller (2026) reports, layouts from SDL's src/joystick/hidapi/steam headers and its
+// SDL_hidapi_steam_triton.c (zlib, Copyright (C) Valve Corporation and Sam Lantinga; see
+// THIRD_PARTY.md): a report id, then a packed struct. The three state reports share everything
+// SDL's HandleGenericState reads, and the timestamp one moves only the trackpads and the IMU's own
+// timestamp, so the six IMU words sit at the same offsets in all three.
+constexpr uint8_t kTritonStateReport = 0x42;
+constexpr uint8_t kTritonBatteryReport = 0x43;
+constexpr uint8_t kTritonStateBleReport = 0x45;
+constexpr uint8_t kTritonWirelessXReport = 0x46;
+constexpr uint8_t kTritonStateTimestampReport = 0x47;
+constexpr uint8_t kTritonWirelessReport = 0x79;
+constexpr size_t kTritonStateLen = 46;
+constexpr size_t kTritonButtonsOffset = 2;
+constexpr int kTritonLeftTriggerOffset = 6;
+constexpr int kTritonRightTriggerOffset = 8;
+constexpr int kTritonSticksOffset = 10;
+constexpr int kTritonAccelOffset = 34;
+constexpr int kTritonGyroOffset = 40;
+// SDL reads a trigger as 0..32767.
+constexpr int32_t kTritonTriggerMax = 32767;
+
+// SDL's TritonButtons bits for the buttons it maps onto its gamepad set. QAM, the four back
+// paddles, the trackpad and trigger clicks and the capacitive touches have no XUSB button.
+constexpr uint32_t kTritonA = 0x00000001;
+constexpr uint32_t kTritonB = 0x00000002;
+constexpr uint32_t kTritonX = 0x00000004;
+constexpr uint32_t kTritonY = 0x00000008;
+constexpr uint32_t kTritonR3 = 0x00000020;
+constexpr uint32_t kTritonView = 0x00000040;
+constexpr uint32_t kTritonR = 0x00000200;
+constexpr uint32_t kTritonDpadDown = 0x00000400;
+constexpr uint32_t kTritonDpadRight = 0x00000800;
+constexpr uint32_t kTritonDpadLeft = 0x00001000;
+constexpr uint32_t kTritonDpadUp = 0x00002000;
+constexpr uint32_t kTritonMenu = 0x00004000;
+constexpr uint32_t kTritonL3 = 0x00008000;
+constexpr uint32_t kTritonSteam = 0x00010000;
+constexpr uint32_t kTritonL = 0x00080000;
+
+struct WideButtonBit {
+    uint32_t mask;
+    uint16_t xusb;
+};
+constexpr WideButtonBit kTritonButtonBits[] = {
+    {kTritonA, XUSB_A},
+    {kTritonB, XUSB_B},
+    {kTritonX, XUSB_X},
+    {kTritonY, XUSB_Y},
+    {kTritonL, XUSB_LB},
+    {kTritonR, XUSB_RB},
+    {kTritonMenu, XUSB_BACK},
+    {kTritonView, XUSB_START},
+    {kTritonSteam, XUSB_GUIDE},
+    {kTritonL3, XUSB_THUMB_L},
+    {kTritonR3, XUSB_THUMB_R},
+    {kTritonDpadUp, XUSB_DPAD_UP},
+    {kTritonDpadDown, XUSB_DPAD_DOWN},
+    {kTritonDpadLeft, XUSB_DPAD_LEFT},
+    {kTritonDpadRight, XUSB_DPAD_RIGHT},
+};
+
+uint16_t tritonButtons(const uint32_t bits) {
+    uint16_t buttons = 0;
+    for (const WideButtonBit& bit : kTritonButtonBits) {
+        const bool isDown = (bits & bit.mask) != 0;
+        if (isDown) buttons |= bit.xusb;
+    }
+    return buttons;
+}
+
+uint8_t tritonTriggerToWire(const int16_t raw) {
+    const int32_t onTheThrow = std::clamp<int32_t>(raw, 0, kTritonTriggerMax);
+    return (uint8_t)((onTheThrow * kTriggerMax) / kTritonTriggerMax);
+}
+
+// SDL's sensor block: gyro (x, z, -y) and accel (x, z, -y), on the 2015 pad's full scales.
+void decodeTritonMotion(const uint8_t* buf, DeviceState& s) {
+    const int16_t ax = rdLe16(buf, kTritonAccelOffset);
+    const int16_t ay = rdLe16(buf, kTritonAccelOffset + 2);
+    const int16_t az = rdLe16(buf, kTritonAccelOffset + 4);
+    const int16_t gx = rdLe16(buf, kTritonGyroOffset);
+    const int16_t gy = rdLe16(buf, kTritonGyroOffset + 2);
+    const int16_t gz = rdLe16(buf, kTritonGyroOffset + 4);
+    const bool imuIsAlive = (ax | ay | az | gx | gy | gz) != 0;
+    if (!imuIsAlive) return;
+
+    s.gyroX = steamGyroToWire(gx);
+    s.gyroY = steamGyroToWire(gz);
+    s.gyroZ = steamGyroToWire(-(int32_t)gy);
+    s.accelX = steamAccelToWire(ax);
+    s.accelY = steamAccelToWire(az);
+    s.accelZ = steamAccelToWire(-(int32_t)ay);
+    s.motionValid = true;
+}
+
+bool isTritonStateReport(const uint8_t reportId) {
+    const bool isPlain = reportId == kTritonStateReport || reportId == kTritonStateBleReport;
+    return isPlain || reportId == kTritonStateTimestampReport;
+}
+
+// Both Y axes are up-positive, as the wire's are (SDL negates them into its own down-positive
+// convention), so the sticks pass straight through.
+bool decodeSteamTriton(const uint8_t* buf, const size_t len, DeviceState& s) {
+    if (len < kTritonStateLen) return false;
+    if (!isTritonStateReport(buf[0])) return false;
+
+    s.wButtons = tritonButtons(rdLe32(buf + kTritonButtonsOffset));
+    s.bLT = tritonTriggerToWire(rdLe16(buf, kTritonLeftTriggerOffset));
+    s.bRT = tritonTriggerToWire(rdLe16(buf, kTritonRightTriggerOffset));
+    readSticksLe16(buf, kTritonSticksOffset, s);
+    decodeTritonMotion(buf, s);
+    return true;
+}
+
+// SDL's TritonBatteryStatus_t after the id: the charge state, then the level in percent. Reset
+// and source-validate are not readings, and SDL reports them as an unknown state beside the
+// percent.
+constexpr size_t kTritonBatteryLen = 17;
+constexpr size_t kTritonChargeStateByte = 1;
+constexpr size_t kTritonBatteryLevelByte = 2;
+constexpr uint8_t kTritonChargeDischarging = 1;
+constexpr uint8_t kTritonChargeCharging = 2;
+constexpr uint8_t kTritonChargeDone = 4;
+
+uint8_t tritonBatteryStatus(const uint8_t chargeState) {
+    switch (chargeState) {
+    case kTritonChargeDischarging:
+        return PAD_BATTERY_STATUS_DISCHARGING;
+    case kTritonChargeCharging:
+        return PAD_BATTERY_STATUS_CHARGING;
+    case kTritonChargeDone:
+        return PAD_BATTERY_STATUS_FULL;
+    default:
+        return PAD_BATTERY_STATUS_UNKNOWN;
+    }
+}
+
+uint8_t tritonBatteryLevel(const uint8_t percent) {
+    const bool isAPercent = (unsigned)percent <= kPercentFull;
+    return isAPercent ? percent : PAD_BATTERY_LEVEL_UNKNOWN;
+}
+
+bool decodeTritonBattery(const uint8_t* buf, const size_t len, DeviceState& s) {
+    if (len < kTritonBatteryLen) return false;
+    if (buf[0] != kTritonBatteryReport) return false;
+    s.batteryValid = true;
+    s.batteryLevel = tritonBatteryLevel(buf[kTritonBatteryLevelByte]);
+    s.batteryStatus = tritonBatteryStatus(buf[kTritonChargeStateByte]);
+    return true;
+}
+
+// SDL's TritonWirelessStatus_t: one state byte after either wireless report id.
+constexpr size_t kTritonWirelessLen = 2;
+constexpr size_t kTritonWirelessStateByte = 1;
+constexpr uint8_t kTritonWirelessDisconnect = 1;
+constexpr uint8_t kTritonWirelessConnect = 2;
+
+WirelessEvent tritonWirelessEvent(const uint8_t* buf, const size_t len) {
+    if (len < kTritonWirelessLen) return WirelessEvent::NONE;
+    const bool isWirelessStatus =
+        buf[0] == kTritonWirelessReport || buf[0] == kTritonWirelessXReport;
+    if (!isWirelessStatus) return WirelessEvent::NONE;
+    switch (buf[kTritonWirelessStateByte]) {
+    case kTritonWirelessDisconnect:
+        return WirelessEvent::DISCONNECT;
+    case kTritonWirelessConnect:
+        return WirelessEvent::CONNECT;
+    default:
+        return WirelessEvent::NONE;
+    }
+}
+
 // The fixed-offset guess for a HID gamepad whose descriptor did not parse: four centred uint8
 // sticks, a byte of hat nibble plus face buttons, and a byte of the rest with the triggers as its
 // top two bits. Anything shorter is not gamepad-shaped and is dropped rather than published as
@@ -1651,6 +1863,8 @@ bool decodeReport(const Parser p, const uint8_t* buf, const size_t len, DeviceSt
         return decodeStadia(buf, len, s);
     case Parser::STEAM_CONTROLLER:
         return sticks != nullptr && decodeSteamController(buf, len, s, *sticks);
+    case Parser::STEAM_TRITON:
+        return decodeSteamTriton(buf, len, s);
     case Parser::GENERIC_HID_GAMEPAD: {
         const bool hasALayout = sticks != nullptr && sticks->hidLayout.valid;
         if (hasALayout) return usbhid::decodeFromLayout(buf, len, s, sticks->hidLayout);
@@ -1662,10 +1876,11 @@ bool decodeReport(const Parser p, const uint8_t* buf, const size_t len, DeviceSt
     return false;
 }
 
+namespace {
+
 // Event framing and the one-byte payload values follow the Linux hid-steam driver
 // (steam_raw_event, ID_CONTROLLER_WIRELESS).
-WirelessEvent checkWirelessEvent(const Parser p, const uint8_t* buf, const size_t len) {
-    if (p != Parser::STEAM_CONTROLLER) return WirelessEvent::NONE;
+WirelessEvent steamWirelessEvent(const uint8_t* buf, const size_t len) {
     if (len < kSteamWirelessEventLen) return WirelessEvent::NONE;
     if (!isSteamPacket(buf, kSteamWirelessType)) return WirelessEvent::NONE;
     if (buf[3] != kSteamWirelessPayloadLen) return WirelessEvent::NONE;
@@ -1677,6 +1892,34 @@ WirelessEvent checkWirelessEvent(const Parser p, const uint8_t* buf, const size_
     default:
         return WirelessEvent::NONE;
     }
+}
+
+} // namespace
+
+WirelessEvent checkWirelessEvent(const Parser p, const uint8_t* buf, const size_t len) {
+    switch (p) {
+    case Parser::STEAM_CONTROLLER:
+        return steamWirelessEvent(buf, len);
+    case Parser::STEAM_TRITON:
+        return tritonWirelessEvent(buf, len);
+    case Parser::XINPUT_360:
+    case Parser::XINPUT_360_WIRELESS:
+    case Parser::XBOX_ONE_GIP:
+    case Parser::DUALSHOCK4:
+    case Parser::DUALSENSE:
+    case Parser::SWITCH_PRO_USB:
+    case Parser::SWITCH_N64_USB:
+    case Parser::STADIA:
+    case Parser::GENERIC_HID_GAMEPAD:
+    case Parser::NONE:
+        return WirelessEvent::NONE;
+    }
+    return WirelessEvent::NONE;
+}
+
+bool decodePadBatteryReport(const Parser p, const uint8_t* buf, const size_t len, DeviceState& s) {
+    if (p != Parser::STEAM_TRITON) return false;
+    return decodeTritonBattery(buf, len, s);
 }
 
 bool decodeGenericHidGamepad(const uint8_t* buf, const size_t len, DeviceState& s) {
@@ -2012,6 +2255,71 @@ size_t buildSwitchRumble(const uint16_t strong, const uint16_t weak, const uint8
     return n;
 }
 
+// Steam Controller (2026) output report 0x80, SDL's MsgHapticRumble: type and intensity zero, then
+// each side's u16 LE speed beside a zero gain, low frequency on the left as the strong motor is.
+constexpr uint8_t kTritonRumbleReportId = 0x80;
+constexpr size_t kTritonRumbleReportLen = 10;
+constexpr size_t kTritonRumbleLeftSpeedByte = 4;
+constexpr size_t kTritonRumbleRightSpeedByte = 7;
+constexpr uint16_t kLowByteMask = 0x00FF;
+
+void writeLe16(uint8_t* out, const uint16_t v) {
+    out[0] = (uint8_t)(v & kLowByteMask);
+    out[1] = highByte(v);
+}
+
+size_t buildTritonRumble(const uint16_t strong, const uint16_t weak, uint8_t* out,
+                         const size_t outCap) {
+    const size_t n = startZeroedReport(kTritonRumbleReportId, kTritonRumbleReportLen, out, outCap);
+    if (n == 0) return 0;
+    writeLe16(&out[kTritonRumbleLeftSpeedByte], strong);
+    writeLe16(&out[kTritonRumbleRightSpeedByte], weak);
+    return n;
+}
+
+// SDL's settings message (ID_SET_SETTINGS_VALUES) after the report id: the message id, the payload
+// length, then a setting number and its u16 LE value.
+constexpr uint8_t kTritonSetSettingsValues = 0x87;
+constexpr uint8_t kTritonOneSettingBytes = 3;
+constexpr size_t kTritonSettingsMessageByte = 1;
+constexpr size_t kTritonSettingsLengthByte = 2;
+constexpr size_t kTritonSettingNumberByte = 3;
+constexpr size_t kTritonSettingValueByte = 4;
+constexpr uint8_t kTritonSettingLizardMode = 9;
+constexpr uint16_t kTritonLizardModeOff = 0;
+constexpr uint8_t kTritonSettingImuMode = 48;
+constexpr uint16_t kTritonImuRawAccelAndGyro = 0x0018;
+
+struct SettingValue {
+    uint8_t number;
+    uint16_t value;
+};
+
+SettingValue tritonSettingValue(const TritonSetting setting) {
+    switch (setting) {
+    case TritonSetting::LIZARD_OFF:
+        return {kTritonSettingLizardMode, kTritonLizardModeOff};
+    case TritonSetting::RAW_IMU:
+        return {kTritonSettingImuMode, kTritonImuRawAccelAndGyro};
+    }
+    return {kTritonSettingLizardMode, kTritonLizardModeOff};
+}
+
+constexpr int64_t kTritonSettingsRefreshMs = 3000;
+constexpr int64_t kTritonRumbleRefreshMs = 40;
+
+bool refreshIsDue(const int64_t sentMs, const int64_t intervalMs, const int64_t nowMs) {
+    if (sentMs == NEVER_SENT_MS) return true;
+    return nowMs - sentMs >= intervalMs;
+}
+
+int64_t msUntilRefresh(const int64_t sentMs, const int64_t intervalMs, const int64_t nowMs) {
+    if (sentMs == NEVER_SENT_MS) return 0;
+    return std::max<int64_t>(0, sentMs + intervalMs - nowMs);
+}
+
+bool rumbleIsRunning(const FeedbackState& st) { return st.strong != 0 || st.weak != 0; }
+
 // Stamps the shadowed lamp onto a DualSense 0x02 report built for something else; the firmware
 // applies whatever the valid flags claim, and every builder here starts from a zeroed report. The
 // power-save bit rides along because the lamp and the microphone amplifier are one thing on this
@@ -2120,6 +2428,8 @@ size_t buildMergedRumbleReport(const Parser p, FeedbackState& st, const uint8_t 
     case Parser::SWITCH_PRO_USB:
     case Parser::SWITCH_N64_USB:
         return buildSwitchRumble(st.strong, st.weak, seq, out, outCap);
+    case Parser::STEAM_TRITON:
+        return buildTritonRumble(st.strong, st.weak, out, outCap);
     case Parser::STEAM_CONTROLLER:
     case Parser::STADIA:
     case Parser::GENERIC_HID_GAMEPAD:
@@ -2180,6 +2490,41 @@ size_t buildMicMuteLedReport(const Parser p, FeedbackState& st, const uint8_t st
     return kDs5OutputReportLen;
 }
 
+size_t buildTritonSettingsReport(const TritonSetting setting, uint8_t* out, const size_t outCap) {
+    const size_t n =
+        startZeroedReport(TRITON_SETTINGS_REPORT_ID, TRITON_SETTINGS_REPORT_BYTES, out, outCap);
+    if (n == 0) return 0;
+    const SettingValue setTo = tritonSettingValue(setting);
+    out[kTritonSettingsMessageByte] = kTritonSetSettingsValues;
+    out[kTritonSettingsLengthByte] = kTritonOneSettingBytes;
+    out[kTritonSettingNumberByte] = setTo.number;
+    writeLe16(&out[kTritonSettingValueByte], setTo.value);
+    return n;
+}
+
+RefreshDue refreshDue(const Parser p, const FeedbackState& st, const int64_t nowMs) {
+    if (p != Parser::STEAM_TRITON) return {};
+    RefreshDue due;
+    due.settings = refreshIsDue(st.settingsSentMs, kTritonSettingsRefreshMs, nowMs);
+    const bool rumbleNeedsAnother = refreshIsDue(st.rumbleSentMs, kTritonRumbleRefreshMs, nowMs);
+    due.rumble = rumbleIsRunning(st) && rumbleNeedsAnother;
+    return due;
+}
+
+uint32_t nextRefreshInMs(const Parser p, const FeedbackState& st, const int64_t nowMs) {
+    if (p != Parser::STEAM_TRITON) return NO_REFRESH;
+    const int64_t settingsIn = msUntilRefresh(st.settingsSentMs, kTritonSettingsRefreshMs, nowMs);
+    if (!rumbleIsRunning(st)) return (uint32_t)settingsIn;
+    const int64_t rumbleIn = msUntilRefresh(st.rumbleSentMs, kTritonRumbleRefreshMs, nowMs);
+    return (uint32_t)std::min(settingsIn, rumbleIn);
+}
+
+OutputRoute outputRouteFor(const Parser p, const uint8_t epOut) {
+    if (epOut != 0) return OutputRoute::INTERRUPT_OUT;
+    const bool writesHidOutputReports = p == Parser::STEAM_TRITON;
+    return writesHidOutputReports ? OutputRoute::CONTROL_SET_REPORT : OutputRoute::NONE;
+}
+
 #ifdef __ANDROID__
 namespace {
 
@@ -2196,13 +2541,61 @@ bool runSteamQuietInit(const int fd, const int interfaceNumber) {
     for (int i = 0;; i++) {
         const size_t n = buildSteamConfigPacket(SteamConfig::QUIET, i, buf, sizeof(buf));
         if (n == 0) break;
-        if (!sendFeatureReport(fd, interfaceNumber, buf, n)) {
+        if (!sendSteamFeatureReport(fd, interfaceNumber, buf, n)) {
             logError("Steam Controller: quiet-mode packet %d failed", i);
             return false;
         }
     }
     logInfo("Steam Controller quiet-mode sequence sent");
     return true;
+}
+
+// SDL sends the lizard switch from its update loop and the IMU mode when sensors are enabled;
+// both go out here so the pad streams motion and stops typing before the probe reads it.
+bool runTritonQuietInit(const int fd, const int interfaceNumber) {
+    const TritonSetting quiet[] = {TritonSetting::LIZARD_OFF, TritonSetting::RAW_IMU};
+    for (const TritonSetting setting : quiet) {
+        if (!sendTritonSetting(fd, interfaceNumber, setting, kFeatureReportAttempts)) {
+            logError("Steam Controller (2026): setting %d failed", (int)setting);
+            return false;
+        }
+    }
+    logInfo("Steam Controller (2026) lizard mode off, raw IMU on");
+    return true;
+}
+
+// One HID output report on the control pipe, its id the report's first byte, as hidapi writes one
+// to an interface without an interrupt OUT endpoint.
+bool writeHidOutputReport(const int fd, const int interfaceNumber, const uint8_t* buf,
+                          const size_t n) {
+    if (interfaceNumber < 0) return false;
+    struct usbdevfs_ctrltransfer ct = {};
+    ct.bRequestType = USB_REQUEST_TYPE_OUT_CLASS_INTERFACE;
+    ct.bRequest = USB_REQUEST_SET_REPORT;
+    ct.wValue = (uint16_t)((HID_REPORT_TYPE_OUTPUT << 8) | buf[0]);
+    ct.wIndex = (uint16_t)interfaceNumber;
+    ct.wLength = (uint16_t)n;
+    ct.timeout = USB_CONTROL_TIMEOUT_MS;
+    ct.data = (void*)buf;
+    blockingRegion("usb.control");
+    if (ioctl(fd, USBDEVFS_CONTROL, &ct) >= 0) return true;
+    logError("SET_REPORT(Output) 0x%02X to iface %d failed: %s", buf[0], interfaceNumber,
+             strerror(errno));
+    return false;
+}
+
+bool writeRoutedReport(const OutputRoute route, const int fd, const int interfaceNumber,
+                       const uint8_t epOut, const uint8_t* buf, const size_t n) {
+    if (n == 0) return false;
+    switch (route) {
+    case OutputRoute::INTERRUPT_OUT:
+        return bulkWrite(fd, epOut, buf, n, kOutWriteTimeoutMs);
+    case OutputRoute::CONTROL_SET_REPORT:
+        return writeHidOutputReport(fd, interfaceNumber, buf, n);
+    case OutputRoute::NONE:
+        return false;
+    }
+    return false;
 }
 
 // GIP init: power-on tells the pad to start sending input reports; the rest of the sequence (LED,
@@ -2284,6 +2677,8 @@ bool runInit(const int fd, const int interfaceNumber, const uint8_t epOut, const
         return true;
     case InitKind::STEAM_QUIET:
         return runSteamQuietInit(fd, interfaceNumber);
+    case InitKind::STEAM_TRITON_QUIET:
+        return runTritonQuietInit(fd, interfaceNumber);
     case InitKind::XBOX_ONE_POWERON:
     case InitKind::XBOX_ONE_S:
         return runGipInit(fd, epOut, init);
@@ -2299,17 +2694,24 @@ void runTeardown(const int fd, const int interfaceNumber, const Parser p) {
     for (int i = 0;; i++) {
         const size_t n = buildSteamConfigPacket(SteamConfig::RESTORE, i, buf, sizeof(buf));
         if (n == 0) break;
-        sendFeatureReport(fd, interfaceNumber, buf, n);
+        sendSteamFeatureReport(fd, interfaceNumber, buf, n);
     }
     logInfo("Steam Controller restored to stand-alone mode");
 }
 
-bool runMergedRumble(const int fd, const uint8_t epOut, const Parser p, FeedbackState& st,
-                     const uint8_t seq) {
-    if (epOut == 0) return false;
+bool runSettingsRefresh(const int fd, const int interfaceNumber, const Parser p) {
+    if (p != Parser::STEAM_TRITON) return false;
+    return sendTritonSetting(fd, interfaceNumber, TritonSetting::LIZARD_OFF,
+                             kFeatureReportOneAttempt);
+}
+
+bool runMergedRumble(const int fd, const int interfaceNumber, const uint8_t epOut, const Parser p,
+                     FeedbackState& st, const uint8_t seq) {
+    const OutputRoute route = outputRouteFor(p, epOut);
+    if (route == OutputRoute::NONE) return false;
     uint8_t buf[kOutReportMaxBytes];
     const size_t n = buildMergedRumbleReport(p, st, seq, buf, sizeof(buf));
-    return writeOutReport(fd, epOut, buf, n);
+    return writeRoutedReport(route, fd, interfaceNumber, epOut, buf, n);
 }
 
 bool runLightbar(const int fd, const uint8_t epOut, const Parser p, FeedbackState& st,

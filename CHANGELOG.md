@@ -9,6 +9,18 @@ computer. Those lines say "update Satellite too".
 
 ## [Unreleased]
 
+### Added
+
+- **The new Steam Controller (2026) can be tried in Direct mode.** On its
+  cable, or on its Puck or other wireless adapter, it can now be switched to
+  Direct: Dish turns off the controller's own keyboard-and-mouse mode and
+  sends the computer its sticks, triggers, buttons, motion and battery, and
+  plays the game's rumble on it. This follows SDL's support for the
+  controller and has not been tried on one yet, so Dish never picks Direct
+  for it on its own. Switched back to Standard, it is a keyboard and mouse
+  again within a few seconds. On a wireless adapter only the first paired
+  controller is reached, and Bluetooth is not supported.
+
 ### Changed
 
 - **Your computer is told the lower of the controller's battery and the
