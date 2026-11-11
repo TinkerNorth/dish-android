@@ -17,6 +17,11 @@ private const val XINPUT_SECURITY_SUBCLASS = 0xFD
 private const val GIP_SUBCLASS = 0x47
 private const val GIP_PROTOCOL = 0xD0
 
+private const val VALVE_VENDOR_ID = 0x28DE
+private const val TRITON_PROTEUS_DONGLE_PRODUCT_ID = 0x1304
+private const val TRITON_NEREID_DONGLE_PRODUCT_ID = 0x1305
+private val TRITON_DONGLE_CONTROLLER_INTERFACES = 2..5
+
 private const val HID_BOOT_SUBCLASS = 0x01
 private const val HID_KEYBOARD_PROTOCOL = 0x01
 private const val HID_MOUSE_PROTOCOL = 0x02
@@ -42,6 +47,40 @@ internal fun gameInterfaceRank(facts: UsbInterfaceFacts): Int {
         else -> RANK_VENDOR_FALLBACK
     }
 }
+
+// An interface that carries an interrupt-IN endpoint, with the number the device gave it.
+internal data class UsbInterfaceCandidate(
+    val number: Int,
+    val facts: UsbInterfaceFacts,
+)
+
+// The index of the best-ranked offered candidate, the earliest when ranks tie; null when none is claimable.
+internal fun pickGameInterface(
+    vendorId: Int,
+    productId: Int,
+    candidates: List<UsbInterfaceCandidate>,
+): Int? {
+    val offered = candidates.withIndex().filter { isOfferedInterface(vendorId, productId, it.value.number) }
+    val ranked = offered.filter { gameInterfaceRank(it.value.facts) > RANK_NONE }
+    return ranked.maxByOrNull { gameInterfaceRank(it.value.facts) }?.index
+}
+
+private fun isTritonDongle(
+    vendorId: Int,
+    productId: Int,
+): Boolean {
+    val isValve = vendorId == VALVE_VENDOR_ID
+    val isProteus = productId == TRITON_PROTEUS_DONGLE_PRODUCT_ID
+    val isNereid = productId == TRITON_NEREID_DONGLE_PRODUCT_ID
+    return isValve && (isProteus || isNereid)
+}
+
+// SDL and Steam take only interfaces 2 to 5 of the 2026 Steam Controller's dongles as controllers.
+private fun isOfferedInterface(
+    vendorId: Int,
+    productId: Int,
+    number: Int,
+): Boolean = !isTritonDongle(vendorId, productId) || number in TRITON_DONGLE_CONTROLLER_INTERFACES
 
 // A pad that also emulates a keyboard/mouse (the Steam Controller does, and lists them first) is
 // never driven from its boot-protocol interfaces while it offers anything else.
