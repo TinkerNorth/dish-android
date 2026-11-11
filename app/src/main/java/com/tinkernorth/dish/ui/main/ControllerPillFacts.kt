@@ -97,7 +97,9 @@ internal sealed interface FunctionPillFact {
 
     data object TouchpadUnknown : FunctionPillFact
 
-    data object Rumble : FunctionPillFact
+    data class Rumble(
+        val on: Boolean,
+    ) : FunctionPillFact
 
     data class Motion(
         val on: Boolean,
@@ -122,7 +124,7 @@ internal fun functionPillFacts(
 ): List<FunctionPillFact> {
     if (inputFunctionsUnknown(row.pathCard)) return unknownFunctionPillFacts(row)
     return buildList {
-        if (rumblePresent(row.pathCard)) add(FunctionPillFact.Rumble)
+        if (rumblePresent(row.pathCard)) add(FunctionPillFact.Rumble(on = row.motionCap.userWants(Feature.RUMBLE)))
         motionPillFor(row, bound)?.let { add(it) }
         addAll(pointerPillsFor(row, bound))
         addAll(feedbackFuncFacts(row.motionCap).map { FunctionPillFact.Feedback(it) })
