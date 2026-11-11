@@ -1949,15 +1949,19 @@ struct InitSequence {
 
 template <size_t N> constexpr int countOf(const InitPacket (&)[N]) { return (int)N; }
 
+// Copies one packet into out; zero when it does not fit.
+size_t copyPacket(const InitPacket& packet, uint8_t* out, const size_t outCap) {
+    if (packet.len > outCap) return 0;
+    memcpy(out, packet.data, packet.len);
+    return packet.len;
+}
+
 // Copies the index-th packet of a sequence into out. Zero means there is no such packet, or it
 // does not fit, which is how both callers learn the sequence has ended.
 size_t copyInitPacket(const InitSequence& sequence, const int index, uint8_t* out,
                       const size_t outCap) {
     if (index < 0 || index >= sequence.count) return 0;
-    const size_t len = sequence.packets[index].len;
-    if (len > outCap) return 0;
-    memcpy(out, sequence.packets[index].data, len);
-    return len;
+    return copyPacket(sequence.packets[index], out, outCap);
 }
 
 // GIP init packets from Linux xpad. Power-on, LED and auth-done are universal; the S-init is the
@@ -1981,12 +1985,13 @@ constexpr InitPacket kGipSSeq[] = {
     {kGipAuthDone, sizeof(kGipAuthDone)},
 };
 
-// The Switch Pro USB handshake (0x80 0x02; the Pro answers 0x81 0x02 on its IN endpoint, which is
-// never read) and the timeout disable (0x80 0x04) that keeps the pad reporting. Both go out as
-// full 64-byte packets, as SDL writes them: the 8BitDo USB Wireless Adapter 2 ignores a two-byte
-// write.
+// The Switch Pro's USB commands, each a full 64-byte packet as SDL writes them (the 8BitDo USB
+// Wireless Adapter 2 ignores a two-byte write): the handshake (0x80 0x02; the Pro answers 0x81 0x02
+// on its IN endpoint, which is never read), the switch of its link to 3 Mbit (0x80 0x03) and the
+// timeout disable (0x80 0x04) that keeps the pad reporting.
 constexpr size_t kSwitchUsbPacketBytes = 64;
 constexpr uint8_t kSwitchHandshake[kSwitchUsbPacketBytes] = {0x80, 0x02};
+constexpr uint8_t kSwitchThreeMegabit[kSwitchUsbPacketBytes] = {0x80, 0x03};
 constexpr uint8_t kSwitchDisableTimeout[kSwitchUsbPacketBytes] = {0x80, 0x04};
 
 // Input report mode 0x30 (buttons + sticks + IMU) as one rumble + subcommand output report:
@@ -2000,12 +2005,45 @@ constexpr uint8_t kSwitchEnableVibration[] = {
     0x01, 0x01, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x48, 0x01,
 };
 
-constexpr InitPacket kSwitchInitPackets[] = {
-    {kSwitchHandshake, sizeof(kSwitchHandshake)},
-    {kSwitchDisableTimeout, sizeof(kSwitchDisableTimeout)},
-    {kSwitchSetReportMode, sizeof(kSwitchSetReportMode)},
-    {kSwitchEnableVibration, sizeof(kSwitchEnableVibration)},
+constexpr unsigned kSwitchStatusTimeoutMs = 100;
+constexpr unsigned kSwitchModeTimeoutMs = 200;
+constexpr unsigned kSwitchInitSettleUs = 40000;
+
+struct SwitchInitStep {
+    InitPacket packet;
+    unsigned timeoutMs;
+    unsigned settleUs;
+    bool isFatal;
+    const char* what;
 };
+
+// hid-nintendo's and SDL's USB order: a Pro on a cable answers the handshake and streams nothing
+// until the timeout disable follows a handshake sent at 3 Mbit. A fatal step failing leaves the pad
+// unusable, so the sequence stops; the others cost a feature at most.
+template <size_t N>
+constexpr SwitchInitStep switchStep(const uint8_t (&packet)[N], const unsigned timeoutMs,
+                                    const unsigned settleUs, const bool isFatal, const char* what) {
+    return {{packet, N}, timeoutMs, settleUs, isFatal, what};
+}
+
+constexpr SwitchInitStep kSwitchInitSequence[] = {
+    switchStep(kSwitchHandshake, kSwitchStatusTimeoutMs, kSwitchInitSettleUs, true, "handshake"),
+    switchStep(kSwitchThreeMegabit, kSwitchStatusTimeoutMs, kSwitchInitSettleUs, false,
+               "3 Mbit write"),
+    switchStep(kSwitchHandshake, kSwitchStatusTimeoutMs, kSwitchInitSettleUs, false,
+               "handshake at 3 Mbit"),
+    switchStep(kSwitchDisableTimeout, kSwitchStatusTimeoutMs, kSwitchInitSettleUs, false,
+               "disable-timeout write"),
+    switchStep(kSwitchSetReportMode, kSwitchModeTimeoutMs, kSwitchInitSettleUs, true,
+               "set-report-mode write"),
+    switchStep(kSwitchEnableVibration, kSwitchModeTimeoutMs, 0, false, "enable-vibration write"),
+};
+
+template <size_t N> constexpr int countOf(const SwitchInitStep (&)[N]) { return (int)N; }
+
+bool switchInitStepExists(const int index) {
+    return index >= 0 && index < countOf(kSwitchInitSequence);
+}
 
 InitSequence gipSequenceFor(const InitKind init) {
     if (init == InitKind::XBOX_ONE_POWERON) return {kGipPowerOnSeq, countOf(kGipPowerOnSeq)};
@@ -2024,7 +2062,12 @@ size_t buildGipInitPacket(const InitKind init, const int index, const uint8_t se
 }
 
 size_t buildSwitchInitPacket(const int index, uint8_t* out, const size_t outCap) {
-    return copyInitPacket({kSwitchInitPackets, countOf(kSwitchInitPackets)}, index, out, outCap);
+    if (!switchInitStepExists(index)) return 0;
+    return copyPacket(kSwitchInitSequence[index].packet, out, outCap);
+}
+
+bool switchInitStepIsFatal(const int index) {
+    return switchInitStepExists(index) && kSwitchInitSequence[index].isFatal;
 }
 
 size_t buildGipAck(const uint8_t* report, const size_t len, uint8_t* out, const size_t outCap) {
@@ -2533,8 +2576,6 @@ constexpr size_t kOutReportMaxBytes = 64;
 constexpr unsigned kGipWriteTimeoutMs = 200;
 constexpr unsigned kOutWriteTimeoutMs = 100;
 constexpr unsigned kGipInterPacketUs = 10000;
-constexpr unsigned kSwitchStatusTimeoutMs = 100;
-constexpr unsigned kSwitchModeTimeoutMs = 200;
 
 bool runSteamQuietInit(const int fd, const int interfaceNumber) {
     uint8_t buf[kInitPacketMaxBytes];
@@ -2616,32 +2657,8 @@ bool runGipInit(const int fd, const uint8_t epOut, const InitKind init) {
     return true;
 }
 
-constexpr unsigned kSwitchInitSettleUs = 40000;
-
-struct SwitchInitStep {
-    const uint8_t* packet;
-    size_t length;
-    unsigned timeoutMs;
-    unsigned settleUs;
-    bool isFatal;
-    const char* what;
-};
-
-// A fatal step failing leaves the pad unusable, so the sequence stops; the other two only cost a
-// feature and the pad still streams without them.
-constexpr SwitchInitStep kSwitchInitSequence[] = {
-    {kSwitchHandshake, sizeof(kSwitchHandshake), kSwitchStatusTimeoutMs, kSwitchInitSettleUs, true,
-     "handshake"},
-    {kSwitchDisableTimeout, sizeof(kSwitchDisableTimeout), kSwitchStatusTimeoutMs,
-     kSwitchInitSettleUs, false, "disable-timeout write"},
-    {kSwitchSetReportMode, sizeof(kSwitchSetReportMode), kSwitchModeTimeoutMs, kSwitchInitSettleUs,
-     true, "set-report-mode write"},
-    {kSwitchEnableVibration, sizeof(kSwitchEnableVibration), kSwitchModeTimeoutMs, 0, false,
-     "enable-vibration write"},
-};
-
 bool runSwitchInitStep(const int fd, const uint8_t epOut, const SwitchInitStep& step) {
-    const bool sent = bulkWrite(fd, epOut, step.packet, step.length, step.timeoutMs);
+    const bool sent = bulkWrite(fd, epOut, step.packet.data, step.packet.len, step.timeoutMs);
     if (!sent && step.isFatal) {
         logError("Switch Pro: %s failed", step.what);
         return false;
