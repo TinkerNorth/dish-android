@@ -773,6 +773,30 @@ TEST(KnownDevices, EightBitDoXinputRowsCarryTheXpadNames) {
     EXPECT_STREQ("8BitDo Ultimate 2C Wireless Controller", ultimate->name);
 }
 
+// The Ultimate 2 Wireless in X-input mode, the xpad identity Linux gained in April 2025: older
+// Android kernels never bind it, so the framework shows no gamepad and only Direct reads it.
+TEST(KnownDevices, EightBitDoUltimate2WirelessInXinputModeIsAVerifiedXinputRow) {
+    constexpr uint16_t kEightBitDo = 0x2DC8;
+    constexpr uint16_t kUltimate2WirelessXinput = 0x310B;
+    const usbparsers::KnownDevice* k =
+        usbparsers::lookupKnown(kEightBitDo, kUltimate2WirelessXinput);
+    ASSERT_NE(nullptr, k);
+    EXPECT_STREQ("8BitDo Ultimate 2 Wireless Controller", k->name);
+    EXPECT_EQ(Parser::XINPUT_360, k->parser);
+    EXPECT_EQ(InitKind::NONE, k->init);
+    EXPECT_TRUE(isVerifiedFastLane(kEightBitDo, kUltimate2WirelessXinput));
+
+    constexpr uint8_t kVendorClass = 0xFF;
+    constexpr uint8_t kXinputSubclass = 0x5D;
+    constexpr uint8_t kXinputProtocol = 0x01;
+    const usbparsers::Classification c = usbparsers::classifyDevice(
+        kEightBitDo, kUltimate2WirelessXinput, kVendorClass, kXinputSubclass, kXinputProtocol);
+    EXPECT_EQ(Parser::XINPUT_360, c.parser);
+    EXPECT_EQ(InitKind::NONE, c.init);
+    EXPECT_STREQ("8BitDo Ultimate 2 Wireless Controller", c.name);
+    EXPECT_TRUE(modelExpectsFrameworkGamepad(kEightBitDo, kUltimate2WirelessXinput));
+}
+
 TEST(KnownDevices, EightBitDoHidIdentitiesAreNoLongerXinputRows) {
     // 0x9000 and 0x9001 are the FC30 Pro and N30 Pro in D-input, 0x6101 the SN30 Pro's Bluetooth
     // identity: none speaks XInput, and a row that said so claimed a quiet pad as dead.

@@ -79,6 +79,7 @@ constexpr KnownDevice kKnown[] = {
 
     {0x2DC8, 0x9003, "8BitDo SN30 Pro+", Parser::XINPUT_360, InitKind::NONE},
     {0x2DC8, 0x310A, "8BitDo Ultimate 2C Wireless Controller", Parser::XINPUT_360, InitKind::NONE},
+    {0x2DC8, 0x310B, "8BitDo Ultimate 2 Wireless Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x2DC8, 0x6001, "8BitDo SN30 Pro (XInput)", Parser::XINPUT_360, InitKind::NONE},
 
     {0x0738, 0x4716, "Mad Catz Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},

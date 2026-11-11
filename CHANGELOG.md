@@ -7,6 +7,15 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **The 8BitDo Ultimate 2 Wireless works in X-input mode.** With its switch on
+  X-input, many phones never saw it at all: their Android is older than the
+  Linux driver that knows this controller. Dish now recognises it and reads it
+  in Direct mode on its own, the way it already reads the Ultimate 2C.
+
 ## [2.5.0] - 2026-11-02
 
 Steadier input when several controllers, the on-screen pad and voice chat are
