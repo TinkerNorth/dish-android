@@ -77,6 +77,7 @@ class CapabilityTest {
                 Feature.LIGHTBAR,
                 Feature.TRIGGER_EFFECTS,
                 Feature.PLAYER_LEDS,
+                Feature.EXTENDED_BUTTONS,
             )
         assertEquals(hostWide, bare)
     }

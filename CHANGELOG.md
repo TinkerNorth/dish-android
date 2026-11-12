@@ -11,6 +11,14 @@ computer. Those lines say "update Satellite too".
 
 ### Added
 
+- **Room on the wire for a controller's extra buttons.** `[wire-coordinated]`
+  Protocol 4. Dish now speaks Satellite protocol 4: on a connection that
+  settled on it, every controller report carries a second word for the buttons
+  an Xbox pad does not have (back paddles, the Steam Controller's "..." button,
+  trackpad and trigger clicks, the capacitive touches), and a controller that
+  sources them says so in its capabilities. This update adds the word and the
+  claim; the controllers that fill it follow. Update Satellite too: an older
+  Satellite keeps working at protocol 3 and sees exactly what it saw before.
 - **The new Steam Controller (2026) can be tried in Direct mode.** On its
   cable, or on its Puck or other wireless adapter, it can now be switched to
   Direct: Dish turns off the controller's own keyboard-and-mouse mode and

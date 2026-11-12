@@ -115,6 +115,7 @@ private val DECLARED_CAP_FEATURES =
         ControllerDescriptor.CAP_MIC to Feature.MIC,
         ControllerDescriptor.CAP_SPEAKER to Feature.SPEAKER,
         ControllerDescriptor.CAP_HAPTIC_AUDIO to Feature.HAPTIC_AUDIO,
+        ControllerDescriptor.CAP_EXTENDED_BUTTONS to Feature.EXTENDED_BUTTONS,
     )
 
 internal fun declaredFeatures(caps: Int): List<Feature> =

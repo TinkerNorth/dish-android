@@ -441,6 +441,23 @@ TEST(ConsumePublishIfChanged, RepublishesAfterStateChange) {
     EXPECT_FALSE(consumePublishIfChanged(s));
 }
 
+TEST(ConsumePublishIfChanged, TheExtendedButtonsAloneTriggerPublish) {
+    DeviceState s;
+    consumePublishIfChanged(s);
+    s.extButtons = 0x0001;
+    EXPECT_TRUE(consumePublishIfChanged(s));
+    EXPECT_FALSE(consumePublishIfChanged(s));
+    s.extButtons = 0;
+    EXPECT_TRUE(consumePublishIfChanged(s));
+}
+
+TEST(ResetState, ClearsTheExtendedButtons) {
+    DeviceState s;
+    s.extButtons = 0x1FFF;
+    resetState(s);
+    EXPECT_EQ(0u, s.extButtons);
+}
+
 TEST(ConsumePublishIfChanged, EachAxisIndependentlyTriggersPublish) {
     DeviceState s;
     consumePublishIfChanged(s);

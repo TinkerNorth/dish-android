@@ -48,6 +48,10 @@ enum class Feature(
     // that 4-channel endpoint is reachable at full width; the host reduces the lanes to
     // RUMBLE everywhere else. Rides the speaker toggle, being the same endpoint.
     HAPTIC_AUDIO(Direction.RECEIVE, "hapticAudio"),
+
+    // Protocol 4: the INPUT extended-buttons word. The controller layer says the pad sources it;
+    // the type layer says the emulated pad renders some of it.
+    EXTENDED_BUTTONS(Direction.SEND, "extendedButtons"),
 }
 
 @JvmInline
@@ -83,6 +87,7 @@ private val HOST_WIDE_FEATURES =
         Feature.LIGHTBAR,
         Feature.TRIGGER_EFFECTS,
         Feature.PLAYER_LEDS,
+        Feature.EXTENDED_BUTTONS,
     )
 
 data class SlotCapabilities(

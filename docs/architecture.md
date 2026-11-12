@@ -85,7 +85,11 @@ The Kotlin → JNI → `sendto()` chain runs at gamepad polling rate
   send path.
 - No allocations per event: the JNI uses a preallocated
   `XUSB_REPORT` and a packed `Int` for HID button + hat (a `Pair`
-  would burn ~6 KB/s of garbage at 250 Hz).
+  would burn ~6 KB/s of garbage at 250 Hz). A pad's extended buttons
+  ride the same report as one `uint32_t` in its `DeviceState`
+  (`extButtons`), latched with the rest of the report, and the frame
+  is 13 or 17 bytes by the session's settled protocol version, read
+  once per frame like the touchpad frame's.
 - The send path takes no lock. A pad's slot and its session live in
   fixed hot tables (`slot_table.h`, `session_table.h`) that the
   reporting thread finds by scanning one packed line; the pad's one
@@ -388,6 +392,9 @@ The wire caps the satellite is told (`ControllerDescriptor` via
 `CapabilityResolver.wireCaps` / `CapabilityComposer.motionWireBit`) are a
 separate projection of the same model: a type-driven base plus motion gated on
 the input gyro and the user toggle, NOT on link-liveness or the host sink.
+`extendedButtons` (protocol 4) rides the controller layer alone: it is the
+claim that the bound pad sources the extended-buttons word, with no user
+switch, and the satellite reads the word whether or not it is claimed.
 The descriptor's `touchpadMode` is the same kind of projection
 (`CapabilityComposer.touchpadWireMode` via the pure
 `TouchpadRouting.wireMode`): the persisted per-satellite pick gated by the
@@ -532,7 +539,9 @@ can't reach are still unit-testable from a host build:
   the send-on-change gate. No Android, JNI, or sodium headers: it
   builds against `app/src/test/cpp/` with googletest.
 - `wire_encoders.h`: pure byte-layout encoders for `MSG_MOTION`,
-  `MSG_BATTERY`, `MSG_TOUCHPAD`, `MSG_LIGHTBAR`, and the controller-audio
+  `MSG_BATTERY`, `MSG_TOUCHPAD`, `MSG_LIGHTBAR`, the protocol 4 tail of
+  `MSG_GAMEPAD_DATA` (the extended-buttons word, `EXT_BUTTON_*`, behind the
+  13-byte report on a session settled at 4), and the controller-audio
   frames (`MSG_MIC_AUDIO` / `MSG_SPEAKER_AUDIO` / `MSG_MIC_LED`), plus the
   datagram ceilings the send path sizes its buffers from. Same host-build
   rule; the wire layout is type-checked against the contract

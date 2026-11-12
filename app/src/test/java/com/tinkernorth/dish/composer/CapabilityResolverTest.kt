@@ -486,6 +486,23 @@ class CapabilityResolverTest {
     }
 
     @Test
+    fun `wireCaps claims CAP_EXTENDED_BUTTONS only for a pad that sources the word, with no user switch`() {
+        for (padSourcesTheWord in listOf(true, false)) {
+            val slot =
+                SlotCapabilities(
+                    controller = if (padSourcesTheWord) capabilitySetOf(Feature.EXTENDED_BUTTONS) else CapabilitySet.EMPTY,
+                    transport = CapabilitySet(Feature.entries.toSet()),
+                    type = CapabilitySet.EMPTY,
+                    host = CapabilitySet.EMPTY,
+                    userEnabled = CapabilitySet.EMPTY,
+                    runtimeDown = CapabilitySet.EMPTY,
+                )
+            val expected = if (padSourcesTheWord) ControllerDescriptor.CAP_EXTENDED_BUTTONS else 0
+            assertEquals("padSourcesTheWord=$padSourcesTheWord", expected, wireCaps(slot) and ControllerDescriptor.CAP_EXTENDED_BUTTONS)
+        }
+    }
+
+    @Test
     fun `wireCaps decisive case - a DualSense on a four-channel endpoint is 0x01C3`() {
         val fourChannelDualSense =
             SlotCapabilities(

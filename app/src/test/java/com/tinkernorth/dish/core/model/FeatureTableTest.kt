@@ -20,6 +20,7 @@ class FeatureTableTest {
                 Feature.KEYBOARD,
                 Feature.BATTERY,
                 Feature.MIC,
+                Feature.EXTENDED_BUTTONS,
             ),
             sends,
         )
@@ -63,6 +64,7 @@ class FeatureTableTest {
                 Feature.MIC to "mic",
                 Feature.SPEAKER to "speaker",
                 Feature.HAPTIC_AUDIO to "hapticAudio",
+                Feature.EXTENDED_BUTTONS to "extendedButtons",
             ),
             slugs,
         )

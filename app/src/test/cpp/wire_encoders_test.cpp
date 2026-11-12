@@ -424,11 +424,80 @@ TEST(DecodeMicLedPayload, OnlyTheThreeKnownStatesAreValid) {
     EXPECT_FALSE(dish_wire::micLedStateValid(0xFF));
 }
 
+// ---- MSG_GAMEPAD_DATA tail (contract §Extended buttons, protocol 4) ---------
+
+TEST(GamepadPayload, IsThirteenBytesBeforeProtocol4AndSeventeenFromIt) {
+    EXPECT_EQ(dish_wire::PROTOCOL_VERSION_EXTENDED_BUTTONS, 4);
+    uint8_t out[dish_wire::GAMEPAD_V4_PAYLOAD_BYTES] = {};
+    for (int32_t version = 1; version < 4; version++) {
+        EXPECT_EQ(dish_wire::encodeGamepadTail(out, version, 0), 13u) << "protocol " << version;
+    }
+    EXPECT_EQ(dish_wire::encodeGamepadTail(out, 4, 0), 17u);
+    EXPECT_EQ(dish_wire::encodeGamepadTail(out, 5, 0), 17u);
+}
+
+TEST(EncodeGamepadTail, WritesTheWordLittleEndianBehindTheReportFromProtocol4) {
+    uint8_t out[dish_wire::GAMEPAD_V4_PAYLOAD_BYTES + 1];
+    for (uint8_t& b : out) b = 0xCC;
+    EXPECT_EQ(dish_wire::encodeGamepadTail(out, 4, 0x00001201u), 17u);
+    EXPECT_EQ(out[12], 0xCC);
+    EXPECT_EQ(out[13], 0x01);
+    EXPECT_EQ(out[14], 0x12);
+    EXPECT_EQ(out[15], 0x00);
+    EXPECT_EQ(out[16], 0x00);
+    EXPECT_EQ(out[17], 0xCC);
+}
+
+TEST(EncodeGamepadTail, LeavesAPreProtocol4PayloadAtThirteenBytesUntouched) {
+    for (int32_t version = 1; version < 4; version++) {
+        uint8_t out[dish_wire::GAMEPAD_V4_PAYLOAD_BYTES];
+        for (uint8_t& b : out) b = 0xCC;
+        EXPECT_EQ(dish_wire::encodeGamepadTail(out, version, 0x1FFFu), 13u);
+        for (size_t i = 13; i < 17; i++) EXPECT_EQ(out[i], 0xCC) << "protocol " << version;
+    }
+}
+
+TEST(EncodeGamepadTail, WritesTheReservedBitsAsZero) {
+    uint8_t out[dish_wire::GAMEPAD_V4_PAYLOAD_BYTES] = {};
+    EXPECT_EQ(dish_wire::encodeGamepadTail(out, 4, 0xFFFFFFFFu), 17u);
+    EXPECT_EQ(out[13], 0xFF);
+    EXPECT_EQ(out[14], 0x1F);
+    EXPECT_EQ(out[15], 0x00);
+    EXPECT_EQ(out[16], 0x00);
+}
+
+TEST(ExtendedButtons, BitsAreTheContractTableInSdlsNames) {
+    EXPECT_EQ(dish_wire::EXT_BUTTON_RIGHT_PADDLE1, 0x0001u);
+    EXPECT_EQ(dish_wire::EXT_BUTTON_LEFT_PADDLE1, 0x0002u);
+    EXPECT_EQ(dish_wire::EXT_BUTTON_RIGHT_PADDLE2, 0x0004u);
+    EXPECT_EQ(dish_wire::EXT_BUTTON_LEFT_PADDLE2, 0x0008u);
+    EXPECT_EQ(dish_wire::EXT_BUTTON_MISC1, 0x0010u);
+    EXPECT_EQ(dish_wire::EXT_BUTTON_LEFT_PAD_CLICK, 0x0020u);
+    EXPECT_EQ(dish_wire::EXT_BUTTON_RIGHT_PAD_CLICK, 0x0040u);
+    EXPECT_EQ(dish_wire::EXT_BUTTON_LEFT_TRIGGER_CLICK, 0x0080u);
+    EXPECT_EQ(dish_wire::EXT_BUTTON_RIGHT_TRIGGER_CLICK, 0x0100u);
+    EXPECT_EQ(dish_wire::EXT_BUTTON_LEFT_STICK_TOUCH, 0x0200u);
+    EXPECT_EQ(dish_wire::EXT_BUTTON_RIGHT_STICK_TOUCH, 0x0400u);
+    EXPECT_EQ(dish_wire::EXT_BUTTON_LEFT_GRIP_TOUCH, 0x0800u);
+    EXPECT_EQ(dish_wire::EXT_BUTTON_RIGHT_GRIP_TOUCH, 0x1000u);
+    const uint32_t everyKnownBit =
+        dish_wire::EXT_BUTTON_RIGHT_PADDLE1 | dish_wire::EXT_BUTTON_LEFT_PADDLE1 |
+        dish_wire::EXT_BUTTON_RIGHT_PADDLE2 | dish_wire::EXT_BUTTON_LEFT_PADDLE2 |
+        dish_wire::EXT_BUTTON_MISC1 | dish_wire::EXT_BUTTON_LEFT_PAD_CLICK |
+        dish_wire::EXT_BUTTON_RIGHT_PAD_CLICK | dish_wire::EXT_BUTTON_LEFT_TRIGGER_CLICK |
+        dish_wire::EXT_BUTTON_RIGHT_TRIGGER_CLICK | dish_wire::EXT_BUTTON_LEFT_STICK_TOUCH |
+        dish_wire::EXT_BUTTON_RIGHT_STICK_TOUCH | dish_wire::EXT_BUTTON_LEFT_GRIP_TOUCH |
+        dish_wire::EXT_BUTTON_RIGHT_GRIP_TOUCH;
+    EXPECT_EQ(dish_wire::EXT_BUTTONS_KNOWN_MASK, everyKnownBit);
+}
+
 // ---- payload sizes (contract §Messages) -----------------------------------
 
 TEST(PayloadSizes, MatchTheContract) {
     // One name per inner payload, so the encoders, the send path's buffers and the receive arms
     // all size themselves from the same place.
+    EXPECT_EQ(dish_wire::GAMEPAD_PAYLOAD_BYTES, 13u);
+    EXPECT_EQ(dish_wire::GAMEPAD_V4_PAYLOAD_BYTES, 17u);
     EXPECT_EQ(dish_wire::MOTION_PAYLOAD_BYTES, 17u);
     EXPECT_EQ(dish_wire::BATTERY_PAYLOAD_BYTES, 3u);
     EXPECT_EQ(dish_wire::TOUCHPAD_V1_PAYLOAD_BYTES, 16u);

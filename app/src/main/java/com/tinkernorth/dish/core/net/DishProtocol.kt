@@ -18,7 +18,12 @@ const val DISH_PROTOCOL_MIN = 1
 // other slot (a phone-only virtual pad, a Bluetooth pad, a stereo-only endpoint) leaves
 // it off and the satellite reduces the lanes to RUMBLE 0x0009, which the rumble paths
 // already render. No frame shape changed between 2 and 3.
-const val DISH_PROTOCOL_CURRENT = 3
+//
+// 4 added the extended-buttons word behind the INPUT report (17 bytes instead of 13, framed by
+// the native send path from the session's settled version) and the descriptor cap
+// `extendedButtons`, the client's claim that a slot's pad sources that word. Nothing the
+// satellite sends changed shape.
+const val DISH_PROTOCOL_CURRENT = 4
 
 // v2 replaced the appended touchpad fields with the pointer frame that carries the
 // mouse buttons and the wheel, so extended mouse is exactly "the satellite is v2+".

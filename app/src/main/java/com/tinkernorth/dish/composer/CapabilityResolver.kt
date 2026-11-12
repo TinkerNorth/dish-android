@@ -17,6 +17,7 @@ private val HARDWARE_CAPS =
         Feature.LIGHTBAR to ControllerDescriptor.CAP_LIGHTBAR,
         Feature.TRIGGER_EFFECTS to ControllerDescriptor.CAP_TRIGGER_EFFECTS,
         Feature.PLAYER_LEDS to ControllerDescriptor.CAP_PLAYER_LEDS,
+        Feature.EXTENDED_BUTTONS to ControllerDescriptor.CAP_EXTENDED_BUTTONS,
     )
 
 // These advertise the client's own source or actuator like the hardware caps above, but they

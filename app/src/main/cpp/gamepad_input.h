@@ -109,6 +109,8 @@ struct DeviceState {
     uint16_t wButtons = 0;
     uint8_t bLT = 0, bRT = 0;
     int16_t sLX = 0, sLY = 0, sRX = 0, sRY = 0;
+    // The protocol 4 extended-buttons word (dish_wire::EXT_BUTTON_*).
+    uint32_t extButtons = 0;
 
     bool ltFromKey = false, rtFromKey = false;
 
@@ -116,6 +118,7 @@ struct DeviceState {
     uint16_t lastWButtons = 0;
     uint8_t lastBLT = 0, lastBRT = 0;
     int16_t lastSLX = 0, lastSLY = 0, lastSRX = 0, lastSRY = 0;
+    uint32_t lastExtButtons = 0;
 
     float flatX = 0.f, flatY = 0.f, flatZ = 0.f, flatRZ = 0.f;
 

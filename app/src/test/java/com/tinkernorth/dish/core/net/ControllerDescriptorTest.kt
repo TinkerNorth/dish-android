@@ -23,7 +23,7 @@ class ControllerDescriptorTest {
         assertEquals(
             """{"ctrlIdx":2,"type":1,"caps":{"rumble":true,"motion":true,"analogTriggers":true,""" +
                 """"lightbar":false,"triggerEffects":false,"playerLeds":false,"mic":false,"speaker":false,""" +
-                """"hapticAudio":false},""" +
+                """"hapticAudio":false,"extendedButtons":false},""" +
                 """"touchpadMode":"ds4"}""",
             d.toJson(),
         )
@@ -79,6 +79,7 @@ class ControllerDescriptorTest {
         assertEquals(0x0040, ControllerDescriptor.CAP_MIC)
         assertEquals(0x0080, ControllerDescriptor.CAP_SPEAKER)
         assertEquals(0x0100, ControllerDescriptor.CAP_HAPTIC_AUDIO)
+        assertEquals(0x0200, ControllerDescriptor.CAP_EXTENDED_BUTTONS)
     }
 
     @Test
@@ -94,10 +95,11 @@ class ControllerDescriptorTest {
                 ControllerDescriptor.CAP_MIC,
                 ControllerDescriptor.CAP_SPEAKER,
                 ControllerDescriptor.CAP_HAPTIC_AUDIO,
+                ControllerDescriptor.CAP_EXTENDED_BUTTONS,
             )
         assertEquals(bits.size, bits.toSet().size)
         val union: Int = bits.fold(0) { acc, bit -> acc or bit }
-        assertEquals(0x01FF, union)
+        assertEquals(0x03FF, union)
     }
 
     @Test
@@ -112,7 +114,7 @@ class ControllerDescriptorTest {
         assertEquals(
             """{"ctrlIdx":0,"type":2,"caps":{"rumble":false,"motion":false,"analogTriggers":false,""" +
                 """"lightbar":false,"triggerEffects":false,"playerLeds":false,"mic":true,"speaker":true,""" +
-                """"hapticAudio":false},""" +
+                """"hapticAudio":false,"extendedButtons":false},""" +
                 """"touchpadMode":"off"}""",
             d.toJson(),
         )
@@ -134,5 +136,13 @@ class ControllerDescriptorTest {
         val hapticOnly = ControllerDescriptor(0, 2, ControllerDescriptor.CAP_HAPTIC_AUDIO, "off").toJson()
         assertTrue(hapticOnly.contains("\"speaker\":false"))
         assertTrue(hapticOnly.contains("\"hapticAudio\":true"))
+    }
+
+    @Test
+    fun `the extended-buttons claim rides the descriptor as extendedButtons`() {
+        val claimed = ControllerDescriptor(0, 0, ControllerDescriptor.CAP_EXTENDED_BUTTONS, "off").toJson()
+        assertTrue(claimed.contains("\"extendedButtons\":true"))
+        val unclaimed = ControllerDescriptor(0, 0, 0, "off").toJson()
+        assertTrue(unclaimed.contains("\"extendedButtons\":false"))
     }
 }
