@@ -1936,6 +1936,42 @@ bool decodePadBatteryReport(const Parser p, const uint8_t* buf, const size_t len
     return decodeTritonBattery(buf, len, s);
 }
 
+namespace {
+
+SlotLinkStep slotLinkStepOnReport(const bool linked, const bool decodedState) {
+    const bool missedItsConnect = decodedState && !linked;
+    return missedItsConnect ? SlotLinkStep::ARRIVES : SlotLinkStep::STAYS;
+}
+
+// SDL's HIDAPI_DriverSteam_InitDevice and hid-steam's steam_get_conn_status:
+// ID_DONGLE_GET_WIRELESS_STATE in the {message id, payload length} framing, with no payload.
+constexpr uint8_t kSteamReceiverStateRequest[] = {0xB4, 0x00};
+
+} // namespace
+
+SlotLinkStep slotLinkStep(const bool linked, const WirelessEvent event, const bool decodedState) {
+    switch (event) {
+    case WirelessEvent::CONNECT:
+        return SlotLinkStep::ARRIVES;
+    case WirelessEvent::DISCONNECT:
+        return linked ? SlotLinkStep::LEAVES : SlotLinkStep::STAYS;
+    case WirelessEvent::NONE:
+        return slotLinkStepOnReport(linked, decodedState);
+    }
+    return SlotLinkStep::STAYS;
+}
+
+bool controllerIsThere(const bool receiverSlot, const bool linked) {
+    return !receiverSlot || linked;
+}
+
+size_t buildReceiverStateRequest(const Parser p, uint8_t* out, const size_t outCap) {
+    if (p != Parser::STEAM_CONTROLLER) return 0;
+    if (outCap < sizeof(kSteamReceiverStateRequest)) return 0;
+    memcpy(out, kSteamReceiverStateRequest, sizeof(kSteamReceiverStateRequest));
+    return sizeof(kSteamReceiverStateRequest);
+}
+
 bool decodeGenericHidGamepad(const uint8_t* buf, const size_t len, DeviceState& s) {
     if (len < kGenericHidMinReportLen) return false;
     decodeU8Sticks(buf, s);
@@ -2567,8 +2603,16 @@ size_t buildTritonSettingsReport(const TritonSetting setting, uint8_t* out, cons
     return n;
 }
 
+namespace {
+
+bool isRefreshed(const Parser p, const FeedbackState& st) {
+    return p == Parser::STEAM_TRITON && !st.controllerAway;
+}
+
+} // namespace
+
 RefreshDue refreshDue(const Parser p, const FeedbackState& st, const int64_t nowMs) {
-    if (p != Parser::STEAM_TRITON) return {};
+    if (!isRefreshed(p, st)) return {};
     RefreshDue due;
     due.settings = refreshIsDue(st.settingsSentMs, kTritonSettingsRefreshMs, nowMs);
     const bool rumbleNeedsAnother = refreshIsDue(st.rumbleSentMs, kTritonRumbleRefreshMs, nowMs);
@@ -2577,7 +2621,7 @@ RefreshDue refreshDue(const Parser p, const FeedbackState& st, const int64_t now
 }
 
 uint32_t nextRefreshInMs(const Parser p, const FeedbackState& st, const int64_t nowMs) {
-    if (p != Parser::STEAM_TRITON) return NO_REFRESH;
+    if (!isRefreshed(p, st)) return NO_REFRESH;
     const int64_t settingsIn = msUntilRefresh(st.settingsSentMs, kTritonSettingsRefreshMs, nowMs);
     if (!rumbleIsRunning(st)) return (uint32_t)settingsIn;
     const int64_t rumbleIn = msUntilRefresh(st.rumbleSentMs, kTritonRumbleRefreshMs, nowMs);
@@ -2736,6 +2780,13 @@ void runTeardown(const int fd, const int interfaceNumber, const Parser p) {
         sendSteamFeatureReport(fd, interfaceNumber, buf, n);
     }
     logInfo("Steam Controller restored to stand-alone mode");
+}
+
+bool runReceiverStateRequest(const int fd, const int interfaceNumber, const Parser p) {
+    uint8_t buf[kInitPacketMaxBytes];
+    const size_t n = buildReceiverStateRequest(p, buf, sizeof(buf));
+    if (n == 0) return false;
+    return sendSteamFeatureReport(fd, interfaceNumber, buf, n);
 }
 
 bool runSettingsRefresh(const int fd, const int interfaceNumber, const Parser p) {

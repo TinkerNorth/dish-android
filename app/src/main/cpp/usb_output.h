@@ -39,6 +39,8 @@ class OutputDevice {
     virtual void ack(const uint8_t* bytes, size_t len) = 0;
     // The pad is back on its dongle, rebooted into its stand-alone defaults.
     virtual void reconnected() = 0;
+    // The pad left its receiver slot.
+    virtual void left() = 0;
     // Re-sends what the pad forgets unless the host repeats it (usbparsers::refreshDue) at nowMs,
     // and answers the milliseconds until it next owes a write, or usbparsers::NO_REFRESH.
     virtual uint32_t refresh(int64_t nowMs) = 0;
@@ -131,8 +133,10 @@ struct MicLedOut {
     uint8_t state = 0;
 };
 
-struct ReconnectedOut {
+// Whether the pad's controller is on its receiver slot: the newest of a connect and a leave wins.
+struct LinkOut {
     int32_t deviceId = 0;
+    bool present = false;
 };
 
 // A GIP ack: each one acknowledges its own packet, so acks queue in order instead of coalescing.
@@ -167,6 +171,8 @@ class OutputWorker {
     void postAck(int32_t deviceId, const uint8_t* bytes, size_t len);
     // The poller's, for a dongle's connect event: the re-init it owes runs here, off the poller.
     void postReconnected(int32_t deviceId);
+    // The poller's, for a receiver slot whose controller left.
+    void postLeft(int32_t deviceId);
 
     uint64_t droppedAcks() const { return droppedAcks_.load(std::memory_order_relaxed); }
 
@@ -178,7 +184,7 @@ class OutputWorker {
         PLAYER_LEDS = 1u << 3,
         TRIGGER_EFFECTS = 1u << 4,
         MIC_LED = 1u << 5,
-        RECONNECTED = 1u << 6,
+        LINK = 1u << 6,
     };
 
     void announce(uint32_t kind);
@@ -186,6 +192,7 @@ class OutputWorker {
     void sleepUntilWorkOrRefresh(uint32_t refreshInMs);
     void run();
     void writeAcks();
+    void writeLink(const LinkOut& link);
     void writePending(uint32_t kinds);
 
     // Written by start and stop only, read by the worker it starts.
@@ -200,7 +207,7 @@ class OutputWorker {
     Mailbox<PlayerLedsOut> playerLeds_;
     Mailbox<TriggerEffectsOut> triggerEffects_;
     Mailbox<MicLedOut> micLed_;
-    Mailbox<ReconnectedOut> reconnected_;
+    Mailbox<LinkOut> link_;
     // The kinds posted since the worker last took them.
     std::atomic<uint32_t> pending_{0};
     dish_hot::MpmcRing<AckOut, ACKS> acks_;

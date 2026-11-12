@@ -904,7 +904,7 @@ Java_com_tinkernorth_dish_hotpath_input_RumbleBridge_nativeInstall(JNIEnv* env, 
     }
 }
 
-// The claim is a Kotlin UsbInterfaceClaim; its Int fields are read by name (proguard-rules.pro
+// The claim is a Kotlin UsbInterfaceClaim; its fields are read by name (proguard-rules.pro
 // keeps them). A missing field means the two sides disagree, which is a build defect, not a
 // device condition: the attach is refused rather than guessed at.
 struct ClaimFields {
@@ -915,6 +915,7 @@ struct ClaimFields {
     jint ifClass;
     jint ifSubclass;
     jint ifProtocol;
+    jboolean receiverSlot;
 };
 
 static bool readClaimField(JNIEnv* env, jclass cls, jobject claim, const char* name, jint* out) {
@@ -928,6 +929,17 @@ static bool readClaimField(JNIEnv* env, jclass cls, jobject claim, const char* n
     return true;
 }
 
+static bool readClaimFlag(JNIEnv* env, jclass cls, jobject claim, const char* name, jboolean* out) {
+    jfieldID id = env->GetFieldID(cls, name, "Z");
+    if (id == nullptr) {
+        env->ExceptionClear();
+        LOGE("attachUsbDevice: UsbInterfaceClaim.%s missing", name);
+        return false;
+    }
+    *out = env->GetBooleanField(claim, id);
+    return true;
+}
+
 static bool readClaim(JNIEnv* env, jobject claim, ClaimFields* out) {
     jclass cls = env->GetObjectClass(claim);
     bool ok = readClaimField(env, cls, claim, "interfaceNumber", &out->interfaceNumber) &&
@@ -936,7 +948,8 @@ static bool readClaim(JNIEnv* env, jobject claim, ClaimFields* out) {
               readClaimField(env, cls, claim, "endpointOut", &out->epOut) &&
               readClaimField(env, cls, claim, "interfaceClass", &out->ifClass) &&
               readClaimField(env, cls, claim, "interfaceSubclass", &out->ifSubclass) &&
-              readClaimField(env, cls, claim, "interfaceProtocol", &out->ifProtocol);
+              readClaimField(env, cls, claim, "interfaceProtocol", &out->ifProtocol) &&
+              readClaimFlag(env, cls, claim, "receiverSlot", &out->receiverSlot);
     env->DeleteLocalRef(cls);
     return ok;
 }
@@ -953,8 +966,8 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_attach
     usbhost::AttachResult r = usbhost::attachDevice(
         dupFd, (uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF), c.interfaceNumber,
         (uint8_t)(c.epIn & 0xFF), (uint16_t)(c.epInMaxPacket & 0xFFFF), (uint8_t)(c.epOut & 0xFF),
-        (uint8_t)(c.ifClass & 0xFF), (uint8_t)(c.ifSubclass & 0xFF),
-        (uint8_t)(c.ifProtocol & 0xFF));
+        (uint8_t)(c.ifClass & 0xFF), (uint8_t)(c.ifSubclass & 0xFF), (uint8_t)(c.ifProtocol & 0xFF),
+        c.receiverSlot == JNI_TRUE);
     return r.ok ? (jint)r.syntheticDeviceId : 0;
 }
 
@@ -1155,6 +1168,11 @@ JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_getDe
 JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_getDirectPadBattery(
     JNIEnv*, jobject, jint deviceId) {
     return (jint)usbhost::getPadBattery((int32_t)deviceId);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_tinkernorth_dish_core_jni_UsbDirectNative_isUsbPadLinked(JNIEnv*, jobject, jint deviceId) {
+    return usbhost::isPadLinked((int32_t)deviceId) ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_deviceInfoJson(

@@ -23,6 +23,8 @@ struct UsbDeviceStats {
     std::atomic<int32_t> lastUrbStatus{0};
     // The pad's charge as its last report carried it, level << 8 | status; -1 until one did.
     std::atomic<int32_t> lastBattery{-1};
+    // Whether the pad's controller is there: a receiver slot's while one is connected to it.
+    std::atomic<bool> linked{true};
 };
 
 // A claimed pad's entry: its counters, and the worker that owns its OUT endpoint.
@@ -59,6 +61,7 @@ class UsbDeviceTable {
             stats.urbErrorCount.store(0, std::memory_order_relaxed);
             stats.lastUrbStatus.store(0, std::memory_order_relaxed);
             stats.lastBattery.store(-1, std::memory_order_relaxed);
+            stats.linked.store(true, std::memory_order_relaxed);
             ids_[i].store(tagOf(deviceId), std::memory_order_release);
             return &devices_[i];
         }

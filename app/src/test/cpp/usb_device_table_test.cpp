@@ -52,6 +52,20 @@ TEST(UsbDeviceTable, AGivenBackEntryReadsTheFallbackAndIsClaimedAgainAtZero) {
     EXPECT_EQ(second->stats.lastBattery.load(), -1);
 }
 
+// A receiver slot marks its controller away; the pad that takes the entry next starts with its
+// own there.
+TEST(UsbDeviceTable, AClaimedEntryStartsWithItsControllerThere) {
+    dish_usb::UsbDeviceTable table;
+    dish_usb::UsbDevice* slot = table.claim(kPad);
+    ASSERT_NE(slot, nullptr);
+    EXPECT_TRUE(slot->stats.linked.load(std::memory_order_relaxed));
+    slot->stats.linked.store(false, std::memory_order_relaxed);
+    table.release(kPad);
+    dish_usb::UsbDevice* next = table.claim(kOtherPad);
+    ASSERT_NE(next, nullptr);
+    EXPECT_TRUE(next->stats.linked.load(std::memory_order_relaxed));
+}
+
 TEST(UsbDeviceTable, AFullTableRefusesTheNextPad) {
     dish_usb::UsbDeviceTable table;
     for (size_t i = 0; i < dish_usb::MAX_USB_DEVICES; i++) {

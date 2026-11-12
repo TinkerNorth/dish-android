@@ -2567,6 +2567,91 @@ TEST(TritonRefresh, NoOtherFamilyIsEverRefreshed) {
     }
 }
 
+// A receiver slot with no controller on it owes nothing: SDL writes to a dongle's slot only while
+// its controller is connected.
+TEST(TritonRefresh, ASlotWhoseControllerIsAwayIsOwedNothing) {
+    usbparsers::FeedbackState st;
+    st.controllerAway = true;
+    st.strong = 0xFFFF;
+    const usbparsers::RefreshDue due = usbparsers::refreshDue(Parser::STEAM_TRITON, st, 0);
+    EXPECT_FALSE(due.settings);
+    EXPECT_FALSE(due.rumble);
+    EXPECT_EQ(usbparsers::NO_REFRESH, usbparsers::nextRefreshInMs(Parser::STEAM_TRITON, st, 0));
+}
+
+// ---- a wireless receiver's slots --------------------------------------------------------------
+
+using usbparsers::SlotLinkStep;
+using usbparsers::slotLinkStep;
+
+TEST(ReceiverSlot, AConnectEventBringsTheSlotsController) {
+    EXPECT_EQ(SlotLinkStep::ARRIVES, slotLinkStep(false, WirelessEvent::CONNECT, false));
+}
+
+// The controller rebooted onto the slot: its settings are gone and go again.
+TEST(ReceiverSlot, AConnectOnASlotThatHasItsControllerArrivesAgain) {
+    EXPECT_EQ(SlotLinkStep::ARRIVES, slotLinkStep(true, WirelessEvent::CONNECT, false));
+}
+
+TEST(ReceiverSlot, ADisconnectEventTakesTheControllerAway) {
+    EXPECT_EQ(SlotLinkStep::LEAVES, slotLinkStep(true, WirelessEvent::DISCONNECT, false));
+}
+
+TEST(ReceiverSlot, ADisconnectOnAnEmptySlotChangesNothing) {
+    EXPECT_EQ(SlotLinkStep::STAYS, slotLinkStep(false, WirelessEvent::DISCONNECT, false));
+}
+
+TEST(ReceiverSlot, AStateReportFromAnEmptySlotBringsItsController) {
+    EXPECT_EQ(SlotLinkStep::ARRIVES, slotLinkStep(false, WirelessEvent::NONE, true));
+}
+
+TEST(ReceiverSlot, AStateReportFromASlotThatHasItsControllerChangesNothing) {
+    EXPECT_EQ(SlotLinkStep::STAYS, slotLinkStep(true, WirelessEvent::NONE, true));
+}
+
+TEST(ReceiverSlot, AReportThatIsNeitherChangesNothing) {
+    EXPECT_EQ(SlotLinkStep::STAYS, slotLinkStep(false, WirelessEvent::NONE, false));
+    EXPECT_EQ(SlotLinkStep::STAYS, slotLinkStep(true, WirelessEvent::NONE, false));
+}
+
+TEST(ReceiverSlot, APadOfItsOwnAlwaysHasItsController) {
+    EXPECT_TRUE(usbparsers::controllerIsThere(false, false));
+    EXPECT_TRUE(usbparsers::controllerIsThere(false, true));
+}
+
+// Only a slot whose controller is connected is configured or restored.
+TEST(ReceiverSlot, ASlotHasItsControllerOnlyWhileItIsConnected) {
+    EXPECT_TRUE(usbparsers::controllerIsThere(true, true));
+    EXPECT_FALSE(usbparsers::controllerIsThere(true, false));
+}
+
+// SDL's HIDAPI_DriverSteam_InitDevice and hid-steam's steam_get_conn_status:
+// ID_DONGLE_GET_WIRELESS_STATE, with no payload, in the 2015 framing {message id, payload length}.
+TEST(ReceiverSlot, The2015ReceiversSlotIsAskedForItsWirelessState) {
+    uint8_t out[16];
+    memset(out, 0xEE, sizeof(out));
+    ASSERT_EQ(2u,
+              usbparsers::buildReceiverStateRequest(Parser::STEAM_CONTROLLER, out, sizeof(out)));
+    EXPECT_EQ(0xB4, out[0]);
+    EXPECT_EQ(0x00, out[1]);
+}
+
+// SDL asks the 2026 receivers nothing: a slot's controller is there once it reports.
+TEST(ReceiverSlot, NoOtherFamilysSlotIsAsked) {
+    uint8_t out[16];
+    for (const Parser p :
+         {Parser::STEAM_TRITON, Parser::XINPUT_360, Parser::DUALSENSE, Parser::NONE}) {
+        EXPECT_EQ(0u, usbparsers::buildReceiverStateRequest(p, out, sizeof(out)))
+            << usbparsers::parserName(p);
+    }
+}
+
+TEST(ReceiverSlot, TheStateRequestRefusesASmallBuffer) {
+    uint8_t out[1];
+    EXPECT_EQ(0u,
+              usbparsers::buildReceiverStateRequest(Parser::STEAM_CONTROLLER, out, sizeof(out)));
+}
+
 // ---- the pad's own battery ------------------------------------------------------------------
 
 namespace {

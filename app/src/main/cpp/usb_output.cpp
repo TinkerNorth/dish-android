@@ -67,8 +67,13 @@ void OutputWorker::postMicLed(const int32_t deviceId, const uint8_t state) {
 }
 
 void OutputWorker::postReconnected(const int32_t deviceId) {
-    reconnected_.post(ReconnectedOut{deviceId});
-    announce(RECONNECTED);
+    link_.post(LinkOut{deviceId, true});
+    announce(LINK);
+}
+
+void OutputWorker::postLeft(const int32_t deviceId) {
+    link_.post(LinkOut{deviceId, false});
+    announce(LINK);
 }
 
 void OutputWorker::postAck(const int32_t deviceId, const uint8_t* bytes, const size_t len) {
@@ -88,13 +93,19 @@ void OutputWorker::writeAcks() {
     }
 }
 
+void OutputWorker::writeLink(const LinkOut& link) {
+    if (link.deviceId != deviceId_) return;
+    if (link.present) {
+        device_->reconnected();
+        return;
+    }
+    device_->left();
+}
+
 // Each kind's newest value, written only for the pad this worker serves. A reconnect goes first:
 // the pad rebooted, and whatever else is pending is meant for it once it is set up again.
 void OutputWorker::writePending(const uint32_t kinds) {
-    if ((kinds & RECONNECTED) != 0) {
-        const ReconnectedOut v = reconnected_.read();
-        if (v.deviceId == deviceId_) device_->reconnected();
-    }
+    if ((kinds & LINK) != 0) writeLink(link_.read());
     if ((kinds & RUMBLE) != 0) {
         const RumbleOut v = rumble_.read();
         if (v.deviceId == deviceId_) device_->rumble(v.strong, v.weak);
