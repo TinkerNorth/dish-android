@@ -205,6 +205,30 @@ class UsbGamepadManagerTest {
     }
 
     @Test
+    fun `a pad of its own is attached as one pad, not as a receiver slot`() {
+        val m = claimTo(-1000)
+
+        m.tryDirectMode(vid, pid)
+
+        verify { native.attachUsbDevice(any(), vid, pid, match { !it.receiverSlot }) }
+        verify(exactly = 1) { native.attachUsbDevice(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `a pad of its own is listed at its claim and its link is never read`() {
+        val m = claimTo(-1000)
+
+        m.tryDirectMode(vid, pid)
+        scheduler.advanceTimeBy(RECEIVER_LINK_POLL_MS * 4)
+        scheduler.runCurrent()
+
+        verify(exactly = 1) { registry.addUsbSynthetic(-1000, "Pad", any(), any(), vid, pid) }
+        verify(exactly = 0) { native.isUsbPadLinked(any()) }
+        assertEquals(emptyList<Int>(), m.controllers.value[key]?.slotPads)
+        assertEquals(-1000, m.controllers.value[key]?.firstPadId())
+    }
+
+    @Test
     fun `a claim carries its framework twin's descriptor`() {
         val conn = mockConn()
         every { usbManager.openDevice(device) } returns conn

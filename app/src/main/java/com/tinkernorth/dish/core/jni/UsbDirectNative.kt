@@ -73,6 +73,10 @@ object UsbDirectNative {
     // carried a reading yet. See directPadSample.
     external fun getDirectPadBattery(deviceId: Int): Int
 
+    // Whether a Direct-claimed pad's controller is there: a receiver slot's while the controller
+    // paired to it is connected, any other pad's always; false for a device that is gone.
+    external fun isUsbPadLinked(deviceId: Int): Boolean
+
     // Direct-mode MSG_MOTION sends for a synthetic device (post 125 Hz throttle).
     external fun getDeviceMotionCount(deviceId: Int): Long
 

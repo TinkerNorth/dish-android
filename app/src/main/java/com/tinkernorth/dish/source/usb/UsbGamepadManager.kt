@@ -73,12 +73,22 @@ class UsbGamepadManager
         private val lastFrameworkId = HashMap<Int, Int?>()
         private val timeouts = HashMap<Int, Job>()
 
+        // Each Direct receiver's slots by model key, read for their controllers while any is held.
+        private val receiverSlots = HashMap<Int, List<ReceiverSlot>>()
+        private var slotLinks: Job? = null
+
         @Volatile private var installed = false
+
+        // One interface a claim holds, and the pad native attached it as.
+        private data class ClaimedPad(
+            val intf: UsbInterface,
+            val syntheticId: Int,
+            val pollRateHz: Int,
+        )
 
         private data class ClaimedConn(
             val connection: UsbDeviceConnection,
-            val intf: UsbInterface,
-            val syntheticId: Int,
+            val pads: List<ClaimedPad>,
         )
 
         private sealed interface ClaimOutcome {
@@ -226,6 +236,7 @@ class UsbGamepadManager
                 hasPermission = usbManager?.hasPermission(device) == true,
                 desired = resolvePath(vid, pid),
                 frameworkExpected = native.modelExpectsFrameworkGamepad(vid, pid),
+                receiver = receiverSlotsOf(vid, pid) != null,
             ).withCapturedBinding(frameworkId)
         }
 
@@ -290,13 +301,7 @@ class UsbGamepadManager
                 UsbEffect.Release -> releaseToFramework(key)
                 UsbEffect.RequestPermission -> usbDevices[key]?.let { requestPermission(it) }
                 is UsbEffect.BindFramework -> bindTo(fx.frameworkId, c.connId, c.type)
-                is UsbEffect.RemoveSynthetic -> {
-                    // Idempotent after a Release already detached; on a physical unplug it is the only
-                    // path that reaps the native poller and its fd instead of stranding them.
-                    native.detachUsbDevice(fx.syntheticId)
-                    claimedConns.remove(key)?.let { runCatching { it.connection.close() } }
-                    registry.removeUsbSynthetic(fx.syntheticId)
-                }
+                is UsbEffect.RemoveSynthetic -> removeSynthetic(key, fx.syntheticId)
                 UsbEffect.BeginHold -> registry.beginModelTransition(c.vendorId, c.productId)
                 UsbEffect.EndHold -> registry.endModelTransition(c.vendorId, c.productId)
                 UsbEffect.MarkNeedsReplug -> registry.markNeedsReplug(c.vendorId, c.productId)
@@ -308,6 +313,29 @@ class UsbGamepadManager
                 is UsbEffect.MarkFailure -> registry.markDirectFailed(c.vendorId, c.productId, fx.reason)
                 UsbEffect.ClearFailure -> registry.clearDirectFailed(c.vendorId, c.productId)
             }
+        }
+
+        // Idempotent after a Release already detached; on a physical unplug it is the only path that
+        // reaps the native pollers and their fds instead of stranding them.
+        private fun removeSynthetic(
+            key: Int,
+            syntheticId: Int,
+        ) {
+            native.detachUsbDevice(syntheticId)
+            claimedConns.remove(key)?.let { dropClaim(it, syntheticId) }
+            registry.removeUsbSynthetic(syntheticId)
+            unlistReceiver(key)
+        }
+
+        // The claim's other pads go with the one the FSM held: a receiver's other slots.
+        private fun dropClaim(
+            claimed: ClaimedConn,
+            detached: Int,
+        ) {
+            claimed.pads
+                .filter { it.syntheticId != detached }
+                .forEach { native.detachUsbDevice(it.syntheticId) }
+            runCatching { claimed.connection.close() }
         }
 
         private fun startTimeout(key: Int) {
@@ -358,7 +386,7 @@ class UsbGamepadManager
             ) : Opened
         }
 
-        // The endpoints of the interface a claim targets, as findInterruptInPair picked them.
+        // The endpoints of an interface a claim targets, as claimTargetsOf picked them.
         private class ClaimTarget(
             val intf: UsbInterface,
             val epIn: UsbEndpoint,
@@ -369,25 +397,24 @@ class UsbGamepadManager
         // and whether the framework interface was stolen (so the FSM knows if it must wait for re-enum).
         private fun doClaim(device: UsbDevice): ClaimOutcome {
             val usb = usbManager ?: return ClaimOutcome.Fail(DirectClaimFailure.InitFailed, frameworkStolen = false)
-            val (intf, epIn, epOut) =
-                findInterruptInPair(device)
-                    ?: return ClaimOutcome.Fail(DirectClaimFailure.InitFailed, frameworkStolen = false)
+            val targets = claimTargetsOf(device)
+            if (targets.isEmpty()) return ClaimOutcome.Fail(DirectClaimFailure.InitFailed, frameworkStolen = false)
             // Read before the claim detaches the kernel driver and the framework device starts going.
             val routedFrameworkId =
                 registry.devices.value.values
                     .firstOrNull {
                         !it.isUsbSynthetic && it.vendorId == device.vendorId && it.productId == device.productId
                     }?.id
-            return when (val opened = openAndClaim(usb, device, intf)) {
+            return when (val opened = openAndClaim(usb, device, targets.map { it.intf })) {
                 is Opened.Refused -> opened.outcome
-                is Opened.Ready -> attachClaimed(device, opened.connection, ClaimTarget(intf, epIn, epOut), routedFrameworkId)
+                is Opened.Ready -> attachClaimed(device, opened.connection, targets, routedFrameworkId)
             }
         }
 
         private fun openAndClaim(
             usb: UsbManager,
             device: UsbDevice,
-            intf: UsbInterface,
+            interfaces: List<UsbInterface>,
         ): Opened {
             val conn =
                 try {
@@ -396,20 +423,74 @@ class UsbGamepadManager
                     Log.w(TAG, "openDevice denied for ${device.vendorId.toHex4()}:${device.productId.toHex4()}", e)
                     return Opened.Refused(ClaimOutcome.Fail(DirectClaimFailure.PermissionDenied, frameworkStolen = false))
                 } ?: return Opened.Refused(ClaimOutcome.Fail(DirectClaimFailure.Busy, frameworkStolen = false))
-            if (!conn.claimInterface(intf, true)) {
+            if (!claimAll(conn, interfaces)) {
                 conn.close()
                 return Opened.Refused(ClaimOutcome.Fail(DirectClaimFailure.Busy, frameworkStolen = false))
             }
             return Opened.Ready(conn)
         }
 
-        // The interface is ours now: the kernel HID driver has been detached (framework stolen).
+        // All of them or none: a refused interface hands back the ones claimed before it.
+        private fun claimAll(
+            conn: UsbDeviceConnection,
+            interfaces: List<UsbInterface>,
+        ): Boolean {
+            val claimed = interfaces.takeWhile { conn.claimInterface(it, true) }
+            val allClaimed = claimed.size == interfaces.size
+            if (!allClaimed) runCatching { claimed.forEach { conn.releaseInterface(it) } }
+            return allClaimed
+        }
+
+        // The interfaces are ours now: the kernel HID driver has been detached (framework stolen).
         private fun attachClaimed(
             device: UsbDevice,
             conn: UsbDeviceConnection,
-            target: ClaimTarget,
+            targets: List<ClaimTarget>,
             routedFrameworkId: Int?,
         ): ClaimOutcome {
+            val receiver = receiverSlotsOf(device.vendorId, device.productId) != null
+            val pads = attachAll(device, conn, targets, receiver)
+            if (pads == null) {
+                runCatching {
+                    targets.forEach { conn.releaseInterface(it.intf) }
+                    conn.close()
+                }
+                return ClaimOutcome.Fail(DirectClaimFailure.InitFailed, frameworkStolen = true)
+            }
+            val key = vidPidKey(device.vendorId, device.productId)
+            claimedConns[key] = ClaimedConn(conn, pads)
+            if (receiver) listenOnSlots(key, pads) else listPad(device, pads.single(), routedFrameworkId)
+            Log.i(TAG, "claimed ${device.vendorId.toHex4()}:${device.productId.toHex4()} → dev=${pads.map { it.syntheticId }}")
+            return ClaimOutcome.Ok(pads.first().syntheticId)
+        }
+
+        // Each target under a synthetic id of its own, or none: a refused one detaches those before it.
+        private fun attachAll(
+            device: UsbDevice,
+            conn: UsbDeviceConnection,
+            targets: List<ClaimTarget>,
+            receiver: Boolean,
+        ): List<ClaimedPad>? {
+            val pads =
+                targets
+                    .asSequence()
+                    .map { attachTarget(device, conn, it, receiver) }
+                    .takeWhile { it != null }
+                    .filterNotNull()
+                    .toList()
+            val allAttached = pads.size == targets.size
+            if (allAttached) return pads
+            pads.forEach { native.detachUsbDevice(it.syntheticId) }
+            return null
+        }
+
+        // Null when native refused the interface.
+        private fun attachTarget(
+            device: UsbDevice,
+            conn: UsbDeviceConnection,
+            target: ClaimTarget,
+            receiverSlot: Boolean,
+        ): ClaimedPad? {
             val intf = target.intf
             val epIn = target.epIn
             val synthetic =
@@ -426,50 +507,175 @@ class UsbGamepadManager
                             interfaceClass = intf.interfaceClass,
                             interfaceSubclass = intf.interfaceSubclass,
                             interfaceProtocol = intf.interfaceProtocol,
+                            receiverSlot = receiverSlot,
                         ),
                 )
-            if (synthetic == 0) {
-                runCatching {
-                    conn.releaseInterface(intf)
-                    conn.close()
-                }
-                return ClaimOutcome.Fail(DirectClaimFailure.InitFailed, frameworkStolen = true)
-            }
-            claimedConns[vidPidKey(device.vendorId, device.productId)] = ClaimedConn(conn, intf, synthetic)
+            val refused = synthetic == 0
+            if (refused) return null
+            return ClaimedPad(intf, synthetic, computeUsbPollRateHz(epIn.interval, epIn.maxPacketSize))
+        }
+
+        // A pad of its own is on the list from its claim, bound where its framework twin was.
+        private fun listPad(
+            device: UsbDevice,
+            pad: ClaimedPad,
+            routedFrameworkId: Int?,
+        ) {
             registry.addUsbSynthetic(
-                deviceId = synthetic,
+                deviceId = pad.syntheticId,
                 name = friendlyName(device),
                 descriptor = routedFrameworkId?.let { registry.devices.value[it]?.descriptor }.orEmpty(),
                 hasGyro = native.modelHasImu(device.vendorId, device.productId),
-                pollRateHz = computeUsbPollRateHz(epIn.interval, epIn.maxPacketSize),
+                pollRateHz = pad.pollRateHz,
                 vendorId = device.vendorId,
                 productId = device.productId,
             )
-            connectionHubProvider.get().bindClaimedSynthetic(routedFrameworkId?.toString(), synthetic.toString())
+            connectionHubProvider.get().bindClaimedSynthetic(routedFrameworkId?.toString(), pad.syntheticId.toString())
             routedFrameworkId?.let { registry.forgetSupersededFramework(it) }
-            Log.i(TAG, "claimed ${device.vendorId.toHex4()}:${device.productId.toHex4()} → dev=$synthetic")
-            return ClaimOutcome.Ok(synthetic)
         }
 
-        // Hand the interface back to the framework but keep the synthetic entry as a held loader
-        // placeholder so the slot stays visible while the framework device re-enumerates.
+        // A receiver's slots are claimed to listen: each is a pad only while its controller is connected.
+        private fun listenOnSlots(
+            key: Int,
+            pads: List<ClaimedPad>,
+        ) {
+            receiverSlots[key] = pads.map { ReceiverSlot(it.intf.id, it.syntheticId, it.pollRateHz) }
+            followSlotLinksOf(key)
+            watchSlotLinks()
+        }
+
+        private fun watchSlotLinks() {
+            if (slotLinks != null) return
+            slotLinks =
+                scope.launch {
+                    while (true) {
+                        delay(RECEIVER_LINK_POLL_MS)
+                        withContext(Dispatchers.Main) { receiverSlots.keys.toList().forEach(::followSlotLinksOf) }
+                    }
+                }
+        }
+
+        private fun followSlotLinksOf(key: Int) {
+            val slots = receiverSlots[key] ?: return
+            val device = usbDevices[key] ?: return
+            val linked = slots.map { it.syntheticId }.filter(native::isUsbPadLinked).toSet()
+            val follow = followSlotLinks(slots, linked, heldBindingsOf(slots))
+            if (follow.effects.isEmpty()) return
+            receiverSlots[key] = follow.slots
+            follow.effects.forEach { applySlotEffect(device, it) }
+            publishSlotPads(key, follow.slots)
+        }
+
+        private fun heldBindingsOf(slots: List<ReceiverSlot>): Map<Int, HeldBinding> {
+            val hub = connectionHubProvider.get()
+            val bound = hub.bindings.value
+            val types = hub.satTypes.value
+            return slots
+                .filter { it.listed }
+                .mapNotNull { slot -> heldBindingOf(slot.syntheticId, bound, types) }
+                .toMap()
+        }
+
+        private fun heldBindingOf(
+            syntheticId: Int,
+            bound: Map<String, String>,
+            types: Map<Pair<String, String>, Int>,
+        ): Pair<Int, HeldBinding>? {
+            val slotId = syntheticId.toString()
+            val connId = bound[slotId] ?: return null
+            return syntheticId to HeldBinding(connId, types[connId to slotId])
+        }
+
+        private fun applySlotEffect(
+            device: UsbDevice,
+            effect: SlotEffect,
+        ) {
+            when (effect) {
+                is SlotEffect.ListPad -> listSlotPad(device, effect.slot)
+                is SlotEffect.UnlistPad -> unlistSlotPad(device, effect.slot)
+            }
+        }
+
+        private fun listSlotPad(
+            device: UsbDevice,
+            slot: ReceiverSlot,
+        ) {
+            Log.i(TAG, "${modelOf(device)} slot ${slot.interfaceNumber} connected → dev=${slot.syntheticId}")
+            registry.addUsbSynthetic(
+                deviceId = slot.syntheticId,
+                name = friendlyName(device),
+                hasGyro = native.modelHasImu(device.vendorId, device.productId),
+                pollRateHz = slot.pollRateHz,
+                vendorId = device.vendorId,
+                productId = device.productId,
+            )
+            bindSlotPad(slot)
+        }
+
+        // Bound as it left, or the way a new claim is.
+        private fun bindSlotPad(slot: ReceiverSlot) {
+            val held = slot.heldBinding
+            if (held == null) {
+                connectionHubProvider.get().bindClaimedSynthetic(null, slot.syntheticId.toString())
+            } else {
+                bindTo(slot.syntheticId, held.connectionId, held.type)
+            }
+        }
+
+        private fun unlistSlotPad(
+            device: UsbDevice,
+            slot: ReceiverSlot,
+        ) {
+            Log.i(TAG, "${modelOf(device)} slot ${slot.interfaceNumber} left → dev=${slot.syntheticId}")
+            registry.removeUsbSynthetic(slot.syntheticId)
+        }
+
+        private fun publishSlotPads(
+            key: Int,
+            slots: List<ReceiverSlot>,
+        ) {
+            val pads = slots.filter { it.listed }.map { it.syntheticId }
+            _controllers.update { map -> map[key]?.let { map + (key to it.copy(slotPads = pads)) } ?: map }
+        }
+
+        // The receiver's claim is over: every slot's pad comes off the list.
+        private fun unlistReceiver(key: Int) {
+            val slots = receiverSlots.remove(key) ?: return
+            slots.filter { it.listed }.forEach { registry.removeUsbSynthetic(it.syntheticId) }
+            publishSlotPads(key, emptyList())
+            if (receiverSlots.isNotEmpty()) return
+            slotLinks?.cancel()
+            slotLinks = null
+        }
+
+        // Hand the interfaces back to the framework. A pad of its own keeps its synthetic entry as a
+        // held loader placeholder, so the slot stays visible while the framework device re-enumerates;
+        // a receiver's slots, which re-enumerate as nothing, come off the list.
         private fun releaseToFramework(key: Int) {
             val claimed = claimedConns.remove(key) ?: return
-            native.detachUsbDevice(claimed.syntheticId)
+            claimed.pads.forEach { native.detachUsbDevice(it.syntheticId) }
             runCatching {
-                claimed.connection.releaseInterface(claimed.intf)
+                claimed.pads.forEach { claimed.connection.releaseInterface(it.intf) }
                 claimed.connection.close()
             }
+            val receiver = receiverSlots.containsKey(key)
+            if (receiver) unlistReceiver(key) else holdReleasedPad(key, claimed.pads.single().syntheticId)
+        }
+
+        private fun holdReleasedPad(
+            key: Int,
+            syntheticId: Int,
+        ) {
             // Capture the live binding so a return-to-Standard (or a rollback) preserves it.
             val hub = connectionHubProvider.get()
-            val synthSlot = claimed.syntheticId.toString()
+            val synthSlot = syntheticId.toString()
             val connId = hub.bindings.value[synthSlot]
             val type = connId?.let { hub.satTypes.value[it to synthSlot] }
             _controllers.update { map ->
                 val c = map[key] ?: return@update map
                 map + (key to c.copy(connId = connId, type = type))
             }
-            registry.setUsbSyntheticTransitioning(claimed.syntheticId, true)
+            registry.setUsbSyntheticTransitioning(syntheticId, true)
         }
 
         private fun bindTo(
@@ -563,6 +769,15 @@ class UsbGamepadManager
             return epIn?.let { it to epOut }
         }
 
+        // Every slot of a receiver; the one findInterruptInPair picks for any other model.
+        private fun claimTargetsOf(device: UsbDevice): List<ClaimTarget> {
+            val withEndpoints = interruptInPairs(device)
+            val candidates = withEndpoints.map { UsbInterfaceCandidate(it.first.id, it.first.facts()) }
+            return interfacesToClaim(device.vendorId, device.productId, candidates)
+                .map { withEndpoints[it] }
+                .map { (intf, epIn, epOut) -> ClaimTarget(intf, epIn, epOut) }
+        }
+
         // Ranked, not first-match: a composite 360 pad's audio/security interfaces also carry an interrupt-IN.
         private fun findInterruptInPair(device: UsbDevice): Triple<UsbInterface, UsbEndpoint, UsbEndpoint?>? {
             val withEndpoints = interruptInPairs(device)
@@ -580,6 +795,8 @@ class UsbGamepadManager
             IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
 
         private fun Int.toHex4(): String = "%04x".format(this and 0xFFFF)
+
+        private fun modelOf(device: UsbDevice): String = "${device.vendorId.toHex4()}:${device.productId.toHex4()}"
 
         private companion object {
             const val TAG = "UsbGamepadManager"

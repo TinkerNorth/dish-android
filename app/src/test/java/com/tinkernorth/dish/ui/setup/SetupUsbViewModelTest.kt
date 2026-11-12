@@ -176,6 +176,43 @@ class SetupUsbViewModelTest {
             assertFalse(vm.state.value.working)
         }
 
+    private fun receiverInDirect(slotPads: List<Int>) =
+        controller(UsbPhase.Direct, syntheticId = RECEIVER_CLAIM, desired = PathChoice.Direct)
+            .copy(receiver = true, slotPads = slotPads)
+
+    private fun kotlinx.coroutines.test.TestScope.grantDirectOnAReceiver(): List<SetupUsbViewModel.Event> {
+        present(frameworkId = null)
+        dispatcher.scheduler.runCurrent()
+        vm.selectController(key())
+        every { usb.setPathChoice(VID, PID, PathChoice.Direct) } answers {
+            controllers.value = mapOf(key() to receiverInDirect(emptyList()))
+        }
+        val events = collectEvents()
+        vm.showPrompt()
+        dispatcher.scheduler.runCurrent()
+        return events
+    }
+
+    @Test
+    fun `granting direct on a receiver proceeds with its first connected controller`() =
+        runTest(dispatcher) {
+            val events = grantDirectOnAReceiver()
+
+            controllers.value = mapOf(key() to receiverInDirect(listOf(-1002, -1004)))
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(listOf<SetupUsbViewModel.Event>(SetupUsbViewModel.Event.Proceed("-1002")), events)
+        }
+
+    @Test
+    fun `granting direct on a receiver waits for a controller to connect`() =
+        runTest(dispatcher) {
+            val events = grantDirectOnAReceiver()
+
+            assertTrue("no slot to bind yet", events.isEmpty())
+            assertTrue(vm.state.value.working)
+        }
+
     @Test
     fun `a refused direct claim falls back to the framework slot id`() =
         runTest(dispatcher) {
@@ -385,5 +422,6 @@ class SetupUsbViewModelTest {
     private companion object {
         const val VID = 0x045E
         const val PID = 0x028E
+        const val RECEIVER_CLAIM = -1001
     }
 }

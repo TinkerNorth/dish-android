@@ -9,7 +9,8 @@ package com.tinkernorth.dish.core.jni
  *
  * Read field by field from satellite_jni.cpp (attachUsbDevice), so the field names are
  * part of the JNI contract: proguard-rules.pro keeps them, and a rename here must be
- * mirrored there. [endpointOut] is 0 for a pad with no OUT endpoint.
+ * mirrored there. [endpointOut] is 0 for a pad with no OUT endpoint. [receiverSlot] is one
+ * slot of a wireless receiver, claimed to listen for the controller paired to it.
  */
 data class UsbInterfaceClaim(
     val interfaceNumber: Int,
@@ -19,4 +20,5 @@ data class UsbInterfaceClaim(
     val interfaceClass: Int,
     val interfaceSubclass: Int,
     val interfaceProtocol: Int,
+    val receiverSlot: Boolean,
 )
