@@ -36,10 +36,11 @@ handshake and streams nothing. It streams only once the timeout disable follows 
 3 Mbit, which is the order Linux's hid-nintendo and SDL send every USB Switch pad: `80 02`, `80 03`,
 `80 02`, `80 04`. Dish now sends that order, then the report-mode, vibration-enable and IMU-enable
 subcommands, to every model on `InitKind::SWITCH_PRO_HANDSHAKE` (the Pro, the 8BitDo adapters, the
-N64 Online pad). The pad's need for the 3 Mbit step was shown on a Pro Controller over macOS (dish-mac PR 101
-carries the probe table); the new sequence has not yet been run on an Android device. On a phone
-whose kernel driver (hid-nintendo) ran the full sequence before Dish claimed the interface, the pad
-streamed either way, which is the likely reason the old sequence passed its Android hardware checks.
+N64 Online pad). The pad's need for the 3 Mbit step was shown on a Pro Controller over macOS
+(dish-mac PR 101 carries the probe table); the new sequence has not yet been run on an Android
+device. On a phone whose kernel driver (hid-nintendo) ran the full sequence before Dish claimed the
+interface, the pad streamed either way, which is the likely reason the old sequence passed its
+Android hardware checks.
 
 **Context, IMU enable:** Until subcommand `0x40` with argument `0x01` is sent, every IMU word of the
 Pro's 0x30 reports reads zero. Shown on a Pro over macOS through dish-mac's own reader: with the
