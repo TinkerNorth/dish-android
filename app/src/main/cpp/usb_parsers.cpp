@@ -1659,10 +1659,10 @@ bool decodeSteamTriton(const uint8_t* buf, const size_t len, DeviceState& s) {
     return true;
 }
 
-// SDL's TritonBatteryStatus_t after the id: the charge state, then the level in percent. Reset
-// and source-validate are not readings, and SDL reports them as an unknown state beside the
-// percent.
-constexpr size_t kTritonBatteryLen = 17;
+// SDL's TritonBatteryStatus_t after the id, fourteen bytes: the charge state, the level in percent
+// and six u16 readings this port does not use. Reset and source-validate are not readings, and SDL
+// reports them as an unknown state beside the percent.
+constexpr size_t kTritonBatteryLen = 15;
 constexpr size_t kTritonChargeStateByte = 1;
 constexpr size_t kTritonBatteryLevelByte = 2;
 constexpr uint8_t kTritonChargeDischarging = 1;

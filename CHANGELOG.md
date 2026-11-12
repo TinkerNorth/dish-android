@@ -57,6 +57,11 @@ computer. Those lines say "update Satellite too".
   share the wake-up, get the same. That the pad needs the faster-link step was
   shown on a Pro Controller over macOS; the new wake-up has not yet been run on
   an Android device.
+- **The new Steam Controller's battery report is accepted at the length SDL
+  accepts.** The controller's own battery message is 15 bytes; Dish asked for
+  17, so a message of SDL's length would have been thrown away and the
+  controller's charge never shown or sent. This follows SDL and has not been
+  tried on a controller yet.
 
 ## [2.5.0] - 2026-11-02
 
