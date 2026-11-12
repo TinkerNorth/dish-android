@@ -18,8 +18,17 @@ computer. Those lines say "update Satellite too".
   plays the game's rumble on it. This follows SDL's support for the
   controller and has not been tried on one yet, so Dish never picks Direct
   for it on its own. Switched back to Standard, it is a keyboard and mouse
-  again within a few seconds. On a wireless adapter only the first paired
-  controller is reached, and Bluetooth is not supported.
+  again within a few seconds. Bluetooth is not supported.
+- **A Steam Controller wireless adapter serves every controller paired to
+  it.** In Direct mode, the original Steam Controller's dongle and the new
+  controller's Puck and other adapter used to reach only the first of their
+  four controller slots. Dish now listens on all four: each controller that
+  is switched on shows up as a controller of its own, with its own card and
+  its own binding, within half a second; one that is switched off leaves,
+  and comes back to the same card and binding when it is switched on again.
+  Direct stays one choice for the whole adapter. Two adapters of the same
+  model plugged in together are still read as one. This follows SDL and the
+  Linux driver and has not been tried on an adapter yet.
 
 ### Changed
 

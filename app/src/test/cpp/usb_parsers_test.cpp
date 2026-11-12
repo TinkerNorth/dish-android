@@ -1835,7 +1835,7 @@ TEST(SteamConfigPackets, RefusesToOverrunACallerBuffer) {
 namespace {
 
 // Dongle wireless event framing per hid-steam: header {version u16, type, payload length},
-// payload byte 0x01 = disconnected, 0x02 = connected.
+// payload byte 0x01 = disconnected, 0x02 = connected, 0x03 = newly paired (SDL).
 std::vector<uint8_t> steamWirelessEvent(uint8_t payload) {
     std::vector<uint8_t> r(64, 0);
     r[0] = 0x01;
@@ -1856,6 +1856,27 @@ TEST(SteamWireless, ConnectAndDisconnectEventsClassify) {
     auto conn = steamWirelessEvent(0x02);
     EXPECT_EQ(WirelessEvent::CONNECT,
               checkWirelessEvent(Parser::STEAM_CONTROLLER, conn.data(), conn.size()));
+}
+
+// SDL's HIDAPI_DriverSteam_UpdateDevice: a controller that pairs to the dongle for the first time
+// announces itself with 0x03 and is on its slot from then on, as a 0x02 one is.
+TEST(SteamWireless, ANewlyPairedControllerIsAConnect) {
+    auto paired = steamWirelessEvent(0x03);
+    EXPECT_EQ(WirelessEvent::CONNECT,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, paired.data(), paired.size()));
+}
+
+// SDL reads the event's first payload byte from any payload of one byte or more.
+TEST(SteamWireless, AnEventWithALongerPayloadStillClassifies) {
+    auto conn = steamWirelessEvent(0x02);
+    conn[3] = 0x02;
+    EXPECT_EQ(WirelessEvent::CONNECT,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, conn.data(), conn.size()));
+
+    auto disc = steamWirelessEvent(0x01);
+    disc[3] = 0x05;
+    EXPECT_EQ(WirelessEvent::DISCONNECT,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, disc.data(), disc.size()));
 }
 
 // The issue and the fix as a pair: a wireless event never decodes as input (so on its own the last
@@ -1889,12 +1910,12 @@ TEST(SteamWireless, RejectsMalformedEvents) {
     EXPECT_EQ(WirelessEvent::NONE,
               checkWirelessEvent(Parser::STEAM_CONTROLLER, badVersion.data(), badVersion.size()));
 
-    auto badPayloadLen = steamWirelessEvent(0x02);
-    badPayloadLen[3] = 0x02;
-    EXPECT_EQ(WirelessEvent::NONE, checkWirelessEvent(Parser::STEAM_CONTROLLER,
-                                                      badPayloadLen.data(), badPayloadLen.size()));
+    auto noPayload = steamWirelessEvent(0x02);
+    noPayload[3] = 0x00;
+    EXPECT_EQ(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, noPayload.data(), noPayload.size()));
 
-    auto unknownPayload = steamWirelessEvent(0x03);
+    auto unknownPayload = steamWirelessEvent(0x04);
     EXPECT_EQ(
         WirelessEvent::NONE,
         checkWirelessEvent(Parser::STEAM_CONTROLLER, unknownPayload.data(), unknownPayload.size()));
@@ -2565,6 +2586,91 @@ TEST(TritonRefresh, NoOtherFamilyIsEverRefreshed) {
         EXPECT_EQ(usbparsers::NO_REFRESH, usbparsers::nextRefreshInMs(p, st, 0))
             << usbparsers::parserName(p);
     }
+}
+
+// A receiver slot with no controller on it owes nothing: SDL writes to a dongle's slot only while
+// its controller is connected.
+TEST(TritonRefresh, ASlotWhoseControllerIsAwayIsOwedNothing) {
+    usbparsers::FeedbackState st;
+    st.controllerAway = true;
+    st.strong = 0xFFFF;
+    const usbparsers::RefreshDue due = usbparsers::refreshDue(Parser::STEAM_TRITON, st, 0);
+    EXPECT_FALSE(due.settings);
+    EXPECT_FALSE(due.rumble);
+    EXPECT_EQ(usbparsers::NO_REFRESH, usbparsers::nextRefreshInMs(Parser::STEAM_TRITON, st, 0));
+}
+
+// ---- a wireless receiver's slots --------------------------------------------------------------
+
+using usbparsers::SlotLinkStep;
+using usbparsers::slotLinkStep;
+
+TEST(ReceiverSlot, AConnectEventBringsTheSlotsController) {
+    EXPECT_EQ(SlotLinkStep::ARRIVES, slotLinkStep(false, WirelessEvent::CONNECT, false));
+}
+
+// The controller rebooted onto the slot: its settings are gone and go again.
+TEST(ReceiverSlot, AConnectOnASlotThatHasItsControllerArrivesAgain) {
+    EXPECT_EQ(SlotLinkStep::ARRIVES, slotLinkStep(true, WirelessEvent::CONNECT, false));
+}
+
+TEST(ReceiverSlot, ADisconnectEventTakesTheControllerAway) {
+    EXPECT_EQ(SlotLinkStep::LEAVES, slotLinkStep(true, WirelessEvent::DISCONNECT, false));
+}
+
+TEST(ReceiverSlot, ADisconnectOnAnEmptySlotChangesNothing) {
+    EXPECT_EQ(SlotLinkStep::STAYS, slotLinkStep(false, WirelessEvent::DISCONNECT, false));
+}
+
+TEST(ReceiverSlot, AStateReportFromAnEmptySlotBringsItsController) {
+    EXPECT_EQ(SlotLinkStep::ARRIVES, slotLinkStep(false, WirelessEvent::NONE, true));
+}
+
+TEST(ReceiverSlot, AStateReportFromASlotThatHasItsControllerChangesNothing) {
+    EXPECT_EQ(SlotLinkStep::STAYS, slotLinkStep(true, WirelessEvent::NONE, true));
+}
+
+TEST(ReceiverSlot, AReportThatIsNeitherChangesNothing) {
+    EXPECT_EQ(SlotLinkStep::STAYS, slotLinkStep(false, WirelessEvent::NONE, false));
+    EXPECT_EQ(SlotLinkStep::STAYS, slotLinkStep(true, WirelessEvent::NONE, false));
+}
+
+TEST(ReceiverSlot, APadOfItsOwnAlwaysHasItsController) {
+    EXPECT_TRUE(usbparsers::controllerIsThere(false, false));
+    EXPECT_TRUE(usbparsers::controllerIsThere(false, true));
+}
+
+// Only a slot whose controller is connected is configured or restored.
+TEST(ReceiverSlot, ASlotHasItsControllerOnlyWhileItIsConnected) {
+    EXPECT_TRUE(usbparsers::controllerIsThere(true, true));
+    EXPECT_FALSE(usbparsers::controllerIsThere(true, false));
+}
+
+// SDL's HIDAPI_DriverSteam_InitDevice and hid-steam's steam_get_conn_status:
+// ID_DONGLE_GET_WIRELESS_STATE, with no payload, in the 2015 framing {message id, payload length}.
+TEST(ReceiverSlot, The2015ReceiversSlotIsAskedForItsWirelessState) {
+    uint8_t out[16];
+    memset(out, 0xEE, sizeof(out));
+    ASSERT_EQ(2u,
+              usbparsers::buildReceiverStateRequest(Parser::STEAM_CONTROLLER, out, sizeof(out)));
+    EXPECT_EQ(0xB4, out[0]);
+    EXPECT_EQ(0x00, out[1]);
+}
+
+// SDL asks the 2026 receivers nothing: a slot's controller is there once it reports.
+TEST(ReceiverSlot, NoOtherFamilysSlotIsAsked) {
+    uint8_t out[16];
+    for (const Parser p :
+         {Parser::STEAM_TRITON, Parser::XINPUT_360, Parser::DUALSENSE, Parser::NONE}) {
+        EXPECT_EQ(0u, usbparsers::buildReceiverStateRequest(p, out, sizeof(out)))
+            << usbparsers::parserName(p);
+    }
+}
+
+TEST(ReceiverSlot, TheStateRequestRefusesASmallBuffer) {
+    uint8_t out[1];
+    EXPECT_EQ(0u,
+              usbparsers::buildReceiverStateRequest(Parser::STEAM_CONTROLLER, out, sizeof(out)));
 }
 
 // ---- the pad's own battery ------------------------------------------------------------------

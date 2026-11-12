@@ -66,6 +66,14 @@ enum class WirelessEvent : uint8_t {
     DISCONNECT = 2,
 };
 
+// What one report does to a wireless receiver's slot: its controller arrives (rebooted, its
+// settings gone), leaves, or nothing changes.
+enum class SlotLinkStep : uint8_t {
+    STAYS = 0,
+    ARRIVES = 1,
+    LEAVES = 2,
+};
+
 using usbhid::ButtonOrder;
 
 // The pad battery a decoder reads (gamepad::DeviceState::battery*). The status is MSG_BATTERY's
@@ -225,6 +233,8 @@ struct FeedbackState {
     // worker's clock (dish_usb::outputClockMs); refreshDue reads them.
     int64_t settingsSentMs = NEVER_SENT_MS;
     int64_t rumbleSentMs = NEVER_SENT_MS;
+    // A receiver slot with no controller on it: nothing is refreshed until one connects.
+    bool controllerAway = false;
 };
 
 // The writes a pad loses unless the host repeats them. The Steam Controller (2026) turns lizard
@@ -309,6 +319,10 @@ bool runInit(int fd, int interfaceNumber, uint8_t epOut, InitKind init);
 // the Steam Controller (2026), whose own watchdog restores lizard mode once the settings stop.
 void runTeardown(int fd, int interfaceNumber, Parser p);
 
+// Asks a receiver slot what it holds (buildReceiverStateRequest); its answer arrives as a report.
+// False when nothing was asked.
+bool runReceiverStateRequest(int fd, int interfaceNumber, Parser p);
+
 // Re-sends the settings refreshDue owes: the Steam Controller (2026)'s lizard switch, once, so a
 // refused write costs the output worker a single transfer. False for every other family.
 bool runSettingsRefresh(int fd, int interfaceNumber, Parser p);
@@ -343,6 +357,18 @@ WirelessEvent checkWirelessEvent(Parser p, const uint8_t* buf, size_t len);
 // Pure: the pad's own charge out of a report that carries nothing else, the Steam Controller
 // (2026)'s battery status. False, with s untouched, for every other report and parser.
 bool decodePadBatteryReport(Parser p, const uint8_t* buf, size_t len, gamepad::DeviceState& s);
+
+// Pure: a receiver slot's link across one report, from its wireless event or, for a slot that held
+// no controller, a report that decoded as state (SDL: "Maybe we missed a wireless status packet?").
+SlotLinkStep slotLinkStep(bool linked, WirelessEvent event, bool decodedState);
+
+// Pure: whether a pad's controller is there to configure or restore. Always for a pad of its own;
+// for a receiver slot, only while its controller is connected.
+bool controllerIsThere(bool receiverSlot, bool linked);
+
+// Pure: the feature report a receiver slot answers with a wireless event saying whether a
+// controller is on it, into out; 0 for a family whose slots are not asked.
+size_t buildReceiverStateRequest(Parser p, uint8_t* out, size_t outCap);
 
 bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, gamepad::DeviceState& s);
 

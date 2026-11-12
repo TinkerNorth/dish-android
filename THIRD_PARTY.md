@@ -92,8 +92,9 @@ freely, subject to the following restrictions:
 ```
 
 The Steam Controller state-packet layout, button bit assignments, trigger full-scale, pad
-rotation angle, feature-report framing, and setting/message identifiers in the same file follow
-SDL's `src/joystick/hidapi/SDL_hidapi_steam.c` and the Valve-authored headers beside it
+rotation angle, feature-report framing, the dongle's wireless-state request, and setting/message
+identifiers in the same file follow SDL's `src/joystick/hidapi/SDL_hidapi_steam.c` and the
+Valve-authored headers beside it
 (`src/joystick/hidapi/steam/controller_structs.h` and `controller_constants.h`, Copyright (C)
 2020-2021 Valve Corporation). Protocol facts only; no SDL code is compiled in.
 
@@ -123,8 +124,9 @@ project's parsers:
   accel 8192 units per g), from `drivers/hid/hid-playstation.c`.
 - Switch Pro HD-rumble amplitude table, from `drivers/hid/hid-nintendo.c`
   (`joycon_encode_rumble`, `joycon_rumble_amplitudes`).
-- Steam Controller stand-alone-mode message sequence and its EPIPE retry, from
-  `drivers/hid/hid-steam.c` (`steam_set_lizard_mode`, `steam_send_report`).
+- Steam Controller stand-alone-mode message sequence, its EPIPE retry and the dongle's
+  connection-status request, from `drivers/hid/hid-steam.c` (`steam_set_lizard_mode`,
+  `steam_send_report`, `steam_get_conn_status`).
 
 The Linux kernel is licensed GPL-2.0-only. Upstream:
 https://github.com/torvalds/linux

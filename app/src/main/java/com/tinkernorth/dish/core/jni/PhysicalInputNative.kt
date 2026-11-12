@@ -182,6 +182,8 @@ class PhysicalInputNative
 
         fun getDirectPadBattery(deviceId: Int): Int = UsbDirectNative.getDirectPadBattery(deviceId)
 
+        fun isUsbPadLinked(deviceId: Int): Boolean = UsbDirectNative.isUsbPadLinked(deviceId)
+
         fun getDeviceMotionCount(deviceId: Int): Long = UsbDirectNative.getDeviceMotionCount(deviceId)
 
         fun getDeviceInputEventCount(deviceId: Int): Long = PhysicalSlotNative.getDeviceInputEventCount(deviceId)

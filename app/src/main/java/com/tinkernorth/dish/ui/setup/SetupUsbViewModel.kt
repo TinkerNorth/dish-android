@@ -11,6 +11,7 @@ import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbController
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.source.usb.UsbPhase
+import com.tinkernorth.dish.source.usb.firstPadId
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -174,7 +175,7 @@ private fun timeoutFor(choice: PathChoice): Long = if (choice == PathChoice.Dire
 // controller still pursuing Direct is mid-permission/claim, not settled, so keep waiting.
 private fun resolved(c: UsbController?): Boolean =
     when (c?.phase) {
-        UsbPhase.Direct -> c.syntheticId != null
+        UsbPhase.Direct -> c.firstPadId() != null
         UsbPhase.Routed -> c.desired != PathChoice.Direct && c.frameworkId != null
         UsbPhase.RestoreStuck, UsbPhase.NeedsReplug -> true
         UsbPhase.Claiming, UsbPhase.AwaitingFramework, null -> false
@@ -184,7 +185,7 @@ private fun resolved(c: UsbController?): Boolean =
 // NeedsReplug has none, so both return null and the caller recovers instead of stranding the user.
 private fun proceedSlot(c: UsbController?): String? =
     when (c?.phase) {
-        UsbPhase.Direct -> c.syntheticId?.toString()
+        UsbPhase.Direct -> c.firstPadId()?.toString()
         UsbPhase.Routed -> if (c.desired != PathChoice.Direct) c.frameworkId?.toString() else null
         else -> null
     }

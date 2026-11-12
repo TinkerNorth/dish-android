@@ -12,10 +12,12 @@ struct AttachResult {
     bool ok = false;
 };
 
+// A receiver slot is claimed to listen: no init and no probe, its controller set up once one is
+// there.
 AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumber,
                           uint8_t endpointIn, uint16_t endpointInMaxPacket, uint8_t endpointOut,
                           uint8_t interfaceClass, uint8_t interfaceSubclass,
-                          uint8_t interfaceProtocol);
+                          uint8_t interfaceProtocol, bool receiverSlot);
 
 void detachDevice(int32_t syntheticDeviceId);
 
@@ -25,6 +27,10 @@ uint64_t getMotionCount(int32_t deviceId);
 
 // URBs that reaped with an error status, failed to submit, or failed to reap.
 uint64_t getUrbErrorCount(int32_t deviceId);
+
+// Whether the claimed pad's controller is there: a receiver slot's while one is connected to it,
+// any other pad's always. False for a device that is gone.
+bool isPadLinked(int32_t deviceId);
 
 // The claimed pad's own charge, as its last report carried it: level << 8 | status in
 // usbparsers::PAD_BATTERY_* terms, or -1 when the device is gone or no report has carried a

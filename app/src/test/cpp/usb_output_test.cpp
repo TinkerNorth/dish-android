@@ -54,6 +54,7 @@ class FakeDevice final : public dish_usb::OutputDevice {
     void micLed(const uint8_t state) override { record("mic " + std::to_string(state)); }
     void ack(const uint8_t* bytes, size_t) override { record("ack " + std::to_string(bytes[0])); }
     void reconnected() override { record("reconnected"); }
+    void left() override { record("left"); }
 
     uint32_t refresh(int64_t) override {
         std::lock_guard<std::mutex> lock(mtx_);
@@ -239,6 +240,52 @@ TEST(OutputWorker, AReconnectIsWrittenForThePadItWasPostedFor) {
     worker.postReconnected(kOtherPad);
     worker.postReconnected(kPad);
     EXPECT_EQ(device.writesUpTo("reconnected"), std::vector<std::string>{"reconnected"});
+    worker.stop();
+}
+
+TEST(OutputWorker, ALeaveIsWrittenForThePadItWasPostedFor) {
+    FakeDevice device;
+    dish_usb::OutputWorker worker;
+    worker.start(kPad, device);
+    worker.postLeft(kOtherPad);
+    worker.postLeft(kPad);
+    EXPECT_EQ(device.writesUpTo("left"), std::vector<std::string>{"left"});
+    worker.stop();
+}
+
+// A receiver slot's controller that came back while a write stalled is set up, once.
+TEST(OutputWorker, AControllerThatLeftAndCameBackDuringAStalledWriteIsSetUpOnce) {
+    FakeDevice device;
+    dish_usb::OutputWorker worker;
+    worker.start(kPad, device);
+    device.holdNextRumble();
+    worker.postRumble(kPad, 1, 1);
+    ASSERT_TRUE(device.waitUntilHolding());
+    worker.postLeft(kPad);
+    worker.postReconnected(kPad);
+    device.letGo();
+    const std::vector<std::string> expected = {"rumble 1/1", "reconnected"};
+    EXPECT_EQ(device.writesUpTo("reconnected"), expected);
+    std::this_thread::sleep_for(kQuiet);
+    EXPECT_EQ(device.writes(), expected);
+    worker.stop();
+}
+
+// One that came and went again while a write stalled is gone, and is not set up.
+TEST(OutputWorker, AControllerThatCameAndWentDuringAStalledWriteIsLeftAlone) {
+    FakeDevice device;
+    dish_usb::OutputWorker worker;
+    worker.start(kPad, device);
+    device.holdNextRumble();
+    worker.postRumble(kPad, 1, 1);
+    ASSERT_TRUE(device.waitUntilHolding());
+    worker.postReconnected(kPad);
+    worker.postLeft(kPad);
+    device.letGo();
+    const std::vector<std::string> expected = {"rumble 1/1", "left"};
+    EXPECT_EQ(device.writesUpTo("left"), expected);
+    std::this_thread::sleep_for(kQuiet);
+    EXPECT_EQ(device.writes(), expected);
     worker.stop();
 }
 

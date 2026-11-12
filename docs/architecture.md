@@ -31,8 +31,11 @@ focus-loss release, keep-screen-on, the low-power dim);
 `MainActivity` wires the same host itself on top of `GameActivity`,
 and only `NativeUnavailableActivity` is exempt.
 `StreamingScreenCoverageTest` enforces this against the manifest.
-USB Direct never touches an Activity: native per-device poller
-threads read URBs and send straight to the wire. Events get
+USB Direct never touches an Activity: a native poller thread per
+claimed interface reads URBs and sends straight to the wire (a
+wireless receiver's Direct claim opens one per slot, and a slot is a
+pad of its own while a controller is paired to it,
+`source/usb/ReceiverSlots.kt`). Events get
 normalised on the JVM, cross into the native layer via the `core.jni`
 objects (`PhysicalSlotNative`, `SlotReportNative`), and the native side runs the encoder + `sendto` on
 the same thread the event arrived on. Discovery, motion, battery, and
@@ -266,10 +269,11 @@ Effects are returned as data and executed by the caller.
   canonical full state machine: every `(phase x event)` pair is total,
   and effects (`Claim`, `SetPref`, `MarkFailure`, and so on) are a
   returned list the coordinator runs.
-- `reconcileSlots`, `resolveRumble`, `resolvePathChoice`, and the
-  registry's placeholder-lifecycle transition are smaller pure decision
-  functions lifted out of Android- or JNI-coupled coordinators for the
-  same reason.
+- `reconcileSlots`, `resolveRumble`, `resolvePathChoice`,
+  `followSlotLinks` (a wireless receiver's slots after a read of their
+  links) and the registry's placeholder-lifecycle transition are smaller
+  pure decision functions lifted out of Android- or JNI-coupled
+  coordinators for the same reason.
 
 Rule: keep the transition pure. If you need a socket or a StateFlow
 read inside the function, you are writing a coordinator, not a reducer:
@@ -509,8 +513,9 @@ firmware watchdog and stops its motors about 50 ms after the last rumble.
 After every pass the worker asks its device when it next owes a write
 (`OutputDevice::refresh`, `usbparsers::refreshDue`) and sleeps no longer than
 that, so the poller never runs a refresh; every other pad's worker sleeps
-until something is posted. A dongle's reconnect re-init is posted to the
-worker the same way.
+until something is posted. A receiver slot's connect and leave are posted
+to the worker the same way: the arriving controller's re-init, and for the
+one that left a stop to its rumble and a pause of its refreshes.
 
 Pure rumble helpers (`rumbleMagnitudeTo255`, `rumbleSafeDurationMs`,
 `resolveSlotId`, `classifyTarget`) are covered by
@@ -563,7 +568,8 @@ can't reach are still unit-testable from a host build:
   loopback socket (`send_path_test` holds them to the bytes pinned in
   `wire_vectors.h`).
 - `usb_device_table.h` and `usb_output.{cpp,h}`: the claimed USB pads' fixed
-  table (their counters, read without a lock) and each pad's output worker,
+  table (their counters, and whether a receiver slot's controller is there,
+  read without a lock) and each pad's output worker,
   which owns its OUT endpoint: per-kind latest-value mailboxes whose values
   name the pad they were posted for, a ring for GIP acks, a timed wake for a
   device that owes refreshes, and a fake device in `usb_output_test` standing

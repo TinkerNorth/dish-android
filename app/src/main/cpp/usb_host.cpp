@@ -74,8 +74,17 @@ class UsbOutput final : public dish_usb::OutputDevice {
     // The reboot wiped the attach-time settings, so they go again or the pad streams without
     // motion while its lizard keyboard leaks into the phone.
     void reconnected() override {
+        feedback.controllerAway = false;
         usbparsers::runInit(fd, interfaceNumber, epOut, init);
         feedback.settingsSentMs = dish_usb::outputClockMs();
+    }
+
+    // Nothing is refreshed for a slot with no controller, and the one that next connects starts
+    // still: the rumble it was playing belonged to the controller that left.
+    void left() override {
+        feedback.controllerAway = true;
+        feedback.strong = 0;
+        feedback.weak = 0;
     }
 
     // A write is stamped when it is attempted, so a pad that refuses one is not retried at once.
@@ -120,6 +129,13 @@ struct DeviceCtx {
     std::string modelName;
     std::string parserName;
     usbparsers::ParserState stickRange;
+
+    // One slot of a wireless receiver, and whether its controller is connected; the poller's own,
+    // mirrored to entry->stats.linked for the JVM.
+    bool receiverSlot = false;
+    bool linked = true;
+    // The poller's: set once the kernel reports the device gone, read after the poller is joined.
+    bool unplugged = false;
 
     int64_t lastMotionNs = 0;
     gamepad::TouchpadGate touchGate;
@@ -281,16 +297,48 @@ void publishDecodedReport(DeviceCtx& ctx, const gamepad::DeviceState& scratch, b
     publishBattery(ctx, scratch);
 }
 
+// A store only on the edge: the JVM reads it on its own cadence.
+void markLinked(DeviceCtx& ctx, const bool linked) {
+    ctx.linked = linked;
+    ctx.entry->stats.linked.store(linked, std::memory_order_relaxed);
+}
+
+// The arriving controller's set-up and the leaving one's are the output worker's to run, so the
+// poller never waits on a control transfer.
+void followSlotLink(DeviceCtx& ctx, const usbparsers::WirelessEvent wev, const bool decodedState) {
+    switch (usbparsers::slotLinkStep(ctx.linked, wev, decodedState)) {
+    case usbparsers::SlotLinkStep::STAYS:
+        return;
+    case usbparsers::SlotLinkStep::ARRIVES:
+        markLinked(ctx, true);
+        ctx.entry->output.postReconnected(ctx.syntheticDeviceId);
+        return;
+    case usbparsers::SlotLinkStep::LEAVES:
+        ctx.linked = false;
+        dish_usb::controllerLeft(ctx.entry->stats);
+        ctx.entry->output.postLeft(ctx.syntheticDeviceId);
+        return;
+    }
+}
+
+void followWirelessEvent(DeviceCtx& ctx, const usbparsers::WirelessEvent wev) {
+    if (ctx.receiverSlot) {
+        followSlotLink(ctx, wev, false);
+        return;
+    }
+    if (wev == usbparsers::WirelessEvent::CONNECT) {
+        ctx.entry->output.postReconnected(ctx.syntheticDeviceId);
+    }
+}
+
 // Both directions publish neutral: a departed pad must not keep its last input latched, and a
-// returning pad rebooted, so any held stick memory is stale. A returning pad's re-init is the
-// output worker's to run, so the poller never waits on its control transfers.
+// returning pad rebooted, so any held stick memory is stale.
 void publishWirelessEvent(DeviceCtx& ctx, const usbparsers::WirelessEvent wev,
                           gamepad::DeviceState& scratch) {
     ctx.stickRange.steamStickX = 0;
     ctx.stickRange.steamStickY = 0;
     dispatch::applyUsbReport(ctx.syntheticDeviceId, scratch);
-    if (wev != usbparsers::WirelessEvent::CONNECT) return;
-    ctx.entry->output.postReconnected(ctx.syntheticDeviceId);
+    followWirelessEvent(ctx, wev);
 }
 
 void ackGipReport(DeviceCtx& ctx, const uint8_t* report, const size_t len) {
@@ -323,7 +371,9 @@ void publishCompletedUrb(DeviceCtx& ctx, const UrbSlot& completed, const int act
     }
     const bool decoded = usbparsers::decodeReport(ctx.parser, completed.buf.data(),
                                                   (size_t)actualLength, scratch, &ctx.stickRange);
-    if (decoded) publishDecodedReport(ctx, scratch, lastMicMuted);
+    if (!decoded) return;
+    if (ctx.receiverSlot) followSlotLink(ctx, usbparsers::WirelessEvent::NONE, decoded);
+    publishDecodedReport(ctx, scratch, lastMicMuted);
 }
 
 void discardPendingUrbs(DeviceCtx& ctx, UrbSlot* (&slots)[kInFlightUrbs]) {
@@ -361,6 +411,7 @@ bool reapReadyUrbs(DeviceCtx& ctx, UrbSlot* (&slots)[kInFlightUrbs], gamepad::De
 
         if (reaped->status == -ENODEV) {
             LOGI("dev=%d disappeared (ENODEV), exiting poll loop", ctx.syntheticDeviceId);
+            ctx.unplugged = true;
             return false;
         }
         if (reaped->status != 0) {
@@ -448,7 +499,11 @@ void shutdownLocked(const std::shared_ptr<DeviceCtx>& ctx) {
     }
     // The worker's last write finishes before the fd it is writing to is closed.
     ctx->entry->output.stop();
-    usbparsers::runTeardown(ctx->fd, ctx->interfaceNumber, ctx->parser);
+    // A device the kernel reported gone has nothing to restore: the write would go to a dead
+    // handle.
+    const bool restorable =
+        !ctx->unplugged && usbparsers::controllerIsThere(ctx->receiverSlot, ctx->linked);
+    if (restorable) usbparsers::runTeardown(ctx->fd, ctx->interfaceNumber, ctx->parser);
     releaseAndReattach(ctx->fd, ctx->interfaceNumber);
     if (ctx->fd >= 0) {
         ::close(ctx->fd);
@@ -547,93 +602,150 @@ void fetchDs5FirmwareInfo(int fd, int interfaceNumber, usbparsers::Ds5FirmwareIn
 
 } // namespace
 
-AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumber, uint8_t epIn,
-                          uint16_t epInMaxPacket, uint8_t epOut, uint8_t ifClass,
-                          uint8_t ifSubclass, uint8_t ifProtocol) {
-    AttachResult out;
+namespace {
 
-    usbparsers::Classification classification =
-        usbparsers::classifyDevice(vid, pid, ifClass, ifSubclass, ifProtocol);
-    std::string modelName = classification.name != nullptr ? classification.name : "USB controller";
-    usbparsers::Parser parser = classification.parser;
-    usbparsers::InitKind init = classification.init;
+// The interface a claim names, and what usb_parsers made of its model.
+struct AttachTarget {
+    int fd = -1;
+    uint16_t vid = 0;
+    uint16_t pid = 0;
+    int interfaceNumber = -1;
+    uint8_t epIn = 0;
+    uint16_t epInMaxPacket = 0;
+    uint8_t epOut = 0;
+    usbparsers::Classification classification;
+    std::string modelName;
+};
 
-    // We expect Kotlin to have already called UsbDeviceConnection.claimInterface(force=true);
-    // CLAIMINTERFACE here is idempotent (returns EBUSY if already held by our process, which is
-    // fine). Without claiming, USBDEVFS_SUBMITURB fails with EBUSY because the kernel HID driver
-    // holds the interface.
-    if (interfaceNumber >= 0) {
-        unsigned int iface = (unsigned int)interfaceNumber;
-        if (ioctl(fd, USBDEVFS_CLAIMINTERFACE, &iface) < 0 && errno != EBUSY) {
-            LOGE("CLAIMINTERFACE %d failed: %s", interfaceNumber, strerror(errno));
-            releaseAndReattach(fd, interfaceNumber);
-            ::close(fd);
-            return out;
-        }
+// We expect Kotlin to have already called UsbDeviceConnection.claimInterface(force=true);
+// CLAIMINTERFACE here is idempotent (returns EBUSY if already held by our process, which is
+// fine). Without claiming, USBDEVFS_SUBMITURB fails with EBUSY because the kernel HID driver
+// holds the interface.
+bool claimInterface(const int fd, const int interfaceNumber) {
+    if (interfaceNumber < 0) return true;
+    unsigned int iface = (unsigned int)interfaceNumber;
+    if (ioctl(fd, USBDEVFS_CLAIMINTERFACE, &iface) >= 0 || errno == EBUSY) return true;
+    LOGE("CLAIMINTERFACE %d failed: %s", interfaceNumber, strerror(errno));
+    releaseAndReattach(fd, interfaceNumber);
+    ::close(fd);
+    return false;
+}
+
+// A partly-applied init still changed the device, and handing it back that way leaves it useless
+// to its owner outside this app.
+void giveBackPad(const AttachTarget& t) {
+    usbparsers::runTeardown(t.fd, t.interfaceNumber, t.classification.parser);
+    releaseAndReattach(t.fd, t.interfaceNumber);
+    ::close(t.fd);
+}
+
+// A receiver slot's controller is set up only once it is there, so there is nothing to restore.
+void giveBackSlot(const AttachTarget& t) {
+    releaseAndReattach(t.fd, t.interfaceNumber);
+    ::close(t.fd);
+}
+
+void giveBack(const AttachTarget& t, const bool receiverSlot) {
+    if (receiverSlot) {
+        giveBackSlot(t);
+        return;
     }
+    giveBackPad(t);
+}
 
-    // Both bail-outs below run teardown first: a partly-applied init still changed the device, and
-    // handing it back that way leaves it useless to its owner outside this app.
-    if (!usbparsers::runInit(fd, interfaceNumber, epOut, init)) {
-        LOGI("attach %04X:%04X (%s): init failed, falling back to routed", vid, pid,
-             modelName.c_str());
-        usbparsers::runTeardown(fd, interfaceNumber, parser);
-        releaseAndReattach(fd, interfaceNumber);
-        ::close(fd);
-        return out;
+// Whether a pad came up, and when its init went out: the Steam Controller (2026)'s first refresh
+// is owed from then.
+struct PadReady {
+    bool ok = false;
+    int64_t initSentMs = usbparsers::NEVER_SENT_MS;
+};
+
+// A pad of its own: its init, then a probe that its reports decode. Either refusal gives it back.
+PadReady readyPad(const AttachTarget& t) {
+    const usbparsers::Parser parser = t.classification.parser;
+    if (!usbparsers::runInit(t.fd, t.interfaceNumber, t.epOut, t.classification.init)) {
+        LOGI("attach %04X:%04X (%s): init failed, falling back to routed", t.vid, t.pid,
+             t.modelName.c_str());
+        giveBackPad(t);
+        return PadReady{};
     }
     const int64_t initSentMs = dish_usb::outputClockMs();
-
-    usbparsers::ProbeOutcome probed = probeEndpoint(fd, epIn, epInMaxPacket, parser);
-    if (!usbparsers::probePermitsClaim(probed, usbparsers::isVerifiedFastLane(vid, pid), parser)) {
-        LOGI("attach %04X:%04X (%s): %s, releasing to framework", vid, pid, modelName.c_str(),
+    const usbparsers::ProbeOutcome probed = probeEndpoint(t.fd, t.epIn, t.epInMaxPacket, parser);
+    if (!usbparsers::probePermitsClaim(probed, usbparsers::isVerifiedFastLane(t.vid, t.pid),
+                                       parser)) {
+        LOGI("attach %04X:%04X (%s): %s, releasing to framework", t.vid, t.pid, t.modelName.c_str(),
              probed == usbparsers::ProbeOutcome::SILENT ? "no reports" : "reports did not decode");
-        usbparsers::runTeardown(fd, interfaceNumber, parser);
-        releaseAndReattach(fd, interfaceNumber);
-        ::close(fd);
-        return out;
+        giveBackPad(t);
+        return PadReady{};
     }
     if (probed == usbparsers::ProbeOutcome::SILENT) {
-        LOGI("attach %04X:%04X (%s): silent at rest, claiming verified model", vid, pid,
-             modelName.c_str());
+        LOGI("attach %04X:%04X (%s): silent at rest, claiming verified model", t.vid, t.pid,
+             t.modelName.c_str());
     }
+    return PadReady{true, initSentMs};
+}
 
+// The 2015 receiver answers with a wireless event; a 2026 one's slot says what it holds with its
+// first report.
+void askReceiverSlot(const AttachTarget& t) {
+    if (usbparsers::runReceiverStateRequest(t.fd, t.interfaceNumber, t.classification.parser)) {
+        return;
+    }
+    LOGI("attach %04X:%04X (%s): slot %d not asked, its first report says what it holds", t.vid,
+         t.pid, t.modelName.c_str(), t.interfaceNumber);
+}
+
+void readModelFeatures(const AttachTarget& t, DeviceCtx& ctx) {
+    const usbparsers::Parser parser = t.classification.parser;
+    if (parser == usbparsers::Parser::GENERIC_HID_GAMEPAD) {
+        fetchHidLayout(t.fd, t.interfaceNumber, ctx.stickRange.hidLayout);
+        ctx.stickRange.hidLayout.order = t.classification.order;
+    } else if (parser == usbparsers::Parser::DUALSHOCK4) {
+        fetchPsCalibration(t.fd, t.interfaceNumber, 0x02, ctx.stickRange.psImu);
+    } else if (parser == usbparsers::Parser::DUALSENSE) {
+        fetchPsCalibration(t.fd, t.interfaceNumber, 0x05, ctx.stickRange.psImu);
+        usbparsers::Ds5FirmwareInfo firmware;
+        fetchDs5FirmwareInfo(t.fd, t.interfaceNumber, firmware);
+        ctx.output.feedback.ds5VibrationV2 = usbparsers::ds5UsesVibrationV2(t.pid, firmware);
+        LOGI("attach %04X:%04X: DualSense feature version %04X (%s), rumble mode %s", t.vid, t.pid,
+             firmware.featureVersion, firmware.valid ? "read" : "unread",
+             ctx.output.feedback.ds5VibrationV2 ? "v2" : "v1");
+    }
+}
+
+// A receiver slot starts with no controller: it is set up, and refreshed, once one is there.
+void markSlotEmpty(DeviceCtx& ctx) {
+    ctx.receiverSlot = true;
+    markLinked(ctx, false);
+    ctx.output.feedback.controllerAway = true;
+}
+
+AttachResult startDevice(const AttachTarget& t, const bool receiverSlot,
+                         const int64_t settingsSentMs) {
+    AttachResult out;
+    const usbparsers::Parser parser = t.classification.parser;
     auto ctx = std::make_shared<DeviceCtx>();
     ctx->syntheticDeviceId = allocSyntheticId();
     ctx->entry = g_usbDevices.claim(ctx->syntheticDeviceId);
     if (ctx->entry == nullptr) {
-        LOGE("attach %04X:%04X (%s): %u pads already claimed, releasing to framework", vid, pid,
-             modelName.c_str(), (unsigned)dish_usb::MAX_USB_DEVICES);
-        usbparsers::runTeardown(fd, interfaceNumber, parser);
-        releaseAndReattach(fd, interfaceNumber);
-        ::close(fd);
+        LOGE("attach %04X:%04X (%s): %u pads already claimed, releasing to framework", t.vid, t.pid,
+             t.modelName.c_str(), (unsigned)dish_usb::MAX_USB_DEVICES);
+        giveBack(t, receiverSlot);
         return out;
     }
-    ctx->fd = fd;
-    ctx->vid = vid;
-    ctx->pid = pid;
-    ctx->epIn = epIn;
-    ctx->epInMaxPacket = epInMaxPacket == 0 ? 64 : epInMaxPacket;
-    ctx->epOut = epOut;
-    ctx->interfaceNumber = interfaceNumber;
+    ctx->fd = t.fd;
+    ctx->vid = t.vid;
+    ctx->pid = t.pid;
+    ctx->epIn = t.epIn;
+    ctx->epInMaxPacket = t.epInMaxPacket == 0 ? 64 : t.epInMaxPacket;
+    ctx->epOut = t.epOut;
+    ctx->interfaceNumber = t.interfaceNumber;
     ctx->parser = parser;
-    ctx->init = init;
-    ctx->modelName = modelName;
+    ctx->init = t.classification.init;
+    ctx->modelName = t.modelName;
     ctx->parserName = usbparsers::parserName(parser);
-    if (parser == usbparsers::Parser::GENERIC_HID_GAMEPAD) {
-        fetchHidLayout(fd, interfaceNumber, ctx->stickRange.hidLayout);
-        ctx->stickRange.hidLayout.order = classification.order;
-    } else if (parser == usbparsers::Parser::DUALSHOCK4) {
-        fetchPsCalibration(fd, interfaceNumber, 0x02, ctx->stickRange.psImu);
-    } else if (parser == usbparsers::Parser::DUALSENSE) {
-        fetchPsCalibration(fd, interfaceNumber, 0x05, ctx->stickRange.psImu);
-        usbparsers::Ds5FirmwareInfo firmware;
-        fetchDs5FirmwareInfo(fd, interfaceNumber, firmware);
-        ctx->output.feedback.ds5VibrationV2 = usbparsers::ds5UsesVibrationV2(pid, firmware);
-        LOGI("attach %04X:%04X: DualSense feature version %04X (%s), rumble mode %s", vid, pid,
-             firmware.featureVersion, firmware.valid ? "read" : "unread",
-             ctx->output.feedback.ds5VibrationV2 ? "v2" : "v1");
-    }
+    readModelFeatures(t, *ctx);
+    if (receiverSlot) markSlotEmpty(*ctx);
 
     {
         std::lock_guard<TrackedMutex> lock(g_mtx);
@@ -642,21 +754,49 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
 
     dispatch::prewarmDevice(ctx->syntheticDeviceId);
 
-    ctx->output.fd = fd;
-    ctx->output.interfaceNumber = interfaceNumber;
-    ctx->output.epOut = epOut;
+    ctx->output.fd = t.fd;
+    ctx->output.interfaceNumber = t.interfaceNumber;
+    ctx->output.epOut = t.epOut;
     ctx->output.parser = parser;
-    ctx->output.init = init;
-    ctx->output.feedback.settingsSentMs = initSentMs;
+    ctx->output.init = t.classification.init;
+    ctx->output.feedback.settingsSentMs = settingsSentMs;
     ctx->entry->output.start(ctx->syntheticDeviceId, ctx->output);
     ctx->poller = std::thread(pollLoop, ctx);
 
-    LOGI("attach ok: %04X:%04X (%s) dev=%d parser=%s ep=0x%02X max=%u", vid, pid, modelName.c_str(),
-         ctx->syntheticDeviceId, ctx->parserName.c_str(), ctx->epIn, (unsigned)ctx->epInMaxPacket);
+    LOGI("attach ok: %04X:%04X (%s) dev=%d parser=%s ep=0x%02X max=%u%s", t.vid, t.pid,
+         t.modelName.c_str(), ctx->syntheticDeviceId, ctx->parserName.c_str(), ctx->epIn,
+         (unsigned)ctx->epInMaxPacket, receiverSlot ? " (receiver slot)" : "");
 
     out.syntheticDeviceId = ctx->syntheticDeviceId;
     out.ok = true;
     return out;
+}
+
+AttachResult attachPad(const AttachTarget& t) {
+    const PadReady ready = readyPad(t);
+    if (!ready.ok) return AttachResult{};
+    return startDevice(t, false, ready.initSentMs);
+}
+
+AttachResult attachReceiverSlot(const AttachTarget& t) {
+    askReceiverSlot(t);
+    return startDevice(t, true, usbparsers::NEVER_SENT_MS);
+}
+
+} // namespace
+
+AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumber, uint8_t epIn,
+                          uint16_t epInMaxPacket, uint8_t epOut, uint8_t ifClass,
+                          uint8_t ifSubclass, uint8_t ifProtocol, bool receiverSlot) {
+    const usbparsers::Classification classification =
+        usbparsers::classifyDevice(vid, pid, ifClass, ifSubclass, ifProtocol);
+    const bool isAKnownModel = classification.name != nullptr;
+    const std::string modelName = isAKnownModel ? classification.name : "USB controller";
+    const AttachTarget t{
+        fd, vid, pid, interfaceNumber, epIn, epInMaxPacket, epOut, classification, modelName};
+    if (!claimInterface(fd, interfaceNumber)) return AttachResult{};
+    if (receiverSlot) return attachReceiverSlot(t);
+    return attachPad(t);
 }
 
 void detachDevice(int32_t syntheticDeviceId) {
@@ -686,6 +826,12 @@ uint64_t getUrbCount(int32_t deviceId) {
 uint64_t getUrbErrorCount(int32_t deviceId) {
     return g_usbDevices.read<uint64_t>(deviceId, 0, [](const dish_usb::UsbDeviceStats& s) {
         return s.urbErrorCount.load(std::memory_order_relaxed);
+    });
+}
+
+bool isPadLinked(int32_t deviceId) {
+    return g_usbDevices.read<bool>(deviceId, false, [](const dish_usb::UsbDeviceStats& s) {
+        return s.linked.load(std::memory_order_relaxed);
     });
 }
 
