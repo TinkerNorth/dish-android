@@ -57,6 +57,13 @@ computer. Those lines say "update Satellite too".
   share the wake-up, get the same. That the pad needs the faster-link step was
   shown on a Pro Controller over macOS; the new wake-up has not yet been run on
   an Android device.
+- **A Switch Pro Controller on a USB cable sends its motion.** Dish woke the
+  pad but never switched its motion sensors on, so every motion reading it
+  sent for the pad was zero unless the phone's own Nintendo driver had
+  switched them on first. Dish now sends the switch-on Linux and SDL send,
+  right after the wake-up. That the pad needs it, and that its accelerometer
+  then reads gravity at rest, was shown on a Pro Controller over macOS; the
+  step has not yet been run on an Android device.
 - **The new Steam Controller's battery report is accepted at the length SDL
   accepts.** The controller's own battery message is 15 bytes; Dish asked for
   17, so a message of SDL's length would have been thrown away and the

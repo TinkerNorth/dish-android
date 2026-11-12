@@ -85,13 +85,14 @@ std::vector<uint8_t> switchReport(size_t len) {
 
 constexpr size_t kSwitchUsbCommandBytes = 64;
 constexpr size_t kSwitchSubcommandBytes = 12;
-constexpr int kSwitchInitPacketCount = 6;
+constexpr int kSwitchInitPacketCount = 7;
 constexpr int kSwitchHandshakeStep = 0;
 constexpr int kSwitchThreeMegabitStep = 1;
 constexpr int kSwitchHandshakeAtThreeMegabitStep = 2;
 constexpr int kSwitchTimeoutDisableStep = 3;
 constexpr int kSwitchReportModeStep = 4;
 constexpr int kSwitchEnableVibrationStep = 5;
+constexpr int kSwitchEnableImuStep = 6;
 
 // The index-th packet of the Switch init sequence, empty once the sequence has ended.
 std::vector<uint8_t> switchInitPacket(const int index) {
@@ -882,9 +883,21 @@ TEST(SwitchInit, TheSubcommandsFollowTheUsbCommandsAsTwelveBytesEach) {
     ASSERT_EQ(kSwitchSubcommandBytes, enableVibration.size());
     EXPECT_EQ(0x48, enableVibration[10]);
     EXPECT_EQ(0x01, enableVibration[11]);
+    const std::vector<uint8_t> enableImu = switchInitPacket(kSwitchEnableImuStep);
+    ASSERT_EQ(kSwitchSubcommandBytes, enableImu.size());
+    EXPECT_EQ(0x40, enableImu[10]);
+    EXPECT_EQ(0x01, enableImu[11]);
 }
 
-TEST(SwitchInit, TheSequenceEndsAfterSixPacketsAndRefusesASmallBuffer) {
+TEST(SwitchInit, TheSubcommandsCountTheirPacketsInTheirSecondByte) {
+    const std::vector<uint8_t> enableImu = switchInitPacket(kSwitchEnableImuStep);
+    ASSERT_EQ(kSwitchSubcommandBytes, enableImu.size());
+    EXPECT_EQ(0x00, switchInitPacket(kSwitchReportModeStep)[1]);
+    EXPECT_EQ(0x01, switchInitPacket(kSwitchEnableVibrationStep)[1]);
+    EXPECT_EQ(0x02, enableImu[1]);
+}
+
+TEST(SwitchInit, TheSequenceEndsAfterSevenPacketsAndRefusesASmallBuffer) {
     EXPECT_FALSE(switchInitPacket(kSwitchInitPacketCount - 1).empty());
     EXPECT_TRUE(switchInitPacket(kSwitchInitPacketCount).empty());
     EXPECT_TRUE(switchInitPacket(-1).empty());
@@ -905,9 +918,10 @@ TEST(SwitchInit, AFailedHandshakeAtThreeMegabitDoesNotEndTheSequence) {
     EXPECT_FALSE(usbparsers::switchInitStepIsFatal(kSwitchHandshakeAtThreeMegabitStep));
 }
 
-TEST(SwitchInit, AFailedTimeoutDisableOrVibrationEnableDoesNotEndTheSequence) {
+TEST(SwitchInit, AFailedTimeoutDisableVibrationEnableOrImuEnableDoesNotEndTheSequence) {
     EXPECT_FALSE(usbparsers::switchInitStepIsFatal(kSwitchTimeoutDisableStep));
     EXPECT_FALSE(usbparsers::switchInitStepIsFatal(kSwitchEnableVibrationStep));
+    EXPECT_FALSE(usbparsers::switchInitStepIsFatal(kSwitchEnableImuStep));
 }
 
 TEST(SwitchInit, NoStepPastTheSequenceIsFatal) {
