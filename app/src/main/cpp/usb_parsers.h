@@ -145,6 +145,9 @@ struct ParserState {
     // which is the same lifetime the pad's own firmware gives its mute setting.
     bool micMuteHeld = false;
     bool micMuted = false;
+    // The Steam Controller (2026)'s IMU tick last published as motion: SDL sends a sensor sample
+    // only for a tick it has not seen, starting from 0.
+    uint32_t tritonImuTick = 0;
 };
 
 const KnownDevice* lookupKnown(uint16_t vid, uint16_t pid);

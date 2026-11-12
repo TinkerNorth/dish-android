@@ -73,6 +73,10 @@ void setLe16(std::vector<uint8_t>& b, size_t off, int16_t v) {
     b[off + 1] = (uint8_t)((v >> 8) & 0xFF);
 }
 
+void setLe32(std::vector<uint8_t>& b, size_t off, uint32_t v) {
+    for (size_t i = 0; i < 4; i++) b[off + i] = (uint8_t)(v >> (8 * i));
+}
+
 std::vector<uint8_t> switchReport(size_t len) {
     std::vector<uint8_t> r(len, 0);
     r[0] = 0x30;
@@ -1959,15 +1963,21 @@ constexpr uint32_t kTritonRightGripTouch = 0x10000000;
 constexpr uint32_t kTritonLeftGripTouch = 0x20000000;
 
 // The report id, then SDL's packed TritonMTUNoQuat_t (or TritonMTUNoQuat32TS_t): the buttons at
-// 2, the triggers at 6 and 8, the sticks LX LY RX RY from 10, accel x y z from 34, gyro x y z from
-// 40, 46 bytes in all.
+// 2, the triggers at 6 and 8, the sticks LX LY RX RY from 10, the IMU's u32 tick at 30, accel
+// x y z from 34, gyro x y z from 40, 46 bytes in all. The timestamp layout has the right pad's
+// pressure at 30 and shortens the tick to a u16 at 32.
 constexpr size_t kTritonStateBytes = 46;
 constexpr size_t kTritonButtons = 2;
 constexpr size_t kTritonLeftTrigger = 6;
 constexpr size_t kTritonRightTrigger = 8;
 constexpr size_t kTritonSticks = 10;
+constexpr size_t kTritonImuTick = 30;
+constexpr size_t kTritonTimestampRightPadPressure = 30;
+constexpr size_t kTritonTimestampImuTick = 32;
 constexpr size_t kTritonAccel = 34;
 constexpr size_t kTritonGyro = 40;
+constexpr uint32_t kAnImuTick = 500;
+constexpr uint32_t kTheNextImuTick = 504;
 
 std::vector<uint8_t> tritonState(const uint8_t reportId = kTritonStateId,
                                  const uint32_t buttons = 0) {
@@ -1977,16 +1987,28 @@ std::vector<uint8_t> tritonState(const uint8_t reportId = kTritonStateId,
     return r;
 }
 
-void setTritonImu(std::vector<uint8_t>& r, const int16_t (&accel)[3], const int16_t (&gyro)[3]) {
+void setTritonImuTick(std::vector<uint8_t>& r, const uint32_t tick) {
+    const bool isTheTimestampLayout = r[0] == kTritonStateTimestampId;
+    if (isTheTimestampLayout) return setLe16(r, kTritonTimestampImuTick, (int16_t)tick);
+    setLe32(r, kTritonImuTick, tick);
+}
+
+void setTritonImu(std::vector<uint8_t>& r, const uint32_t tick, const int16_t (&accel)[3],
+                  const int16_t (&gyro)[3]) {
+    setTritonImuTick(r, tick);
     for (size_t axis = 0; axis < 3; axis++) {
         setLe16(r, kTritonAccel + 2 * axis, accel[axis]);
         setLe16(r, kTritonGyro + 2 * axis, gyro[axis]);
     }
 }
 
+bool decodeTriton(const std::vector<uint8_t>& r, DeviceState& s, ParserState& st) {
+    return decodeReport(Parser::STEAM_TRITON, r.data(), r.size(), s, &st);
+}
+
 bool decodeTriton(const std::vector<uint8_t>& r, DeviceState& s) {
     ParserState st;
-    return decodeReport(Parser::STEAM_TRITON, r.data(), r.size(), s, &st);
+    return decodeTriton(r, s, st);
 }
 
 // SDL's TritonBatteryStatus_t after the id: the charge state, the percent, then six u16 readings
@@ -2151,7 +2173,7 @@ TEST(TritonDecode, SticksAreLittleEndianAndUpPositiveLikeTheWire) {
 // and +-4 g on the same axes.
 TEST(TritonDecode, ImuRotatesOntoTheWireAxisOrderAndScale) {
     auto r = tritonState();
-    setTritonImu(r, {1000, 2000, 3000}, {4000, 5000, 6000});
+    setTritonImu(r, kAnImuTick, {1000, 2000, 3000}, {4000, 5000, 6000});
     DeviceState s;
     ASSERT_TRUE(decodeTriton(r, s));
     EXPECT_TRUE(s.motionValid);
@@ -2170,7 +2192,7 @@ TEST(TritonDecode, TheTimestampReportReadsTheSameButtonsSticksAndImu) {
     auto stamped = tritonState(kTritonStateTimestampId, kTritonA | kTritonDpadUp);
     for (auto* r : {&plain, &stamped}) {
         setLe16(*r, kTritonSticks, 1234);
-        setTritonImu(*r, {-100, 200, -300}, {400, -500, 600});
+        setTritonImu(*r, kAnImuTick, {-100, 200, -300}, {400, -500, 600});
     }
     DeviceState fromPlain;
     DeviceState fromStamped;
@@ -2185,10 +2207,97 @@ TEST(TritonDecode, TheTimestampReportReadsTheSameButtonsSticksAndImu) {
     EXPECT_TRUE(fromStamped.motionValid);
 }
 
-TEST(TritonDecode, ASilentImuPublishesNoMotion) {
+// SDL sends a sensor sample only for an IMU tick it has not seen (last_sensor_tick32 in
+// HandleState, last_sensor_tick16 in HandleState_Timestamp).
+TEST(TritonMotion, ARepeatedImuTickIsInputButNotMotion) {
+    auto r = tritonState(kTritonStateId, kTritonA);
+    setTritonImu(r, kAnImuTick, {1000, 2000, 3000}, {4000, 5000, 6000});
+    ParserState st;
+    DeviceState first;
+    ASSERT_TRUE(decodeTriton(r, first, st));
+    EXPECT_TRUE(first.motionValid);
+    DeviceState again;
+    ASSERT_TRUE(decodeTriton(r, again, st));
+    EXPECT_EQ(XUSB_A, again.wButtons);
+    EXPECT_FALSE(again.motionValid);
+}
+
+TEST(TritonMotion, ANewImuTickPublishesTheNextSample) {
+    auto r = tritonState();
+    setTritonImu(r, kAnImuTick, {1000, 2000, 3000}, {4000, 5000, 6000});
+    ParserState st;
+    DeviceState first;
+    ASSERT_TRUE(decodeTriton(r, first, st));
+    setTritonImu(r, kTheNextImuTick, {1000, 2000, 3000}, {8000, 5000, 6000});
+    DeviceState next;
+    ASSERT_TRUE(decodeTriton(r, next, st));
+    EXPECT_TRUE(next.motionValid);
+    EXPECT_EQ(7999, next.gyroX);
+}
+
+TEST(TritonMotion, AnAllZeroImuBlockWithANewTickIsStillPublished) {
+    auto r = tritonState();
+    setTritonImu(r, kAnImuTick, {0, 0, 0}, {0, 0, 0});
     DeviceState s;
-    ASSERT_TRUE(decodeTriton(tritonState(kTritonStateId, kTritonA), s));
+    ASSERT_TRUE(decodeTriton(r, s));
+    EXPECT_TRUE(s.motionValid);
+    EXPECT_EQ(0, s.gyroX);
+    EXPECT_EQ(0, s.accelZ);
+}
+
+// Tick 0 is where SDL's last tick starts, so a report at tick 0 carries no sample it has not seen.
+TEST(TritonMotion, AnImuThatNeverTickedPublishesNoMotion) {
+    auto r = tritonState(kTritonStateId, kTritonA);
+    setTritonImu(r, 0, {1000, 2000, 3000}, {4000, 5000, 6000});
+    DeviceState s;
+    ASSERT_TRUE(decodeTriton(r, s));
+    EXPECT_EQ(XUSB_A, s.wButtons);
     EXPECT_FALSE(s.motionValid);
+}
+
+TEST(TritonMotion, ThePlainReportsTickOnTheirThirtyTwoBitWordAtThirty) {
+    for (const uint8_t id : {kTritonStateId, kTritonStateBleId}) {
+        auto r = tritonState(id);
+        setTritonImu(r, kAnImuTick, {1000, 2000, 3000}, {4000, 5000, 6000});
+        ParserState st;
+        DeviceState first;
+        ASSERT_TRUE(decodeTriton(r, first, st)) << (int)id;
+        EXPECT_TRUE(first.motionValid) << (int)id;
+        setLe32(r, kTritonImuTick, kTheNextImuTick);
+        DeviceState next;
+        ASSERT_TRUE(decodeTriton(r, next, st)) << (int)id;
+        EXPECT_TRUE(next.motionValid) << (int)id;
+    }
+}
+
+TEST(TritonMotion, TheTimestampReportTicksOnItsSixteenBitWordAfterTheRightPadsPressure) {
+    auto r = tritonState(kTritonStateTimestampId);
+    setTritonImu(r, kAnImuTick, {1000, 2000, 3000}, {4000, 5000, 6000});
+    ParserState st;
+    DeviceState first;
+    ASSERT_TRUE(decodeTriton(r, first, st));
+    EXPECT_TRUE(first.motionValid);
+    setLe16(r, kTritonTimestampRightPadPressure, 100);
+    DeviceState pressed;
+    ASSERT_TRUE(decodeTriton(r, pressed, st));
+    EXPECT_FALSE(pressed.motionValid);
+    setLe16(r, kTritonTimestampImuTick, (int16_t)kTheNextImuTick);
+    DeviceState next;
+    ASSERT_TRUE(decodeTriton(r, next, st));
+    EXPECT_TRUE(next.motionValid);
+}
+
+TEST(TritonMotion, TheLastTickIsHeldPerPad) {
+    auto r = tritonState();
+    setTritonImu(r, kAnImuTick, {1000, 2000, 3000}, {4000, 5000, 6000});
+    ParserState onePad;
+    ParserState anotherPad;
+    DeviceState onOne;
+    ASSERT_TRUE(decodeTriton(r, onOne, onePad));
+    DeviceState onTheOther;
+    ASSERT_TRUE(decodeTriton(r, onTheOther, anotherPad));
+    EXPECT_TRUE(onOne.motionValid);
+    EXPECT_TRUE(onTheOther.motionValid);
 }
 
 TEST(TritonDecode, AStateReportCarriesNoBattery) {

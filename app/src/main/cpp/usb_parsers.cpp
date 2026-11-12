@@ -1549,7 +1549,8 @@ bool decodeSteamController(const uint8_t* buf, const size_t len, DeviceState& s,
 // SDL_hidapi_steam_triton.c (zlib, Copyright (C) Valve Corporation and Sam Lantinga; see
 // THIRD_PARTY.md): a report id, then a packed struct. The three state reports share everything
 // SDL's HandleGenericState reads, and the timestamp one moves only the trackpads and the IMU's own
-// timestamp, so the six IMU words sit at the same offsets in all three.
+// tick, a u32 at 30 that it shortens to a u16 at 32, so the six IMU words sit at the same offsets
+// in all three.
 constexpr uint8_t kTritonStateReport = 0x42;
 constexpr uint8_t kTritonBatteryReport = 0x43;
 constexpr uint8_t kTritonStateBleReport = 0x45;
@@ -1561,6 +1562,8 @@ constexpr size_t kTritonButtonsOffset = 2;
 constexpr int kTritonLeftTriggerOffset = 6;
 constexpr int kTritonRightTriggerOffset = 8;
 constexpr int kTritonSticksOffset = 10;
+constexpr int kTritonImuTickOffset = 30;
+constexpr int kTritonTimestampImuTickOffset = 32;
 constexpr int kTritonAccelOffset = 34;
 constexpr int kTritonGyroOffset = 40;
 // SDL reads a trigger as 0..32767.
@@ -1628,9 +1631,6 @@ void decodeTritonMotion(const uint8_t* buf, DeviceState& s) {
     const int16_t gx = rdLe16(buf, kTritonGyroOffset);
     const int16_t gy = rdLe16(buf, kTritonGyroOffset + 2);
     const int16_t gz = rdLe16(buf, kTritonGyroOffset + 4);
-    const bool imuIsAlive = (ax | ay | az | gx | gy | gz) != 0;
-    if (!imuIsAlive) return;
-
     s.gyroX = steamGyroToWire(gx);
     s.gyroY = steamGyroToWire(gz);
     s.gyroZ = steamGyroToWire(-(int32_t)gy);
@@ -1640,6 +1640,20 @@ void decodeTritonMotion(const uint8_t* buf, DeviceState& s) {
     s.motionValid = true;
 }
 
+uint32_t tritonImuTick(const uint8_t* buf) {
+    const bool isTheTimestampReport = buf[0] == kTritonStateTimestampReport;
+    if (isTheTimestampReport) return (uint16_t)rdLe16(buf, kTritonTimestampImuTickOffset);
+    return rdLe32(buf + kTritonImuTickOffset);
+}
+
+void publishTritonMotionOnANewTick(const uint8_t* buf, DeviceState& s, ParserState& st) {
+    const uint32_t tick = tritonImuTick(buf);
+    const bool isTheSampleAlreadyPublished = tick == st.tritonImuTick;
+    if (isTheSampleAlreadyPublished) return;
+    decodeTritonMotion(buf, s);
+    st.tritonImuTick = tick;
+}
+
 bool isTritonStateReport(const uint8_t reportId) {
     const bool isPlain = reportId == kTritonStateReport || reportId == kTritonStateBleReport;
     return isPlain || reportId == kTritonStateTimestampReport;
@@ -1647,7 +1661,7 @@ bool isTritonStateReport(const uint8_t reportId) {
 
 // Both Y axes are up-positive, as the wire's are (SDL negates them into its own down-positive
 // convention), so the sticks pass straight through.
-bool decodeSteamTriton(const uint8_t* buf, const size_t len, DeviceState& s) {
+bool decodeSteamTriton(const uint8_t* buf, const size_t len, DeviceState& s, ParserState& st) {
     if (len < kTritonStateLen) return false;
     if (!isTritonStateReport(buf[0])) return false;
 
@@ -1655,7 +1669,7 @@ bool decodeSteamTriton(const uint8_t* buf, const size_t len, DeviceState& s) {
     s.bLT = tritonTriggerToWire(rdLe16(buf, kTritonLeftTriggerOffset));
     s.bRT = tritonTriggerToWire(rdLe16(buf, kTritonRightTriggerOffset));
     readSticksLe16(buf, kTritonSticksOffset, s);
-    decodeTritonMotion(buf, s);
+    publishTritonMotionOnANewTick(buf, s, st);
     return true;
 }
 
@@ -1864,7 +1878,7 @@ bool decodeReport(const Parser p, const uint8_t* buf, const size_t len, DeviceSt
     case Parser::STEAM_CONTROLLER:
         return sticks != nullptr && decodeSteamController(buf, len, s, *sticks);
     case Parser::STEAM_TRITON:
-        return decodeSteamTriton(buf, len, s);
+        return sticks != nullptr && decodeSteamTriton(buf, len, s, *sticks);
     case Parser::GENERIC_HID_GAMEPAD: {
         const bool hasALayout = sticks != nullptr && sticks->hidLayout.valid;
         if (hasALayout) return usbhid::decodeFromLayout(buf, len, s, sticks->hidLayout);
