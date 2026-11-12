@@ -275,7 +275,8 @@ size_t buildMicMuteLedReport(Parser p, FeedbackState& st, uint8_t state, uint8_t
 size_t buildGipInitPacket(InitKind init, int index, uint8_t seq, uint8_t* out, size_t outCap);
 
 // The Switch Pro USB init sequence, packet by packet: the four 0x80 commands as full 64-byte
-// packets, then the two subcommands. Zero once the sequence ends or the packet does not fit.
+// packets, then the three subcommands (report mode, vibration, IMU). Zero once the sequence ends
+// or the packet does not fit.
 size_t buildSwitchInitPacket(int index, uint8_t* out, size_t outCap);
 
 // Pure: whether a failed write of the index-th Switch init packet ends the sequence.

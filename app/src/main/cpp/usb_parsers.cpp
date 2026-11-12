@@ -2019,6 +2019,12 @@ constexpr uint8_t kSwitchEnableVibration[] = {
     0x01, 0x01, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x48, 0x01,
 };
 
+// Subcommand 0x40 arg 0x01: the IMU is off until asked, and every IMU word of the 0x30 reports
+// reads zero until then.
+constexpr uint8_t kSwitchEnableImu[] = {
+    0x01, 0x02, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x40, 0x01,
+};
+
 constexpr unsigned kSwitchStatusTimeoutMs = 100;
 constexpr unsigned kSwitchModeTimeoutMs = 200;
 constexpr unsigned kSwitchInitSettleUs = 40000;
@@ -2050,7 +2056,9 @@ constexpr SwitchInitStep kSwitchInitSequence[] = {
                "disable-timeout write"),
     switchStep(kSwitchSetReportMode, kSwitchModeTimeoutMs, kSwitchInitSettleUs, true,
                "set-report-mode write"),
-    switchStep(kSwitchEnableVibration, kSwitchModeTimeoutMs, 0, false, "enable-vibration write"),
+    switchStep(kSwitchEnableVibration, kSwitchModeTimeoutMs, kSwitchInitSettleUs, false,
+               "enable-vibration write"),
+    switchStep(kSwitchEnableImu, kSwitchModeTimeoutMs, 0, false, "enable-IMU write"),
 };
 
 template <size_t N> constexpr int countOf(const SwitchInitStep (&)[N]) { return (int)N; }

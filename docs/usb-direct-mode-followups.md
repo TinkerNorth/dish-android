@@ -34,17 +34,22 @@ End-to-end Guide also needs the satellite to forward `wButtons` bit `0x0400` to 
 used to send (handshake `80 02`, timeout disable `80 04`, full report mode): it acknowledges the
 handshake and streams nothing. It streams only once the timeout disable follows a handshake sent at
 3 Mbit, which is the order Linux's hid-nintendo and SDL send every USB Switch pad: `80 02`, `80 03`,
-`80 02`, `80 04`. Dish now sends that order, then the report-mode and vibration-enable subcommands,
-to every model on `InitKind::SWITCH_PRO_HANDSHAKE` (the Pro, the 8BitDo adapters, the N64 Online
-pad). The pad's need for the 3 Mbit step was shown on a Pro Controller over macOS (dish-mac PR 101
-carries the probe table); the new sequence has not yet been run on an Android device. On a phone
-whose kernel driver (hid-nintendo) ran the full sequence before Dish claimed the interface, the pad
-streamed either way, which is the likely reason the old sequence passed its Android hardware checks.
+`80 02`, `80 04`. Dish now sends that order, then the report-mode, vibration-enable and IMU-enable
+subcommands, to every model on `InitKind::SWITCH_PRO_HANDSHAKE` (the Pro, the 8BitDo adapters, the
+N64 Online pad). The pad's need for the 3 Mbit step was shown on a Pro Controller over macOS
+(dish-mac PR 101 carries the probe table); the new sequence has not yet been run on an Android
+device. On a phone whose kernel driver (hid-nintendo) ran the full sequence before Dish claimed the
+interface, the pad streamed either way, which is the likely reason the old sequence passed its
+Android hardware checks.
 
-Dish sends no IMU enable (subcommand `0x40`). Over macOS, with the same subcommands, the Pro's IMU
-frames read zero (dish-mac PR 101 records it as nothing turning the IMU on); whether the Android
-pitch and yaw confirmation below relied on the kernel driver having turned the IMU on first is not
-known.
+**Context, IMU enable:** Until subcommand `0x40` with argument `0x01` is sent, every IMU word of the
+Pro's 0x30 reports reads zero. Shown on a Pro over macOS through dish-mac's own reader: with the
+report-mode subcommand alone, 282 motion samples at rest read six zeros; with the IMU enable sent
+after it, the accelerometer reads about 1 g at rest (dish-mac PR 101 saw the zeros, and dish-mac
+PR 109 sends the enable and carries the run). Dish now sends it as the last step of
+`kSwitchInitSequence`, after the vibration enable, non-fatal as in SDL. It has not yet been run on
+an Android device, and whether the Android pitch and yaw confirmation below relied on the kernel
+driver having turned the IMU on first is not known.
 
 **Context, IMU:** The Switch Pro IMU scaling is correct (`32767/28568` gyro, `32767/16384` accel),
 and the axis order is now rotated onto the DS4 wire convention with pitch and yaw
@@ -55,9 +60,9 @@ exactly this).
 `decodeSwitchProUsb`, IMU block).
 
 **Task:** With a real Switch Pro on a phone whose kernel has no hid-nintendo, confirm the pad streams
-from its plugged-in state through Dish's own sequence. Then, in Direct mode, confirm gyro/accel axis
-directions against the satellite's motion expectation and flip signs / reorder axes as needed; if
-the IMU reads zero, add the IMU enable subcommand.
+from its plugged-in state through Dish's own sequence, with non-zero IMU words. Then, in Direct mode,
+confirm gyro/accel axis directions against the satellite's motion expectation and flip signs /
+reorder axes as needed.
 
 **Acceptance:** A Pro Controller plugged in cold reaches Direct mode and streams on a phone whose
 kernel never woke it. Tilting/rotating the controller moves the in-game motion in the matching
