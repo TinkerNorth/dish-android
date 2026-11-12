@@ -1989,9 +1989,10 @@ bool decodeTriton(const std::vector<uint8_t>& r, DeviceState& s) {
     return decodeReport(Parser::STEAM_TRITON, r.data(), r.size(), s, &st);
 }
 
-// SDL's TritonBatteryStatus_t after the id: the charge state, the percent, then seven u16
-// readings this port does not use.
-constexpr size_t kTritonBatteryBytes = 17;
+// SDL's TritonBatteryStatus_t after the id: the charge state, the percent, then six u16 readings
+// this port does not use, fifteen bytes in all.
+constexpr size_t kTritonBatteryBytes = 15;
+constexpr size_t kTritonBatteryPaddedBytes = 64;
 constexpr uint8_t kTritonChargeReset = 0;
 constexpr uint8_t kTritonChargeDischarging = 1;
 constexpr uint8_t kTritonChargeCharging = 2;
@@ -2229,6 +2230,25 @@ TEST(TritonBattery, APercentPastAHundredIsAnUnknownLevel) {
     DeviceState s;
     ASSERT_TRUE(usbparsers::decodePadBatteryReport(Parser::STEAM_TRITON, r.data(), r.size(), s));
     EXPECT_EQ(usbparsers::PAD_BATTERY_LEVEL_UNKNOWN, s.batteryLevel);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_DISCHARGING, s.batteryStatus);
+}
+
+TEST(TritonBattery, AReportOfSdlsFifteenBytesReadsItsChargeStateAndLevel) {
+    const auto r = tritonBattery(kTritonChargeCharging, 63);
+    ASSERT_EQ(15u, r.size());
+    DeviceState s;
+    ASSERT_TRUE(usbparsers::decodePadBatteryReport(Parser::STEAM_TRITON, r.data(), r.size(), s));
+    EXPECT_TRUE(s.batteryValid);
+    EXPECT_EQ(63, s.batteryLevel);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_CHARGING, s.batteryStatus);
+}
+
+TEST(TritonBattery, AReportPaddedPastSdlsFifteenBytesStillReads) {
+    auto r = tritonBattery(kTritonChargeDischarging, 42);
+    r.resize(kTritonBatteryPaddedBytes, 0);
+    DeviceState s;
+    ASSERT_TRUE(usbparsers::decodePadBatteryReport(Parser::STEAM_TRITON, r.data(), r.size(), s));
+    EXPECT_EQ(42, s.batteryLevel);
     EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_DISCHARGING, s.batteryStatus);
 }
 
