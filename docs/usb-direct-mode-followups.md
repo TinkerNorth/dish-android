@@ -189,19 +189,35 @@ waits on its control transfers.
   and teardown leaves it mute as a desktop mouse until its own power cycle (hold the Steam button)
   or until the relaunched app re-claims it.
 - The wireless event framing and the reconnect re-init, which follow `hid-steam` but have never
-  seen a real dongle.
+  seen a real dongle, and with them everything about the dongle's slots below.
 
-**Known limitation, the dongle reaches one slot:** the wired pad enumerates as mouse, keyboard,
-pad; the dongle enumerates as keyboard then four pad interfaces, one per paired controller.
-`findInterruptInPair` breaks a rank tie by taking the first candidate, so only the first slot is
-ever claimed. A pad paired to another slot fails `probeDecodable` and falls back to routed, which
-is safe but looks like "Direct failed". Reaching the others means attaching each candidate in turn
-rather than picking one up front.
+**The dongle's four slots (implemented, needs hardware verification):** the wired pad enumerates
+as mouse, keyboard, pad; the dongle enumerates as keyboard then four pad interfaces, one per paired
+controller. A Direct claim of the dongle opens all four (`interfacesToClaim` and `receiverSlotsOf`
+in `ReceiverSlots.kt`, `claimTargetsOf` in `UsbGamepadManager.kt`), each attached as a receiver
+slot under a synthetic id of its own: no init and no probe at attach, one
+`ID_DONGLE_GET_WIRELESS_STATE` feature report asking the slot what it holds
+(`runReceiverStateRequest`, as SDL's `HIDAPI_DriverSteam_InitDevice` and `hid-steam`'s
+`steam_get_conn_status` do), and from then on its poller follows the slot's link (`slotLinkStep`):
+a connect event, or a state report from a slot that held nothing, marks the controller there and
+posts the quiet init to the output worker; a disconnect marks it away, publishes neutral and stops
+the worker's refreshes. The JVM reads each slot's link every 500 ms (`isUsbPadLinked`,
+`followSlotLinks` in `ReceiverSlotLinks.kt`): a slot whose controller is there is a pad of its own
+on the list, with its own card and binding; an empty slot is no pad; a controller that comes back is
+the same pad on the same slot, bound as it left. The model's Direct opt-in is one choice for all
+four slots, switching any slot's card to Standard releases the whole dongle, and the teardown
+restores stand-alone mode only on a slot whose controller is there (`controllerIsThere`). A dongle
+takes four of the eight native USB entries (`MAX_USB_DEVICES`).
 
-The interface pick also assumes the emulated keyboard and mouse declare the HID boot subclass.
-`hid-steam` deliberately does not rely on that, distinguishing the real pad by its report
+Nothing receiver-side has met a dongle, there is none here: the slot layout, the state request and
+its answer, the event framing, the arrival on a missed connect, the per-slot init on arrival, the
+restore on release and the 500 ms cadence are all unverified.
+
+The wired pad's interface pick also assumes the emulated keyboard and mouse declare the HID boot
+subclass. `hid-steam` deliberately does not rely on that, distinguishing the real pad by its report
 descriptor instead. If the assumption is wrong the config packets go to the wrong interface, stall,
-and the claim falls back to routed after roughly a second.
+and the claim falls back to routed after roughly a second. The dongle's slots are opened by
+interface number, 1 to 4, whatever they declare.
 
 **Deliberately absent:**
 - Rumble. The pad has no motors, only trackpad voice coils driven by `ID_TRIGGER_HAPTIC_PULSE`
@@ -213,10 +229,14 @@ and the claim falls back to routed after roughly a second.
   framework as a gamepad.
 
 **Where:** `app/src/main/cpp/usb_parsers.cpp` (`decodeSteamController`, `buildSteamConfigPacket`,
-`checkWirelessEvent`, `modelExpectsFrameworkGamepad`, `runInit`, `runTeardown`),
-`app/src/main/cpp/usb_host.cpp` (`attachDevice`, `pollLoop`, `shutdownLocked`),
-`app/src/main/java/.../source/usb/UsbPathMachine.kt` (`frameworkExpected`),
-`app/src/main/java/.../source/usb/UsbGamepadManager.kt` (`gameInterfaceRank`, `releaseAllDirect`),
+`checkWirelessEvent`, `modelExpectsFrameworkGamepad`, `runInit`, `runTeardown`, `slotLinkStep`,
+`controllerIsThere`, `buildReceiverStateRequest`, `runReceiverStateRequest`),
+`app/src/main/cpp/usb_host.cpp` (`attachDevice`, `attachReceiverSlot`, `followSlotLink`,
+`pollLoop`, `shutdownLocked`, `isPadLinked`),
+`app/src/main/java/.../source/usb/UsbPathMachine.kt` (`frameworkExpected`, `receiver`, `slotPads`),
+`app/src/main/java/.../source/usb/ReceiverSlots.kt`, `ReceiverSlotLinks.kt`,
+`app/src/main/java/.../source/usb/UsbGamepadManager.kt` (`claimTargetsOf`, `listenOnSlots`,
+`followSlotLinksOf`, `releaseAllDirect`),
 `app/src/main/java/.../composer/StreamingServiceController.kt` (claim-hold).
 
 **Acceptance:** A wired Steam Controller picked as Direct streams sticks, triggers, buttons and
@@ -265,9 +285,10 @@ and never auto-claimed.
   is false, so the path FSM settles Standard at once (`frameworkExpected`), as for the 2015 pad.
 
 **Unverified and worth checking first:**
-- The interface pick. It assumes the lizard keyboard and mouse declare the HID boot subclass, as item
-  8 does for the 2015 pad; SDL accepts any interface of the wired pad and interfaces 2..5 of a
-  dongle, and names nothing else about the layout.
+- The wired pad's interface pick. It assumes the lizard keyboard and mouse declare the HID boot
+  subclass, as item 8 does for the 2015 pad; SDL accepts any interface of the wired pad and names
+  nothing else about the layout. A dongle is opened on interfaces 2 to 5 by number, as SDL does,
+  whatever they declare.
 - Whether the gamepad interface has an interrupt OUT endpoint. Rumble goes there when it does and as
   a SET_REPORT(Output) on the control pipe when it does not (`outputRouteFor`), which is how hidapi
   writes an output report; neither route has met the firmware.
@@ -279,14 +300,18 @@ and never auto-claimed.
   sleep takes a realtime deadline (`sem_timedwait` has no other clock everywhere this builds), so a
   wall-clock step backwards during a wait can delay one refresh by the size of the step.
 - The battery percent's range. SDL passes it through; anything above 100 reads unknown here.
-- The dongle event framing and the reconnect re-init.
+- The dongle event framing, the reconnect re-init and the slot following below.
 
-**Known limitation, the dongle reaches one slot:** each paired controller is its own HID interface,
-numbered 2..5. As with the 2015 dongle, `findInterruptInPair` claims one interface up front, the
-first candidate, so only the first slot is ever reached (interface 2, if the dongle's other
-interfaces rank lower). A pad paired to another slot, or a dongle whose first slot is empty, fails
-`probeDecodable` and falls back to routed, which is safe but looks like "Direct failed". Reaching the
-others means attaching each candidate in turn.
+**The dongles' four slots (implemented, needs hardware verification):** each paired controller is
+its own HID interface, numbered 2..5, and a Direct claim of a Proteus or a Nereid opens all four as
+receiver slots, as item 8 describes for the 2015 dongle: each slot is a pad of its own while a
+controller is paired to it, listed within 500 ms of its arrival and unlisted on its disconnect. The
+2026 dongles are asked nothing at attach (SDL asks nothing either): a slot's controller is there
+once its 0x79/0x46 connect event or its first state report arrives, and away on its disconnect
+event. While a slot's controller is away its worker owes no refresh (`FeedbackState.controllerAway`,
+`refreshDue`, `nextRefreshInMs`), so the lizard switch no longer goes to an empty slot every 3 s,
+and the rumble that was playing stops with the controller that left. Everything receiver-side is
+unverified on hardware; there is no dongle here.
 
 **Deliberately absent:**
 - Bluetooth LE (28DE:1303). The pad speaks Valve's own protocol over GATT, not HID over GATT, so it
@@ -294,15 +319,14 @@ others means attaching each candidate in turn.
 - The two trackpads over `MSG_TOUCHPAD` (the wire carries one surface per slot), the four back
   paddles, QAM and the trigger and pad clicks (no XUSB button), the capacitive touches, and the
   other haptic reports (pulse, tone, sweep, script).
-- Pausing the refresh while a dongle's pad is away. SDL stops writing until the pad comes back; here
-  the lizard switch keeps going to the dongle, one refused transfer every 3 s.
 
 **Where:** `app/src/main/cpp/usb_parsers.cpp` (`decodeSteamTriton`, `decodePadBatteryReport`,
 `checkWirelessEvent`, `buildTritonSettingsReport`, `refreshDue`, `nextRefreshInMs`,
 `outputRouteFor`, `runTritonQuietInit`, `runSettingsRefresh`, `runMergedRumble`),
-`app/src/main/cpp/usb_output.{h,cpp}` (`OutputDevice::refresh`, `postReconnected`),
-`app/src/main/cpp/worker_wake.h` (`sleepUnlessFor`), `app/src/main/cpp/usb_host.cpp` (`UsbOutput`,
-`publishCompletedUrb`, `publishWirelessEvent`).
+`app/src/main/cpp/usb_output.{h,cpp}` (`OutputDevice::refresh`, `OutputDevice::left`,
+`postReconnected`, `postLeft`), `app/src/main/cpp/worker_wake.h` (`sleepUnlessFor`),
+`app/src/main/cpp/usb_host.cpp` (`UsbOutput`, `publishCompletedUrb`, `publishWirelessEvent`,
+`followSlotLink`), and the slot files item 8 lists.
 
 **Acceptance:** A wired Steam Controller (2026) picked as Direct streams sticks, triggers, buttons
 and motion for minutes with no lizard keyboard or mouse input reaching the phone, rumbles for as long
