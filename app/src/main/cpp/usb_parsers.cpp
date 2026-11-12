@@ -1410,9 +1410,10 @@ constexpr uint8_t kSteamVersionHi = 0x00;
 constexpr uint8_t kSteamStateType = 0x01;
 constexpr uint8_t kSteamWirelessType = 0x03;
 constexpr size_t kSteamWirelessEventLen = 5;
-constexpr uint8_t kSteamWirelessPayloadLen = 0x01;
+constexpr uint8_t kSteamWirelessMinPayloadLen = 0x01;
 constexpr uint8_t kSteamWirelessDisconnect = 0x01;
 constexpr uint8_t kSteamWirelessConnect = 0x02;
+constexpr uint8_t kSteamWirelessPaired = 0x03;
 constexpr size_t kSteamButtonsOffset = 8;
 constexpr size_t kSteamLeftTriggerByte = 11;
 constexpr size_t kSteamRightTriggerByte = 12;
@@ -1892,16 +1893,18 @@ bool decodeReport(const Parser p, const uint8_t* buf, const size_t len, DeviceSt
 
 namespace {
 
-// Event framing and the one-byte payload values follow the Linux hid-steam driver
-// (steam_raw_event, ID_CONTROLLER_WIRELESS).
+// Event framing follows the Linux hid-steam driver (steam_raw_event, ID_CONTROLLER_WIRELESS); the
+// payload length floor and the newly-paired value follow SDL's HIDAPI_DriverSteam_UpdateDevice,
+// which reads the first payload byte of any payload and takes a pairing as a connect.
 WirelessEvent steamWirelessEvent(const uint8_t* buf, const size_t len) {
     if (len < kSteamWirelessEventLen) return WirelessEvent::NONE;
     if (!isSteamPacket(buf, kSteamWirelessType)) return WirelessEvent::NONE;
-    if (buf[3] != kSteamWirelessPayloadLen) return WirelessEvent::NONE;
+    if (buf[3] < kSteamWirelessMinPayloadLen) return WirelessEvent::NONE;
     switch (buf[4]) {
     case kSteamWirelessDisconnect:
         return WirelessEvent::DISCONNECT;
     case kSteamWirelessConnect:
+    case kSteamWirelessPaired:
         return WirelessEvent::CONNECT;
     default:
         return WirelessEvent::NONE;

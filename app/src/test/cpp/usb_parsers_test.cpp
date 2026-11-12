@@ -1835,7 +1835,7 @@ TEST(SteamConfigPackets, RefusesToOverrunACallerBuffer) {
 namespace {
 
 // Dongle wireless event framing per hid-steam: header {version u16, type, payload length},
-// payload byte 0x01 = disconnected, 0x02 = connected.
+// payload byte 0x01 = disconnected, 0x02 = connected, 0x03 = newly paired (SDL).
 std::vector<uint8_t> steamWirelessEvent(uint8_t payload) {
     std::vector<uint8_t> r(64, 0);
     r[0] = 0x01;
@@ -1856,6 +1856,27 @@ TEST(SteamWireless, ConnectAndDisconnectEventsClassify) {
     auto conn = steamWirelessEvent(0x02);
     EXPECT_EQ(WirelessEvent::CONNECT,
               checkWirelessEvent(Parser::STEAM_CONTROLLER, conn.data(), conn.size()));
+}
+
+// SDL's HIDAPI_DriverSteam_UpdateDevice: a controller that pairs to the dongle for the first time
+// announces itself with 0x03 and is on its slot from then on, as a 0x02 one is.
+TEST(SteamWireless, ANewlyPairedControllerIsAConnect) {
+    auto paired = steamWirelessEvent(0x03);
+    EXPECT_EQ(WirelessEvent::CONNECT,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, paired.data(), paired.size()));
+}
+
+// SDL reads the event's first payload byte from any payload of one byte or more.
+TEST(SteamWireless, AnEventWithALongerPayloadStillClassifies) {
+    auto conn = steamWirelessEvent(0x02);
+    conn[3] = 0x02;
+    EXPECT_EQ(WirelessEvent::CONNECT,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, conn.data(), conn.size()));
+
+    auto disc = steamWirelessEvent(0x01);
+    disc[3] = 0x05;
+    EXPECT_EQ(WirelessEvent::DISCONNECT,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, disc.data(), disc.size()));
 }
 
 // The issue and the fix as a pair: a wireless event never decodes as input (so on its own the last
@@ -1889,12 +1910,12 @@ TEST(SteamWireless, RejectsMalformedEvents) {
     EXPECT_EQ(WirelessEvent::NONE,
               checkWirelessEvent(Parser::STEAM_CONTROLLER, badVersion.data(), badVersion.size()));
 
-    auto badPayloadLen = steamWirelessEvent(0x02);
-    badPayloadLen[3] = 0x02;
-    EXPECT_EQ(WirelessEvent::NONE, checkWirelessEvent(Parser::STEAM_CONTROLLER,
-                                                      badPayloadLen.data(), badPayloadLen.size()));
+    auto noPayload = steamWirelessEvent(0x02);
+    noPayload[3] = 0x00;
+    EXPECT_EQ(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, noPayload.data(), noPayload.size()));
 
-    auto unknownPayload = steamWirelessEvent(0x03);
+    auto unknownPayload = steamWirelessEvent(0x04);
     EXPECT_EQ(
         WirelessEvent::NONE,
         checkWirelessEvent(Parser::STEAM_CONTROLLER, unknownPayload.data(), unknownPayload.size()));
