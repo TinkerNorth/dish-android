@@ -79,6 +79,32 @@ std::vector<uint8_t> switchReport(size_t len) {
     return r;
 }
 
+constexpr size_t kSwitchUsbCommandBytes = 64;
+constexpr size_t kSwitchSubcommandBytes = 12;
+constexpr int kSwitchInitPacketCount = 6;
+constexpr int kSwitchHandshakeStep = 0;
+constexpr int kSwitchThreeMegabitStep = 1;
+constexpr int kSwitchHandshakeAtThreeMegabitStep = 2;
+constexpr int kSwitchTimeoutDisableStep = 3;
+constexpr int kSwitchReportModeStep = 4;
+constexpr int kSwitchEnableVibrationStep = 5;
+
+// The index-th packet of the Switch init sequence, empty once the sequence has ended.
+std::vector<uint8_t> switchInitPacket(const int index) {
+    std::vector<uint8_t> packet(kSwitchUsbCommandBytes, 0xAA);
+    const size_t n = usbparsers::buildSwitchInitPacket(index, packet.data(), packet.size());
+    packet.resize(n);
+    return packet;
+}
+
+// A 0x80 USB command, zero-padded to the full packet.
+std::vector<uint8_t> switchUsbCommand(const uint8_t command) {
+    std::vector<uint8_t> packet(kSwitchUsbCommandBytes, 0);
+    packet[0] = 0x80;
+    packet[1] = command;
+    return packet;
+}
+
 // Symmetric calibration: gyro maps raw -> raw*1024 calibrated, accel maps raw -> raw (8192/g).
 std::vector<uint8_t> psCalibReport() {
     std::vector<uint8_t> r(35, 0);
@@ -829,36 +855,60 @@ TEST(KnownDevices, ThePlayStationClassicControllerIsGenericHidInItsOwnOrder) {
     EXPECT_FALSE(usbparsers::isVerifiedFastLane(0x054C, 0x0CDA));
 }
 
-TEST(SwitchInit, TheUsbCommandsGoOutAsSixtyFourBytePackets) {
-    uint8_t buf[64];
-    memset(buf, 0xAA, sizeof(buf));
-    ASSERT_EQ(64u, usbparsers::buildSwitchInitPacket(0, buf, sizeof(buf)));
-    EXPECT_EQ(0x80, buf[0]);
-    EXPECT_EQ(0x02, buf[1]);
-    for (size_t i = 2; i < sizeof(buf); i++) EXPECT_EQ(0, buf[i]) << i;
-    ASSERT_EQ(64u, usbparsers::buildSwitchInitPacket(1, buf, sizeof(buf)));
-    EXPECT_EQ(0x80, buf[0]);
-    EXPECT_EQ(0x04, buf[1]);
-    for (size_t i = 2; i < sizeof(buf); i++) EXPECT_EQ(0, buf[i]) << i;
+TEST(SwitchInit, TheUsbCommandsAreHandshakeThreeMegabitHandshakeThenTimeoutDisable) {
+    EXPECT_EQ(switchUsbCommand(0x02), switchInitPacket(kSwitchHandshakeStep));
+    EXPECT_EQ(switchUsbCommand(0x03), switchInitPacket(kSwitchThreeMegabitStep));
+    EXPECT_EQ(switchUsbCommand(0x02), switchInitPacket(kSwitchHandshakeAtThreeMegabitStep));
+    EXPECT_EQ(switchUsbCommand(0x04), switchInitPacket(kSwitchTimeoutDisableStep));
 }
 
-TEST(SwitchInit, TheSubcommandsKeepTheirTwelveBytes) {
-    uint8_t buf[64];
-    ASSERT_EQ(12u, usbparsers::buildSwitchInitPacket(2, buf, sizeof(buf)));
-    EXPECT_EQ(0x01, buf[0]);
-    EXPECT_EQ(0x03, buf[10]);
-    EXPECT_EQ(0x30, buf[11]);
-    ASSERT_EQ(12u, usbparsers::buildSwitchInitPacket(3, buf, sizeof(buf)));
-    EXPECT_EQ(0x48, buf[10]);
-    EXPECT_EQ(0x01, buf[11]);
+TEST(SwitchInit, EachUsbCommandGoesOutAsAFullSixtyFourBytePacket) {
+    for (int step = kSwitchHandshakeStep; step <= kSwitchTimeoutDisableStep; step++) {
+        EXPECT_EQ(kSwitchUsbCommandBytes, switchInitPacket(step).size()) << step;
+    }
 }
 
-TEST(SwitchInit, TheSequenceEndsAfterFourPacketsAndRefusesASmallBuffer) {
-    uint8_t buf[64];
-    EXPECT_EQ(0u, usbparsers::buildSwitchInitPacket(4, buf, sizeof(buf)));
-    EXPECT_EQ(0u, usbparsers::buildSwitchInitPacket(-1, buf, sizeof(buf)));
+TEST(SwitchInit, TheSubcommandsFollowTheUsbCommandsAsTwelveBytesEach) {
+    const std::vector<uint8_t> reportMode = switchInitPacket(kSwitchReportModeStep);
+    ASSERT_EQ(kSwitchSubcommandBytes, reportMode.size());
+    EXPECT_EQ(0x01, reportMode[0]);
+    EXPECT_EQ(0x03, reportMode[10]);
+    EXPECT_EQ(0x30, reportMode[11]);
+    const std::vector<uint8_t> enableVibration = switchInitPacket(kSwitchEnableVibrationStep);
+    ASSERT_EQ(kSwitchSubcommandBytes, enableVibration.size());
+    EXPECT_EQ(0x48, enableVibration[10]);
+    EXPECT_EQ(0x01, enableVibration[11]);
+}
+
+TEST(SwitchInit, TheSequenceEndsAfterSixPacketsAndRefusesASmallBuffer) {
+    EXPECT_FALSE(switchInitPacket(kSwitchInitPacketCount - 1).empty());
+    EXPECT_TRUE(switchInitPacket(kSwitchInitPacketCount).empty());
+    EXPECT_TRUE(switchInitPacket(-1).empty());
     uint8_t small[16];
-    EXPECT_EQ(0u, usbparsers::buildSwitchInitPacket(0, small, sizeof(small)));
+    EXPECT_EQ(0u, usbparsers::buildSwitchInitPacket(kSwitchHandshakeStep, small, sizeof(small)));
+}
+
+TEST(SwitchInit, AFailedFirstHandshakeOrReportModeWriteEndsTheSequence) {
+    EXPECT_TRUE(usbparsers::switchInitStepIsFatal(kSwitchHandshakeStep));
+    EXPECT_TRUE(usbparsers::switchInitStepIsFatal(kSwitchReportModeStep));
+}
+
+TEST(SwitchInit, AThreeMegabitWriteFailingAsOnThe8BitDoM30DoesNotEndTheSequence) {
+    EXPECT_FALSE(usbparsers::switchInitStepIsFatal(kSwitchThreeMegabitStep));
+}
+
+TEST(SwitchInit, AFailedHandshakeAtThreeMegabitDoesNotEndTheSequence) {
+    EXPECT_FALSE(usbparsers::switchInitStepIsFatal(kSwitchHandshakeAtThreeMegabitStep));
+}
+
+TEST(SwitchInit, AFailedTimeoutDisableOrVibrationEnableDoesNotEndTheSequence) {
+    EXPECT_FALSE(usbparsers::switchInitStepIsFatal(kSwitchTimeoutDisableStep));
+    EXPECT_FALSE(usbparsers::switchInitStepIsFatal(kSwitchEnableVibrationStep));
+}
+
+TEST(SwitchInit, NoStepPastTheSequenceIsFatal) {
+    EXPECT_FALSE(usbparsers::switchInitStepIsFatal(kSwitchInitPacketCount));
+    EXPECT_FALSE(usbparsers::switchInitStepIsFatal(-1));
 }
 
 TEST(GipAck, AReportThatAsksForAnAckGetsXpadsAnswer) {

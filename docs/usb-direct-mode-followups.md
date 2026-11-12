@@ -28,19 +28,40 @@ End-to-end Guide also needs the satellite to forward `wButtons` bit `0x0400` to 
 
 ---
 
-## 2. Switch Pro IMU sign/orientation is unverified
+## 2. Switch Pro: the USB start sequence has not run on Android, and the IMU signs are unverified
 
-**Context:** The Switch Pro IMU scaling is correct (`32767/28568` gyro, `32767/16384` accel), and the
-axis order is now rotated onto the DS4 wire convention with pitch and yaw hardware-confirmed. Roll's
-sign and the three accel signs are still unverified (the code notes exactly this).
+**Context, start sequence:** A Switch Pro Controller on a cable stays silent after the sequence Dish
+used to send (handshake `80 02`, timeout disable `80 04`, full report mode): it acknowledges the
+handshake and streams nothing. It streams only once the timeout disable follows a handshake sent at
+3 Mbit, which is the order Linux's hid-nintendo and SDL send every USB Switch pad: `80 02`, `80 03`,
+`80 02`, `80 04`. Dish now sends that order, then the report-mode and vibration-enable subcommands,
+to every model on `InitKind::SWITCH_PRO_HANDSHAKE` (the Pro, the 8BitDo adapters, the N64 Online
+pad). The pad's need for the 3 Mbit step was shown on a Pro Controller over macOS (dish-mac PR 101
+carries the probe table); the new sequence has not yet been run on an Android device. On a phone
+whose kernel driver (hid-nintendo) ran the full sequence before Dish claimed the interface, the pad
+streamed either way, which is the likely reason the old sequence passed its Android hardware checks.
 
-**Where:** `app/src/main/cpp/usb_parsers.cpp` (`decodeSwitchProUsb`, IMU block).
+Dish sends no IMU enable (subcommand `0x40`). Over macOS, with the same subcommands, the Pro's IMU
+frames read zero (dish-mac PR 101 records it as nothing turning the IMU on); whether the Android
+pitch and yaw confirmation below relied on the kernel driver having turned the IMU on first is not
+known.
 
-**Task:** With a real Switch Pro in Direct mode, confirm gyro/accel axis directions against the
-satellite's motion expectation and flip signs / reorder axes as needed.
+**Context, IMU:** The Switch Pro IMU scaling is correct (`32767/28568` gyro, `32767/16384` accel),
+and the axis order is now rotated onto the DS4 wire convention with pitch and yaw
+hardware-confirmed. Roll's sign and the three accel signs are still unverified (the code notes
+exactly this).
 
-**Acceptance:** Tilting/rotating the controller moves the in-game motion in the matching direction on
-all three axes.
+**Where:** `app/src/main/cpp/usb_parsers.cpp` (`kSwitchInitSequence`, `runSwitchProHandshake`;
+`decodeSwitchProUsb`, IMU block).
+
+**Task:** With a real Switch Pro on a phone whose kernel has no hid-nintendo, confirm the pad streams
+from its plugged-in state through Dish's own sequence. Then, in Direct mode, confirm gyro/accel axis
+directions against the satellite's motion expectation and flip signs / reorder axes as needed; if
+the IMU reads zero, add the IMU enable subcommand.
+
+**Acceptance:** A Pro Controller plugged in cold reaches Direct mode and streams on a phone whose
+kernel never woke it. Tilting/rotating the controller moves the in-game motion in the matching
+direction on all three axes.
 
 ---
 

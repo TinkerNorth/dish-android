@@ -47,6 +47,16 @@ computer. Those lines say "update Satellite too".
   the adapter that SDL and Steam read controllers from, instead of the first
   one that looked like a controller. This follows SDL and Steam and has not
   been tried on an adapter yet.
+- **A Switch Pro Controller on a USB cable gets the wake-up it streams after.**
+  Dish used to send the pad a handshake and then the command that keeps it
+  reporting, and the pad answered the handshake and stayed silent unless the
+  phone's own Nintendo driver had already woken it before Dish took over. Dish
+  now sends what Linux and SDL send: the handshake, the switch to the pad's
+  faster link speed, the handshake again and then the keep-reporting command.
+  The 8BitDo adapters and the Nintendo 64 controller for Switch Online, which
+  share the wake-up, get the same. That the pad needs the faster-link step was
+  shown on a Pro Controller over macOS; the new wake-up has not yet been run on
+  an Android device.
 
 ## [2.5.0] - 2026-11-02
 

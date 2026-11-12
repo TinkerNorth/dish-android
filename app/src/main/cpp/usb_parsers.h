@@ -271,9 +271,12 @@ size_t buildMicMuteLedReport(Parser p, FeedbackState& st, uint8_t state, uint8_t
 // number at byte 2), returns its length or 0 when there are no more. runInit sends them in order.
 size_t buildGipInitPacket(InitKind init, int index, uint8_t seq, uint8_t* out, size_t outCap);
 
-// The Switch Pro USB init sequence, packet by packet: the two 0x80 commands as full 64-byte
+// The Switch Pro USB init sequence, packet by packet: the four 0x80 commands as full 64-byte
 // packets, then the two subcommands. Zero once the sequence ends or the packet does not fit.
 size_t buildSwitchInitPacket(int index, uint8_t* out, size_t outCap);
+
+// Pure: whether a failed write of the index-th Switch init packet ends the sequence.
+bool switchInitStepIsFatal(int index);
 
 // A GIP report whose flags ask for an acknowledgement (the mode-button report does) is
 // retransmitted until one arrives; this builds the ack xpad sends. Zero when none is owed.
