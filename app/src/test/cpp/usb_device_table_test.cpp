@@ -66,6 +66,17 @@ TEST(UsbDeviceTable, AClaimedEntryStartsWithItsControllerThere) {
     EXPECT_TRUE(next->stats.linked.load(std::memory_order_relaxed));
 }
 
+// The charge was the controller's that left; the one that next connects reports its own.
+TEST(UsbDeviceTable, AControllerThatLeavesTakesItsBatteryReadingWithIt) {
+    dish_usb::UsbDeviceTable table;
+    dish_usb::UsbDevice* slot = table.claim(kPad);
+    ASSERT_NE(slot, nullptr);
+    slot->stats.lastBattery.store(0x6402, std::memory_order_relaxed);
+    dish_usb::controllerLeft(slot->stats);
+    EXPECT_FALSE(slot->stats.linked.load(std::memory_order_relaxed));
+    EXPECT_EQ(slot->stats.lastBattery.load(std::memory_order_relaxed), -1);
+}
+
 TEST(UsbDeviceTable, AFullTableRefusesTheNextPad) {
     dish_usb::UsbDeviceTable table;
     for (size_t i = 0; i < dish_usb::MAX_USB_DEVICES; i++) {

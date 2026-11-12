@@ -33,6 +33,12 @@ struct UsbDevice {
     OutputWorker output;
 };
 
+// A receiver slot's controller left: the charge its last report carried was that controller's.
+inline void controllerLeft(UsbDeviceStats& stats) {
+    stats.linked.store(false, std::memory_order_relaxed);
+    stats.lastBattery.store(-1, std::memory_order_relaxed);
+}
+
 // The poller is its counters' one writer, so a load and a store count without a
 // read-modify-write.
 inline void bump(std::atomic<uint64_t>& counter) {
