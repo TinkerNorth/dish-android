@@ -242,7 +242,10 @@ and never auto-claimed.
   share the buttons, triggers and sticks, and the six IMU words sit at the same offsets in all three.
   Buttons follow SDL's mapping onto XUSB positions, triggers scale SDL's 0..32767 onto a byte, the
   sticks pass through (both Y axes are already up-positive), and gyro (x, z, -y) and accel
-  (x, z, -y) follow SDL's sensor block onto the wire's +-2000 deg/s and +-4 g.
+  (x, z, -y) follow SDL's sensor block onto the wire's +-2000 deg/s and +-4 g. Motion goes out
+  only for a report whose IMU tick (the u32 at 30 of 0x42 and 0x45, the u16 at 32 of 0x47) differs
+  from the last one published, SDL's own gate, so a report that repeats a sample is input and not
+  motion; the last tick is per pad, in `ParserState`, and starts at 0 as SDL's does.
 - **Battery** (`decodePadBatteryReport`): report 0x43 carries the charge state and the percent. It
   never publishes as input (that would flash a neutral pad on the wire) and feeds the Direct battery
   reading, so `BatteryRouting.route` weighs it against the phone's like any other pad's.

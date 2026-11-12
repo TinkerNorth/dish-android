@@ -62,6 +62,11 @@ computer. Those lines say "update Satellite too".
   17, so a message of SDL's length would have been thrown away and the
   controller's charge never shown or sent. This follows SDL and has not been
   tried on a controller yet.
+- **The new Steam Controller's motion is sent once per reading.** The
+  controller stamps each motion reading with its own clock, and a report can
+  carry a reading the last one already did. Dish now sends a reading to the
+  computer only when that stamp has moved, as SDL does, instead of once per
+  report. This follows SDL and has not been tried on a controller yet.
 
 ## [2.5.0] - 2026-11-02
 
