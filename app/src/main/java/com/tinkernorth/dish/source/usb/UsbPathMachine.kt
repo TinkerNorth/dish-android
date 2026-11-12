@@ -36,6 +36,11 @@ data class UsbController(
     // Whether releasing to Standard re-enumerates a framework gamepad. False for models whose
     // stand-alone identity is a keyboard/mouse, such as the Steam Controller.
     val frameworkExpected: Boolean = true,
+    // A wireless receiver: its Direct claim holds every slot, and each slot's connected controller
+    // is a pad of its own.
+    val receiver: Boolean = false,
+    // Those pads, in interface order; syntheticId is the claim the FSM holds, a pad or not.
+    val slotPads: List<Int> = emptyList(),
 )
 
 sealed interface UsbEvent {

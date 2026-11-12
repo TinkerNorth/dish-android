@@ -65,8 +65,13 @@ class UsbInterfacePickTest {
     }
 
     @Test
-    fun `the first generation Steam dongle keeps the first best-ranked interface`() {
-        assertEquals(0, pickedNumber(steamControllerDongle, dongleShaped))
+    fun `the first generation Steam dongle never picks its keyboard interface 0`() {
+        assertEquals(1, pickedNumber(steamControllerDongle, dongleShaped))
+    }
+
+    @Test
+    fun `the first generation Steam dongle never picks an interface above 4`() {
+        assertNull(pickedNumber(steamControllerDongle, numbered(0, 5, 6)))
     }
 
     @Test
