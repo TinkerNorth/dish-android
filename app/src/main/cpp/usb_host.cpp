@@ -134,6 +134,8 @@ struct DeviceCtx {
     // mirrored to entry->stats.linked for the JVM.
     bool receiverSlot = false;
     bool linked = true;
+    // The poller's: set once the kernel reports the device gone, read after the poller is joined.
+    bool unplugged = false;
 
     int64_t lastMotionNs = 0;
     gamepad::TouchpadGate touchGate;
@@ -312,7 +314,8 @@ void followSlotLink(DeviceCtx& ctx, const usbparsers::WirelessEvent wev, const b
         ctx.entry->output.postReconnected(ctx.syntheticDeviceId);
         return;
     case usbparsers::SlotLinkStep::LEAVES:
-        markLinked(ctx, false);
+        ctx.linked = false;
+        dish_usb::controllerLeft(ctx.entry->stats);
         ctx.entry->output.postLeft(ctx.syntheticDeviceId);
         return;
     }
@@ -408,6 +411,7 @@ bool reapReadyUrbs(DeviceCtx& ctx, UrbSlot* (&slots)[kInFlightUrbs], gamepad::De
 
         if (reaped->status == -ENODEV) {
             LOGI("dev=%d disappeared (ENODEV), exiting poll loop", ctx.syntheticDeviceId);
+            ctx.unplugged = true;
             return false;
         }
         if (reaped->status != 0) {
@@ -495,9 +499,11 @@ void shutdownLocked(const std::shared_ptr<DeviceCtx>& ctx) {
     }
     // The worker's last write finishes before the fd it is writing to is closed.
     ctx->entry->output.stop();
-    if (usbparsers::controllerIsThere(ctx->receiverSlot, ctx->linked)) {
-        usbparsers::runTeardown(ctx->fd, ctx->interfaceNumber, ctx->parser);
-    }
+    // A device the kernel reported gone has nothing to restore: the write would go to a dead
+    // handle.
+    const bool restorable =
+        !ctx->unplugged && usbparsers::controllerIsThere(ctx->receiverSlot, ctx->linked);
+    if (restorable) usbparsers::runTeardown(ctx->fd, ctx->interfaceNumber, ctx->parser);
     releaseAndReattach(ctx->fd, ctx->interfaceNumber);
     if (ctx->fd >= 0) {
         ::close(ctx->fd);
