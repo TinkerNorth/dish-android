@@ -157,9 +157,10 @@ work or stay silent; none receives a malformed report.
 **Status:** Implemented from SDL and `hid-steam` (see `THIRD_PARTY.md`), never run against the
 hardware. `Parser::STEAM_CONTROLLER` decodes the state packet; `InitKind::STEAM_QUIET` stops the
 firmware's stand-alone keyboard/mouse emulation at attach and `runTeardown` restores it on every
-exit path that still has the device, physical unplug included (the unplug path detaches the native
-device too, so the attempt is made even though an unplugged wired pad has already lost the volatile
-settings with its power). The restore loads the firmware's stand-alone defaults, not a snapshot of
+exit path whose handle is live: a release to Standard, a Standard pick from a card, the app's exit.
+A detach that follows a physical unplug writes nothing to the dead handle (`DeviceCtx::unplugged`,
+set when the poller reaps `ENODEV`); an unplugged wired pad lost the volatile settings with its
+power anyway. The restore loads the firmware's stand-alone defaults, not a snapshot of
 the pre-claim state; that is deliberate and mirrors SDL's close sequence, and Steam re-pushes its
 own configuration whenever the pad reconnects to it. Listed in `kImported`, so Direct is opt-in and
 never auto-claimed.
@@ -171,7 +172,8 @@ service also stays up while any Direct claim is held, so backgrounding the app d
 process (and the pending restore) at the mercy of the low-memory killer.
 
 Dongle connect/disconnect events (`ID_CONTROLLER_WIRELESS`, same endpoint as input) are classified
-by `checkWirelessEvent`: a disconnect publishes a neutral state, since a powering-off pad would
+by `checkWirelessEvent`, read as SDL reads them: any payload of one byte or more, 0x01 disconnected,
+0x02 connected, 0x03 newly paired (a connect). A disconnect publishes a neutral state, since a powering-off pad would
 otherwise leave its last input latched on the wire, plausibly the held Steam button of the
 power-off gesture; a connect re-runs the quiet init, since the pad rebooted into stand-alone
 defaults and would stream without motion while its lizard keyboard leaked into the phone. The
@@ -200,8 +202,9 @@ slot under a synthetic id of its own: no init and no probe at attach, one
 (`runReceiverStateRequest`, as SDL's `HIDAPI_DriverSteam_InitDevice` and `hid-steam`'s
 `steam_get_conn_status` do), and from then on its poller follows the slot's link (`slotLinkStep`):
 a connect event, or a state report from a slot that held nothing, marks the controller there and
-posts the quiet init to the output worker; a disconnect marks it away, publishes neutral and stops
-the worker's refreshes. The JVM reads each slot's link every 500 ms (`isUsbPadLinked`,
+posts the quiet init to the output worker; a disconnect marks it away, publishes neutral, stops the
+worker's refreshes and drops the battery reading, which was that controller's (`controllerLeft`).
+The JVM reads each slot's link every 500 ms (`isUsbPadLinked`,
 `followSlotLinks` in `ReceiverSlotLinks.kt`): a slot whose controller is there is a pad of its own
 on the list, with its own card and binding; an empty slot is no pad; a controller that comes back is
 the same pad on the same slot, bound as it left. The model's Direct opt-in is one choice for all
@@ -210,8 +213,15 @@ restores stand-alone mode only on a slot whose controller is there (`controllerI
 takes four of the eight native USB entries (`MAX_USB_DEVICES`).
 
 Nothing receiver-side has met a dongle, there is none here: the slot layout, the state request and
-its answer, the event framing, the arrival on a missed connect, the per-slot init on arrival, the
-restore on release and the 500 ms cadence are all unverified.
+its answer, the event framing and the newly-paired value, the arrival on a missed connect, the
+per-slot init on arrival, the restore on release and the 500 ms cadence are all unverified.
+
+**Known limitation, two dongles of one model are one:** every claim is keyed by vendor and product
+id (`claimedConns` and `receiverSlots` in `UsbGamepadManager.kt`, the `UsbController` map, the
+path preference), so a second dongle of the same model plugged in beside the first folds into the
+first's entry and only the first is read. The desktop clients share the limitation. Telling them
+apart means keying by the `UsbDevice`'s name as well, through the path FSM and the preference
+store.
 
 The wired pad's interface pick also assumes the emulated keyboard and mouse declare the HID boot
 subclass. `hid-steam` deliberately does not rely on that, distinguishing the real pad by its report
@@ -310,8 +320,9 @@ controller is paired to it, listed within 500 ms of its arrival and unlisted on 
 once its 0x79/0x46 connect event or its first state report arrives, and away on its disconnect
 event. While a slot's controller is away its worker owes no refresh (`FeedbackState.controllerAway`,
 `refreshDue`, `nextRefreshInMs`), so the lizard switch no longer goes to an empty slot every 3 s,
-and the rumble that was playing stops with the controller that left. Everything receiver-side is
-unverified on hardware; there is no dongle here.
+and the rumble that was playing and the battery reading go with the controller that left. Two
+Pucks, or two Nereids, plugged in together are one entry, as item 8 notes. Everything
+receiver-side is unverified on hardware; there is no dongle here.
 
 **Deliberately absent:**
 - Bluetooth LE (28DE:1303). The pad speaks Valve's own protocol over GATT, not HID over GATT, so it

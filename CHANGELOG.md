@@ -26,7 +26,8 @@ computer. Those lines say "update Satellite too".
   is switched on shows up as a controller of its own, with its own card and
   its own binding, within half a second; one that is switched off leaves,
   and comes back to the same card and binding when it is switched on again.
-  Direct stays one choice for the whole adapter. This follows SDL and the
+  Direct stays one choice for the whole adapter. Two adapters of the same
+  model plugged in together are still read as one. This follows SDL and the
   Linux driver and has not been tried on an adapter yet.
 
 ### Changed
