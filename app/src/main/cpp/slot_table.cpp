@@ -36,6 +36,7 @@ void copyPadAxes(const DeviceState& nu, DeviceState& s) {
     s.sLY = nu.sLY;
     s.sRX = nu.sRX;
     s.sRY = nu.sRY;
+    s.extButtons = nu.extButtons;
 }
 
 // Copy-on-valid keeps the last known sample visible: a report that carries no motion must not
@@ -255,11 +256,14 @@ void SlotTable::publishIfChanged(HotSlot& slot) {
     if (!gamepad::consumePublishIfChanged(slot.state)) return;
     switch (binding.kind) {
     case SLOT_SATELLITE: {
+        const dish_session::SessionRef session = sessions_.find(binding.sessionHandle);
+        if (!session) return;
         dish_send::Framed report;
-        dish_send::frameGamepadReport(report, binding.controllerIndex,
-                                      dish_send::xusbReportOf(slot.state));
+        dish_send::frameGamepadReport(
+            report, session->protocolVersion.load(std::memory_order_relaxed),
+            binding.controllerIndex, dish_send::xusbReportOf(slot.state), slot.state.extButtons);
         report.closesStage1 = true;
-        dish_send::sendFramed(sessions_.find(binding.sessionHandle), &report, 1);
+        dish_send::sendFramed(session, &report, 1);
         return;
     }
     case SLOT_BLUETOOTH:
@@ -323,19 +327,19 @@ void SlotTable::sendUsbFrame(HotSlot& slot, const UsbFrame& frame, const bool wi
     const SlotBinding& binding = slot.binding;
     const dish_session::SessionRef session = sessions_.find(binding.sessionHandle);
     if (!session) return;
+    const int32_t protocolVersion = session->protocolVersion.load(std::memory_order_relaxed);
     dish_send::Framed batch[3];
     size_t count = 0;
     if (withGamepad) {
-        dish_send::frameGamepadReport(batch[count], binding.controllerIndex,
-                                      dish_send::xusbReportOf(slot.state));
+        dish_send::frameGamepadReport(batch[count], protocolVersion, binding.controllerIndex,
+                                      dish_send::xusbReportOf(slot.state), slot.state.extButtons);
         batch[count++].closesStage1 = true;
     }
     if (frame.motion != nullptr) {
         dish_send::frameMotion(batch[count++], binding.controllerIndex, *frame.motion);
     }
     if (frame.touch != nullptr) {
-        dish_send::frameTouchpad(batch[count++],
-                                 session->protocolVersion.load(std::memory_order_relaxed),
+        dish_send::frameTouchpad(batch[count++], protocolVersion,
                                  (uint8_t)(binding.controllerIndex & 0xFF), *frame.touch, false,
                                  false, frame.touchEventTimeMs, 0);
     }

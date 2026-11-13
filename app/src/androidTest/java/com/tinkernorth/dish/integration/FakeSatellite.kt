@@ -635,7 +635,7 @@ class FakeSatellite(
             .getOrElse { Cipher.getInstance("ChaCha20-Poly1305") }
 
     private companion object {
-        const val PROTOCOL_VERSION = 3
+        const val PROTOCOL_VERSION = 4
         const val PROTOCOL_VERSION_MIN = 1
 
         const val OP_HEARTBEAT = 0x0002

@@ -161,20 +161,24 @@ XUSB_REPORT xusbReportOf(const gamepad::DeviceState& s) {
 }
 
 // The satellite takes the pad state as a wire XUSB report, straight out of the stack: one slot
-// byte then the report, no allocation on the per-packet path.
-void frameGamepadReport(Framed& out, const int controllerIndex, const XUSB_REPORT& report) {
-    uint8_t payload[GAMEPAD_PAYLOAD_BYTES];
+// byte then the report, then the protocol 4 tail, no allocation on the per-packet path.
+void frameGamepadReport(Framed& out, const int32_t protocolVersion, const int controllerIndex,
+                        const XUSB_REPORT& report, const uint32_t extButtons) {
+    uint8_t payload[dish_wire::GAMEPAD_V4_PAYLOAD_BYTES];
     payload[0] = (uint8_t)(controllerIndex & 0xFF);
     memcpy(payload + 1, &report, sizeof(report));
-    frame(out, dish_wire::MSG_GAMEPAD_DATA, payload, sizeof(payload));
+    const size_t payloadLen = dish_wire::encodeGamepadTail(payload, protocolVersion, extButtons);
+    frame(out, dish_wire::MSG_GAMEPAD_DATA, payload, (uint16_t)payloadLen);
     out.tally = Tally::Gamepad;
     out.controller = (uint8_t)(controllerIndex & CTRL_INDEX_MASK);
 }
 
 bool sendGamepadReport(const SessionRef& session, const int controllerIndex,
-                       const XUSB_REPORT& report) {
+                       const XUSB_REPORT& report, const uint32_t extButtons) {
+    if (!session) return false;
     Framed d;
-    frameGamepadReport(d, controllerIndex, report);
+    frameGamepadReport(d, session->protocolVersion.load(std::memory_order_relaxed), controllerIndex,
+                       report, extButtons);
     return sendFramed(session, &d, 1) == 1;
 }
 

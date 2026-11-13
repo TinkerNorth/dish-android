@@ -26,9 +26,8 @@ struct XUSB_REPORT {
 };
 #pragma pack(pop)
 static_assert(sizeof(XUSB_REPORT) == 12, "XUSB_REPORT must be 12 bytes");
-
-// MSG_GAMEPAD_DATA: one slot byte then the wire XUSB report.
-inline constexpr size_t GAMEPAD_PAYLOAD_BYTES = 1 + sizeof(XUSB_REPORT);
+static_assert(1 + sizeof(XUSB_REPORT) == dish_wire::GAMEPAD_PAYLOAD_BYTES,
+              "MSG_GAMEPAD_DATA is one slot byte then the wire XUSB report");
 
 // Steady-state cadence is contractual (satellite docs/contract.md: 2000 ms). Probe
 // mode densifies RTT sampling only while the diagnostics latency panel is open; the
@@ -65,12 +64,14 @@ bool sendEncrypted(const dish_session::SessionRef& session, uint16_t msgType,
 
 XUSB_REPORT xusbReportOf(const gamepad::DeviceState& s);
 
-// Frames a MSG_GAMEPAD_DATA for one controller: its slot byte, then the wire XUSB report.
-void frameGamepadReport(Framed& out, int controllerIndex, const XUSB_REPORT& report);
+// Frames a MSG_GAMEPAD_DATA for one controller: its slot byte, then the wire XUSB report, then on
+// a session settled at protocol 4 the extended-buttons word.
+void frameGamepadReport(Framed& out, int32_t protocolVersion, int controllerIndex,
+                        const XUSB_REPORT& report, uint32_t extButtons);
 
 // True when the report left for the session.
 bool sendGamepadReport(const dish_session::SessionRef& session, int controllerIndex,
-                       const XUSB_REPORT& report);
+                       const XUSB_REPORT& report, uint32_t extButtons);
 
 struct MotionSample {
     int16_t gyro[3];

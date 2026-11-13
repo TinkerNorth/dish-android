@@ -56,10 +56,16 @@ inline constexpr uint8_t CRYPTO_DIR_SERVER_TO_CLIENT = 0x01;
 
 // Protocol 2 carries the pointer frame (mouse buttons and wheel) in MSG_TOUCHPAD.
 inline constexpr int32_t PROTOCOL_VERSION_TOUCHPAD_V2 = 2;
+// Protocol 4 carries the extended-buttons word behind the report in MSG_GAMEPAD_DATA.
+inline constexpr int32_t PROTOCOL_VERSION_EXTENDED_BUTTONS = 4;
 
 // Inner payload sizes (satellite docs/contract.md §Messages): the encoders below take arrays of
 // exactly these lengths, the send path sizes its buffers from them, and the receive arms match
 // msgLen against them.
+// MSG_GAMEPAD_DATA 0x0001 inner: ctrlIdx then the 12-byte XUSB report, and from protocol 4 the
+// extended-buttons word (u32 LE) behind them (satellite docs/contract.md §Extended buttons).
+inline constexpr size_t GAMEPAD_PAYLOAD_BYTES = 13;
+inline constexpr size_t GAMEPAD_V4_PAYLOAD_BYTES = 17;
 inline constexpr size_t MOTION_PAYLOAD_BYTES = 17;
 inline constexpr size_t BATTERY_PAYLOAD_BYTES = 3;
 inline constexpr size_t TOUCHPAD_V1_PAYLOAD_BYTES = 16;
@@ -82,6 +88,32 @@ inline void putLE32(uint8_t* dst, const uint32_t v) {
     dst[1] = static_cast<uint8_t>(v >> 8);
     dst[2] = static_cast<uint8_t>(v >> 16);
     dst[3] = static_cast<uint8_t>(v >> 24);
+}
+
+// The extended-buttons word, in SDL's names (satellite docs/contract.md §Extended buttons). The
+// bits above the known ones are reserved: a sender writes them as 0.
+inline constexpr uint32_t EXT_BUTTON_RIGHT_PADDLE1 = 0x0001;
+inline constexpr uint32_t EXT_BUTTON_LEFT_PADDLE1 = 0x0002;
+inline constexpr uint32_t EXT_BUTTON_RIGHT_PADDLE2 = 0x0004;
+inline constexpr uint32_t EXT_BUTTON_LEFT_PADDLE2 = 0x0008;
+inline constexpr uint32_t EXT_BUTTON_MISC1 = 0x0010;
+inline constexpr uint32_t EXT_BUTTON_LEFT_PAD_CLICK = 0x0020;
+inline constexpr uint32_t EXT_BUTTON_RIGHT_PAD_CLICK = 0x0040;
+inline constexpr uint32_t EXT_BUTTON_LEFT_TRIGGER_CLICK = 0x0080;
+inline constexpr uint32_t EXT_BUTTON_RIGHT_TRIGGER_CLICK = 0x0100;
+inline constexpr uint32_t EXT_BUTTON_LEFT_STICK_TOUCH = 0x0200;
+inline constexpr uint32_t EXT_BUTTON_RIGHT_STICK_TOUCH = 0x0400;
+inline constexpr uint32_t EXT_BUTTON_LEFT_GRIP_TOUCH = 0x0800;
+inline constexpr uint32_t EXT_BUTTON_RIGHT_GRIP_TOUCH = 0x1000;
+inline constexpr uint32_t EXT_BUTTONS_KNOWN_MASK = 0x1FFF;
+
+// Writes the protocol 4 tail behind a 13-byte gamepad payload and answers the payload's length
+// for the settled version.
+inline size_t encodeGamepadTail(uint8_t out[GAMEPAD_V4_PAYLOAD_BYTES],
+                                const int32_t protocolVersion, const uint32_t extButtons) {
+    if (protocolVersion < PROTOCOL_VERSION_EXTENDED_BUTTONS) return GAMEPAD_PAYLOAD_BYTES;
+    putLE32(out + GAMEPAD_PAYLOAD_BYTES, extButtons & EXT_BUTTONS_KNOWN_MASK);
+    return GAMEPAD_V4_PAYLOAD_BYTES;
 }
 
 // MSG_MOTION 0x000A inner, 17B: ctrlIdx, gyro xyz i16 LE, accel xyz i16 LE, tsΔus u32 LE.

@@ -53,6 +53,12 @@ gamepad::DeviceState buttons(const uint16_t wButtons) {
     return nu;
 }
 
+gamepad::DeviceState extendedButtons(const uint32_t extButtons) {
+    gamepad::DeviceState nu{};
+    nu.extButtons = extButtons;
+    return nu;
+}
+
 gamepad::TouchpadState pinnedTouch() {
     gamepad::TouchpadState t{};
     t.f0Active = true;
@@ -585,4 +591,91 @@ TEST_F(Slots, AMoonlightUrbHandsAllThreeToTheBridgeInOrderAndBluetoothOnlyTheGam
     EXPECT_EQ(reports[3].kind, dish_slots::SLOT_BLUETOOTH);
     EXPECT_EQ(reports[3].payload, dish_slots::BridgeReport::GAMEPAD);
     EXPECT_TRUE(sentBytes().empty());
+}
+
+namespace {
+
+// The inner payload of each MSG_GAMEPAD_DATA datagram, in the order sent.
+std::vector<Bytes> gamepadPayloadsOf(const std::vector<Bytes>& sent) {
+    const vector_session::Key key = vector_session::vectorKey();
+    std::vector<Bytes> out;
+    for (const Bytes& datagram : sent) {
+        const auto inner = fake_satellite::openFromClient(wire_vectors::kToken, key.bytes,
+                                                          datagram.data(), datagram.size());
+        EXPECT_TRUE(inner.has_value() && inner->msgType == dish_wire::MSG_GAMEPAD_DATA);
+        if (inner) out.push_back(inner->payload);
+    }
+    return out;
+}
+
+// The pinned USB report's 13 payload bytes with the protocol 4 word behind them.
+Bytes pinnedUsbPayloadWithTail(const uint32_t extButtons) {
+    const Bytes inner = bytesOf(wire_vectors::kUsbGamepadInner);
+    Bytes expected(inner.begin() + dish_wire::INNER_HEADER_BYTES, inner.end());
+    expected.push_back((uint8_t)extButtons);
+    expected.push_back((uint8_t)(extButtons >> 8));
+    expected.push_back((uint8_t)(extButtons >> 16));
+    expected.push_back((uint8_t)(extButtons >> 24));
+    return expected;
+}
+
+} // namespace
+
+// The protocol 4 word of each MSG_GAMEPAD_DATA datagram, in the order sent.
+std::vector<uint32_t> extendedButtonsOf(const std::vector<Bytes>& sent) {
+    std::vector<uint32_t> out;
+    for (const Bytes& payload : gamepadPayloadsOf(sent)) {
+        EXPECT_EQ(payload.size(), dish_wire::GAMEPAD_V4_PAYLOAD_BYTES);
+        if (payload.size() < dish_wire::GAMEPAD_V4_PAYLOAD_BYTES) continue;
+        out.push_back((uint32_t)payload[13] | (uint32_t)payload[14] << 8 |
+                      (uint32_t)payload[15] << 16 | (uint32_t)payload[16] << 24);
+    }
+    return out;
+}
+
+TEST_F(Slots, AUsbReportOnAProtocol4SessionCarriesTheExtendedButtonsWordBehindThePinnedReport) {
+    session->protocolVersion.store(4);
+    slots->bindSatellite(wire_vectors::kUsbDevice, handle, wire_vectors::kUsbController);
+    gamepad::DeviceState nu = pinnedUsbReport();
+    nu.extButtons = 0x00001003u;
+    slots->applyUsbReport(wire_vectors::kUsbDevice, nu);
+    EXPECT_EQ(gamepadPayloadsOf(sentBytes()),
+              std::vector<Bytes>{pinnedUsbPayloadWithTail(0x00001003u)});
+}
+
+TEST_F(Slots, AUsbReportOnAProtocol3SessionIsThePinnedThirteenByteFrameWhateverTheWord) {
+    session->protocolVersion.store(3);
+    slots->bindSatellite(wire_vectors::kUsbDevice, handle, wire_vectors::kUsbController);
+    gamepad::DeviceState nu = pinnedUsbReport();
+    nu.extButtons = 0x00001FFFu;
+    slots->applyUsbReport(wire_vectors::kUsbDevice, nu);
+    EXPECT_EQ(sentBytes(), std::vector<Bytes>{bytesOf(wire_vectors::kUsbGamepad)});
+}
+
+TEST_F(Slots, AChangeInTheExtendedButtonsAloneIsAReport) {
+    session->protocolVersion.store(4);
+    slots->bindSatellite(1, handle, 0);
+    slots->applyUsbReport(1, extendedButtons(0x0001));
+    slots->applyUsbReport(1, extendedButtons(0x0001));
+    slots->applyUsbReport(1, extendedButtons(0x0000));
+    slots->applyUsbReport(1, extendedButtons(0x0000));
+    EXPECT_EQ(extendedButtonsOf(sentBytes()), (std::vector<uint32_t>{0x0001, 0x0000}));
+}
+
+TEST_F(Slots, ReleasingEveryReportClearsTheExtendedButtons) {
+    session->protocolVersion.store(4);
+    slots->bindSatellite(1, handle, 0);
+    slots->applyUsbReport(1, extendedButtons(0x1000));
+    slots->releaseAll();
+    EXPECT_EQ(extendedButtonsOf(sentBytes()), (std::vector<uint32_t>{0x1000, 0x0000}));
+}
+
+TEST_F(Slots, AUrbOnAProtocol4SessionCarriesTheWordInItsGamepadDatagram) {
+    session->protocolVersion.store(4);
+    slots->bindSatellite(1, handle, 0);
+    const gamepad::DeviceState report = extendedButtons(0x0010);
+    dish_slots::UsbFrame frame;
+    frame.report = &report;
+    slots->applyUsbFrame(1, frame);
+    EXPECT_EQ(extendedButtonsOf(sentBytes()), (std::vector<uint32_t>{0x0010}));
 }

@@ -289,7 +289,7 @@ class BindingDiagMappersTest {
 
     private companion object {
         const val HEX = 16
-        const val FIRST_UNKNOWN_CAP_BIT = 0x0200
+        const val FIRST_UNKNOWN_CAP_BIT = 0x0400
 
         val WIRE_CAP_FEATURES =
             listOf(
@@ -302,6 +302,7 @@ class BindingDiagMappersTest {
                 ControllerDescriptor.CAP_MIC to Feature.MIC,
                 ControllerDescriptor.CAP_SPEAKER to Feature.SPEAKER,
                 ControllerDescriptor.CAP_HAPTIC_AUDIO to Feature.HAPTIC_AUDIO,
+                ControllerDescriptor.CAP_EXTENDED_BUTTONS to Feature.EXTENDED_BUTTONS,
             )
     }
 }

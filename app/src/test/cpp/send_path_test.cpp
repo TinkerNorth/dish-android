@@ -201,7 +201,7 @@ TEST_F(SendPath, AnOnScreenPadReportIsThePinnedBytesAndIsCountedForItsController
     report.sThumbLY = -32768;
     report.sThumbRX = 0;
     report.sThumbRY = -1;
-    EXPECT_TRUE(dish_send::sendGamepadReport(session, 0, report));
+    EXPECT_TRUE(dish_send::sendGamepadReport(session, 0, report, 0));
     EXPECT_EQ(sentBytes(), std::vector<Bytes>{bytesOf(wire_vectors::kScreenGamepad)});
     EXPECT_EQ(session->sentByCtrl[0].load(), 1u);
 }
@@ -338,7 +338,7 @@ TEST_F(SendPath, AnEmptyBatchSendsNothing) {
 
 TEST_F(SendPath, ABatchGoesOutUnderConsecutiveCountersInTheOrderItWasFramed) {
     dish_send::Framed batch[3];
-    dish_send::frameGamepadReport(batch[0], 1, dish_send::XUSB_REPORT{});
+    dish_send::frameGamepadReport(batch[0], 1, 1, dish_send::XUSB_REPORT{}, 0);
     dish_send::frameMotion(batch[1], 1, dish_send::MotionSample{{1, 2, 3}, {4, 5, 6}, 7});
     ASSERT_TRUE(dish_send::frame(batch[2], dish_wire::MSG_HEARTBEAT_PING, nullptr, 0));
     const uint64_t first = session->counter.load();
@@ -385,7 +385,7 @@ TEST_F(SendPath, ConcurrentSendersReachTheWireInTheOrderTheirCountersWereDrawn) 
     std::vector<std::thread> senders;
     for (int i = 0; i < kConcurrentSenders; i++) {
         senders.emplace_back([this] {
-            const uint8_t payload[dish_send::GAMEPAD_PAYLOAD_BYTES] = {};
+            const uint8_t payload[dish_wire::GAMEPAD_PAYLOAD_BYTES] = {};
             for (int n = 0; n < kDatagramsPerSender; n++) {
                 dish_send::sendEncrypted(session, dish_wire::MSG_GAMEPAD_DATA, payload,
                                          sizeof(payload));
@@ -439,7 +439,7 @@ TEST_F(SendPath, AReKeyMidStreamNeverSealsARestartedCounterUnderTheOldKey) {
     std::vector<std::thread> senders;
     for (int i = 0; i < kReKeySenders; i++) {
         senders.emplace_back([this, &stop] {
-            const uint8_t payload[dish_send::GAMEPAD_PAYLOAD_BYTES] = {};
+            const uint8_t payload[dish_wire::GAMEPAD_PAYLOAD_BYTES] = {};
             while (!stop.load()) {
                 dish_send::sendEncrypted(session, dish_wire::MSG_GAMEPAD_DATA, payload,
                                          sizeof(payload));
@@ -515,4 +515,55 @@ TEST_F(SendPath, TheSocketPortPutsThePinnedBytesOnTheWire) {
     EXPECT_TRUE(dish_send::sendEncrypted(s, dish_wire::MSG_HEARTBEAT_PING, nullptr, 0));
     EXPECT_EQ(satellite.receive(kReceiveTimeoutMs), bytesOf(wire_vectors::kHeartbeatPing));
     table.close(toSatellite);
+}
+
+namespace {
+
+dish_send::XUSB_REPORT pinnedScreenReport() {
+    dish_send::XUSB_REPORT report{};
+    report.wButtons = 0xF00F;
+    report.bLeftTrigger = 255;
+    report.bRightTrigger = 1;
+    report.sThumbLX = 32767;
+    report.sThumbLY = -32768;
+    report.sThumbRX = 0;
+    report.sThumbRY = -1;
+    return report;
+}
+
+// The pinned inner message with the protocol 4 tail: msgLen 17 and the word behind the report.
+Bytes pinnedScreenInnerWithTail(const uint32_t extButtons) {
+    Bytes expected = bytesOf(wire_vectors::kScreenGamepadInner);
+    expected[3] = 0x11;
+    expected.push_back((uint8_t)extButtons);
+    expected.push_back((uint8_t)(extButtons >> 8));
+    expected.push_back((uint8_t)(extButtons >> 16));
+    expected.push_back((uint8_t)(extButtons >> 24));
+    return expected;
+}
+
+} // namespace
+
+TEST_F(SendPath, AReportOnAProtocol4SessionCarriesTheExtendedButtonsWordBehindTheReport) {
+    session->protocolVersion.store(4);
+    EXPECT_TRUE(dish_send::sendGamepadReport(session, 0, pinnedScreenReport(), 0x00001003u));
+    const std::vector<Bytes> sent = sentBytes();
+    ASSERT_EQ(sent.size(), 1u);
+    EXPECT_EQ(openAsTheSatellite(sent[0]), pinnedScreenInnerWithTail(0x00001003u));
+    EXPECT_EQ(session->sentByCtrl[0].load(), 1u);
+}
+
+TEST_F(SendPath, AReportOnASessionBeforeProtocol4IsThePinnedThirteenByteFrameWhateverTheWord) {
+    for (int32_t version = 1; version < 4; version++) {
+        session->protocolVersion.store(version);
+        counterAt(bytesOf(wire_vectors::kScreenGamepad));
+        EXPECT_TRUE(dish_send::sendGamepadReport(session, 0, pinnedScreenReport(), 0x00001FFFu));
+        EXPECT_EQ(sentBytes(), std::vector<Bytes>{bytesOf(wire_vectors::kScreenGamepad)})
+            << "protocol " << version;
+    }
+}
+
+TEST_F(SendPath, AReportForASessionTheTableDoesNotKnowGoesNowhere) {
+    EXPECT_FALSE(dish_send::sendGamepadReport(table.find(handle + 1), 0, pinnedScreenReport(), 1));
+    EXPECT_TRUE(sentBytes().empty());
 }

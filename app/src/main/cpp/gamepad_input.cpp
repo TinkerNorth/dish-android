@@ -456,13 +456,14 @@ void resetState(DeviceState& s) {
     s.bLT = 0;
     s.bRT = 0;
     s.sLX = s.sLY = s.sRX = s.sRY = 0;
+    s.extButtons = 0;
     s.ltFromKey = false;
     s.rtFromKey = false;
     s.cButtons = 0;
 }
 
 bool consumePublishIfChanged(DeviceState& s) {
-    const bool sameButtons = s.lastWButtons == s.wButtons;
+    const bool sameButtons = s.lastWButtons == s.wButtons && s.lastExtButtons == s.extButtons;
     const bool sameTriggers = s.lastBLT == s.bLT && s.lastBRT == s.bRT;
     const bool sameLeftStick = s.lastSLX == s.sLX && s.lastSLY == s.sLY;
     const bool sameRightStick = s.lastSRX == s.sRX && s.lastSRY == s.sRY;
@@ -470,6 +471,7 @@ bool consumePublishIfChanged(DeviceState& s) {
     const bool isUnchanged = s.everPublished && sameReport;
     if (isUnchanged) return false;
     s.lastWButtons = s.wButtons;
+    s.lastExtButtons = s.extButtons;
     s.lastBLT = s.bLT;
     s.lastBRT = s.bRT;
     s.lastSLX = s.sLX;
@@ -483,6 +485,7 @@ bool consumePublishIfChanged(DeviceState& s) {
 void resetPublishLatch(DeviceState& s) {
     s.everPublished = false;
     s.lastWButtons = 0;
+    s.lastExtButtons = 0;
     s.lastBLT = 0;
     s.lastBRT = 0;
     s.lastSLX = 0;

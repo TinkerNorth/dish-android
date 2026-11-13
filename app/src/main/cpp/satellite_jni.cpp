@@ -563,7 +563,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendR
     report.sThumbLY = (int16_t)sLY;
     report.sThumbRX = (int16_t)sRX;
     report.sThumbRY = (int16_t)sRY;
-    dish_send::sendGamepadReport(s, controllerIndex, report);
+    dish_send::sendGamepadReport(s, controllerIndex, report, 0);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendMotion(

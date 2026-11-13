@@ -30,6 +30,7 @@ data class ControllerDescriptor(
             append(",\"mic\":").append((caps and CAP_MIC) != 0)
             append(",\"speaker\":").append((caps and CAP_SPEAKER) != 0)
             append(",\"hapticAudio\":").append((caps and CAP_HAPTIC_AUDIO) != 0)
+            append(",\"extendedButtons\":").append((caps and CAP_EXTENDED_BUTTONS) != 0)
             append("}")
             append(",\"touchpadMode\":\"").append(sanitizedMode()).append("\"}")
         }
@@ -58,6 +59,11 @@ data class ControllerDescriptor(
         // Protocol 3: this client plays the DualSense's haptic WAVEFORM into the pad's own
         // 4-channel endpoint. Without it the host reduces those lanes to RUMBLE.
         const val CAP_HAPTIC_AUDIO = 0x0100
+
+        // Protocol 4: this slot's pad sources the INPUT extended-buttons word (paddles, the
+        // Steam "..." button, pad and trigger clicks, capacitive touches). A claim, not a gate:
+        // the host reads the word whatever the cap says.
+        const val CAP_EXTENDED_BUTTONS = 0x0200
 
         // Protocol constants (never localized): valid descriptor touchpadMode values.
         const val TOUCHPAD_MODE_DS4 = "ds4"

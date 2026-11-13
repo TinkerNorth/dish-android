@@ -8,6 +8,11 @@ import org.junit.Test
 
 class DishProtocolTest {
     @Test
+    fun `the client speaks protocol 4, the INPUT frame with the extended-buttons word`() {
+        assertEquals(4, DISH_PROTOCOL_CURRENT)
+    }
+
+    @Test
     fun `no advertisement reads as unknown, not as a verdict`() {
         assertEquals(DishProtocolCompat.UNKNOWN, dishProtocolCompatFor(null))
         assertEquals(DishProtocolCompat.UNKNOWN, dishProtocolCompatFor(0))
