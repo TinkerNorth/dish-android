@@ -496,18 +496,21 @@ void resetPublishLatch(DeviceState& s) {
 }
 
 size_t formatDeviceStateJson(const DeviceState& s, char* buf, const size_t cap) {
+    const uint32_t wireExtButtons = s.extButtons & dish_wire::EXT_BUTTONS_KNOWN_MASK;
     const int n = snprintf(
         buf, cap,
         "{\"buttons\":%u,\"lt\":%u,\"rt\":%u,\"lx\":%d,\"ly\":%d,\"rx\":%d,\"ry\":%d,"
         "\"motionValid\":%s,\"gx\":%d,\"gy\":%d,\"gz\":%d,\"ax\":%d,\"ay\":%d,\"az\":%d,"
         "\"touchValid\":%s,\"f0Active\":%s,\"f0Id\":%u,\"f0X\":%d,\"f0Y\":%d,"
-        "\"f1Active\":%s,\"f1Id\":%u,\"f1X\":%d,\"f1Y\":%d,\"click\":%s}",
+        "\"f1Active\":%s,\"f1Id\":%u,\"f1X\":%d,\"f1Y\":%d,\"click\":%s,"
+        "\"extButtons\":%u,\"rightClick\":%s,\"wheel\":%d}",
         (unsigned)s.wButtons, (unsigned)s.bLT, (unsigned)s.bRT, (int)s.sLX, (int)s.sLY, (int)s.sRX,
         (int)s.sRY, s.motionValid ? "true" : "false", (int)s.gyroX, (int)s.gyroY, (int)s.gyroZ,
         (int)s.accelX, (int)s.accelY, (int)s.accelZ, s.touchValid ? "true" : "false",
         s.touch0Active ? "true" : "false", (unsigned)s.touch0Id, (int)s.touch0X, (int)s.touch0Y,
         s.touch1Active ? "true" : "false", (unsigned)s.touch1Id, (int)s.touch1X, (int)s.touch1Y,
-        s.touchClick ? "true" : "false");
+        s.touchClick ? "true" : "false", (unsigned)wireExtButtons,
+        s.touchRightDown ? "true" : "false", (int)s.touchScrollV);
     const bool fits = n >= 0 && (size_t)n < cap;
     return fits ? (size_t)n : 0;
 }

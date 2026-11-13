@@ -299,6 +299,29 @@ TEST_F(Slots, TheInspectorSeesMotionAndTouchOnlyWhileItIsOpen) {
     EXPECT_EQ(slots->formatDeviceState(99, openView, sizeof(openView)), 0u);
 }
 
+TEST_F(Slots, TheInspectorSeesTheExtendedButtonsWord) {
+    char view[gamepad::kDeviceStateJsonCap];
+    slots->prewarmDevice(1);
+    slots->setInspecting(true);
+    slots->applyUsbReport(1, extendedButtons(dish_wire::EXT_BUTTON_MISC1));
+    ASSERT_GT(slots->formatDeviceState(1, view, sizeof(view)), 0u);
+    EXPECT_NE(std::string(view).find("\"extButtons\":16,"), std::string::npos) << view;
+}
+
+TEST_F(Slots, TheInspectorSeesThePointersRightButtonAndWheel) {
+    gamepad::DeviceState nu{};
+    nu.touchValid = true;
+    nu.touchRightDown = true;
+    nu.touchScrollV = gamepad::kWheelNotch;
+    char view[gamepad::kDeviceStateJsonCap];
+    slots->prewarmDevice(1);
+    slots->setInspecting(true);
+    slots->applyUsbReport(1, nu);
+    ASSERT_GT(slots->formatDeviceState(1, view, sizeof(view)), 0u);
+    EXPECT_NE(std::string(view).find("\"rightClick\":true,"), std::string::npos) << view;
+    EXPECT_NE(std::string(view).find("\"wheel\":120}"), std::string::npos) << view;
+}
+
 TEST_F(Slots, OnlyAGamepadReportClosesTheStage1BenchWindow) {
     slots->bindSatellite(1, handle, 0);
     hotpath::setEnabled(true);

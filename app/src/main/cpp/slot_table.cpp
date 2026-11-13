@@ -65,6 +65,8 @@ void mirrorTouchForInspector(const DeviceState& nu, DeviceState& s) {
     s.touch1X = nu.touch1X;
     s.touch1Y = nu.touch1Y;
     s.touchClick = nu.touchClick;
+    s.touchRightDown = nu.touchRightDown;
+    s.touchScrollV = nu.touchScrollV;
 }
 
 void applyJoystickSample(DeviceState& state, const gamepad::FrameworkAxes& sample) {

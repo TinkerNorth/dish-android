@@ -309,6 +309,8 @@ bool consumePublishIfChanged(DeviceState& s);
 
 void resetPublishLatch(DeviceState& s);
 
+constexpr size_t kDeviceStateJsonCap = 512;
+
 // Serializes the wire-facing view of a DeviceState for the diagnostics inspector. Pure and
 // bounded (host-testable); returns bytes written excluding the NUL, or 0 if cap is too small.
 size_t formatDeviceStateJson(const DeviceState& s, char* buf, size_t cap);
