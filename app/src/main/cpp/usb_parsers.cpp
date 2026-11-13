@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 #include "usb_parsers.h"
+#include "wire_encoders.h"
 
 #include <string.h>
 #include <algorithm>
@@ -472,6 +473,19 @@ bool isASteamController(const Parser p) {
 bool modelExpectsFrameworkGamepad(const uint16_t vid, const uint16_t pid) {
     const KnownDevice* k = lookupKnown(vid, pid);
     return k == nullptr || !isASteamController(k->parser);
+}
+
+constexpr uint16_t kDualSenseEdgeProductId = 0x0DF2;
+constexpr uint16_t kSwitchProProductId = 0x2009;
+constexpr uint16_t kSwitchChargingGripProductId = 0x200E;
+
+bool modelHasExtendedButtons(const uint16_t vid, const uint16_t pid) {
+    const KnownDevice* k = lookupKnown(vid, pid);
+    if (k == nullptr) return false;
+    const bool isTheEdge = k->parser == Parser::DUALSENSE && pid == kDualSenseEdgeProductId;
+    const bool hasCapture = k->parser == Parser::SWITCH_PRO_USB &&
+                            (pid == kSwitchProProductId || pid == kSwitchChargingGripProductId);
+    return isASteamController(k->parser) || isTheEdge || hasCapture;
 }
 
 bool parserStreamsUnprompted(const Parser p) {
@@ -1126,6 +1140,22 @@ void decodeDualSenseTouch(const uint8_t* buf, const size_t len, DeviceState& s) 
     s.touchValid = true;
 }
 
+// The DualSense Edge's back buttons in the misc byte, SDL's PS5_LEFT/RIGHT_FUNCTION and
+// PS5_LEFT/RIGHT_PADDLE, as the contract's paddle 2 (Fn) and paddle 1 (back) bits.
+constexpr uint8_t kDs5EdgeLeftFnBit = 0x10;
+constexpr uint8_t kDs5EdgeRightFnBit = 0x20;
+constexpr uint8_t kDs5EdgeLeftPaddleBit = 0x40;
+constexpr uint8_t kDs5EdgeRightPaddleBit = 0x80;
+
+uint32_t dualSenseEdgeExtendedButtons(const uint8_t misc) {
+    uint32_t word = 0;
+    if (misc & kDs5EdgeLeftFnBit) word |= dish_wire::EXT_BUTTON_LEFT_PADDLE2;
+    if (misc & kDs5EdgeRightFnBit) word |= dish_wire::EXT_BUTTON_RIGHT_PADDLE2;
+    if (misc & kDs5EdgeLeftPaddleBit) word |= dish_wire::EXT_BUTTON_LEFT_PADDLE1;
+    if (misc & kDs5EdgeRightPaddleBit) word |= dish_wire::EXT_BUTTON_RIGHT_PADDLE1;
+    return word;
+}
+
 // Takes the whole ParserState rather than just the IMU calibration because the mic-mute button
 // needs a latch across reports; a null one decodes everything except the mute state, which is the
 // honest answer for a caller that kept no per-device memory.
@@ -1141,6 +1171,8 @@ bool decodeDualSense(const uint8_t* buf, const size_t len, DeviceState& s, Parse
     uint16_t buttons = decodePsButtons(buf[kDs5FaceByte], buf[kDs5ShoulderByte]);
     if (sticks != nullptr) applyMicMuteLatch(buf[kDs5MiscByte], *sticks, buttons);
     s.wButtons = buttons;
+    const bool isTheEdge = sticks != nullptr && sticks->productId == kDualSenseEdgeProductId;
+    s.extButtons = isTheEdge ? dualSenseEdgeExtendedButtons(buf[kDs5MiscByte]) : 0;
 
     const bool hasMotion = calib != nullptr && calib->valid && len >= kDs5MotionMinLen;
     if (hasMotion) decodePsMotion(buf, kDs5GyroOffset, kDs5AccelOffset, *calib, s);
@@ -1174,6 +1206,8 @@ constexpr ButtonBit kSwitchSharedByteBits[] = {
     {0x04, XUSB_THUMB_R},
     {0x08, XUSB_THUMB_L},
 };
+// SDL's SWITCH_SHARE, the Capture button, which its gamepad layer reads as misc1.
+constexpr uint8_t kSwitchCaptureBit = 0x20;
 constexpr ButtonBit kSwitchLeftByteBits[] = {
     {0x01, XUSB_DPAD_DOWN}, {0x02, XUSB_DPAD_UP}, {0x04, XUSB_DPAD_RIGHT},
     {0x08, XUSB_DPAD_LEFT}, {0x40, XUSB_LB},
@@ -1283,6 +1317,7 @@ bool decodeSwitchProUsb(const uint8_t* buf, const size_t len, DeviceState& s, Pa
     const uint8_t leftByte = buf[kSwitchLeftByte];
 
     s.wButtons = decodeSwitchProButtons(rightByte, sharedByte, leftByte);
+    s.extButtons = (sharedByte & kSwitchCaptureBit) ? dish_wire::EXT_BUTTON_MISC1 : 0;
     s.bLT = (leftByte & kSwitchZlBit) ? kTriggerMax : 0;
     s.bRT = (rightByte & kSwitchZrBit) ? kTriggerMax : 0;
 
@@ -1383,6 +1418,8 @@ bool decodeStadia(const uint8_t* buf, const size_t len, DeviceState& s) {
 // Steam Controller state packet, layout from SDL's src/joystick/hidapi/steam headers (zlib,
 // Copyright (C) Valve Corporation; see THIRD_PARTY.md). Buttons occupy the low 24 bits of a 64-bit
 // field whose bytes 3 and 4 are the analog triggers.
+constexpr uint32_t kSteamRightTriggerClick = 0x000001;
+constexpr uint32_t kSteamLeftTriggerClick = 0x000002;
 constexpr uint32_t kSteamRightBumper = 0x000004;
 constexpr uint32_t kSteamLeftBumper = 0x000008;
 constexpr uint32_t kSteamNorth = 0x000010;
@@ -1396,6 +1433,8 @@ constexpr uint32_t kSteamDpadDown = 0x000800;
 constexpr uint32_t kSteamMenu = 0x001000;
 constexpr uint32_t kSteamGuide = 0x002000;
 constexpr uint32_t kSteamEscape = 0x004000;
+constexpr uint32_t kSteamBackLeft = 0x008000;
+constexpr uint32_t kSteamBackRight = 0x010000;
 constexpr uint32_t kSteamLeftPadClicked = 0x020000;
 constexpr uint32_t kSteamRightPadClicked = 0x040000;
 constexpr uint32_t kSteamLeftPadFinger = 0x080000;
@@ -1478,6 +1517,21 @@ uint16_t decodeSteamButtons(const uint32_t btn) {
     return buttons;
 }
 
+// The extras in SDL's names: the grips are its two paddles, the full-pull trigger bits its trigger
+// clicks, and a left-pad click under a finger is the pad's, where trackSteamLeftStick leaves it.
+// The right pad's click stays R3 while the right pad is the right stick.
+uint32_t steamExtendedButtons(const uint32_t btn) {
+    uint32_t word = 0;
+    if (btn & kSteamBackLeft) word |= dish_wire::EXT_BUTTON_LEFT_PADDLE1;
+    if (btn & kSteamBackRight) word |= dish_wire::EXT_BUTTON_RIGHT_PADDLE1;
+    if (btn & kSteamLeftTriggerClick) word |= dish_wire::EXT_BUTTON_LEFT_TRIGGER_CLICK;
+    if (btn & kSteamRightTriggerClick) word |= dish_wire::EXT_BUTTON_RIGHT_TRIGGER_CLICK;
+    const bool leftPadClickedUnderAFinger =
+        (btn & kSteamLeftPadFinger) && (btn & kSteamLeftPadClicked);
+    if (leftPadClickedUnderAFinger) word |= dish_wire::EXT_BUTTON_LEFT_PAD_CLICK;
+    return word;
+}
+
 // One pair of axes carries either the stick or the left pad. The finger-down bit says which; the
 // interleave bit means pad frames alternate with stick frames worth holding on to.
 void trackSteamLeftStick(const uint8_t* buf, const uint32_t btn, ParserState& st,
@@ -1538,6 +1592,7 @@ bool decodeSteamController(const uint8_t* buf, const size_t len, DeviceState& s,
 
     trackSteamLeftStick(buf, btn, st, buttons);
     s.wButtons = buttons;
+    s.extButtons = steamExtendedButtons(btn);
     s.sLX = st.steamStickX;
     s.sLY = st.steamStickY;
 
@@ -1570,8 +1625,8 @@ constexpr int kTritonGyroOffset = 40;
 // SDL reads a trigger as 0..32767.
 constexpr int32_t kTritonTriggerMax = 32767;
 
-// SDL's TritonButtons bits for the buttons it maps onto its gamepad set. QAM, the four back
-// paddles, the trackpad and trigger clicks and the capacitive touches have no XUSB button.
+// SDL's TritonButtons bits. The first set maps onto the XUSB word; QAM, the four back paddles,
+// the trackpad and trigger clicks and the capacitive touches ride the extended-buttons word.
 constexpr uint32_t kTritonA = 0x00000001;
 constexpr uint32_t kTritonB = 0x00000002;
 constexpr uint32_t kTritonX = 0x00000004;
@@ -1587,6 +1642,19 @@ constexpr uint32_t kTritonMenu = 0x00004000;
 constexpr uint32_t kTritonL3 = 0x00008000;
 constexpr uint32_t kTritonSteam = 0x00010000;
 constexpr uint32_t kTritonL = 0x00080000;
+constexpr uint32_t kTritonQam = 0x00000010;
+constexpr uint32_t kTritonR4 = 0x00000080;
+constexpr uint32_t kTritonR5 = 0x00000100;
+constexpr uint32_t kTritonL4 = 0x00020000;
+constexpr uint32_t kTritonL5 = 0x00040000;
+constexpr uint32_t kTritonRightStickTouch = 0x00100000;
+constexpr uint32_t kTritonRightPadClick = 0x00400000;
+constexpr uint32_t kTritonRightTriggerClick = 0x00800000;
+constexpr uint32_t kTritonLeftStickTouch = 0x01000000;
+constexpr uint32_t kTritonLeftPadClick = 0x04000000;
+constexpr uint32_t kTritonLeftTriggerClick = 0x08000000;
+constexpr uint32_t kTritonRightGripTouch = 0x10000000;
+constexpr uint32_t kTritonLeftGripTouch = 0x20000000;
 
 struct WideButtonBit {
     uint32_t mask;
@@ -1617,6 +1685,37 @@ uint16_t tritonButtons(const uint32_t bits) {
         if (isDown) buttons |= bit.xusb;
     }
     return buttons;
+}
+
+struct ExtendedButtonBit {
+    uint32_t mask;
+    uint32_t ext;
+};
+// SDL's names: QAM is misc1, R4/L4/R5/L5 are paddle 1-4, the pad clicks are touchpad and misc2,
+// the trigger clicks misc3 and misc4, and the stick and grip touches the capsense inputs.
+constexpr ExtendedButtonBit kTritonExtendedBits[] = {
+    {kTritonQam, dish_wire::EXT_BUTTON_MISC1},
+    {kTritonR4, dish_wire::EXT_BUTTON_RIGHT_PADDLE1},
+    {kTritonL4, dish_wire::EXT_BUTTON_LEFT_PADDLE1},
+    {kTritonR5, dish_wire::EXT_BUTTON_RIGHT_PADDLE2},
+    {kTritonL5, dish_wire::EXT_BUTTON_LEFT_PADDLE2},
+    {kTritonLeftPadClick, dish_wire::EXT_BUTTON_LEFT_PAD_CLICK},
+    {kTritonRightPadClick, dish_wire::EXT_BUTTON_RIGHT_PAD_CLICK},
+    {kTritonLeftTriggerClick, dish_wire::EXT_BUTTON_LEFT_TRIGGER_CLICK},
+    {kTritonRightTriggerClick, dish_wire::EXT_BUTTON_RIGHT_TRIGGER_CLICK},
+    {kTritonLeftStickTouch, dish_wire::EXT_BUTTON_LEFT_STICK_TOUCH},
+    {kTritonRightStickTouch, dish_wire::EXT_BUTTON_RIGHT_STICK_TOUCH},
+    {kTritonLeftGripTouch, dish_wire::EXT_BUTTON_LEFT_GRIP_TOUCH},
+    {kTritonRightGripTouch, dish_wire::EXT_BUTTON_RIGHT_GRIP_TOUCH},
+};
+
+uint32_t tritonExtendedButtons(const uint32_t bits) {
+    uint32_t word = 0;
+    for (const ExtendedButtonBit& bit : kTritonExtendedBits) {
+        const bool isDown = (bits & bit.mask) != 0;
+        if (isDown) word |= bit.ext;
+    }
+    return word;
 }
 
 uint8_t tritonTriggerToWire(const int16_t raw) {
@@ -1666,7 +1765,9 @@ bool decodeSteamTriton(const uint8_t* buf, const size_t len, DeviceState& s, Par
     if (len < kTritonStateLen) return false;
     if (!isTritonStateReport(buf[0])) return false;
 
-    s.wButtons = tritonButtons(rdLe32(buf + kTritonButtonsOffset));
+    const uint32_t bits = rdLe32(buf + kTritonButtonsOffset);
+    s.wButtons = tritonButtons(bits);
+    s.extButtons = tritonExtendedButtons(bits);
     s.bLT = tritonTriggerToWire(rdLe16(buf, kTritonLeftTriggerOffset));
     s.bRT = tritonTriggerToWire(rdLe16(buf, kTritonRightTriggerOffset));
     readSticksLe16(buf, kTritonSticksOffset, s);
