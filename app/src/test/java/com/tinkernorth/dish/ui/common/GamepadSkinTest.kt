@@ -4,6 +4,7 @@
 package com.tinkernorth.dish.ui.common
 
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE_EDGE
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_SWITCHPRO
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
@@ -24,6 +25,11 @@ class GamepadSkinTest {
         assertEquals(GamepadSkin.PlayStation, gamepadSkinForControllerType(CONTROLLER_TYPE_PLAYSTATION))
         assertEquals(GamepadSkin.DualSense, gamepadSkinForControllerType(CONTROLLER_TYPE_DUALSENSE))
         assertEquals(GamepadSkin.Switch, gamepadSkinForControllerType(CONTROLLER_TYPE_SWITCHPRO))
+    }
+
+    @Test
+    fun `the DualSense Edge wears the DualSense skin`() {
+        assertEquals(GamepadSkin.DualSense, gamepadSkinForControllerType(CONTROLLER_TYPE_DUALSENSE_EDGE))
     }
 
     @Test

@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE_EDGE
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_SWITCHPRO
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
@@ -463,6 +464,7 @@ class ConfigureBindingsViewModel
                         CONTROLLER_TYPE_PLAYSTATION,
                         CONTROLLER_TYPE_DUALSENSE,
                         CONTROLLER_TYPE_SWITCHPRO,
+                        CONTROLLER_TYPE_DUALSENSE_EDGE,
                     )
                 }
             return destinationPotential(
@@ -997,6 +999,7 @@ class ConfigureBindingsViewModel
                 TypeOption(CONTROLLER_TYPE_XBOX, context.getString(R.string.picker_type_xbox)),
                 TypeOption(CONTROLLER_TYPE_DUALSENSE, context.getString(R.string.picker_type_dualsense)),
                 TypeOption(CONTROLLER_TYPE_SWITCHPRO, context.getString(R.string.picker_type_switchpro)),
+                TypeOption(CONTROLLER_TYPE_DUALSENSE_EDGE, context.getString(R.string.picker_type_dualsense_edge)),
             )
 
         // The four types a Moonlight host can be asked to plug in. Hard-coded because no host
@@ -1088,6 +1091,7 @@ class ConfigureBindingsViewModel
                         SLUG_DS4 -> context.getString(R.string.picker_type_playstation)
                         SLUG_DUALSENSE -> context.getString(R.string.picker_type_dualsense)
                         SLUG_SWITCHPRO -> context.getString(R.string.picker_type_switchpro)
+                        SLUG_DUALSENSE_EDGE -> context.getString(R.string.picker_type_dualsense_edge)
                         else -> null
                     }
                 TypeOption(t.id, bundled ?: t.name.ifBlank { t.slug })
@@ -1180,6 +1184,7 @@ class ConfigureBindingsViewModel
             const val SLUG_DS4 = "ds4"
             const val SLUG_DUALSENSE = "dualsense"
             const val SLUG_SWITCHPRO = "switchpro"
+            const val SLUG_DUALSENSE_EDGE = "dualsenseedge"
         }
     }
 

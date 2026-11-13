@@ -81,6 +81,10 @@
                     layout="@layout/setup_type_card" />
 
                 <include
+                    android:id="@+id/cardTypeDualsenseEdge"
+                    layout="@layout/setup_type_card" />
+
+                <include
                     android:id="@+id/cardMlAuto"
                     layout="@layout/setup_type_card" />
 

@@ -27,6 +27,7 @@ const val CONTROLLER_TYPE_XBOX = 0
 const val CONTROLLER_TYPE_PLAYSTATION = 1
 const val CONTROLLER_TYPE_DUALSENSE = 2
 const val CONTROLLER_TYPE_SWITCHPRO = 3
+const val CONTROLLER_TYPE_DUALSENSE_EDGE = 4
 
 data class ConnectionSummary(
     val id: String,

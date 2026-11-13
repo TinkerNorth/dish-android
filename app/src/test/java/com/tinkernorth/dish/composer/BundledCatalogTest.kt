@@ -53,15 +53,30 @@ class BundledCatalogTest {
     }
 
     @Test
+    fun `the DualSense Edge is a DualSense that renders the four paddles`() {
+        val edge = bundledTypeCapabilities(SLUG_DUALSENSE_EDGE)!!
+        assertEquals(
+            bundledTypeCapabilities(SLUG_DUALSENSE)!!.features + Feature.EXTENDED_BUTTONS,
+            edge.features,
+        )
+        assertFalse(Feature.EXTENDED_BUTTONS in bundledTypeCapabilities(SLUG_DUALSENSE)!!)
+    }
+
+    @Test
+    fun `typeCapabilitiesById resolves the Edge's id 4 to the Edge, not the Xbox fallback`() {
+        assertEquals(bundledTypeCapabilities(SLUG_DUALSENSE_EDGE), typeCapabilitiesById(CONTROLLER_TYPE_DUALSENSE_EDGE))
+    }
+
+    @Test
     fun `an unknown slug falls through to the server catalog`() {
         assertNull(bundledTypeCapabilities("gamecube"))
     }
 
     @Test
-    fun `only the two Sony types carry audio endpoints`() {
+    fun `only the Sony types carry audio endpoints`() {
         // The composite personas that give an emulated pad real speaker and microphone
-        // endpoints exist for DualSense and DualShock 4 v2 only.
-        for (slug in listOf(SLUG_DS4, SLUG_DUALSENSE)) {
+        // endpoints exist for DualSense, DualSense Edge and DualShock 4 v2 only.
+        for (slug in listOf(SLUG_DS4, SLUG_DUALSENSE, SLUG_DUALSENSE_EDGE)) {
             val caps = bundledTypeCapabilities(slug)!!
             assertTrue(slug, Feature.MIC in caps)
             assertTrue(slug, Feature.SPEAKER in caps)
@@ -88,6 +103,7 @@ class BundledCatalogTest {
         assertTrue(Feature.MOTION in typeCapabilitiesById(CONTROLLER_TYPE_PLAYSTATION))
         assertTrue(Feature.MOTION in typeCapabilitiesById(CONTROLLER_TYPE_DUALSENSE))
         assertTrue(Feature.MOTION in typeCapabilitiesById(CONTROLLER_TYPE_SWITCHPRO))
+        assertTrue(Feature.MOTION in typeCapabilitiesById(CONTROLLER_TYPE_DUALSENSE_EDGE))
         assertFalse(Feature.MOTION in typeCapabilitiesById(CONTROLLER_TYPE_XBOX))
         // Switch Pro is the only motion pad without a touchpad.
         assertTrue(Feature.TOUCHPAD in typeCapabilitiesById(CONTROLLER_TYPE_DUALSENSE))

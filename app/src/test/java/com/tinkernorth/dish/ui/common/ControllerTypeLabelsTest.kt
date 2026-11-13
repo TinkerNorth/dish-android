@@ -4,6 +4,7 @@ package com.tinkernorth.dish.ui.common
 
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE_EDGE
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_SWITCHPRO
 import com.tinkernorth.dish.core.net.moonlight.NINTENDO
@@ -19,6 +20,12 @@ class ControllerTypeLabelsTest {
         assertEquals(R.string.picker_type_playstation, bundledControllerTypeLabelRes(CONTROLLER_TYPE_PLAYSTATION))
         assertEquals(R.string.picker_type_dualsense, bundledControllerTypeLabelRes(CONTROLLER_TYPE_DUALSENSE))
         assertEquals(R.string.picker_type_switchpro, bundledControllerTypeLabelRes(CONTROLLER_TYPE_SWITCHPRO))
+    }
+
+    @Test
+    fun `the DualSense Edge has its own label and wears the DualSense silhouette`() {
+        assertEquals(R.string.picker_type_dualsense_edge, bundledControllerTypeLabelRes(CONTROLLER_TYPE_DUALSENSE_EDGE))
+        assertEquals(R.drawable.ic_ctrl_dualsense, bundledControllerTypeGlyphRes(CONTROLLER_TYPE_DUALSENSE_EDGE))
     }
 
     @Test

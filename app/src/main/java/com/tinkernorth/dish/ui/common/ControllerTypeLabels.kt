@@ -6,6 +6,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE_EDGE
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_SWITCHPRO
 import com.tinkernorth.dish.core.net.moonlight.NINTENDO
@@ -20,6 +21,7 @@ fun bundledControllerTypeLabelRes(type: Int): Int =
         CONTROLLER_TYPE_PLAYSTATION -> R.string.picker_type_playstation
         CONTROLLER_TYPE_DUALSENSE -> R.string.picker_type_dualsense
         CONTROLLER_TYPE_SWITCHPRO -> R.string.picker_type_switchpro
+        CONTROLLER_TYPE_DUALSENSE_EDGE -> R.string.picker_type_dualsense_edge
         else -> R.string.picker_type_xbox
     }
 
@@ -40,7 +42,7 @@ fun moonlightTypeLabelRes(type: Int): Int =
 fun bundledControllerTypeGlyphRes(type: Int): Int =
     when (type) {
         CONTROLLER_TYPE_PLAYSTATION -> R.drawable.ic_ctrl_ds4
-        CONTROLLER_TYPE_DUALSENSE -> R.drawable.ic_ctrl_dualsense
+        CONTROLLER_TYPE_DUALSENSE, CONTROLLER_TYPE_DUALSENSE_EDGE -> R.drawable.ic_ctrl_dualsense
         CONTROLLER_TYPE_SWITCHPRO -> R.drawable.ic_ctrl_switchpro
         else -> R.drawable.ic_ctrl_xbox360
     }
