@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <string>
 
+#include "gamepad_input.h"
+
 namespace usbhost {
 
 struct AttachResult {
@@ -55,5 +57,9 @@ void sendTriggerEffects(int32_t syntheticDeviceId, const uint8_t* left, const ui
 // MSG_MIC_LED's own state byte: 0 off, 1 on, 2 pulse. Only the DualSense has the lamp; every other
 // family drops the write in the builder.
 void sendMicMuteLed(int32_t syntheticDeviceId, uint8_t state);
+
+// The slot's trackpad pick for a Steam Controller (gamepad::TrackpadPick), read by its poller
+// before each decode.
+void setTrackpadPick(int32_t syntheticDeviceId, gamepad::TrackpadPick pick);
 
 } // namespace usbhost

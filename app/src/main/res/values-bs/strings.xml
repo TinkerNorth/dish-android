@@ -475,6 +475,12 @@
     <string name="binding_func_motion">Pokret</string>
     <string name="binding_func_touchpad">Dodirna ploča</string>
     <string name="binding_func_mouse">Miš</string>
+    <!-- A Steam Controller's trackpads: the row and its four picks. -->
+    <string name="binding_func_trackpads">Trackpadovi</string>
+    <string name="trackpad_pick_stick">Desna palica</string>
+    <string name="trackpad_pick_pad">Touchpad</string>
+    <string name="trackpad_pick_mouse">Miš</string>
+    <string name="trackpad_pick_off">Isključeno</string>
     <string name="binding_func_gyro">Žiro</string>
     <string name="binding_func_mic">Mikrofon</string>
     <string name="binding_func_speaker">Zvuk kontrolera</string>

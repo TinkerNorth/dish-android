@@ -137,6 +137,7 @@ add_executable(usb_parsers_test
     usb_parsers_test.cpp
     "${SATELLITE_CPP}/usb_parsers.cpp"
     "${SATELLITE_CPP}/usb_hid_descriptor.cpp"
+    "${SATELLITE_CPP}/gamepad_input.cpp"
 )
 target_include_directories(usb_parsers_test PRIVATE "${SATELLITE_CPP}")
 target_compile_options(usb_parsers_test PRIVATE -Wall -Wextra -Wpedantic -Werror)

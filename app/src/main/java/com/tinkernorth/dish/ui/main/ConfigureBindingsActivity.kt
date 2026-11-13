@@ -32,6 +32,7 @@ import com.tinkernorth.dish.databinding.BindingValueNoneBinding
 import com.tinkernorth.dish.databinding.DialogCardListBinding
 import com.tinkernorth.dish.databinding.SetupReviewCardBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
+import com.tinkernorth.dish.repository.TrackpadPick
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DIMMED_ALPHA
 import com.tinkernorth.dish.ui.common.DishNavigator
@@ -41,6 +42,7 @@ import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
 import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setLeadingIcon
 import com.tinkernorth.dish.ui.common.tierPillSpec
+import com.tinkernorth.dish.ui.common.trackpadPickLabelRes
 import com.tinkernorth.dish.ui.donate.wireDonateButton
 import com.tinkernorth.dish.ui.setup.ReviewFlow
 import com.tinkernorth.dish.ui.setup.bindCapabilityRows
@@ -301,7 +303,35 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
         bindEmulateRow(state)
         bindMotionRow(state)
         bindRumbleRow(state)
+        bindTrackpadRow(state)
         bindAudioRows(state)
+    }
+
+    // A Steam Controller's two trackpads share one pick. The row shows the pick in force, which
+    // the type or the host can hold below the stored one (a surface the type lacks, a mouse the
+    // host has not granted), so what it says is what the wire carries.
+    private fun bindTrackpadRow(state: ConfigUiState) {
+        val bz = binding.sectionBinding
+        val visible = state.trackpadChoices.isNotEmpty()
+        bz.trackpadDivider.visibility = if (visible) View.VISIBLE else View.GONE
+        bz.trackpadRow.visibility = if (visible) View.VISIBLE else View.GONE
+        if (!visible) return
+        bz.tvTrackpadPick.text = getString(trackpadPickLabelRes(state.trackpadPickInForce))
+        bz.trackpadRow.setOnClickListener { showTrackpadMenu(state.trackpadChoices, state.trackpadPickInForce) }
+    }
+
+    private fun showTrackpadMenu(
+        choices: List<TrackpadPick>,
+        current: TrackpadPick,
+    ) {
+        val labels = choices.map { getString(trackpadPickLabelRes(it)) }.toTypedArray()
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.binding_func_trackpads)
+            .setSingleChoiceItems(labels, choices.indexOf(current)) { dialog, which ->
+                viewModel.setTrackpadPick(choices[which])
+                dialog.dismiss()
+            }.setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     // The listener is cleared before the checked state is set: setChecked fires it, and a render

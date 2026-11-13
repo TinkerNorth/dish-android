@@ -3653,3 +3653,194 @@ TEST(ExtendedButtonsModel, EveryOtherPadSourcesNothing) {
     EXPECT_FALSE(usbparsers::modelHasExtendedButtons(0x057E, 0x2019));
     EXPECT_FALSE(usbparsers::modelHasExtendedButtons(0x1234, 0x5678));
 }
+
+// ---- the Steam trackpads through the per-slot pick ------------------------------------------
+
+TEST(SteamTrackpads, TheDefaultPickIsTheRightStickAsToday) {
+    ParserState st;
+    EXPECT_EQ(gamepad::TrackpadPick::STICK, st.trackpadPick);
+}
+
+// SDL rotates the left pad by -15 degrees and the right pad by +15 (RotatePad with
+// -flRotationAngle and flRotationAngle), so a finger at the pad's +x edge lands as below.
+TEST(SteamTrackpads, PadPickPutsTheLeftPadOnTheLeftHalfThroughTheShellRotation) {
+    ParserState st;
+    st.trackpadPick = gamepad::TrackpadPick::PAD;
+    auto r = steamState(kBtnLeftPadFinger);
+    setLe16(r, 16, 32767);
+    setLe16(r, 18, 0);
+    DeviceState s;
+    ASSERT_TRUE(decodeSteam(r, s, st));
+    ASSERT_TRUE(s.touchValid);
+    EXPECT_TRUE(s.touch0Active);
+    EXPECT_EQ(-559, s.touch0X);
+    EXPECT_EQ(8480, s.touch0Y);
+    EXPECT_FALSE(s.touch1Active);
+    EXPECT_EQ(0, s.sLX);
+    EXPECT_EQ(0, s.sLY);
+}
+
+TEST(SteamTrackpads, PadPickPutsTheRightPadOnTheRightHalfAndOffTheStick) {
+    ParserState st;
+    st.trackpadPick = gamepad::TrackpadPick::PAD;
+    auto r = steamState(kBtnRightPadFinger);
+    setLe16(r, 20, 32767);
+    setLe16(r, 22, 0);
+    DeviceState s;
+    ASSERT_TRUE(decodeSteam(r, s, st));
+    ASSERT_TRUE(s.touchValid);
+    EXPECT_TRUE(s.touch1Active);
+    EXPECT_EQ(32209, s.touch1X);
+    EXPECT_EQ(-8480, s.touch1Y);
+    EXPECT_FALSE(s.touch0Active);
+    EXPECT_EQ(0, s.sRX);
+    EXPECT_EQ(0, s.sRY);
+}
+
+TEST(SteamTrackpads, OutsideTheStickPickTheRightPadClickIsTheSurfaceClickAndNotR3) {
+    for (const gamepad::TrackpadPick pick :
+         {gamepad::TrackpadPick::PAD, gamepad::TrackpadPick::MOUSE}) {
+        ParserState st;
+        st.trackpadPick = pick;
+        DeviceState s;
+        ASSERT_TRUE(decodeSteam(steamState(kBtnRightPadFinger | kBtnRightPadClicked), s, st));
+        EXPECT_EQ(0, s.wButtons & XUSB_THUMB_R) << (int)pick;
+        EXPECT_TRUE(s.touchClick) << (int)pick;
+        EXPECT_EQ(0u, s.extButtons) << (int)pick;
+    }
+}
+
+TEST(SteamTrackpads, OffPickDropsThePositionsAndSendsBothClicksAsExtendedButtons) {
+    ParserState st;
+    st.trackpadPick = gamepad::TrackpadPick::OFF;
+    auto r = steamState(kBtnLeftPadFinger | kBtnLeftPadClicked | kBtnRightPadFinger |
+                        kBtnRightPadClicked);
+    setLe16(r, 16, 20000);
+    setLe16(r, 20, 20000);
+    DeviceState s;
+    ASSERT_TRUE(decodeSteam(r, s, st));
+    EXPECT_FALSE(s.touch0Active);
+    EXPECT_FALSE(s.touch1Active);
+    EXPECT_EQ(0, s.sRX);
+    EXPECT_EQ(0, s.wButtons & XUSB_THUMB_R);
+    EXPECT_EQ(dish_wire::EXT_BUTTON_LEFT_PAD_CLICK | dish_wire::EXT_BUTTON_RIGHT_PAD_CLICK,
+              s.extButtons);
+}
+
+TEST(SteamTrackpads, MousePickMakesTheRightPadTheCursorAndTheLeftPadTheWheel) {
+    ParserState st;
+    st.trackpadPick = gamepad::TrackpadPick::MOUSE;
+    auto cursor = steamState(kBtnRightPadFinger | kBtnRightPadClicked);
+    setLe16(cursor, 20, 0);
+    setLe16(cursor, 22, 0);
+    DeviceState s;
+    ASSERT_TRUE(decodeSteam(cursor, s, st));
+    EXPECT_TRUE(s.touch0Active);
+    EXPECT_TRUE(s.touchClick);
+    EXPECT_FALSE(s.touchRightDown);
+
+    auto rest = steamState(kBtnLeftPadFinger);
+    setLe16(rest, 16, 0);
+    setLe16(rest, 18, 0);
+    DeviceState r0;
+    ASSERT_TRUE(decodeSteam(rest, r0, st));
+    auto swipe = steamState(kBtnLeftPadFinger | kBtnLeftPadClicked);
+    setLe16(swipe, 16, 0);
+    setLe16(swipe, 18, 8500);
+    DeviceState r1;
+    ASSERT_TRUE(decodeSteam(swipe, r1, st));
+    EXPECT_TRUE(r1.touchRightDown);
+    EXPECT_FALSE(r1.touchClick);
+    EXPECT_EQ(2 * gamepad::kWheelNotch, r1.touchScrollV);
+    EXPECT_EQ(0, r1.wButtons & XUSB_THUMB_L);
+}
+
+TEST(TritonTrackpads, TheDefaultPickLeavesBothPadsOffTheWireAndTheirClicksInTheWord) {
+    auto r = tritonState(kTritonStateId, kTritonLeftPadTouch | kTritonRightPadTouch |
+                                             kTritonLeftPadClick | kTritonRightPadClick);
+    setLe16(r, 18, 1000);
+    setLe16(r, 24, -1000);
+    DeviceState s;
+    ASSERT_TRUE(decodeTriton(r, s));
+    EXPECT_TRUE(s.touchValid);
+    EXPECT_FALSE(s.touch0Active);
+    EXPECT_FALSE(s.touch1Active);
+    EXPECT_EQ(dish_wire::EXT_BUTTON_LEFT_PAD_CLICK | dish_wire::EXT_BUTTON_RIGHT_PAD_CLICK,
+              s.extButtons);
+}
+
+TEST(TritonTrackpads, PadPickReadsThePadsAtEighteenAndTwentyFourOnThePlainReports) {
+    for (const uint8_t id : {kTritonStateId, kTritonStateBleId}) {
+        ParserState st;
+        st.trackpadPick = gamepad::TrackpadPick::PAD;
+        auto r = tritonState(id, kTritonLeftPadTouch | kTritonRightPadTouch);
+        setLe16(r, 18, 1000);
+        setLe16(r, 20, 2000);
+        setLe16(r, 24, -1000);
+        setLe16(r, 26, -2000);
+        DeviceState s;
+        ASSERT_TRUE(decodeTriton(r, s, st)) << (int)id;
+        ASSERT_TRUE(s.touchValid) << (int)id;
+        EXPECT_TRUE(s.touch0Active) << (int)id;
+        EXPECT_EQ(-15884, s.touch0X) << (int)id;
+        EXPECT_EQ(-2000, s.touch0Y) << (int)id;
+        EXPECT_TRUE(s.touch1Active) << (int)id;
+        EXPECT_EQ(15884, s.touch1X) << (int)id;
+        EXPECT_EQ(2000, s.touch1Y) << (int)id;
+    }
+}
+
+TEST(TritonTrackpads, PadPickReadsThePadsAtTwentyAndTwentySixOnTheTimestampReport) {
+    ParserState st;
+    st.trackpadPick = gamepad::TrackpadPick::PAD;
+    auto r = tritonState(kTritonStateTimestampId, kTritonLeftPadTouch | kTritonRightPadTouch);
+    setLe16(r, 20, 1000);
+    setLe16(r, 22, 2000);
+    setLe16(r, 26, -1000);
+    setLe16(r, 28, -2000);
+    DeviceState s;
+    ASSERT_TRUE(decodeTriton(r, s, st));
+    EXPECT_EQ(-15884, s.touch0X);
+    EXPECT_EQ(-2000, s.touch0Y);
+    EXPECT_EQ(15884, s.touch1X);
+    EXPECT_EQ(2000, s.touch1Y);
+}
+
+TEST(TritonTrackpads, APadWithoutItsTouchBitIsLiftedWhateverItsCoordinates) {
+    ParserState st;
+    st.trackpadPick = gamepad::TrackpadPick::PAD;
+    auto r = tritonState(kTritonStateId, kTritonRightPadTouch);
+    setLe16(r, 18, 1000);
+    setLe16(r, 24, 1000);
+    DeviceState s;
+    ASSERT_TRUE(decodeTriton(r, s, st));
+    EXPECT_FALSE(s.touch0Active);
+    EXPECT_TRUE(s.touch1Active);
+}
+
+TEST(TritonTrackpads, PadPickMakesEitherPadClickTheSurfaceClickAndNotAnExtendedButton) {
+    ParserState st;
+    st.trackpadPick = gamepad::TrackpadPick::PAD;
+    DeviceState s;
+    ASSERT_TRUE(decodeTriton(tritonState(kTritonStateId, kTritonLeftPadTouch | kTritonLeftPadClick),
+                             s, st));
+    EXPECT_TRUE(s.touchClick);
+    EXPECT_EQ(0u, s.extButtons);
+}
+
+TEST(TritonTrackpads, EveryPickLeavesTheRealRightStickAlone) {
+    for (const gamepad::TrackpadPick pick :
+         {gamepad::TrackpadPick::STICK, gamepad::TrackpadPick::PAD, gamepad::TrackpadPick::MOUSE,
+          gamepad::TrackpadPick::OFF}) {
+        ParserState st;
+        st.trackpadPick = pick;
+        auto r = tritonState(kTritonStateId, kTritonRightPadTouch);
+        setLe16(r, 14, 5000);
+        setLe16(r, 16, -6000);
+        setLe16(r, 24, 30000);
+        DeviceState s;
+        ASSERT_TRUE(decodeTriton(r, s, st));
+        EXPECT_EQ(5000, s.sRX) << (int)pick;
+        EXPECT_EQ(-6000, s.sRY) << (int)pick;
+    }
+}

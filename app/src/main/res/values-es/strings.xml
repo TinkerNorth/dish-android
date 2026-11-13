@@ -476,6 +476,12 @@
     <string name="binding_func_motion">Movimiento</string>
     <string name="binding_func_touchpad">Panel táctil</string>
     <string name="binding_func_mouse">Ratón</string>
+    <!-- A Steam Controller's trackpads: the row and its four picks. -->
+    <string name="binding_func_trackpads">Trackpads</string>
+    <string name="trackpad_pick_stick">Stick derecho</string>
+    <string name="trackpad_pick_pad">Panel táctil</string>
+    <string name="trackpad_pick_mouse">Ratón</string>
+    <string name="trackpad_pick_off">Apagado</string>
     <string name="binding_func_gyro">Giro</string>
     <string name="binding_func_mic">Micrófono</string>
     <string name="binding_func_speaker">Sonido del mando</string>

@@ -26,6 +26,7 @@ import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.SlotToggleStores
 import com.tinkernorth.dish.source.store.SpeakerEnabledStore
+import com.tinkernorth.dish.source.store.TrackpadPickStore
 import com.tinkernorth.dish.source.system.MicPermissionGate
 import com.tinkernorth.dish.source.usb.PhysicalPadSources
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
@@ -147,6 +148,7 @@ class ConfigureBindingsAudioTogglesTest {
                         rumble = mockk<RumbleEnabledStore>(relaxed = true),
                         mic = micStore,
                         speaker = speakerStore,
+                        trackpadPick = mockk<TrackpadPickStore> { every { pickFor(any()) } returns null },
                     ),
                 micPermission = micPermission,
                 capabilityComposer = composer,

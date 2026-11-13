@@ -679,3 +679,26 @@ TEST_F(Slots, AUrbOnAProtocol4SessionCarriesTheWordInItsGamepadDatagram) {
     slots->applyUsbFrame(1, frame);
     EXPECT_EQ(extendedButtonsOf(sentBytes()), (std::vector<uint32_t>{0x0010}));
 }
+
+TEST_F(Slots, AUrbCarriesTheTouchFramesRightButtonAndWheelOnAProtocol2Session) {
+    session->protocolVersion.store(2);
+    slots->bindSatellite(1, handle, 0);
+    gamepad::TouchpadState t = pinnedTouch();
+    t.rightDown = true;
+    dish_slots::UsbFrame frame;
+    frame.touch = &t;
+    frame.touchScrollV = 240;
+    slots->applyUsbFrame(1, frame);
+    const std::vector<Bytes> sent = sentBytes();
+    ASSERT_EQ(sent.size(), 1u);
+    const vector_session::Key key = vector_session::vectorKey();
+    const auto inner = fake_satellite::openFromClient(wire_vectors::kToken, key.bytes,
+                                                      sent[0].data(), sent[0].size());
+    ASSERT_TRUE(inner.has_value());
+    EXPECT_EQ(inner->msgType, dish_wire::MSG_TOUCHPAD);
+    ASSERT_EQ(inner->payload.size(), dish_wire::TOUCHPAD_V2_PAYLOAD_BYTES);
+    EXPECT_EQ(inner->payload[2],
+              dish_wire::TOUCHPAD_BUTTON_LEFT | dish_wire::TOUCHPAD_BUTTON_RIGHT);
+    EXPECT_EQ(inner->payload[17], 240 & 0xFF);
+    EXPECT_EQ(inner->payload[18], 0);
+}

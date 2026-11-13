@@ -86,6 +86,7 @@ class CapabilityComposerLightbarTest {
                 every { modelHasTriggerEffects(any(), any()) } returns false
                 every { modelHasTriggerRumble(any(), any()) } returns false
                 every { modelHasExtendedButtons(any(), any()) } returns false
+                every { modelSteamTrackpads(any(), any()) } returns 0
                 every { isKnownFastLaneModel(any(), any()) } returns true
             }
         val routes: PadAudioRoutes =
@@ -116,6 +117,11 @@ class CapabilityComposerLightbarTest {
                 rumble = mockk { every { state } returns MutableStateFlow(emptyMap()) },
                 mic = mockk { every { state } returns MutableStateFlow(emptyMap()) },
                 speaker = mockk { every { state } returns MutableStateFlow(emptyMap()) },
+                trackpadPick =
+                    mockk {
+                        every { state } returns MutableStateFlow(emptyMap())
+                        every { pickFor(any()) } returns null
+                    },
             )
         return CapabilityComposer(
             availability,

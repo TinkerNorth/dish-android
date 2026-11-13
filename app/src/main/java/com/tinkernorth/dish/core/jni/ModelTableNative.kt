@@ -58,6 +58,12 @@ object ModelTableNative {
         productId: Int,
     ): Boolean
 
+    // 0 none, 1 the 2015 Steam Controller, 2 the 2026 one (composer/TouchpadRouting.SteamTrackpads).
+    external fun modelSteamTrackpads(
+        vendorId: Int,
+        productId: Int,
+    ): Int
+
     external fun modelFrameworkRumbleUnreliable(
         vendorId: Int,
         productId: Int,

@@ -29,6 +29,7 @@ import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.SlotToggleStores
 import com.tinkernorth.dish.source.store.SpeakerEnabledStore
+import com.tinkernorth.dish.source.store.TrackpadPickStore
 import com.tinkernorth.dish.source.system.MicPermissionGate
 import com.tinkernorth.dish.source.usb.PhysicalPadSources
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
@@ -140,7 +141,13 @@ class ConfigureBindingsDefaultTypeTest {
                 context,
                 hub,
                 PhysicalPadSources(gamepadRegistry, native, usbGamepadManager, mockk(relaxed = true)),
-                SlotToggleStores(motionEnabledStore, rumbleEnabledStore, micEnabledStore, speakerEnabledStore),
+                SlotToggleStores(
+                    motionEnabledStore,
+                    rumbleEnabledStore,
+                    micEnabledStore,
+                    speakerEnabledStore,
+                    mockk<TrackpadPickStore> { every { pickFor(any()) } returns null },
+                ),
                 micPermission,
                 capabilityComposer,
                 satellite,

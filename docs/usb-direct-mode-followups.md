@@ -237,11 +237,18 @@ The right pad's click stays R3 while the right pad is the right stick (SDL maps 
 too), so no position or click lands in two wire fields. Which type renders which bit is the
 satellite's (contract.md "Extended buttons"); unverified on hardware like the rest of the decoder.
 
+**Trackpads (the per-slot pick, `gamepad::routeSteamTrackpads`):** the configure screen's
+Trackpads row picks `stick` (the right pad as the right stick with its click as R3, the default),
+`pad` (both pads on the type's touch surface, left half and right half, either click the surface
+click), `mouse` (the right pad as the cursor, the left pad as the wheel and right button) or `off`
+(clicks in the extended-buttons word). One pick covers both pads, and the router test pins that a
+position or a click lands in exactly one wire field, so the double actuation the earlier text
+warned about cannot happen. Unverified on hardware like the rest.
+
 **Deliberately absent:**
 - Rumble. The pad has no motors, only trackpad voice coils driven by `ID_TRIGGER_HAPTIC_PULSE`
   pulse trains; the simple rumble command is Steam Deck firmware only, and `hid-steam` gates force
   feedback on the Deck quirk. `parserHasRumble` is false, so nothing is advertised.
-- Streaming either trackpad over `MSG_TOUCHPAD`, which would double-actuate against the right stick.
 - Bluetooth. The pad speaks Valve's own BLE protocol, not HID over GATT, so it never reaches the
   framework as a gamepad.
 
@@ -337,11 +344,14 @@ the two trigger clicks as their own bits, and the stick and grip touches as the 
 bits, all in SDL's names from `SDL_hidapi_steam_triton.c`. The pad touch bits have no slot in the
 word. Unverified on hardware like the rest of the decoder.
 
+**Trackpads:** as item 8's pick, without `stick` (this pad has a real right stick): `pad` when the
+emulated type has a touch surface, else `off`, and `mouse` by choice. The pads' pressure has no
+field on the wire.
+
 **Deliberately absent:**
 - Bluetooth LE (28DE:1303). The pad speaks Valve's own protocol over GATT, not HID over GATT, so it
   never reaches the framework as a gamepad, and the Direct path is USB only.
-- The two trackpads over `MSG_TOUCHPAD` (the wire carries one surface per slot) and the other
-  haptic reports (pulse, tone, sweep, script).
+- The other haptic reports (pulse, tone, sweep, script).
 
 **Where:** `app/src/main/cpp/usb_parsers.cpp` (`decodeSteamTriton`, `decodePadBatteryReport`,
 `checkWirelessEvent`, `buildTritonSettingsReport`, `refreshDue`, `nextRefreshInMs`,

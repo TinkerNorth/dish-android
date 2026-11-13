@@ -15,6 +15,7 @@ import com.tinkernorth.dish.core.net.moonlight.resolveMoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.TOUCHPAD_MODE_OFF
+import com.tinkernorth.dish.repository.TrackpadPick
 import com.tinkernorth.dish.source.audio.PadAudioRoutes
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightPad
@@ -213,11 +214,59 @@ class CapabilityComposer
          * changes that do not move the descriptor) never fire a no-op wire update.
          */
         val wireProjection: Flow<Map<String, WireProjection>> =
-            combine(state, mouseSurface.state) { caps, _ ->
+            combine(state, mouseSurface.state, toggles.trackpadPick.state) { caps, _, _ ->
                 caps.mapValues { (slotId, slot) ->
                     WireProjection(wireCaps(slot), touchpadWireMode(slotId))
                 }
             }.distinctUntilChanged()
+
+        /**
+         * The trackpad pick in force for every Direct Steam Controller, keyed by its device id, for
+         * the native router (TrackpadPickGateway). Re-derived with the capabilities and on every
+         * pick, so a type or host change that moves a default reaches the pad too.
+         */
+        val trackpadPicks: Flow<Map<Int, TrackpadPick>> =
+            combine(state, toggles.trackpadPick.state) { caps, _ ->
+                buildMap {
+                    for (slotId in caps.keys) {
+                        val deviceId = slotId.toIntOrNull() ?: continue
+                        if (steamTrackpadsFor(slotId) == SteamTrackpads.NONE) continue
+                        put(deviceId, trackpadPickFor(slotId))
+                    }
+                }
+            }.distinctUntilChanged()
+
+        // Which Steam Controller's trackpads the slot's Direct pad has; none for every other input.
+        fun steamTrackpadsFor(slotId: String): SteamTrackpads {
+            val device = slotId.toIntOrNull()?.let { registry.devices.value[it] } ?: return SteamTrackpads.NONE
+            if (!device.isUsbSynthetic) return SteamTrackpads.NONE
+            return steamTrackpadsOf(native.modelSteamTrackpads(device.vendorId, device.productId))
+        }
+
+        fun trackpadPickChoicesFor(slotId: String): List<TrackpadPick> = trackpadPickChoices(steamTrackpadsFor(slotId))
+
+        /**
+         * The pick in force for a bound slot, read from the stores directly like [touchpadWireMode]
+         * (the same bind-time reason). An unbound slot has no type and no host, so a pad or mouse
+         * pick waits as off and the 2015 default stays the stick.
+         */
+        fun trackpadPickFor(slotId: String): TrackpadPick {
+            val model = steamTrackpadsFor(slotId)
+            val connId = hub.bindings.value[slotId]
+            val controller = liveControllerLayer(slotId)
+            val kind =
+                hub.connections.value
+                    .firstOrNull { it.id == connId }
+                    ?.kind ?: ConnectionKind.SATELLITE
+            val type = connId?.let { boundTypeNow(it, slotId, kind, sourceHasMotion = Feature.MOTION in controller) }
+            val host = connId?.let { (hostFacts.features.featuresFor(it) ?: HostFeatureSet.SATELLITE_DEFAULT).toCapabilitySet() }
+            return effectiveTrackpadPick(
+                stored = toggles.trackpadPick.pickFor(slotId),
+                model = model,
+                typeHasPad = type != null && Feature.TOUCHPAD in type,
+                hostMouse = host != null && Feature.MOUSE in host,
+            )
+        }
 
         // The read-surface for BOUND slots. A screen previewing an unsaved type/host uses
         // capabilityForCandidate instead, since this does not reflect the draft.
@@ -244,6 +293,7 @@ class CapabilityComposer
          */
         fun touchpadWireMode(slotId: String): String {
             val connId = hub.bindings.value[slotId] ?: return TOUCHPAD_MODE_OFF
+            if (steamTrackpadsFor(slotId) != SteamTrackpads.NONE) return wireModeForTrackpadPick(trackpadPickFor(slotId))
             val controller = liveControllerLayer(slotId)
             val kind =
                 hub.connections.value

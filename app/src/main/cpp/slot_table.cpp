@@ -322,7 +322,8 @@ bool SlotTable::takeUsbReport(HotSlot& slot, const DeviceState& nu) {
     return slot.binding.kind != SLOT_NONE && gamepad::consumePublishIfChanged(s);
 }
 
-// A pad's own trackpad carries no mouse buttons and no wheel.
+// A pad's own trackpad carries no middle button; the right button and the wheel exist only for a
+// Steam Controller's pads composed as a mouse.
 void SlotTable::sendUsbFrame(HotSlot& slot, const UsbFrame& frame, const bool withGamepad) {
     const SlotBinding& binding = slot.binding;
     const dish_session::SessionRef session = sessions_.find(binding.sessionHandle);
@@ -340,8 +341,9 @@ void SlotTable::sendUsbFrame(HotSlot& slot, const UsbFrame& frame, const bool wi
     }
     if (frame.touch != nullptr) {
         dish_send::frameTouchpad(batch[count++], protocolVersion,
-                                 (uint8_t)(binding.controllerIndex & 0xFF), *frame.touch, false,
-                                 false, frame.touchEventTimeMs, 0);
+                                 (uint8_t)(binding.controllerIndex & 0xFF), *frame.touch,
+                                 frame.touch->rightDown, false, frame.touchEventTimeMs,
+                                 frame.touchScrollV);
     }
     dish_send::sendFramed(session, batch, count);
 }

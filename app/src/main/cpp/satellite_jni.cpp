@@ -1106,6 +1106,20 @@ Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelExpectsFrameworkGamepad
                : JNI_FALSE;
 }
 
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_setTrackpadPick(
+    JNIEnv*, jobject, jint syntheticDeviceId, jint pick) {
+    const bool known = pick >= static_cast<jint>(gamepad::TrackpadPick::STICK) &&
+                       pick <= static_cast<jint>(gamepad::TrackpadPick::OFF);
+    if (!known) return;
+    usbhost::setTrackpadPick((int32_t)syntheticDeviceId, static_cast<gamepad::TrackpadPick>(pick));
+}
+
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelSteamTrackpads(
+    JNIEnv*, jobject, jint vid, jint pid) {
+    return static_cast<jint>(
+        usbparsers::modelSteamTrackpads((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF)));
+}
+
 JNIEXPORT jboolean JNICALL
 Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasExtendedButtons(JNIEnv*, jobject,
                                                                             jint vid, jint pid) {

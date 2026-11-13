@@ -19,6 +19,8 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.InputFunctions
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.comparatorByLinkTier
+import com.tinkernorth.dish.composer.effectiveTrackpadPick
+import com.tinkernorth.dish.composer.trackpadPickChoices
 import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.CapabilitySet
@@ -38,6 +40,7 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.SatelliteCapabilitiesRepository
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
+import com.tinkernorth.dish.repository.TrackpadPick
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent
@@ -52,6 +55,7 @@ import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.SlotToggleStores
 import com.tinkernorth.dish.source.store.SpeakerEnabledStore
+import com.tinkernorth.dish.source.store.TrackpadPickStore
 import com.tinkernorth.dish.source.system.MicPermissionGate
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.PhysicalPadSources
@@ -133,6 +137,8 @@ data class BindingDraft(
     val rumbleOn: Boolean = true,
     val micOn: Boolean = false,
     val speakerOn: Boolean = true,
+    // A Steam Controller's trackpad pick; null until the user picks, so the model's default applies.
+    val trackpadPick: TrackpadPick? = null,
 )
 
 sealed interface BindingBlocker {
@@ -163,6 +169,10 @@ data class ConfigUiState(
     val hosts: List<BindingHost> = emptyList(),
     val draft: BindingDraft? = null,
     val typeOptions: List<TypeOption> = emptyList(),
+    // The trackpad picks a Steam Controller slot offers (empty for every other input) and the one
+    // in force for the draft, which the path can hold below the stored pick.
+    val trackpadChoices: List<TrackpadPick> = emptyList(),
+    val trackpadPickInForce: TrackpadPick = TrackpadPick.OFF,
     val connections: List<ConnectionSummary> = emptyList(),
     val knownHostLabels: Map<String, String> = emptyMap(),
     val controllerPresent: Boolean = true,
@@ -347,6 +357,7 @@ class ConfigureBindingsViewModel
         private val rumbleEnabledStore: RumbleEnabledStore get() = toggles.rumble
         private val micEnabledStore: MicEnabledStore get() = toggles.mic
         private val speakerEnabledStore: SpeakerEnabledStore get() = toggles.speaker
+        private val trackpadPickStore: TrackpadPickStore get() = toggles.trackpadPick
         private val catalogRepo: SatelliteCatalogRepository get() = hostFacts.catalog
         private val capabilitiesRepo: SatelliteCapabilitiesRepository get() = hostFacts.capabilities
         private val hostFeaturesStore: SatelliteHostFeaturesStore get() = hostFacts.features
@@ -689,6 +700,8 @@ class ConfigureBindingsViewModel
 
         fun setSpeaker(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(speakerOn = on)).withCapabilities() }
 
+        fun setTrackpadPick(pick: TrackpadPick) = _ui.update { it.copy(draft = it.draft?.copy(trackpadPick = pick)).withCapabilities() }
+
         /** Re-read RECORD_AUDIO: on resume, and when a request the screen launched resolves. */
         fun refreshMicPermission() {
             micPermission.refresh()
@@ -734,7 +747,20 @@ class ConfigureBindingsViewModel
                         candidateDirect = candidateDirect,
                     )
                 } ?: SlotCapabilities.NONE
-            return copy(capabilities = caps, inputFuncs = capabilityComposer.inputFunctionsFor(slotId, candidateDirect))
+            val model = capabilityComposer.steamTrackpadsFor(slotId)
+            val pickInForce =
+                effectiveTrackpadPick(
+                    stored = d.trackpadPick,
+                    model = model,
+                    typeHasPad = caps.typeOk(Feature.TOUCHPAD),
+                    hostMouse = caps.destinationOk(Feature.MOUSE),
+                )
+            return copy(
+                capabilities = caps,
+                inputFuncs = capabilityComposer.inputFunctionsFor(slotId, candidateDirect),
+                trackpadChoices = trackpadPickChoices(model),
+                trackpadPickInForce = pickInForce,
+            )
         }
 
         // The label for a controller type from the live catalog, falling back to the
@@ -825,6 +851,8 @@ class ConfigureBindingsViewModel
             rumbleEnabledStore.setEnabled(slotId, draft.rumbleOn)
             if (state.micAvailable) micEnabledStore.setEnabled(slotId, draft.micOn)
             if (state.speakerAvailable) speakerEnabledStore.setEnabled(slotId, draft.speakerOn)
+            val pick = draft.trackpadPick
+            if (state.trackpadChoices.isNotEmpty() && pick != null) trackpadPickStore.setPick(slotId, pick)
         }
 
         /**
@@ -1167,6 +1195,7 @@ class ConfigureBindingsViewModel
                 rumbleOn = rumbleEnabledStore.isEnabled(slotId),
                 micOn = micEnabledStore.isEnabled(slotId),
                 speakerOn = speakerEnabledStore.isEnabled(slotId),
+                trackpadPick = trackpadPickStore.pickFor(slotId),
             )
         }
 
