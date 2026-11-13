@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 #include "usb_parsers.h"
+#include "wire_encoders.h"
 
 #include <gtest/gtest.h>
 
@@ -3444,4 +3445,211 @@ TEST(ParserName, EveryParserHasADistinctNonEmptyName) {
             EXPECT_STRNE(usbparsers::parserName(a), usbparsers::parserName(b));
         }
     }
+}
+
+// ---- the extended-buttons word (satellite docs/contract.md §Extended buttons), SDL's names ----
+
+namespace {
+
+// SDL_hidapi_steam.c: STEAM_RIGHT_TRIGGER_MASK, STEAM_LEFT_TRIGGER_MASK (the full-pull clicks),
+// STEAM_BUTTON_BACK_LEFT_MASK and STEAM_BUTTON_BACK_RIGHT_MASK (the grips).
+constexpr uint32_t kBtnRightTriggerClick = 0x000001;
+constexpr uint32_t kBtnLeftTriggerClick = 0x000002;
+constexpr uint32_t kBtnBackLeft = 0x008000;
+constexpr uint32_t kBtnBackRight = 0x010000;
+
+DeviceState steamDecoded(const uint32_t buttons) {
+    DeviceState s;
+    ParserState st;
+    EXPECT_TRUE(decodeSteam(steamState(buttons), s, st));
+    return s;
+}
+
+} // namespace
+
+TEST(SteamExtended, TheGripsAreSdlsLeftAndRightPaddle) {
+    EXPECT_EQ(dish_wire::EXT_BUTTON_LEFT_PADDLE1, steamDecoded(kBtnBackLeft).extButtons);
+    EXPECT_EQ(dish_wire::EXT_BUTTON_RIGHT_PADDLE1, steamDecoded(kBtnBackRight).extButtons);
+    EXPECT_EQ(0, steamDecoded(kBtnBackLeft | kBtnBackRight).wButtons);
+}
+
+TEST(SteamExtended, TheFullPullTriggerBitsAreTheTriggerClicks) {
+    EXPECT_EQ(dish_wire::EXT_BUTTON_LEFT_TRIGGER_CLICK,
+              steamDecoded(kBtnLeftTriggerClick).extButtons);
+    EXPECT_EQ(dish_wire::EXT_BUTTON_RIGHT_TRIGGER_CLICK,
+              steamDecoded(kBtnRightTriggerClick).extButtons);
+    EXPECT_EQ(0, steamDecoded(kBtnLeftTriggerClick | kBtnRightTriggerClick).wButtons);
+}
+
+TEST(SteamExtended, ALeftPadClickUnderAFingerIsTheLeftPadClickAndNotTheStickClick) {
+    const DeviceState s = steamDecoded(kBtnLeftPadFinger | kBtnLeftPadClicked);
+    EXPECT_EQ(dish_wire::EXT_BUTTON_LEFT_PAD_CLICK, s.extButtons);
+    EXPECT_EQ(0, s.wButtons & XUSB_THUMB_L);
+}
+
+TEST(SteamExtended, ALeftPadClickWithNoFingerStaysTheStickClickAlone) {
+    const DeviceState s = steamDecoded(kBtnLeftPadClicked);
+    EXPECT_EQ(0u, s.extButtons);
+    EXPECT_EQ(XUSB_THUMB_L, s.wButtons & XUSB_THUMB_L);
+}
+
+TEST(SteamExtended, TheRightPadClickStaysTheRightStickClickAloneWhileThePadIsTheStick) {
+    const DeviceState s = steamDecoded(kBtnRightPadFinger | kBtnRightPadClicked);
+    EXPECT_EQ(0u, s.extButtons);
+    EXPECT_EQ(XUSB_THUMB_R, s.wButtons & XUSB_THUMB_R);
+}
+
+TEST(SteamExtended, TheMappedButtonsLeaveTheWordClear) {
+    const uint32_t everyMapped = kBtnRightBumper | kBtnLeftBumper | kBtnNorth | kBtnEast |
+                                 kBtnWest | kBtnSouth | kBtnDpadUp | kBtnDpadRight | kBtnMenu |
+                                 kBtnGuide | kBtnEscape | kBtnStickButton;
+    EXPECT_EQ(0u, steamDecoded(everyMapped).extButtons);
+}
+
+TEST(SteamExtended, EveryExtraRidesTheWordAtOnce) {
+    const DeviceState s =
+        steamDecoded(kBtnBackLeft | kBtnBackRight | kBtnLeftTriggerClick | kBtnRightTriggerClick |
+                     kBtnLeftPadFinger | kBtnLeftPadClicked);
+    EXPECT_EQ(dish_wire::EXT_BUTTON_LEFT_PADDLE1 | dish_wire::EXT_BUTTON_RIGHT_PADDLE1 |
+                  dish_wire::EXT_BUTTON_LEFT_TRIGGER_CLICK |
+                  dish_wire::EXT_BUTTON_RIGHT_TRIGGER_CLICK | dish_wire::EXT_BUTTON_LEFT_PAD_CLICK,
+              s.extButtons);
+}
+
+// SDL_hidapi_steam_triton.c TritonButtons: QAM is misc1, R4/L4/R5/L5 are paddle 1-4, the pad and
+// trigger clicks and the stick and grip touches are their own bits.
+TEST(TritonExtended, EachExtraBitIsItsSdlNamedExtendedButton) {
+    struct ExtendedCase {
+        uint32_t bit;
+        uint32_t expected;
+    };
+    const ExtendedCase cases[] = {
+        {kTritonQam, dish_wire::EXT_BUTTON_MISC1},
+        {kTritonR4, dish_wire::EXT_BUTTON_RIGHT_PADDLE1},
+        {kTritonL4, dish_wire::EXT_BUTTON_LEFT_PADDLE1},
+        {kTritonR5, dish_wire::EXT_BUTTON_RIGHT_PADDLE2},
+        {kTritonL5, dish_wire::EXT_BUTTON_LEFT_PADDLE2},
+        {kTritonLeftPadClick, dish_wire::EXT_BUTTON_LEFT_PAD_CLICK},
+        {kTritonRightPadClick, dish_wire::EXT_BUTTON_RIGHT_PAD_CLICK},
+        {kTritonLeftTriggerClick, dish_wire::EXT_BUTTON_LEFT_TRIGGER_CLICK},
+        {kTritonRightTriggerClick, dish_wire::EXT_BUTTON_RIGHT_TRIGGER_CLICK},
+        {kTritonLeftStickTouch, dish_wire::EXT_BUTTON_LEFT_STICK_TOUCH},
+        {kTritonRightStickTouch, dish_wire::EXT_BUTTON_RIGHT_STICK_TOUCH},
+        {kTritonLeftGripTouch, dish_wire::EXT_BUTTON_LEFT_GRIP_TOUCH},
+        {kTritonRightGripTouch, dish_wire::EXT_BUTTON_RIGHT_GRIP_TOUCH},
+    };
+    for (const ExtendedCase& c : cases) {
+        DeviceState s;
+        ASSERT_TRUE(decodeTriton(tritonState(kTritonStateId, c.bit), s));
+        EXPECT_EQ(c.expected, s.extButtons) << "triton bit 0x" << std::hex << c.bit;
+        EXPECT_EQ(0, s.wButtons) << "triton bit 0x" << std::hex << c.bit;
+    }
+}
+
+TEST(TritonExtended, ThePadTouchesAndTheMappedButtonsLeaveTheWordClear) {
+    const uint32_t mapped = kTritonA | kTritonB | kTritonX | kTritonY | kTritonL | kTritonR |
+                            kTritonMenu | kTritonView | kTritonSteam | kTritonL3 | kTritonR3 |
+                            kTritonDpadUp | kTritonDpadDown | kTritonDpadLeft | kTritonDpadRight;
+    DeviceState s;
+    ASSERT_TRUE(decodeTriton(
+        tritonState(kTritonStateId, mapped | kTritonLeftPadTouch | kTritonRightPadTouch), s));
+    EXPECT_EQ(0u, s.extButtons);
+}
+
+TEST(TritonExtended, TheTimestampReportCarriesTheSameWord) {
+    DeviceState s;
+    ASSERT_TRUE(decodeTriton(tritonState(kTritonStateTimestampId, kTritonQam | kTritonL5), s));
+    EXPECT_EQ(dish_wire::EXT_BUTTON_MISC1 | dish_wire::EXT_BUTTON_LEFT_PADDLE2, s.extButtons);
+}
+
+// SDL_hidapi_switch.c HandleFullControllerState: bit 0x20 of the shared button byte is
+// SDL_GAMEPAD_BUTTON_SWITCH_SHARE, the Capture button, which SDL's gamepad layer calls misc1.
+TEST(SwitchExtended, TheCaptureBitOfTheSharedByteIsMisc1) {
+    auto r = switchReport(64);
+    r[4] = 0x20;
+    DeviceState s;
+    ParserState st;
+    ASSERT_TRUE(decodeReport(Parser::SWITCH_PRO_USB, r.data(), r.size(), s, &st));
+    EXPECT_EQ(dish_wire::EXT_BUTTON_MISC1, s.extButtons);
+    EXPECT_EQ(0, s.wButtons);
+}
+
+TEST(SwitchExtended, EveryOtherSharedBitLeavesTheWordClear) {
+    auto r = switchReport(64);
+    r[4] = 0xDF;
+    DeviceState s;
+    ParserState st;
+    ASSERT_TRUE(decodeReport(Parser::SWITCH_PRO_USB, r.data(), r.size(), s, &st));
+    EXPECT_EQ(0u, s.extButtons);
+}
+
+// SDL_hidapi_ps5.c HandleStatePacketCommon: byte 10 bits 0x10 LEFT_FUNCTION, 0x20 RIGHT_FUNCTION,
+// 0x40 LEFT_PADDLE, 0x80 RIGHT_PADDLE, which SDL's Edge mapping reads as paddle 4, 3, 2, 1.
+TEST(DualSenseEdgeExtended, TheBackButtonsInByte10AreSdlsPaddlesAndFunctionButtons) {
+    struct EdgeCase {
+        uint8_t bit;
+        uint32_t expected;
+    };
+    const EdgeCase cases[] = {
+        {0x10, dish_wire::EXT_BUTTON_LEFT_PADDLE2},
+        {0x20, dish_wire::EXT_BUTTON_RIGHT_PADDLE2},
+        {0x40, dish_wire::EXT_BUTTON_LEFT_PADDLE1},
+        {0x80, dish_wire::EXT_BUTTON_RIGHT_PADDLE1},
+    };
+    for (const EdgeCase& c : cases) {
+        auto r = dualSenseReport();
+        r[8] = 0x08;
+        r[10] = c.bit;
+        DeviceState s;
+        ParserState st;
+        st.productId = 0x0DF2;
+        ASSERT_TRUE(decodeReport(Parser::DUALSENSE, r.data(), r.size(), s, &st));
+        EXPECT_EQ(c.expected, s.extButtons) << "byte 10 bit 0x" << std::hex << (int)c.bit;
+        EXPECT_EQ(0, s.wButtons) << "byte 10 bit 0x" << std::hex << (int)c.bit;
+    }
+}
+
+TEST(DualSenseEdgeExtended, APlainDualSenseNeverSourcesTheWord) {
+    auto r = dualSenseReport();
+    r[10] = 0xF0;
+    DeviceState s;
+    ParserState st;
+    st.productId = 0x0CE6;
+    ASSERT_TRUE(decodeReport(Parser::DUALSENSE, r.data(), r.size(), s, &st));
+    EXPECT_EQ(0u, s.extButtons);
+}
+
+TEST(DualSenseEdgeExtended, WithoutAParserStateTheWordIsClear) {
+    auto r = dualSenseReport();
+    r[10] = 0xF0;
+    DeviceState s;
+    ASSERT_TRUE(decodeReport(Parser::DUALSENSE, r.data(), r.size(), s, nullptr));
+    EXPECT_EQ(0u, s.extButtons);
+}
+
+TEST(DualSenseEdgeExtended, ThePsTouchClickAndMuteBitsAreNotBackButtons) {
+    auto r = dualSenseReport();
+    r[10] = 0x01 | 0x02 | 0x04;
+    DeviceState s;
+    ParserState st;
+    st.productId = 0x0DF2;
+    ASSERT_TRUE(decodeReport(Parser::DUALSENSE, r.data(), r.size(), s, &st));
+    EXPECT_EQ(0u, s.extButtons);
+}
+
+TEST(ExtendedButtonsModel, TheSteamControllersTheEdgeAndTheSwitchProSourceTheWord) {
+    for (const uint16_t pid : {0x1102, 0x1142, 0x1302, 0x1304, 0x1305}) {
+        EXPECT_TRUE(usbparsers::modelHasExtendedButtons(0x28DE, pid)) << std::hex << pid;
+    }
+    EXPECT_TRUE(usbparsers::modelHasExtendedButtons(0x054C, 0x0DF2));
+    EXPECT_TRUE(usbparsers::modelHasExtendedButtons(0x057E, 0x2009));
+    EXPECT_TRUE(usbparsers::modelHasExtendedButtons(0x057E, 0x200E));
+}
+
+TEST(ExtendedButtonsModel, EveryOtherPadSourcesNothing) {
+    EXPECT_FALSE(usbparsers::modelHasExtendedButtons(0x054C, 0x0CE6));
+    EXPECT_FALSE(usbparsers::modelHasExtendedButtons(0x054C, 0x05C4));
+    EXPECT_FALSE(usbparsers::modelHasExtendedButtons(0x057E, 0x2017));
+    EXPECT_FALSE(usbparsers::modelHasExtendedButtons(0x057E, 0x2019));
+    EXPECT_FALSE(usbparsers::modelHasExtendedButtons(0x1234, 0x5678));
 }

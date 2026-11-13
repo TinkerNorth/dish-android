@@ -51,6 +51,13 @@ object ModelTableNative {
         productId: Int,
     ): Boolean
 
+    // Per model, not per report family: the DualSense Edge's back buttons and the Switch Pro's
+    // Capture button are theirs alone among the pads that share their decoders.
+    external fun modelHasExtendedButtons(
+        vendorId: Int,
+        productId: Int,
+    ): Boolean
+
     external fun modelFrameworkRumbleUnreliable(
         vendorId: Int,
         productId: Int,

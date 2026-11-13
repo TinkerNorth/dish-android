@@ -92,6 +92,7 @@ internal data class ModelFacts(
     val modelHasPlayerLeds: Boolean = false,
     val modelHasTriggerEffects: Boolean = false,
     val modelHasTriggerRumble: Boolean = false,
+    val modelHasExtendedButtons: Boolean = false,
     val knownFastLane: Boolean = false,
     val frameworkCaps: PhysicalGamepadRegistry.FrameworkCaps? = null,
 )
@@ -127,6 +128,7 @@ internal fun composerFor(
             every { modelHasPlayerLeds(any(), any()) } returns model.modelHasPlayerLeds
             every { modelHasTriggerEffects(any(), any()) } returns model.modelHasTriggerEffects
             every { modelHasTriggerRumble(any(), any()) } returns model.modelHasTriggerRumble
+            every { modelHasExtendedButtons(any(), any()) } returns model.modelHasExtendedButtons
             every { isKnownFastLaneModel(any(), any()) } returns model.knownFastLane
         }
     val toggles =

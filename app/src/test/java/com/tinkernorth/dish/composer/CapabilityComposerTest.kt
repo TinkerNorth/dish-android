@@ -223,6 +223,32 @@ class CapabilityComposerTest {
         }
 
     @Test
+    fun `a Direct pad whose model sources the extended buttons claims them and a framework pad never does`() =
+        composerTest {
+            val devices =
+                MutableStateFlow(
+                    mapOf(
+                        -1000 to device(-1000, isUsbSynthetic = true),
+                        9 to device(9, hasRumble = true),
+                    ),
+                )
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    model = ModelFacts(modelHasExtendedButtons = true),
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            assertTrue(Feature.EXTENDED_BUTTONS in composer.capabilityFor("-1000").controller)
+            assertFalse(Feature.EXTENDED_BUTTONS in composer.capabilityFor("9").controller)
+        }
+
+    @Test
     fun `a framework pad never advertises LED or trigger surfaces`() =
         composerTest {
             // Same model answers, but not captured: the framework path has no raw

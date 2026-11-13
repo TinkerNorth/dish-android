@@ -131,6 +131,9 @@ struct PsImuCalib {
 };
 
 struct ParserState {
+    // Filled at attach: the model's product id, for a decoder that tells the variants of one
+    // report family apart (the DualSense Edge's back buttons).
+    uint16_t productId = 0;
     AxisAutoRange lx;
     AxisAutoRange ly;
     AxisAutoRange rx;
@@ -180,6 +183,10 @@ bool probePermitsClaim(ProbeOutcome outcome, bool verifiedFastLane, Parser parse
 // Whether releasing this model back to Standard produces a framework gamepad InputDevice (both
 // Steam Controllers' stand-alone identity is a keyboard and mouse).
 bool modelExpectsFrameworkGamepad(uint16_t vid, uint16_t pid);
+
+// Whether the model sources the INPUT extended-buttons word (contract §Extended buttons): both
+// Steam Controllers, the DualSense Edge and the Switch pads with a Capture button.
+bool modelHasExtendedButtons(uint16_t vid, uint16_t pid);
 
 const char* parserName(Parser p);
 

@@ -386,6 +386,7 @@ class CapabilityComposer
             if (native.modelHasTriggerEffects(vid, pid)) out += Feature.TRIGGER_EFFECTS
             if (native.modelHasPlayerLeds(vid, pid)) out += Feature.PLAYER_LEDS
             if (native.modelHasTriggerRumble(vid, pid)) out += Feature.TRIGGER_RUMBLE
+            if (native.modelHasExtendedButtons(vid, pid)) out += Feature.EXTENDED_BUTTONS
             return out
         }
 

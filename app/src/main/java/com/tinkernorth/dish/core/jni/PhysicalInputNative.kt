@@ -49,6 +49,11 @@ class PhysicalInputNative
             productId: Int,
         ): Boolean = ModelTableNative.modelHasTriggerRumble(vendorId, productId)
 
+        fun modelHasExtendedButtons(
+            vendorId: Int,
+            productId: Int,
+        ): Boolean = ModelTableNative.modelHasExtendedButtons(vendorId, productId)
+
         fun modelFrameworkRumbleUnreliable(
             vendorId: Int,
             productId: Int,

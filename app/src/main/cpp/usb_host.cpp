@@ -697,6 +697,7 @@ void askReceiverSlot(const AttachTarget& t) {
 
 void readModelFeatures(const AttachTarget& t, DeviceCtx& ctx) {
     const usbparsers::Parser parser = t.classification.parser;
+    ctx.stickRange.productId = t.pid;
     if (parser == usbparsers::Parser::GENERIC_HID_GAMEPAD) {
         fetchHidLayout(t.fd, t.interfaceNumber, ctx.stickRange.hidLayout);
         ctx.stickRange.hidLayout.order = t.classification.order;

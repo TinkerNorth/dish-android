@@ -229,11 +229,18 @@ descriptor instead. If the assumption is wrong the config packets go to the wron
 and the claim falls back to routed after roughly a second. The dongle's slots are opened by
 interface number, 1 to 4, whatever they declare.
 
+**Extended buttons (protocol 4, `steamExtendedButtons`):** the two grips ride the INPUT word as
+`leftPaddle1` and `rightPaddle1` (SDL's `STEAM_BUTTON_BACK_LEFT/RIGHT_MASK` are its two paddles),
+the full-pull trigger bits as `leftTriggerClick` and `rightTriggerClick`, and a click on the left
+pad while a finger rests on it as `leftPadClick`; with no finger that click stays the stick's L3.
+The right pad's click stays R3 while the right pad is the right stick (SDL maps it to RIGHT_STICK
+too), so no position or click lands in two wire fields. Which type renders which bit is the
+satellite's (contract.md "Extended buttons"); unverified on hardware like the rest of the decoder.
+
 **Deliberately absent:**
 - Rumble. The pad has no motors, only trackpad voice coils driven by `ID_TRIGGER_HAPTIC_PULSE`
   pulse trains; the simple rumble command is Steam Deck firmware only, and `hid-steam` gates force
   feedback on the Deck quirk. `parserHasRumble` is false, so nothing is advertised.
-- The grip buttons, which have no XUSB equivalent.
 - Streaming either trackpad over `MSG_TOUCHPAD`, which would double-actuate against the right stick.
 - Bluetooth. The pad speaks Valve's own BLE protocol, not HID over GATT, so it never reaches the
   framework as a gamepad.
@@ -324,12 +331,17 @@ and the rumble that was playing and the battery reading go with the controller t
 Pucks, or two Nereids, plugged in together are one entry, as item 8 notes. Everything
 receiver-side is unverified on hardware; there is no dongle here.
 
+**Extended buttons (protocol 4, `tritonExtendedButtons`):** QAM rides the INPUT word as `misc1`,
+R4/L4/R5/L5 as `rightPaddle1`/`leftPaddle1`/`rightPaddle2`/`leftPaddle2`, the two pad clicks and
+the two trigger clicks as their own bits, and the stick and grip touches as the four capsense
+bits, all in SDL's names from `SDL_hidapi_steam_triton.c`. The pad touch bits have no slot in the
+word. Unverified on hardware like the rest of the decoder.
+
 **Deliberately absent:**
 - Bluetooth LE (28DE:1303). The pad speaks Valve's own protocol over GATT, not HID over GATT, so it
   never reaches the framework as a gamepad, and the Direct path is USB only.
-- The two trackpads over `MSG_TOUCHPAD` (the wire carries one surface per slot), the four back
-  paddles, QAM and the trigger and pad clicks (no XUSB button), the capacitive touches, and the
-  other haptic reports (pulse, tone, sweep, script).
+- The two trackpads over `MSG_TOUCHPAD` (the wire carries one surface per slot) and the other
+  haptic reports (pulse, tone, sweep, script).
 
 **Where:** `app/src/main/cpp/usb_parsers.cpp` (`decodeSteamTriton`, `decodePadBatteryReport`,
 `checkWirelessEvent`, `buildTritonSettingsReport`, `refreshDue`, `nextRefreshInMs`,

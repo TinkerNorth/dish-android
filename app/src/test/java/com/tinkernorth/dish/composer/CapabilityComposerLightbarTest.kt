@@ -85,6 +85,7 @@ class CapabilityComposerLightbarTest {
                 every { modelHasPlayerLeds(any(), any()) } returns false
                 every { modelHasTriggerEffects(any(), any()) } returns false
                 every { modelHasTriggerRumble(any(), any()) } returns false
+                every { modelHasExtendedButtons(any(), any()) } returns false
                 every { isKnownFastLaneModel(any(), any()) } returns true
             }
         val routes: PadAudioRoutes =
