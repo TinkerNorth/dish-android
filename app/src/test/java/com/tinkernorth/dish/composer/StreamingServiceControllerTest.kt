@@ -8,6 +8,7 @@ import com.tinkernorth.dish.architecture.testing.probe
 import com.tinkernorth.dish.source.usb.UsbController
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.source.usb.UsbPhase
+import com.tinkernorth.dish.source.usb.UsbUnitKey
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -24,7 +25,7 @@ import kotlin.random.Random
 class StreamingServiceControllerTest {
     private val scope = TestScope(StandardTestDispatcher())
     private val slots = MutableStateFlow(0)
-    private val claims = MutableStateFlow<Map<Int, UsbController>>(emptyMap())
+    private val claims = MutableStateFlow<Map<UsbUnitKey, UsbController>>(emptyMap())
     private val liveness = StreamingServiceLiveness()
     private val crashReporting = mockk<CrashReportingController>(relaxed = true)
     private val wakeState =
@@ -33,12 +34,12 @@ class StreamingServiceControllerTest {
         }
     private val usbGamepadManager =
         mockk<UsbGamepadManager> {
-            every { controllers } returns claims
+            every { controllersByUnit } returns claims
         }
 
-    private fun directClaim(): Map<Int, UsbController> =
+    private fun directClaim(): Map<UsbUnitKey, UsbController> =
         mapOf(
-            1 to
+            UsbUnitKey(model = 1, unit = 0) to
                 UsbController(
                     vendorId = 0x28DE,
                     productId = 0x1102,

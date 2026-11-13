@@ -417,4 +417,4 @@ private fun reduceNeedsReplug(
 
 // How many controllers currently hold a Direct claim. The foreground service keys off this so the
 // process (and the device restore a release runs) survives backgrounding while a pad is claimed.
-fun Map<Int, UsbController>.directClaimCount(): Int = values.count { it.phase == UsbPhase.Direct }
+fun Map<*, UsbController>.directClaimCount(): Int = values.count { it.phase == UsbPhase.Direct }
