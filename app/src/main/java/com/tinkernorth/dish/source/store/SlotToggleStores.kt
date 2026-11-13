@@ -15,4 +15,5 @@ class SlotToggleStores
         val rumble: RumbleEnabledStore,
         val mic: MicEnabledStore,
         val speaker: SpeakerEnabledStore,
+        val trackpadPick: TrackpadPickStore,
     )

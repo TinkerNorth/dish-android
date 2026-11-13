@@ -132,6 +132,10 @@ struct DeviceState {
     bool touchValid = false;
     bool touch0Active = false, touch1Active = false;
     bool touchClick = false;
+    // The pointer frame's right button and wheel (protocol 2): a Steam Controller's trackpads
+    // composed as a mouse; every other pad leaves them idle.
+    bool touchRightDown = false;
+    int16_t touchScrollV = 0;
     uint8_t touch0Id = 0, touch1Id = 0;
     int16_t touch0X = 0, touch0Y = 0, touch1X = 0, touch1Y = 0;
 
@@ -148,9 +152,46 @@ struct DeviceState {
 struct TouchpadState {
     bool f0Active = false, f1Active = false;
     bool clickDown = false;
+    bool rightDown = false;
     uint8_t f0Id = 0, f1Id = 0;
     int16_t f0X = 0, f0Y = 0, f1X = 0, f1Y = 0;
 };
+
+// A Steam Controller trackpad as its decoder reads it: up-positive, the full int16 range, SDL's
+// shell rotation applied on the 2015 pads.
+struct PadSample {
+    bool active = false;
+    int16_t x = 0, y = 0;
+    bool click = false;
+};
+
+struct SteamPads {
+    PadSample left;
+    PadSample right;
+};
+
+// The slot's trackpad pick, the Kotlin store's stick | pad | mouse | off in the order the JNI
+// carries them.
+enum class TrackpadPick : uint8_t { STICK = 0, PAD = 1, MOUSE = 2, OFF = 3 };
+
+enum class SteamModel : uint8_t { CONTROLLER_2015 = 0, CONTROLLER_2026 = 1 };
+
+// Mouse mode's wheel: the left pad's vertical travel, one notch per kPadScrollUnitsPerNotch, the
+// rest carried to the next sample.
+struct PadScrollTracker {
+    bool tracking = false;
+    int16_t lastY = 0;
+    int32_t remainder = 0;
+};
+constexpr int32_t kPadScrollUnitsPerNotch = 4096;
+constexpr int16_t kWheelNotch = 120;
+
+// Lands both trackpads on the wire by the pick: the 2015 right pad as the right stick with its
+// click as R3 (stick), both pads on one touch surface (pad), the right pad as the cursor and the
+// left as the wheel and right button (mouse), or nowhere, with the clicks in the extended-buttons
+// word wherever nothing else consumes them. Owns the 2015 right stick and the touch fields of s.
+void routeSteamTrackpads(TrackpadPick pick, SteamModel model, const SteamPads& pads,
+                         PadScrollTracker& scroll, DeviceState& s);
 
 bool operator==(const TouchpadState& a, const TouchpadState& b);
 inline bool operator!=(const TouchpadState& a, const TouchpadState& b) { return !(a == b); }

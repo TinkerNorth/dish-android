@@ -11,6 +11,16 @@ computer. Those lines say "update Satellite too".
 
 ### Added
 
+- **Steam Controller trackpads, your pick per controller.** A Steam Controller
+  in Direct mode now has a Trackpads row on its configure screen: Right stick
+  (the 2015 model's usual role for its right trackpad), Touchpad (both pads on
+  the emulated controller's touch surface, left half and right half), Mouse
+  (the right pad moves the pointer, the left pad scrolls, right pad click is the
+  left button and left pad click the right button) or Off. The 2015 model starts
+  on Right stick and the 2026 model on Touchpad where the emulated controller
+  has one, else Off; Mouse is always your choice. Whichever you pick, a trackpad
+  or its click lands in exactly one place, never on the stick and the touch
+  surface at once. Not tried on a real Steam Controller yet.
 - **A controller's extra buttons reach the computer.** On a Satellite that
   speaks protocol 4 (update Satellite too), a Steam Controller in Direct mode
   sends its back buttons: the 2015 model's two grips, its trigger clicks and a

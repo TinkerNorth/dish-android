@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 #include "gamepad_input.h"
+#include "wire_encoders.h"
 
 #include <gtest/gtest.h>
 
 #include <cstring>
+#include <set>
 
 using namespace gamepad;
 
@@ -1349,4 +1351,338 @@ TEST(QuirkBits, TheNewBitsSitAboveTheOlderOnes) {
     const uint8_t older = QUIRK_SWAP_AB | QUIRK_SWAP_XY | QUIRK_SWITCH_LAYOUT |
                           QUIRK_N64_HID_LAYOUT | QUIRK_N64_DRIVER_LAYOUT;
     EXPECT_EQ(0, (QUIRK_EIGHTBITDO_DINPUT | QUIRK_XPAD_TRIGGER_AXES) & older);
+}
+
+// ---- the Steam trackpad router: every position and click lands in one wire field ----------
+
+namespace {
+
+enum class Landing {
+    RIGHT_STICK,
+    FINGER0,
+    FINGER1,
+    WHEEL,
+    LEFT_BUTTON,
+    RIGHT_BUTTON,
+    R3,
+    EXT_LEFT_PAD_CLICK,
+    EXT_RIGHT_PAD_CLICK,
+};
+
+std::set<Landing> positionLandings(const DeviceState& s) {
+    std::set<Landing> out;
+    if (s.sRX != 0 || s.sRY != 0) out.insert(Landing::RIGHT_STICK);
+    if (s.touchValid && s.touch0Active) out.insert(Landing::FINGER0);
+    if (s.touchValid && s.touch1Active) out.insert(Landing::FINGER1);
+    if (s.touchScrollV != 0) out.insert(Landing::WHEEL);
+    return out;
+}
+
+std::set<Landing> clickLandings(const DeviceState& s) {
+    std::set<Landing> out;
+    if (s.touchValid && s.touchClick) out.insert(Landing::LEFT_BUTTON);
+    if (s.touchValid && s.touchRightDown) out.insert(Landing::RIGHT_BUTTON);
+    if (s.wButtons & XUSB_THUMB_R) out.insert(Landing::R3);
+    if (s.extButtons & dish_wire::EXT_BUTTON_LEFT_PAD_CLICK)
+        out.insert(Landing::EXT_LEFT_PAD_CLICK);
+    if (s.extButtons & dish_wire::EXT_BUTTON_RIGHT_PAD_CLICK) {
+        out.insert(Landing::EXT_RIGHT_PAD_CLICK);
+    }
+    return out;
+}
+
+PadSample finger(const int16_t x, const int16_t y, const bool click = false) {
+    PadSample p;
+    p.active = true;
+    p.x = x;
+    p.y = y;
+    p.click = click;
+    return p;
+}
+
+// A left-pad position is a move: two samples, so a wheel has travel to count.
+DeviceState routed(const TrackpadPick pick, const SteamModel model, const SteamPads& first,
+                   const SteamPads& then) {
+    PadScrollTracker scroll;
+    DeviceState warm;
+    routeSteamTrackpads(pick, model, first, scroll, warm);
+    DeviceState s;
+    routeSteamTrackpads(pick, model, then, scroll, s);
+    return s;
+}
+
+DeviceState routed(const TrackpadPick pick, const SteamModel model, const SteamPads& pads) {
+    return routed(pick, model, pads, pads);
+}
+
+constexpr TrackpadPick kEveryPick[] = {TrackpadPick::STICK, TrackpadPick::PAD, TrackpadPick::MOUSE,
+                                       TrackpadPick::OFF};
+constexpr SteamModel kEveryModel[] = {SteamModel::CONTROLLER_2015, SteamModel::CONTROLLER_2026};
+
+std::set<Landing> expectedLeftPosition(const TrackpadPick pick) {
+    switch (pick) {
+    case TrackpadPick::STICK:
+    case TrackpadPick::OFF:
+        return {};
+    case TrackpadPick::PAD:
+        return {Landing::FINGER0};
+    case TrackpadPick::MOUSE:
+        return {Landing::WHEEL};
+    }
+    return {};
+}
+
+std::set<Landing> expectedRightPosition(const TrackpadPick pick, const SteamModel model) {
+    switch (pick) {
+    case TrackpadPick::STICK:
+        return model == SteamModel::CONTROLLER_2015 ? std::set<Landing>{Landing::RIGHT_STICK}
+                                                    : std::set<Landing>{};
+    case TrackpadPick::OFF:
+        return {};
+    case TrackpadPick::PAD:
+        return {Landing::FINGER1};
+    case TrackpadPick::MOUSE:
+        return {Landing::FINGER0};
+    }
+    return {};
+}
+
+std::set<Landing> expectedLeftClick(const TrackpadPick pick) {
+    switch (pick) {
+    case TrackpadPick::STICK:
+    case TrackpadPick::OFF:
+        return {Landing::EXT_LEFT_PAD_CLICK};
+    case TrackpadPick::PAD:
+        return {Landing::LEFT_BUTTON};
+    case TrackpadPick::MOUSE:
+        return {Landing::RIGHT_BUTTON};
+    }
+    return {};
+}
+
+std::set<Landing> expectedRightClick(const TrackpadPick pick, const SteamModel model) {
+    switch (pick) {
+    case TrackpadPick::STICK:
+        return model == SteamModel::CONTROLLER_2015
+                   ? std::set<Landing>{Landing::R3}
+                   : std::set<Landing>{Landing::EXT_RIGHT_PAD_CLICK};
+    case TrackpadPick::OFF:
+        return {Landing::EXT_RIGHT_PAD_CLICK};
+    case TrackpadPick::PAD:
+    case TrackpadPick::MOUSE:
+        return {Landing::LEFT_BUTTON};
+    }
+    return {};
+}
+
+const char* nameOf(const TrackpadPick pick) {
+    switch (pick) {
+    case TrackpadPick::STICK:
+        return "stick";
+    case TrackpadPick::PAD:
+        return "pad";
+    case TrackpadPick::MOUSE:
+        return "mouse";
+    case TrackpadPick::OFF:
+        return "off";
+    }
+    return "?";
+}
+
+const char* nameOf(const SteamModel model) {
+    return model == SteamModel::CONTROLLER_2015 ? "2015" : "2026";
+}
+
+} // namespace
+
+TEST(TouchpadGate, ARightButtonChangeAloneIsFresh) {
+    TouchpadGate gate;
+    TouchpadState t = touchAt(100, 100);
+    EXPECT_EQ(TouchpadSend::FRESH, gate.decide(t, 1000));
+    t.rightDown = true;
+    EXPECT_EQ(TouchpadSend::FRESH, gate.decide(t, 2000));
+    EXPECT_NE(TouchpadState{}, t);
+}
+
+TEST(SteamTrackpadRouter, EachPositionLandsInAtMostOneWireFieldAndClicksInExactlyOne) {
+    for (const TrackpadPick pick : kEveryPick) {
+        for (const SteamModel model : kEveryModel) {
+            const std::string where = std::string(nameOf(pick)) + "/" + nameOf(model);
+            SteamPads leftMove;
+            leftMove.left = finger(1000, 2000);
+            SteamPads leftMoved;
+            leftMoved.left = finger(1000, 2000 + 2 * kPadScrollUnitsPerNotch);
+            const DeviceState leftPosition = routed(pick, model, leftMove, leftMoved);
+            EXPECT_EQ(expectedLeftPosition(pick), positionLandings(leftPosition)) << where;
+            EXPECT_TRUE(clickLandings(leftPosition).empty()) << where;
+
+            SteamPads right;
+            right.right = finger(-1000, -2000);
+            const DeviceState rightPosition = routed(pick, model, right);
+            EXPECT_EQ(expectedRightPosition(pick, model), positionLandings(rightPosition)) << where;
+            EXPECT_TRUE(clickLandings(rightPosition).empty()) << where;
+
+            SteamPads leftClick;
+            leftClick.left = finger(0, 0, true);
+            EXPECT_EQ(expectedLeftClick(pick), clickLandings(routed(pick, model, leftClick)))
+                << where;
+
+            SteamPads rightClick;
+            rightClick.right = finger(0, 0, true);
+            EXPECT_EQ(expectedRightClick(pick, model),
+                      clickLandings(routed(pick, model, rightClick)))
+                << where;
+        }
+    }
+}
+
+TEST(SteamTrackpadRouter, PadModeSplitsTheSurfaceLeftHalfAndRightHalfWithYUp) {
+    SteamPads pads;
+    pads.left = finger(1000, 2000);
+    pads.right = finger(-1000, -2000);
+    const DeviceState s = routed(TrackpadPick::PAD, SteamModel::CONTROLLER_2026, pads);
+    ASSERT_TRUE(s.touchValid);
+    EXPECT_TRUE(s.touch0Active);
+    EXPECT_EQ(0, s.touch0Id);
+    EXPECT_EQ(-15884, s.touch0X);
+    EXPECT_EQ(-2000, s.touch0Y);
+    EXPECT_TRUE(s.touch1Active);
+    EXPECT_EQ(1, s.touch1Id);
+    EXPECT_EQ(15884, s.touch1X);
+    EXPECT_EQ(2000, s.touch1Y);
+    EXPECT_FALSE(s.touchClick);
+}
+
+TEST(SteamTrackpadRouter, PadModeHalvesMeetAtTheMiddleAndReachTheEdges) {
+    SteamPads pads;
+    pads.left = finger(32767, 32767);
+    pads.right = finger(-32768, -32768);
+    const DeviceState s = routed(TrackpadPick::PAD, SteamModel::CONTROLLER_2026, pads);
+    EXPECT_EQ(-1, s.touch0X);
+    EXPECT_EQ(-32767, s.touch0Y);
+    EXPECT_EQ(0, s.touch1X);
+    EXPECT_EQ(32767, s.touch1Y);
+    SteamPads edges;
+    edges.left = finger(-32768, 0);
+    edges.right = finger(32767, 0);
+    const DeviceState e = routed(TrackpadPick::PAD, SteamModel::CONTROLLER_2026, edges);
+    EXPECT_EQ(-32768, e.touch0X);
+    EXPECT_EQ(32767, e.touch1X);
+}
+
+TEST(SteamTrackpadRouter, PadModeClickIsTheSurfaceClickFromEitherPad) {
+    SteamPads leftClick;
+    leftClick.left = finger(0, 0, true);
+    EXPECT_TRUE(routed(TrackpadPick::PAD, SteamModel::CONTROLLER_2015, leftClick).touchClick);
+    SteamPads rightClick;
+    rightClick.right = finger(0, 0, true);
+    EXPECT_TRUE(routed(TrackpadPick::PAD, SteamModel::CONTROLLER_2015, rightClick).touchClick);
+}
+
+TEST(SteamTrackpadRouter, MouseModeIsTheRightPadAsFingerZeroWithYUp) {
+    SteamPads pads;
+    pads.right = finger(12000, -3000, true);
+    const DeviceState s = routed(TrackpadPick::MOUSE, SteamModel::CONTROLLER_2015, pads);
+    ASSERT_TRUE(s.touchValid);
+    EXPECT_TRUE(s.touch0Active);
+    EXPECT_EQ(12000, s.touch0X);
+    EXPECT_EQ(3000, s.touch0Y);
+    EXPECT_FALSE(s.touch1Active);
+    EXPECT_TRUE(s.touchClick);
+    EXPECT_FALSE(s.touchRightDown);
+}
+
+TEST(SteamTrackpadRouter, MouseModeLeftPadClickIsTheRightButton) {
+    SteamPads pads;
+    pads.left = finger(0, 0, true);
+    const DeviceState s = routed(TrackpadPick::MOUSE, SteamModel::CONTROLLER_2026, pads);
+    EXPECT_TRUE(s.touchRightDown);
+    EXPECT_FALSE(s.touchClick);
+}
+
+TEST(SteamTrackpadRouter, MouseModeCountsLeftPadTravelInWheelNotchesAndKeepsTheRemainder) {
+    PadScrollTracker scroll;
+    SteamPads pads;
+    pads.left = finger(0, 0);
+    DeviceState first;
+    routeSteamTrackpads(TrackpadPick::MOUSE, SteamModel::CONTROLLER_2026, pads, scroll, first);
+    EXPECT_EQ(0, first.touchScrollV);
+
+    pads.left = finger(0, (int16_t)(2 * kPadScrollUnitsPerNotch + 100));
+    DeviceState up;
+    routeSteamTrackpads(TrackpadPick::MOUSE, SteamModel::CONTROLLER_2026, pads, scroll, up);
+    EXPECT_EQ(2 * kWheelNotch, up.touchScrollV);
+
+    pads.left =
+        finger(0, (int16_t)(2 * kPadScrollUnitsPerNotch + 100 - kPadScrollUnitsPerNotch - 204));
+    DeviceState down;
+    routeSteamTrackpads(TrackpadPick::MOUSE, SteamModel::CONTROLLER_2026, pads, scroll, down);
+    EXPECT_EQ(-kWheelNotch, down.touchScrollV);
+
+    DeviceState still;
+    routeSteamTrackpads(TrackpadPick::MOUSE, SteamModel::CONTROLLER_2026, pads, scroll, still);
+    EXPECT_EQ(0, still.touchScrollV);
+}
+
+TEST(SteamTrackpadRouter, MouseModeALiftedLeftPadStartsTheNextSwipeFresh) {
+    PadScrollTracker scroll;
+    SteamPads pads;
+    pads.left = finger(0, 0);
+    DeviceState s;
+    routeSteamTrackpads(TrackpadPick::MOUSE, SteamModel::CONTROLLER_2026, pads, scroll, s);
+    pads.left = PadSample{};
+    routeSteamTrackpads(TrackpadPick::MOUSE, SteamModel::CONTROLLER_2026, pads, scroll, s);
+    pads.left = finger(0, 30000);
+    DeviceState landed;
+    routeSteamTrackpads(TrackpadPick::MOUSE, SteamModel::CONTROLLER_2026, pads, scroll, landed);
+    EXPECT_EQ(0, landed.touchScrollV);
+}
+
+TEST(SteamTrackpadRouter, StickModeOnThe2015PadIsTodaysRightStickAndR3) {
+    SteamPads pads;
+    pads.right = finger(5000, -6000, true);
+    const DeviceState s = routed(TrackpadPick::STICK, SteamModel::CONTROLLER_2015, pads);
+    EXPECT_EQ(5000, s.sRX);
+    EXPECT_EQ(-6000, s.sRY);
+    EXPECT_EQ(XUSB_THUMB_R, s.wButtons & XUSB_THUMB_R);
+    EXPECT_FALSE(s.touch0Active);
+    EXPECT_FALSE(s.touch1Active);
+}
+
+TEST(SteamTrackpadRouter, The2015RightStickStaysCentredAndNoR3OutsideStickMode) {
+    for (const TrackpadPick pick : {TrackpadPick::PAD, TrackpadPick::MOUSE, TrackpadPick::OFF}) {
+        SteamPads pads;
+        pads.right = finger(5000, -6000, true);
+        const DeviceState s = routed(pick, SteamModel::CONTROLLER_2015, pads);
+        EXPECT_EQ(0, s.sRX) << nameOf(pick);
+        EXPECT_EQ(0, s.sRY) << nameOf(pick);
+        EXPECT_EQ(0, s.wButtons & XUSB_THUMB_R) << nameOf(pick);
+    }
+}
+
+TEST(SteamTrackpadRouter, The2026PadHasARealRightStickTheRouterLeavesAlone) {
+    SteamPads pads;
+    pads.right = finger(5000, -6000);
+    for (const TrackpadPick pick : kEveryPick) {
+        DeviceState s;
+        s.sRX = 111;
+        s.sRY = -222;
+        PadScrollTracker scroll;
+        routeSteamTrackpads(pick, SteamModel::CONTROLLER_2026, pads, scroll, s);
+        EXPECT_EQ(111, s.sRX) << nameOf(pick);
+        EXPECT_EQ(-222, s.sRY) << nameOf(pick);
+    }
+}
+
+TEST(SteamTrackpadRouter, OffAndStickLeaveALiftedSurfaceSoAStaleFingerClears) {
+    SteamPads pads;
+    pads.left = finger(1000, 1000);
+    pads.right = finger(1000, 1000);
+    for (const TrackpadPick pick : {TrackpadPick::STICK, TrackpadPick::OFF}) {
+        const DeviceState s = routed(pick, SteamModel::CONTROLLER_2026, pads);
+        EXPECT_TRUE(s.touchValid) << nameOf(pick);
+        EXPECT_FALSE(s.touch0Active) << nameOf(pick);
+        EXPECT_FALSE(s.touch1Active) << nameOf(pick);
+        EXPECT_FALSE(s.touchClick) << nameOf(pick);
+    }
 }

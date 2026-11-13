@@ -395,6 +395,14 @@ the input gyro and the user toggle, NOT on link-liveness or the host sink.
 `extendedButtons` (protocol 4) rides the controller layer alone: it is the
 claim that the bound pad sources the extended-buttons word, with no user
 switch, and the satellite reads the word whether or not it is claimed.
+A Direct Steam Controller's `touchpadMode` comes from its per-slot trackpad
+pick instead (`TrackpadPickStore`, `stick | pad | mouse | off`): the pure ladder
+in `composer/TouchpadRouting.kt` (`effectiveTrackpadPick`) holds the stored pick
+to what the model offers, the type's surface and the host's mouse grant, and
+projects it to the wire mode. The same pick reaches the pad's native router
+(`gamepad::routeSteamTrackpads`, which lands every pad position and click in
+exactly one wire field) through `composer/TrackpadPickGateway.kt`, so what the
+descriptor declares and what the decoder composes cannot drift.
 The descriptor's `touchpadMode` is the same kind of projection
 (`CapabilityComposer.touchpadWireMode` via the pure
 `TouchpadRouting.wireMode`): the persisted per-satellite pick gated by the

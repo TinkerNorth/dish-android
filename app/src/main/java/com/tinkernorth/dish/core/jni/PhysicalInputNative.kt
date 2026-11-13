@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.core.jni
 
+import com.tinkernorth.dish.repository.TrackpadPick
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -53,6 +54,11 @@ class PhysicalInputNative
             vendorId: Int,
             productId: Int,
         ): Boolean = ModelTableNative.modelHasExtendedButtons(vendorId, productId)
+
+        fun modelSteamTrackpads(
+            vendorId: Int,
+            productId: Int,
+        ): Int = ModelTableNative.modelSteamTrackpads(vendorId, productId)
 
         fun modelFrameworkRumbleUnreliable(
             vendorId: Int,
@@ -135,6 +141,13 @@ class PhysicalInputNative
 
         fun detachUsbDevice(syntheticDeviceId: Int) {
             UsbDirectNative.detachUsbDevice(syntheticDeviceId)
+        }
+
+        fun setTrackpadPick(
+            syntheticDeviceId: Int,
+            pick: TrackpadPick,
+        ) {
+            UsbDirectNative.setTrackpadPick(syntheticDeviceId, pick.ordinal)
         }
 
         fun sendUsbRumble(

@@ -17,6 +17,7 @@ import com.tinkernorth.dish.composer.MoonlightBindingRestoreController
 import com.tinkernorth.dish.composer.MoonlightSessionController
 import com.tinkernorth.dish.composer.SlotTopologyController
 import com.tinkernorth.dish.composer.StreamingServiceController
+import com.tinkernorth.dish.composer.TrackpadPickGateway
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.BluetoothGamepadBridge
@@ -97,6 +98,8 @@ class DishApplication : Application() {
     @Inject lateinit var streamingServiceController: StreamingServiceController
 
     @Inject lateinit var slotTopologyController: SlotTopologyController
+
+    @Inject lateinit var trackpadPickGateway: TrackpadPickGateway
 
     @Inject lateinit var moonlightSessionController: MoonlightSessionController
 

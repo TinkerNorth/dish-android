@@ -22,6 +22,13 @@ object UsbDirectNative {
 
     external fun detachUsbDevice(syntheticDeviceId: Int)
 
+    // The slot's trackpad pick for a Direct Steam Controller, as TrackpadPick's ordinal; read by
+    // the pad's poller before each decode. Ignored for a device that is gone.
+    external fun setTrackpadPick(
+        syntheticDeviceId: Int,
+        pick: Int,
+    )
+
     // strong/weak are wire-scale 0..65535; native maps to each device's rumble output report.
     external fun sendUsbRumble(
         syntheticDeviceId: Int,

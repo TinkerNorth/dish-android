@@ -139,6 +139,8 @@ struct DeviceCtx {
 
     int64_t lastMotionNs = 0;
     gamepad::TouchpadGate touchGate;
+    // The slot's trackpad pick, written by the JVM and read by the poller before each decode.
+    std::atomic<uint8_t> trackpadPick{static_cast<uint8_t>(gamepad::TrackpadPick::STICK)};
 
     // The pad's entry in g_usbDevices: its poller's counters and charge, which the JVM reads
     // without a lock, and the worker that owns its OUT endpoint.
@@ -258,19 +260,22 @@ bool dueMotion(DeviceCtx& ctx, const gamepad::DeviceState& scratch, const int64_
     return true;
 }
 
-// Whether the send-on-change gate lets this report's touch frame (its lastSent) through.
+// Whether the send-on-change gate lets this report's touch frame (its lastSent) through. A wheel
+// turn is an event, not a state, so it goes out whether or not the fingers moved.
 bool dueTouch(DeviceCtx& ctx, const gamepad::DeviceState& scratch, const int64_t nowNs) {
     gamepad::TouchpadState cur;
     cur.f0Active = scratch.touch0Active;
     cur.f1Active = scratch.touch1Active;
     cur.clickDown = scratch.touchClick;
+    cur.rightDown = scratch.touchRightDown;
     cur.f0Id = scratch.touch0Id;
     cur.f1Id = scratch.touch1Id;
     cur.f0X = scratch.touch0X;
     cur.f0Y = scratch.touch0Y;
     cur.f1X = scratch.touch1X;
     cur.f1Y = scratch.touch1Y;
-    return ctx.touchGate.decide(cur, nowNs) != gamepad::TouchpadSend::SKIP;
+    const bool stateDue = ctx.touchGate.decide(cur, nowNs) != gamepad::TouchpadSend::SKIP;
+    return stateDue || scratch.touchScrollV != 0;
 }
 
 int64_t monotonicNowNs() {
@@ -292,6 +297,7 @@ void publishDecodedReport(DeviceCtx& ctx, const gamepad::DeviceState& scratch, b
     frame.motion = hasMotion ? &motion : nullptr;
     frame.touch = hasTouch ? &ctx.touchGate.lastSent() : nullptr;
     frame.touchEventTimeMs = (uint32_t)ctx.touchGate.lastEventTimeMs();
+    frame.touchScrollV = hasTouch ? scratch.touchScrollV : 0;
     dispatch::applyUsbFrame(ctx.syntheticDeviceId, frame);
     publishMicMuteEdge(ctx, lastMicMuted);
     publishBattery(ctx, scratch);
@@ -369,6 +375,8 @@ void publishCompletedUrb(DeviceCtx& ctx, const UrbSlot& completed, const int act
         publishBattery(ctx, scratch);
         return;
     }
+    ctx.stickRange.trackpadPick =
+        static_cast<gamepad::TrackpadPick>(ctx.trackpadPick.load(std::memory_order_relaxed));
     const bool decoded = usbparsers::decodeReport(ctx.parser, completed.buf.data(),
                                                   (size_t)actualLength, scratch, &ctx.stickRange);
     if (!decoded) return;
@@ -935,6 +943,13 @@ void sendMicMuteLed(int32_t syntheticDeviceId, uint8_t state) {
     g_usbDevices.post(syntheticDeviceId, [&](dish_usb::OutputWorker& output) {
         output.postMicLed(syntheticDeviceId, state);
     });
+}
+
+void setTrackpadPick(const int32_t syntheticDeviceId, const gamepad::TrackpadPick pick) {
+    std::lock_guard<TrackedMutex> lock(g_mtx);
+    auto it = g_devices.find(syntheticDeviceId);
+    if (it == g_devices.end()) return;
+    it->second->trackpadPick.store(static_cast<uint8_t>(pick), std::memory_order_relaxed);
 }
 
 } // namespace usbhost

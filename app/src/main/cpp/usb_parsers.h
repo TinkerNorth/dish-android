@@ -159,7 +159,17 @@ struct ParserState {
     // The Steam Controller (2026)'s IMU tick last published as motion: SDL sends a sensor sample
     // only for a tick it has not seen, starting from 0.
     uint32_t tritonImuTick = 0;
+    // The slot's trackpad pick (gamepad::routeSteamTrackpads), copied in from the pad's context
+    // before each decode; the 2015 pad's right pad is the right stick until told otherwise, and
+    // the 2026 pad treats that as off.
+    gamepad::TrackpadPick trackpadPick = gamepad::TrackpadPick::STICK;
+    gamepad::PadScrollTracker padScroll;
 };
+
+enum class SteamTrackpads : uint8_t { NONE = 0, PAD_2015 = 1, PAD_2026 = 2 };
+
+// Which Steam Controller's trackpads a model has, for the per-slot pick.
+SteamTrackpads modelSteamTrackpads(uint16_t vid, uint16_t pid);
 
 const KnownDevice* lookupKnown(uint16_t vid, uint16_t pid);
 

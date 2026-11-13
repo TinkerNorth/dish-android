@@ -8,6 +8,7 @@ import com.tinkernorth.dish.core.model.CatalogDto
 import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
+import com.tinkernorth.dish.repository.TrackpadPick
 import com.tinkernorth.dish.source.audio.PadAudioRoute
 import com.tinkernorth.dish.source.audio.PadAudioRoutes
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
@@ -69,6 +70,7 @@ internal data class StoreStates(
     val rumbleEnabled: MutableStateFlow<Map<String, Boolean>> = MutableStateFlow(emptyMap()),
     val micEnabled: MutableStateFlow<Map<String, Boolean>> = MutableStateFlow(emptyMap()),
     val speakerEnabled: MutableStateFlow<Map<String, Boolean>> = MutableStateFlow(emptyMap()),
+    val trackpadPicks: MutableStateFlow<Map<String, TrackpadPick>> = MutableStateFlow(emptyMap()),
     val padAudioRoutes: MutableStateFlow<Map<Int, PadAudioRoute>> = MutableStateFlow(emptyMap()),
     val mouseSurface: MutableStateFlow<Set<String>> = MutableStateFlow(emptySet()),
     val hostFeaturesState: MutableStateFlow<Map<String, HostFeatureSet>> = MutableStateFlow(emptyMap()),
@@ -93,6 +95,7 @@ internal data class ModelFacts(
     val modelHasTriggerEffects: Boolean = false,
     val modelHasTriggerRumble: Boolean = false,
     val modelHasExtendedButtons: Boolean = false,
+    val steamTrackpads: Int = 0,
     val knownFastLane: Boolean = false,
     val frameworkCaps: PhysicalGamepadRegistry.FrameworkCaps? = null,
 )
@@ -129,6 +132,7 @@ internal fun composerFor(
             every { modelHasTriggerEffects(any(), any()) } returns model.modelHasTriggerEffects
             every { modelHasTriggerRumble(any(), any()) } returns model.modelHasTriggerRumble
             every { modelHasExtendedButtons(any(), any()) } returns model.modelHasExtendedButtons
+            every { modelSteamTrackpads(any(), any()) } returns model.steamTrackpads
             every { isKnownFastLaneModel(any(), any()) } returns model.knownFastLane
         }
     val toggles =
@@ -137,6 +141,11 @@ internal fun composerFor(
             rumble = mockk { every { state } returns stores.rumbleEnabled },
             mic = mockk { every { state } returns stores.micEnabled },
             speaker = mockk { every { state } returns stores.speakerEnabled },
+            trackpadPick =
+                mockk {
+                    every { state } returns stores.trackpadPicks
+                    every { pickFor(any()) } answers { stores.trackpadPicks.value[firstArg()] }
+                },
         )
     val routes: PadAudioRoutes =
         mockk {

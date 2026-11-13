@@ -27,6 +27,7 @@ import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.SlotToggleStores
 import com.tinkernorth.dish.source.store.SpeakerEnabledStore
+import com.tinkernorth.dish.source.store.TrackpadPickStore
 import com.tinkernorth.dish.source.system.MicPermissionGate
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.PhysicalPadSources
@@ -134,6 +135,7 @@ class ConfigureBindingsApplyTest {
                         rumble = rumbleStore,
                         mic = mockk<MicEnabledStore>(relaxed = true),
                         speaker = mockk<SpeakerEnabledStore>(relaxed = true),
+                        trackpadPick = mockk<TrackpadPickStore> { every { pickFor(any()) } returns null },
                     ),
                 micPermission = mockk<MicPermissionGate>(relaxed = true),
                 capabilityComposer = composer,

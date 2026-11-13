@@ -74,6 +74,8 @@ struct UsbFrame {
     const dish_send::MotionSample* motion = nullptr;
     const gamepad::TouchpadState* touch = nullptr;
     uint32_t touchEventTimeMs = 0;
+    // The pointer frame's wheel, an event: a Steam Controller's left pad as a mouse's wheel.
+    int16_t touchScrollV = 0;
 };
 
 inline constexpr size_t STATE_WORDS =

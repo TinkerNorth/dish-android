@@ -479,6 +479,14 @@ constexpr uint16_t kDualSenseEdgeProductId = 0x0DF2;
 constexpr uint16_t kSwitchProProductId = 0x2009;
 constexpr uint16_t kSwitchChargingGripProductId = 0x200E;
 
+SteamTrackpads modelSteamTrackpads(const uint16_t vid, const uint16_t pid) {
+    const KnownDevice* k = lookupKnown(vid, pid);
+    if (k == nullptr) return SteamTrackpads::NONE;
+    if (k->parser == Parser::STEAM_CONTROLLER) return SteamTrackpads::PAD_2015;
+    if (k->parser == Parser::STEAM_TRITON) return SteamTrackpads::PAD_2026;
+    return SteamTrackpads::NONE;
+}
+
 bool modelHasExtendedButtons(const uint16_t vid, const uint16_t pid) {
     const KnownDevice* k = lookupKnown(vid, pid);
     if (k == nullptr) return false;
@@ -1484,10 +1492,16 @@ uint8_t steamTriggerToWire(const uint8_t raw) {
 }
 
 // SDL adds a further +1000 to each axis while a finger is down. That is harmless for a touch
-// surface but would park a stick off centre, so it is deliberately not carried over.
+// surface but would park a stick off centre, so it is deliberately not carried over. SDL rotates
+// the right pad by the shell angle and the left pad by its negative.
 void steamRotatePad(const int32_t x, const int32_t y, int16_t& outX, int16_t& outY) {
     outX = clampI16((kSteamPadCos * x - kSteamPadSin * y) / kQ16One);
     outY = clampI16((kSteamPadSin * x + kSteamPadCos * y) / kQ16One);
+}
+
+void steamRotateLeftPad(const int32_t x, const int32_t y, int16_t& outX, int16_t& outY) {
+    outX = clampI16((kSteamPadCos * x + kSteamPadSin * y) / kQ16One);
+    outY = clampI16((kSteamPadCos * y - kSteamPadSin * x) / kQ16One);
 }
 
 int16_t steamGyroToWire(const int32_t raw) {
@@ -1513,23 +1527,37 @@ uint16_t decodeSteamButtons(const uint32_t btn) {
     if (btn & kSteamDpadDown) buttons |= XUSB_DPAD_DOWN;
     if (btn & kSteamDpadLeft) buttons |= XUSB_DPAD_LEFT;
     if (btn & kSteamDpadRight) buttons |= XUSB_DPAD_RIGHT;
-    if (btn & kSteamRightPadClicked) buttons |= XUSB_THUMB_R;
     return buttons;
 }
 
-// The extras in SDL's names: the grips are its two paddles, the full-pull trigger bits its trigger
-// clicks, and a left-pad click under a finger is the pad's, where trackSteamLeftStick leaves it.
-// The right pad's click stays R3 while the right pad is the right stick.
+// The extras in SDL's names: the grips are its two paddles and the full-pull trigger bits its
+// trigger clicks. The pad clicks are the trackpad router's.
 uint32_t steamExtendedButtons(const uint32_t btn) {
     uint32_t word = 0;
     if (btn & kSteamBackLeft) word |= dish_wire::EXT_BUTTON_LEFT_PADDLE1;
     if (btn & kSteamBackRight) word |= dish_wire::EXT_BUTTON_RIGHT_PADDLE1;
     if (btn & kSteamLeftTriggerClick) word |= dish_wire::EXT_BUTTON_LEFT_TRIGGER_CLICK;
     if (btn & kSteamRightTriggerClick) word |= dish_wire::EXT_BUTTON_RIGHT_TRIGGER_CLICK;
-    const bool leftPadClickedUnderAFinger =
-        (btn & kSteamLeftPadFinger) && (btn & kSteamLeftPadClicked);
-    if (leftPadClickedUnderAFinger) word |= dish_wire::EXT_BUTTON_LEFT_PAD_CLICK;
     return word;
+}
+
+// The two pads as the router takes them. A left-pad click with no finger on the pad is the
+// stick's (trackSteamLeftStick), so it is not the pad's here.
+gamepad::SteamPads steamPads(const uint8_t* buf, const uint32_t btn) {
+    gamepad::SteamPads pads;
+    pads.left.active = (btn & kSteamLeftPadFinger) != 0;
+    if (pads.left.active) {
+        steamRotateLeftPad(rdLe16(buf, kSteamLeftAxesOffset), rdLe16(buf, kSteamLeftAxesOffset + 2),
+                           pads.left.x, pads.left.y);
+    }
+    pads.left.click = pads.left.active && (btn & kSteamLeftPadClicked) != 0;
+    pads.right.active = (btn & kSteamRightPadFinger) != 0;
+    if (pads.right.active) {
+        steamRotatePad(rdLe16(buf, kSteamRightPadOffset), rdLe16(buf, kSteamRightPadOffset + 2),
+                       pads.right.x, pads.right.y);
+    }
+    pads.right.click = (btn & kSteamRightPadClicked) != 0;
+    return pads;
 }
 
 // One pair of axes carries either the stick or the left pad. The finger-down bit says which; the
@@ -1548,17 +1576,6 @@ void trackSteamLeftStick(const uint8_t* buf, const uint32_t btn, ParserState& st
         st.steamStickY = 0;
     }
     if (btn & kSteamStickButton) buttons |= XUSB_THUMB_L;
-}
-
-void decodeSteamRightPad(const uint8_t* buf, const uint32_t btn, DeviceState& s) {
-    const bool fingerDown = (btn & kSteamRightPadFinger) != 0;
-    if (!fingerDown) {
-        s.sRX = 0;
-        s.sRY = 0;
-        return;
-    }
-    steamRotatePad(rdLe16(buf, kSteamRightPadOffset), rdLe16(buf, kSteamRightPadOffset + 2), s.sRX,
-                   s.sRY);
 }
 
 void decodeSteamMotion(const uint8_t* buf, DeviceState& s) {
@@ -1596,7 +1613,8 @@ bool decodeSteamController(const uint8_t* buf, const size_t len, DeviceState& s,
     s.sLX = st.steamStickX;
     s.sLY = st.steamStickY;
 
-    decodeSteamRightPad(buf, btn, s);
+    gamepad::routeSteamTrackpads(st.trackpadPick, gamepad::SteamModel::CONTROLLER_2015,
+                                 steamPads(buf, btn), st.padScroll, s);
     decodeSteamMotion(buf, s);
     return true;
 }
@@ -1618,6 +1636,11 @@ constexpr size_t kTritonButtonsOffset = 2;
 constexpr int kTritonLeftTriggerOffset = 6;
 constexpr int kTritonRightTriggerOffset = 8;
 constexpr int kTritonSticksOffset = 10;
+// The pads: left x y, pressure, right x y, pressure, from 18 on the plain reports and from 20 on
+// the timestamp report, which puts a u16 pad timestamp first.
+constexpr int kTritonPadsOffset = 18;
+constexpr int kTritonTimestampPadsOffset = 20;
+constexpr int kTritonRightPadWithinPads = 6;
 constexpr int kTritonImuTickOffset = 30;
 constexpr int kTritonTimestampImuTickOffset = 32;
 constexpr int kTritonAccelOffset = 34;
@@ -1648,9 +1671,11 @@ constexpr uint32_t kTritonR5 = 0x00000100;
 constexpr uint32_t kTritonL4 = 0x00020000;
 constexpr uint32_t kTritonL5 = 0x00040000;
 constexpr uint32_t kTritonRightStickTouch = 0x00100000;
+constexpr uint32_t kTritonRightPadTouch = 0x00200000;
 constexpr uint32_t kTritonRightPadClick = 0x00400000;
 constexpr uint32_t kTritonRightTriggerClick = 0x00800000;
 constexpr uint32_t kTritonLeftStickTouch = 0x01000000;
+constexpr uint32_t kTritonLeftPadTouch = 0x02000000;
 constexpr uint32_t kTritonLeftPadClick = 0x04000000;
 constexpr uint32_t kTritonLeftTriggerClick = 0x08000000;
 constexpr uint32_t kTritonRightGripTouch = 0x10000000;
@@ -1691,16 +1716,14 @@ struct ExtendedButtonBit {
     uint32_t mask;
     uint32_t ext;
 };
-// SDL's names: QAM is misc1, R4/L4/R5/L5 are paddle 1-4, the pad clicks are touchpad and misc2,
-// the trigger clicks misc3 and misc4, and the stick and grip touches the capsense inputs.
+// SDL's names: QAM is misc1, R4/L4/R5/L5 are paddle 1-4, the trigger clicks misc3 and misc4,
+// and the stick and grip touches the capsense inputs. The pad clicks are the trackpad router's.
 constexpr ExtendedButtonBit kTritonExtendedBits[] = {
     {kTritonQam, dish_wire::EXT_BUTTON_MISC1},
     {kTritonR4, dish_wire::EXT_BUTTON_RIGHT_PADDLE1},
     {kTritonL4, dish_wire::EXT_BUTTON_LEFT_PADDLE1},
     {kTritonR5, dish_wire::EXT_BUTTON_RIGHT_PADDLE2},
     {kTritonL5, dish_wire::EXT_BUTTON_LEFT_PADDLE2},
-    {kTritonLeftPadClick, dish_wire::EXT_BUTTON_LEFT_PAD_CLICK},
-    {kTritonRightPadClick, dish_wire::EXT_BUTTON_RIGHT_PAD_CLICK},
     {kTritonLeftTriggerClick, dish_wire::EXT_BUTTON_LEFT_TRIGGER_CLICK},
     {kTritonRightTriggerClick, dish_wire::EXT_BUTTON_RIGHT_TRIGGER_CLICK},
     {kTritonLeftStickTouch, dish_wire::EXT_BUTTON_LEFT_STICK_TOUCH},
@@ -1716,6 +1739,29 @@ uint32_t tritonExtendedButtons(const uint32_t bits) {
         if (isDown) word |= bit.ext;
     }
     return word;
+}
+
+gamepad::PadSample tritonPad(const uint8_t* buf, const int offset, const bool touched,
+                             const bool clicked) {
+    gamepad::PadSample pad;
+    pad.active = touched;
+    if (touched) {
+        pad.x = rdLe16(buf, offset);
+        pad.y = rdLe16(buf, offset + 2);
+    }
+    pad.click = clicked;
+    return pad;
+}
+
+gamepad::SteamPads tritonPads(const uint8_t* buf, const uint32_t bits) {
+    const bool isTheTimestampReport = buf[0] == kTritonStateTimestampReport;
+    const int offset = isTheTimestampReport ? kTritonTimestampPadsOffset : kTritonPadsOffset;
+    gamepad::SteamPads pads;
+    pads.left = tritonPad(buf, offset, (bits & kTritonLeftPadTouch) != 0,
+                          (bits & kTritonLeftPadClick) != 0);
+    pads.right = tritonPad(buf, offset + kTritonRightPadWithinPads,
+                           (bits & kTritonRightPadTouch) != 0, (bits & kTritonRightPadClick) != 0);
+    return pads;
 }
 
 uint8_t tritonTriggerToWire(const int16_t raw) {
@@ -1771,6 +1817,8 @@ bool decodeSteamTriton(const uint8_t* buf, const size_t len, DeviceState& s, Par
     s.bLT = tritonTriggerToWire(rdLe16(buf, kTritonLeftTriggerOffset));
     s.bRT = tritonTriggerToWire(rdLe16(buf, kTritonRightTriggerOffset));
     readSticksLe16(buf, kTritonSticksOffset, s);
+    gamepad::routeSteamTrackpads(st.trackpadPick, gamepad::SteamModel::CONTROLLER_2026,
+                                 tritonPads(buf, bits), st.padScroll, s);
     publishTritonMotionOnANewTick(buf, s, st);
     return true;
 }

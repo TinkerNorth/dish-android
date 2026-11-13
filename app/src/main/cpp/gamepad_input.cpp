@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 #include "gamepad_input.h"
+#include "wire_encoders.h"
 
 #include <algorithm>
 #include <cmath>
@@ -355,7 +356,7 @@ uint16_t hatAxesToDpadBits(const float hatX, const float hatY) {
 
 bool isTouchpadEdge(const TouchpadState& last, const TouchpadState& cur) {
     const bool contactChanged = cur.f0Active != last.f0Active || cur.f1Active != last.f1Active;
-    const bool clickChanged = cur.clickDown != last.clickDown;
+    const bool clickChanged = cur.clickDown != last.clickDown || cur.rightDown != last.rightDown;
     const bool trackingIdChanged = cur.f0Id != last.f0Id || cur.f1Id != last.f1Id;
     return contactChanged || clickChanged || trackingIdChanged;
 }
@@ -513,7 +514,7 @@ size_t formatDeviceStateJson(const DeviceState& s, char* buf, const size_t cap) 
 
 bool operator==(const TouchpadState& a, const TouchpadState& b) {
     const bool sameContacts = a.f0Active == b.f0Active && a.f1Active == b.f1Active;
-    const bool sameClick = a.clickDown == b.clickDown;
+    const bool sameClick = a.clickDown == b.clickDown && a.rightDown == b.rightDown;
     const bool sameIds = a.f0Id == b.f0Id && a.f1Id == b.f1Id;
     const bool sameFinger0 = a.f0X == b.f0X && a.f0Y == b.f0Y;
     const bool sameFinger1 = a.f1X == b.f1X && a.f1Y == b.f1Y;
@@ -547,6 +548,113 @@ TouchpadSend TouchpadGate::decideHeal(const int64_t nowNs) {
     resendsLeft_--;
     lastSentNs_ = nowNs;
     return TouchpadSend::HEAL;
+}
+
+namespace {
+
+constexpr int16_t kHalfSurface = 16384;
+constexpr uint8_t kLeftPadFingerId = 0;
+constexpr uint8_t kRightPadFingerId = 1;
+
+// Pads are up-positive and the wire is +y down; -(-32768) has no int16.
+int16_t padYToWire(const int16_t y) {
+    return (int16_t)std::clamp<int32_t>(-(int32_t)y, -32767, 32767);
+}
+
+void liftSurface(DeviceState& s) {
+    s.touchValid = true;
+    s.touch0Active = false;
+    s.touch1Active = false;
+    s.touchClick = false;
+    s.touchRightDown = false;
+    s.touchScrollV = 0;
+    s.touch0Id = kLeftPadFingerId;
+    s.touch1Id = kRightPadFingerId;
+    s.touch0X = s.touch0Y = s.touch1X = s.touch1Y = 0;
+}
+
+void clicksToTheWord(const SteamPads& pads, DeviceState& s) {
+    if (pads.left.click) s.extButtons |= dish_wire::EXT_BUTTON_LEFT_PAD_CLICK;
+    if (pads.right.click) s.extButtons |= dish_wire::EXT_BUTTON_RIGHT_PAD_CLICK;
+}
+
+void routeAsStick(const SteamPads& pads, DeviceState& s) {
+    liftSurface(s);
+    s.sRX = pads.right.active ? pads.right.x : 0;
+    s.sRY = pads.right.active ? pads.right.y : 0;
+    if (pads.right.click) s.wButtons |= XUSB_THUMB_R;
+    if (pads.left.click) s.extButtons |= dish_wire::EXT_BUTTON_LEFT_PAD_CLICK;
+}
+
+void routeAsPad(const SteamPads& pads, DeviceState& s) {
+    liftSurface(s);
+    s.touch0Active = pads.left.active;
+    if (pads.left.active) {
+        s.touch0X = (int16_t)(pads.left.x / 2 - kHalfSurface);
+        s.touch0Y = padYToWire(pads.left.y);
+    }
+    s.touch1Active = pads.right.active;
+    if (pads.right.active) {
+        s.touch1X = (int16_t)(pads.right.x / 2 + kHalfSurface);
+        s.touch1Y = padYToWire(pads.right.y);
+    }
+    s.touchClick = pads.left.click || pads.right.click;
+}
+
+int16_t wheelFrom(const PadSample& left, PadScrollTracker& scroll) {
+    if (!left.active) {
+        scroll = PadScrollTracker{};
+        return 0;
+    }
+    if (!scroll.tracking) {
+        scroll.tracking = true;
+        scroll.lastY = left.y;
+        return 0;
+    }
+    scroll.remainder += (int32_t)left.y - scroll.lastY;
+    scroll.lastY = left.y;
+    const int32_t notches = scroll.remainder / kPadScrollUnitsPerNotch;
+    scroll.remainder -= notches * kPadScrollUnitsPerNotch;
+    return (int16_t)(notches * kWheelNotch);
+}
+
+void routeAsMouse(const SteamPads& pads, PadScrollTracker& scroll, DeviceState& s) {
+    liftSurface(s);
+    s.touch0Active = pads.right.active;
+    if (pads.right.active) {
+        s.touch0X = pads.right.x;
+        s.touch0Y = padYToWire(pads.right.y);
+    }
+    s.touchClick = pads.right.click;
+    s.touchRightDown = pads.left.click;
+    s.touchScrollV = wheelFrom(pads.left, scroll);
+}
+
+void routeAsOff(const SteamPads& pads, DeviceState& s) {
+    liftSurface(s);
+    clicksToTheWord(pads, s);
+}
+
+} // namespace
+
+void routeSteamTrackpads(const TrackpadPick pick, const SteamModel model, const SteamPads& pads,
+                         PadScrollTracker& scroll, DeviceState& s) {
+    const bool rightPadIsTheStick = model == SteamModel::CONTROLLER_2015;
+    if (rightPadIsTheStick) {
+        s.sRX = 0;
+        s.sRY = 0;
+    }
+    switch (pick) {
+    case TrackpadPick::STICK:
+        if (rightPadIsTheStick) return routeAsStick(pads, s);
+        return routeAsOff(pads, s);
+    case TrackpadPick::PAD:
+        return routeAsPad(pads, s);
+    case TrackpadPick::MOUSE:
+        return routeAsMouse(pads, scroll, s);
+    case TrackpadPick::OFF:
+        return routeAsOff(pads, s);
+    }
 }
 
 } // namespace gamepad
