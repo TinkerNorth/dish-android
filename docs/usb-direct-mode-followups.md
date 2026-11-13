@@ -216,12 +216,16 @@ Nothing receiver-side has met a dongle, there is none here: the slot layout, the
 its answer, the event framing and the newly-paired value, the arrival on a missed connect, the
 per-slot init on arrival, the restore on release and the 500 ms cadence are all unverified.
 
-**Known limitation, two dongles of one model are one:** every claim is keyed by vendor and product
-id (`claimedConns` and `receiverSlots` in `UsbGamepadManager.kt`, the `UsbController` map, the
-path preference), so a second dongle of the same model plugged in beside the first folds into the
-first's entry and only the first is read. The desktop clients share the limitation. Telling them
-apart means keying by the `UsbDevice`'s name as well, through the path FSM and the preference
-store.
+**Two dongles of one model:** each physical device runs its own path FSM, keyed by
+`UsbUnitKey` (the model and a unit; `UsbUnits.kt`), and is told from its twin by its
+`UsbDevice.deviceName`. A second dongle beside the first gets a claim, slots and pads of its own,
+and unplugging one leaves the other's (`UsbSameModelDevicesTest`). The path preference stays the
+model's, as on the desktops. Two limits remain, both because Android does not say which framework
+`InputDevice` belongs to which `UsbDevice`: every device of a model follows the model's first live
+framework card (`liveFrameworkFor`), so two pads of one model switched back to Standard together
+settle on the same card, and the registry's card marks (the transition hold, needs-replug,
+restore-stuck and the Direct failure shown on a card) are the model's. Unverified with two
+identical devices.
 
 The wired pad's interface pick also assumes the emulated keyboard and mouse declare the HID boot
 subclass. `hid-steam` deliberately does not rely on that, distinguishing the real pad by its report
@@ -335,7 +339,7 @@ once its 0x79/0x46 connect event or its first state report arrives, and away on 
 event. While a slot's controller is away its worker owes no refresh (`FeedbackState.controllerAway`,
 `refreshDue`, `nextRefreshInMs`), so the lizard switch no longer goes to an empty slot every 3 s,
 and the rumble that was playing and the battery reading go with the controller that left. Two
-Pucks, or two Nereids, plugged in together are one entry, as item 8 notes. Everything
+Pucks, or two Nereids, plugged in together are two entries, as item 8 notes. Everything
 receiver-side is unverified on hardware; there is no dongle here.
 
 **Extended buttons (protocol 4, `tritonExtendedButtons`):** QAM rides the INPUT word as `misc1`,

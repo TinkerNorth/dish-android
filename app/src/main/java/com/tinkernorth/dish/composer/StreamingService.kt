@@ -77,7 +77,7 @@ class StreamingService : Service() {
         combine(
             wakeState.streamingSlotCount,
             hub.connections,
-            usbGamepadManager.controllers,
+            usbGamepadManager.controllersByUnit,
             micCapture.state,
         ) { count, conns, controllers, plan ->
             StreamingSnapshot(count, conns, controllers.directClaimCount(), plan.arming, micIndicatorStateOf(plan))

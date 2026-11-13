@@ -36,7 +36,7 @@ class StreamingServiceController
         private var startPending = false
 
         override fun upstream(): Flow<Input> =
-            combine(wakeState.streamingSlotCount, usbGamepadManager.controllers, liveness.state) { slots, controllers, live ->
+            combine(wakeState.streamingSlotCount, usbGamepadManager.controllersByUnit, liveness.state) { slots, controllers, live ->
                 Input(slots + controllers.directClaimCount(), live)
             }
 

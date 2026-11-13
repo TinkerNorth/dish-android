@@ -84,6 +84,14 @@ computer. Those lines say "update Satellite too".
 
 ### Fixed
 
+- **Two controllers of the same model each work in Direct mode.** Two
+  DualSense pads on USB cables, two Steam Controller receivers or two of the
+  new Steam Controller's adapters used to share one entry in Dish: only one of
+  them was read, and unplugging either one stopped the one being read. Each now
+  gets its own Direct claim and its own slots, unplugging one leaves the other
+  running, and one that cannot switch to Direct leaves the other on it. Direct
+  or Standard is still one choice for the model. Not tried with two identical
+  controllers yet.
 - **The 8BitDo Ultimate 2 Wireless works in X-input mode.** With its switch on
   X-input, many phones never saw it at all: their Android is older than the
   Linux driver that knows this controller. Dish now recognises it and reads it
