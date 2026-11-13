@@ -365,9 +365,7 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
     }
 
     private fun renderButtons(s: InputSnapshot) {
-        val pressed = WireButton.entries.filter { (s.buttons and it.bit) != 0 }.joinToString(" · ") { it.label }
-        binding.tvButtons.text =
-            getString(R.string.inspector_pressed, pressed.ifEmpty { getString(R.string.inspector_none) })
+        binding.tvButtons.text = pressedText(s)
     }
 
     // A pad with no IMU says so once rather than showing zeroes, which would read as a sensor
@@ -385,12 +383,9 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
     }
 
     private fun renderTouch(s: InputSnapshot) {
-        if (!s.touchValid) {
-            binding.tvTouchHint.text = getString(R.string.inspector_touch_missing)
-            return
-        }
+        binding.tvTouchHint.text = touchHintText(s)
+        if (!s.touchValid) return
         binding.plotTouch.update(s)
-        binding.tvTouchHint.text = ""
     }
 
     private fun startCapture(

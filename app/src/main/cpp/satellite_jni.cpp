@@ -1263,7 +1263,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_InstrumentationNative_
 
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_deviceStateJson(
     JNIEnv* env, jobject, jint deviceId) {
-    char buf[512];
+    char buf[gamepad::kDeviceStateJsonCap];
     const size_t n = g_slotTable.formatDeviceState((int32_t)deviceId, buf, sizeof(buf));
     return env->NewStringUTF(n > 0 ? buf : "");
 }

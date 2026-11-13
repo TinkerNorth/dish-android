@@ -31,6 +31,13 @@ computer. Those lines say "update Satellite too".
   computer makes of them is up to the controller type Dish emulates there,
   which the next updates extend. Not tried on a real Steam Controller or
   DualSense Edge yet.
+- **The controller inspector shows a controller's extra buttons.** Its live
+  input now names a back paddle, the Misc 1 button (a Switch Pro Controller's
+  Capture, the new Steam Controller's "..."), a trackpad or trigger click and a
+  stick or grip touch as you press them, next to the usual buttons. With a
+  Steam Controller's trackpads set to Mouse, its right click and scroll wheel
+  show under the touchpad. Before, the inspector showed only the buttons an
+  Xbox controller has.
 - **DualSense Edge as a controller type.** A Satellite that offers it (update
   Satellite too) can be asked to plug in a DualSense Edge: a DualSense whose
   two back buttons and two Fn buttons are the extra buttons a controller sends

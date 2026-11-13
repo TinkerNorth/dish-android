@@ -703,16 +703,55 @@ TEST(DeviceStateJson, SerializesEveryFieldInTheDocumentedLayout) {
     s.touch1X = 0;
     s.touch1Y = 0;
     s.touchClick = true;
+    s.extButtons = dish_wire::EXT_BUTTON_LEFT_PADDLE1 | dish_wire::EXT_BUTTON_MISC1;
+    s.touchRightDown = true;
+    s.touchScrollV = -kWheelNotch;
 
-    char buf[512];
+    char buf[kDeviceStateJsonCap];
     size_t n = formatDeviceStateJson(s, buf, sizeof(buf));
     ASSERT_GT(n, 0u);
     EXPECT_STREQ(
         "{\"buttons\":4112,\"lt\":12,\"rt\":255,\"lx\":-32768,\"ly\":32767,\"rx\":-1,\"ry\":1,"
         "\"motionValid\":true,\"gx\":10,\"gy\":-20,\"gz\":30,\"ax\":-40,\"ay\":50,\"az\":-60,"
         "\"touchValid\":true,\"f0Active\":true,\"f0Id\":7,\"f0X\":-100,\"f0Y\":200,"
-        "\"f1Active\":false,\"f1Id\":8,\"f1X\":0,\"f1Y\":0,\"click\":true}",
+        "\"f1Active\":false,\"f1Id\":8,\"f1X\":0,\"f1Y\":0,\"click\":true,"
+        "\"extButtons\":18,\"rightClick\":true,\"wheel\":-120}",
         buf);
+}
+
+TEST(DeviceStateJson, TheExtendedButtonsWordCarriesOnlyTheBitsTheWireCarries) {
+    constexpr uint32_t kABitNoProtocolDefines = 0x80000000u;
+    DeviceState s{};
+    s.extButtons = dish_wire::EXT_BUTTON_MISC1 | kABitNoProtocolDefines;
+    char buf[kDeviceStateJsonCap];
+    ASSERT_GT(formatDeviceStateJson(s, buf, sizeof(buf)), 0u);
+    EXPECT_NE(nullptr, strstr(buf, "\"extButtons\":16,")) << buf;
+}
+
+namespace {
+
+DeviceState everyFieldAtItsWidest() {
+    DeviceState s{};
+    s.wButtons = UINT16_MAX;
+    s.bLT = s.bRT = UINT8_MAX;
+    s.sLX = s.sLY = s.sRX = s.sRY = INT16_MIN;
+    s.gyroX = s.gyroY = s.gyroZ = INT16_MIN;
+    s.accelX = s.accelY = s.accelZ = INT16_MIN;
+    s.touch0Id = s.touch1Id = UINT8_MAX;
+    s.touch0X = s.touch0Y = s.touch1X = s.touch1Y = INT16_MIN;
+    s.extButtons = UINT32_MAX;
+    s.touchScrollV = INT16_MIN;
+    return s;
+}
+
+} // namespace
+
+TEST(DeviceStateJson, TheWidestStateFitsTheInspectorBuffer) {
+    const DeviceState s = everyFieldAtItsWidest();
+    char buf[kDeviceStateJsonCap];
+    ASSERT_GT(formatDeviceStateJson(s, buf, sizeof(buf)), 0u);
+    EXPECT_NE(nullptr, strstr(buf, "\"extButtons\":8191,\"rightClick\":false,\"wheel\":-32768}"))
+        << buf;
 }
 
 TEST(DeviceStateJson, DefaultStateIsAllZerosAndFalse) {
