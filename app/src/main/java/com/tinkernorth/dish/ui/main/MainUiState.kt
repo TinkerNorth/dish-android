@@ -103,4 +103,6 @@ sealed class MainEvent {
     data class ShowPairingDialog(
         val connectionId: String,
     ) : MainEvent()
+
+    data object ShowSteamBlePermissionNeeded : MainEvent()
 }

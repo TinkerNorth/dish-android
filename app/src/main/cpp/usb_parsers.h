@@ -27,6 +27,9 @@ enum class Parser : uint8_t {
     // The Steam Controller (2026, "Triton"): its own report ids, haptic rumble, and lizard mode
     // under a firmware watchdog.
     STEAM_TRITON = 11,
+    // The Steam Controller (2015) on Bluetooth LE: SDL's BLE state packets, assembled from the
+    // segments of Valve's input characteristic, each naming the chunks it carries.
+    STEAM_CONTROLLER_BLE = 12,
 };
 
 enum class InitKind : uint8_t {
@@ -130,6 +133,36 @@ struct PsImuCalib {
     int32_t accelDenom[3] = {1, 1, 1};
 };
 
+// A Bluetooth LE Steam Controller (2015) packet arrives in segments of 18 bytes, at most eight
+// (SDL's SteamControllerPacketAssembler).
+inline constexpr size_t STEAM_BLE_SEGMENT_PAYLOAD = 18;
+inline constexpr size_t STEAM_BLE_MAX_SEGMENTS = 8;
+
+struct SteamBleAssembly {
+    uint8_t packet[STEAM_BLE_SEGMENT_PAYLOAD * STEAM_BLE_MAX_SEGMENTS] = {};
+    int nextSegment = 0;
+};
+
+struct SteamImu {
+    int16_t accel[3] = {0, 0, 0};
+    int16_t gyro[3] = {0, 0, 0};
+};
+
+// What the chunks of a Bluetooth LE state packet have said so far: a packet carries only some of
+// them, and the rest keep what they last said.
+struct SteamBleHeld {
+    uint32_t buttons = 0;
+    uint8_t leftTrigger = 0;
+    uint8_t rightTrigger = 0;
+    int16_t stickX = 0;
+    int16_t stickY = 0;
+    int16_t leftPadX = 0;
+    int16_t leftPadY = 0;
+    int16_t rightPadX = 0;
+    int16_t rightPadY = 0;
+    SteamImu imu;
+};
+
 struct ParserState {
     // Filled at attach: the model's product id, for a decoder that tells the variants of one
     // report family apart (the DualSense Edge's back buttons).
@@ -164,6 +197,8 @@ struct ParserState {
     // the 2026 pad treats that as off.
     gamepad::TrackpadPick trackpadPick = gamepad::TrackpadPick::STICK;
     gamepad::PadScrollTracker padScroll;
+    SteamBleAssembly steamBleAssembly;
+    SteamBleHeld steamBleHeld;
 };
 
 enum class SteamTrackpads : uint8_t { NONE = 0, PAD_2015 = 1, PAD_2026 = 2 };
@@ -172,6 +207,12 @@ enum class SteamTrackpads : uint8_t { NONE = 0, PAD_2015 = 1, PAD_2026 = 2 };
 SteamTrackpads modelSteamTrackpads(uint16_t vid, uint16_t pid);
 
 const KnownDevice* lookupKnown(uint16_t vid, uint16_t pid);
+
+// The Bluetooth LE identities SDL gives the Steam Controllers, which never enumerate on USB.
+const KnownDevice* lookupBluetoothModel(uint16_t vid, uint16_t pid);
+
+// A model on either transport: the USB rows, then the Bluetooth LE identities.
+const KnownDevice* lookupModel(uint16_t vid, uint16_t pid);
 
 Classification classifyDevice(uint16_t vid, uint16_t pid, uint8_t ifClass, uint8_t ifSubclass,
                               uint8_t ifProtocol);
@@ -328,6 +369,35 @@ inline constexpr size_t TRITON_SETTINGS_REPORT_BYTES = 64;
 
 // Pure: one setting's whole SET_REPORT data stage, report id first; 0 when out is too small.
 size_t buildTritonSettingsReport(TritonSetting setting, uint8_t* out, size_t outCap);
+
+// Where a Bluetooth LE write goes: Valve's report characteristic, which takes feature reports, or
+// the characteristic of the output report it names (SDL's HIDDeviceBLESteamController).
+inline constexpr uint8_t BLE_FEATURE_TARGET = 0;
+inline constexpr size_t BLE_WRITE_MAX_BYTES = 64;
+// The longest notification kept, with the report id put back in front of it.
+inline constexpr size_t BLE_REPORT_MAX_BYTES = 65;
+
+struct BleWrite {
+    uint8_t target = BLE_FEATURE_TARGET;
+    size_t len = 0;
+    uint8_t bytes[BLE_WRITE_MAX_BYTES] = {};
+};
+
+// Pure: a notification of the pad's input characteristic as the report it carries, the report id
+// in front, as SDL's Android bridge hands it on; 0 when it does not fit.
+size_t bleInputReport(uint8_t reportId, const uint8_t* value, size_t len, uint8_t* out,
+                      size_t outCap);
+
+// Pure: the index-th write that takes a Steam Controller on Bluetooth LE out of lizard mode (QUIET)
+// or gives it back (RESTORE); false once there are no more.
+bool buildSteamBleConfigWrite(Parser p, SteamConfig stage, int index, BleWrite& out);
+
+// Pure: the settings write refreshDue owes a Bluetooth LE pad; false for a family whose settings
+// hold.
+bool buildSteamBleSettingsRefresh(Parser p, BleWrite& out);
+
+// Pure: the merged rumble as a Bluetooth LE write; false for a family without rumble.
+bool buildSteamBleRumbleWrite(Parser p, FeedbackState& st, BleWrite& out);
 
 // Sends the attach-time init sequence InitKind names over the claimed interface.
 bool runInit(int fd, int interfaceNumber, uint8_t epOut, InitKind init);

@@ -79,6 +79,9 @@ static jmethodID g_speakerAudioFrameMethod = nullptr;
 static jclass g_micMuteBridgeClass = nullptr;
 static jmethodID g_micMutePadMethod = nullptr;
 
+static jclass g_steamBleBridgeClass = nullptr;
+static jmethodID g_steamBleWriteMethod = nullptr;
+
 // The input threads hand Bluetooth and Moonlight reports and the pads' mic-mute edges to the
 // bridge thread, and the receive thread hands speaker audio to the audio dispatch thread, through
 // the lock-free queues of bridge_queue.h and speaker_queue.h.
@@ -360,6 +363,77 @@ void applyPadMicMute(int32_t deviceId, bool muted) { g_bridgeQueue.pushMicMute(d
 
 void applyUsbFrame(int32_t deviceId, const dish_slots::UsbFrame& frame) {
     g_slotTable.applyUsbFrame(deviceId, frame);
+}
+
+} // namespace dispatch
+
+namespace {
+
+// The JVM as a native thread making a Bluetooth LE pad's writes sees it: attached on its first
+// write and detached when the thread ends. A JVM thread is attached already and stays so.
+class JvmAttachment {
+  public:
+    JvmAttachment() = default;
+    JvmAttachment(const JvmAttachment&) = delete;
+    JvmAttachment& operator=(const JvmAttachment&) = delete;
+
+    ~JvmAttachment() {
+        if (attachedHere_) g_jvm->DetachCurrentThread();
+    }
+
+    JNIEnv* env() {
+        if (env_ == nullptr) attach();
+        return env_;
+    }
+
+  private:
+    void attach() {
+        if (g_jvm == nullptr) return;
+        JNIEnv* env = nullptr;
+        const bool alreadyAttached =
+            g_jvm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) == JNI_OK;
+        if (alreadyAttached) {
+            env_ = env;
+            return;
+        }
+        if (g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK) return;
+        env_ = env;
+        attachedHere_ = true;
+    }
+
+    JNIEnv* env_ = nullptr;
+    bool attachedHere_ = false;
+};
+
+JNIEnv* envOfThisThread() {
+    thread_local JvmAttachment attachment;
+    return attachment.env();
+}
+
+} // namespace
+
+namespace dispatch {
+
+bool writeBlePad(const int32_t padId, const uint8_t target, const uint8_t* bytes,
+                 const size_t len) {
+    JNIEnv* env = envOfThisThread();
+    const bool bridged =
+        env != nullptr && g_steamBleBridgeClass != nullptr && g_steamBleWriteMethod != nullptr;
+    if (!bridged) return false;
+    jbyteArray value = env->NewByteArray((jsize)len);
+    if (value == nullptr) {
+        env->ExceptionClear();
+        return false;
+    }
+    env->SetByteArrayRegion(value, 0, (jsize)len, reinterpret_cast<const jbyte*>(bytes));
+    const jboolean written = env->CallStaticBooleanMethod(
+        g_steamBleBridgeClass, g_steamBleWriteMethod, (jint)padId, (jint)target, value);
+    env->DeleteLocalRef(value);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return false;
+    }
+    return written == JNI_TRUE;
 }
 
 } // namespace dispatch
@@ -976,6 +1050,36 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_detach
     usbhost::detachDevice((int32_t)syntheticDeviceId);
 }
 
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SteamBleNative_attachBlePad(
+    JNIEnv*, jobject, jint vid, jint pid, jint inputReportId) {
+    const usbhost::AttachResult r = usbhost::attachBlePad(
+        (uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF), (uint8_t)(inputReportId & 0xFF));
+    return r.ok ? (jint)r.syntheticDeviceId : 0;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_tinkernorth_dish_core_jni_SteamBleNative_startBlePad(JNIEnv*, jobject, jint padId) {
+    return usbhost::startBlePad((int32_t)padId) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SteamBleNative_detachBlePad(
+    JNIEnv*, jobject, jint padId, jboolean restore) {
+    usbhost::detachBlePad((int32_t)padId, restore == JNI_TRUE);
+}
+
+// The Bluetooth LE input path's one JNI call: the notification copied onto the stack, then decoded
+// and sent on the calling binder thread, as a USB poller sends its URB, under the poller's role.
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SteamBleNative_processBleReport(
+    JNIEnv* env, jobject, jint padId, jbyteArray value) {
+    const ScopedThreadRole role(ThreadRole::UsbPoller);
+    if (value == nullptr) return;
+    uint8_t bytes[usbparsers::BLE_REPORT_MAX_BYTES - 1];
+    const jsize given = env->GetArrayLength(value);
+    const jsize kept = given < (jsize)sizeof(bytes) ? given : (jsize)sizeof(bytes);
+    env->GetByteArrayRegion(value, 0, kept, reinterpret_cast<jbyte*>(bytes));
+    usbhost::deliverBleReport((int32_t)padId, bytes, (size_t)kept);
+}
+
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_sendUsbRumble(
     JNIEnv*, jobject, jint syntheticDeviceId, jint strong, jint weak) {
     usbhost::sendRumble((int32_t)syntheticDeviceId, (uint16_t)(strong & 0xFFFF),
@@ -1002,6 +1106,19 @@ Java_com_tinkernorth_dish_hotpath_input_FeedbackBridge_nativeInstall(JNIEnv* env
     if (g_feedbackMicLedMethod == nullptr) {
         g_feedbackMicLedMethod = resolveStaticMethod(env, g_feedbackBridgeClass, "FeedbackBridge",
                                                      "dispatchMicLed", "(III)V");
+    }
+}
+
+// A Bluetooth LE Steam Controller's writes, going UP to the app's own GATT client from the pad's
+// output worker (and from its claim and its release).
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_hotpath_input_SteamBleBridge_nativeInstall(JNIEnv* env, jclass cls) {
+    if (g_steamBleBridgeClass == nullptr) {
+        g_steamBleBridgeClass = (jclass)env->NewGlobalRef(cls);
+    }
+    if (g_steamBleWriteMethod == nullptr) {
+        g_steamBleWriteMethod =
+            resolveStaticMethod(env, g_steamBleBridgeClass, "SteamBleBridge", "write", "(II[B)Z");
     }
 }
 
@@ -1071,7 +1188,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_sendUs
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_lookupKnownModelName(
     JNIEnv* env, jobject, jint vid, jint pid) {
     const usbparsers::KnownDevice* k =
-        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
+        usbparsers::lookupModel((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
     return env->NewStringUTF(k ? k->name : "");
 }
 
@@ -1086,7 +1203,7 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_i
 static jboolean modelPredicate(const jint vid, const jint pid,
                                bool (*const predicate)(usbparsers::Parser)) {
     const usbparsers::KnownDevice* k =
-        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
+        usbparsers::lookupModel((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
     if (!k) return JNI_FALSE;
     return predicate(k->parser) ? JNI_TRUE : JNI_FALSE;
 }

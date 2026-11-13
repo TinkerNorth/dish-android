@@ -11,6 +11,17 @@ computer. Those lines say "update Satellite too".
 
 ### Added
 
+- **A Steam Controller paired over Bluetooth is a controller.** Pair a Steam
+  Controller, the 2015 model or the 2026 one, with your phone in Android's
+  Bluetooth settings and Dish takes it over as it does on a cable or through
+  its receiver: out of its keyboard-and-mouse mode, as a Direct controller with
+  its own card, its trackpad pick and its back buttons. Motion works on both;
+  rumble on the 2026 model (the 2015 model has none on any connection). Dish
+  cannot read the controller's own battery over Bluetooth, so the computer is
+  told the phone's. When the controller sleeps or Bluetooth goes off its card
+  goes away, and it comes back when the controller wakes. On Android 12 and
+  later this needs the Bluetooth permission; without it Dish says so and the
+  connections screen asks for it. Not tried on a real Steam Controller yet.
 - **Steam Controller trackpads, your pick per controller.** A Steam Controller
   in Direct mode now has a Trackpads row on its configure screen: Right stick
   (the 2015 model's usual role for its right trackpad), Touchpad (both pads on

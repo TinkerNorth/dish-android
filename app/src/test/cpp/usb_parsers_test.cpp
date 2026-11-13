@@ -5,8 +5,10 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <vector>
 
 using gamepad::DeviceState;
@@ -3843,4 +3845,568 @@ TEST(TritonTrackpads, EveryPickLeavesTheRealRightStickAlone) {
         EXPECT_EQ(5000, s.sRX) << (int)pick;
         EXPECT_EQ(-6000, s.sRY) << (int)pick;
     }
+}
+
+// ---- the Steam Controllers on Bluetooth LE (SDL's HIDDeviceBLESteamController and drivers) ----
+
+namespace {
+
+constexpr uint16_t kSteamBle2015 = 0x1106;
+
+// SDL_hidapi_steam.c on Bluetooth LE: each notification of the 2015 pad's input characteristic is
+// one segment, which SDL's Android bridge hands on behind the report number 0x03: a header (0x80
+// data, 0x40 the last, the segment number in the low three bits) and 18 payload bytes.
+constexpr uint8_t kBleReportNumber = 0x03;
+constexpr uint8_t kSegmentData = 0x80;
+constexpr uint8_t kSegmentLast = 0x40;
+constexpr size_t kSegmentHeader = 2;
+constexpr size_t kSegmentPayload = 18;
+
+// The assembled packet: k_EBLEReportState in the low nibble of byte 0, then
+// EBLEOptionDataChunksBitmask in its high nibble and in byte 1, naming the chunks that follow.
+constexpr uint8_t kBleStateType = 4;
+constexpr uint8_t kBleStatusType = 5;
+constexpr uint32_t kChunkButtons = 0x0010;
+constexpr uint32_t kChunkTriggers = 0x0020;
+constexpr uint32_t kChunkButtonsHigh = 0x0040;
+constexpr uint32_t kChunkStick = 0x0080;
+constexpr uint32_t kChunkLeftPad = 0x0100;
+constexpr uint32_t kChunkRightPad = 0x0200;
+constexpr uint32_t kChunkAccel = 0x0400;
+constexpr uint32_t kChunkGyro = 0x0800;
+constexpr uint32_t kChunkQuat = 0x1000;
+constexpr uint32_t kMaskLowNibble = 0xF0;
+constexpr uint32_t kBleBackLeft = 0x008000;
+
+// A state packet in the order UpdateBLESteamControllerState reads its chunks.
+class BlePacket {
+  public:
+    explicit BlePacket(const uint32_t mask, const uint8_t type = kBleStateType)
+        : bytes_{(uint8_t)((mask & kMaskLowNibble) | type), (uint8_t)(mask >> 8)} {}
+
+    BlePacket& u8(const uint8_t v) {
+        bytes_.push_back(v);
+        return *this;
+    }
+
+    BlePacket& le16(const int16_t v) {
+        bytes_.push_back((uint8_t)(v & 0xFF));
+        bytes_.push_back((uint8_t)((v >> 8) & 0xFF));
+        return *this;
+    }
+
+    BlePacket& le24(const uint32_t v) {
+        for (size_t i = 0; i < 3; i++) bytes_.push_back((uint8_t)(v >> (8 * i)));
+        return *this;
+    }
+
+    const std::vector<uint8_t>& bytes() const { return bytes_; }
+
+  private:
+    std::vector<uint8_t> bytes_;
+};
+
+std::vector<uint8_t> bleSegment(const std::vector<uint8_t>& packet, const size_t index,
+                                const size_t count) {
+    std::vector<uint8_t> segment(kSegmentHeader + kSegmentPayload, 0);
+    segment[0] = kBleReportNumber;
+    const bool isTheLast = index + 1 == count;
+    segment[1] = (uint8_t)(kSegmentData | index | (isTheLast ? kSegmentLast : 0));
+    const size_t from = index * kSegmentPayload;
+    const size_t n = std::min(kSegmentPayload, packet.size() - from);
+    std::copy_n(packet.begin() + (long)from, n, segment.begin() + (long)kSegmentHeader);
+    return segment;
+}
+
+// The packet cut into the segments the pad sends.
+std::vector<std::vector<uint8_t>> bleSegments(const std::vector<uint8_t>& packet) {
+    const size_t count = (packet.size() + kSegmentPayload - 1) / kSegmentPayload;
+    std::vector<std::vector<uint8_t>> segments;
+    for (size_t i = 0; i < count; i++) segments.push_back(bleSegment(packet, i, count));
+    return segments;
+}
+
+bool decodeBleSegment(const std::vector<uint8_t>& segment, DeviceState& s, ParserState& st) {
+    s = DeviceState{};
+    return decodeReport(Parser::STEAM_CONTROLLER_BLE, segment.data(), segment.size(), s, &st);
+}
+
+// Every segment in turn; what the last one decoded.
+bool decodeBle(const std::vector<uint8_t>& packet, DeviceState& s, ParserState& st) {
+    bool decoded = false;
+    for (const std::vector<uint8_t>& segment : bleSegments(packet)) {
+        decoded = decodeBleSegment(segment, s, st);
+    }
+    return decoded;
+}
+
+std::vector<uint8_t> bytesOf(const usbparsers::BleWrite& w) {
+    return std::vector<uint8_t>(w.bytes, w.bytes + w.len);
+}
+
+// SDL's SetFeatureReport on Bluetooth LE sends a short feature report as one segment: 0x03, the
+// header 0xC0 (data, the last, segment 0), the payload zero-padded to 18. Its Android bridge
+// writes that without its first byte and its last: 18 bytes from the header on.
+std::vector<uint8_t> bleFeatureWrite(const std::initializer_list<uint8_t> payload) {
+    std::vector<uint8_t> w(1 + kSegmentPayload - 1, 0);
+    w[0] = kSegmentData | kSegmentLast;
+    std::copy(payload.begin(), payload.end(), w.begin() + 1);
+    return w;
+}
+
+// The report as SDL's Android bridge writes it to a 2026 pad: without its id and its last byte.
+std::vector<uint8_t> sdlBleWriteOf(const uint8_t* report, const size_t len) {
+    return std::vector<uint8_t>(report + 1, report + len - 1);
+}
+
+std::vector<uint8_t> tritonSettingsWrite(const usbparsers::TritonSetting setting) {
+    uint8_t report[usbparsers::TRITON_SETTINGS_REPORT_BYTES];
+    const size_t n = usbparsers::buildTritonSettingsReport(setting, report, sizeof(report));
+    return sdlBleWriteOf(report, n);
+}
+
+usbparsers::BleWrite configWrite(const Parser p, const SteamConfig stage, const int index) {
+    usbparsers::BleWrite w;
+    EXPECT_TRUE(usbparsers::buildSteamBleConfigWrite(p, stage, index, w)) << index;
+    return w;
+}
+
+} // namespace
+
+TEST(SteamBleClassify, TheBluetoothIdentitiesAreModelsButNoUsbRow) {
+    EXPECT_EQ(nullptr, usbparsers::lookupKnown(kValve, kSteamBle2015));
+    EXPECT_EQ(nullptr, usbparsers::lookupKnown(kValve, kTritonBle));
+    const usbparsers::KnownDevice* pad2015 = usbparsers::lookupModel(kValve, kSteamBle2015);
+    ASSERT_NE(nullptr, pad2015);
+    EXPECT_EQ(Parser::STEAM_CONTROLLER_BLE, pad2015->parser);
+    const usbparsers::KnownDevice* pad2026 = usbparsers::lookupModel(kValve, kTritonBle);
+    ASSERT_NE(nullptr, pad2026);
+    EXPECT_EQ(Parser::STEAM_TRITON, pad2026->parser);
+}
+
+TEST(SteamBleClassify, AUsbDeviceIsNeverTakenForABluetoothIdentity) {
+    const auto c = usbparsers::classifyDevice(kValve, kSteamBle2015, 0x03, 0x00, 0x00);
+    EXPECT_EQ(Parser::GENERIC_HID_GAMEPAD, c.parser);
+    EXPECT_FALSE(isVerifiedFastLane(kValve, kSteamBle2015));
+    EXPECT_FALSE(isVerifiedFastLane(kValve, kTritonBle));
+}
+
+TEST(SteamBleClassify, TheBluetoothPadsHaveTheirTrackpadsTheirExtrasAndNoFrameworkGamepad) {
+    EXPECT_EQ(usbparsers::SteamTrackpads::PAD_2015,
+              usbparsers::modelSteamTrackpads(kValve, kSteamBle2015));
+    EXPECT_EQ(usbparsers::SteamTrackpads::PAD_2026,
+              usbparsers::modelSteamTrackpads(kValve, kTritonBle));
+    EXPECT_TRUE(usbparsers::modelHasExtendedButtons(kValve, kSteamBle2015));
+    EXPECT_TRUE(usbparsers::modelHasExtendedButtons(kValve, kTritonBle));
+    EXPECT_FALSE(modelExpectsFrameworkGamepad(kValve, kSteamBle2015));
+    EXPECT_FALSE(modelExpectsFrameworkGamepad(kValve, kTritonBle));
+}
+
+// SDL adds the 2015 pad's gyro and accelerometer on every transport, and rumbles it on none.
+TEST(SteamBleClassify, The2015PadOnBluetoothHasMotionButNoRumble) {
+    EXPECT_TRUE(parserHasImu(Parser::STEAM_CONTROLLER_BLE));
+    EXPECT_FALSE(parserHasRumble(Parser::STEAM_CONTROLLER_BLE));
+    EXPECT_FALSE(parserHasTouchpad(Parser::STEAM_CONTROLLER_BLE));
+}
+
+TEST(SteamBleDecode, AStatePacketsButtonsAndTriggersReadAsTheWiredPadsDo) {
+    ParserState st;
+    DeviceState s;
+    const auto packet = BlePacket(kChunkButtons | kChunkTriggers)
+                            .le24(kBtnSouth | kBtnLeftBumper | kBtnMenu | kBtnDpadUp)
+                            .u8(0)
+                            .u8(100)
+                            .bytes();
+    ASSERT_TRUE(decodeBle(packet, s, st));
+    EXPECT_EQ(XUSB_A | XUSB_LB | XUSB_BACK | XUSB_DPAD_UP, s.wButtons);
+    EXPECT_EQ(0, s.bLT);
+    EXPECT_EQ(126, s.bRT);
+}
+
+TEST(SteamBleDecode, TheStickIsAChunkOfItsOwnAndItsClickIsL3) {
+    ParserState st;
+    DeviceState s;
+    const auto packet = BlePacket(kChunkButtons | kChunkStick)
+                            .le24(kBtnStickButton)
+                            .le16(-8000)
+                            .le16(12000)
+                            .bytes();
+    ASSERT_TRUE(decodeBle(packet, s, st));
+    EXPECT_EQ(-8000, s.sLX);
+    EXPECT_EQ(12000, s.sLY);
+    EXPECT_EQ(XUSB_THUMB_L, s.wButtons);
+}
+
+TEST(SteamBleDecode, ChunksAPacketLeavesOutKeepWhatTheyLastSaid) {
+    ParserState st;
+    DeviceState s;
+    const auto first =
+        BlePacket(kChunkButtons | kChunkStick).le24(kBtnSouth).le16(5000).le16(-6000).bytes();
+    ASSERT_TRUE(decodeBle(first, s, st));
+    const auto buttonsOnly = BlePacket(kChunkButtons).le24(kBtnEast).bytes();
+    ASSERT_TRUE(decodeBle(buttonsOnly, s, st));
+    EXPECT_EQ(XUSB_B, s.wButtons);
+    EXPECT_EQ(5000, s.sLX);
+    EXPECT_EQ(-6000, s.sLY);
+}
+
+TEST(SteamBleDecode, TheRightPadDrivesTheRightStickThroughTheShellRotation) {
+    ParserState st;
+    DeviceState s;
+    const auto packet = BlePacket(kChunkButtons | kChunkRightPad)
+                            .le24(kBtnRightPadFinger)
+                            .le16(10000)
+                            .le16(0)
+                            .bytes();
+    ASSERT_TRUE(decodeBle(packet, s, st));
+    EXPECT_EQ(9659, s.sRX);
+    EXPECT_EQ(2588, s.sRY);
+}
+
+TEST(SteamBleDecode, TheLeftPadIsAChunkOfItsOwnAndLeavesTheStickWhereItIs) {
+    ParserState st;
+    st.trackpadPick = gamepad::TrackpadPick::PAD;
+    DeviceState s;
+    const auto packet = BlePacket(kChunkButtons | kChunkStick | kChunkLeftPad)
+                            .le24(kBtnLeftPadFinger)
+                            .le16(4000)
+                            .le16(-3000)
+                            .le16(32767)
+                            .le16(0)
+                            .bytes();
+    ASSERT_TRUE(decodeBle(packet, s, st));
+    EXPECT_EQ(4000, s.sLX);
+    EXPECT_EQ(-3000, s.sLY);
+    ASSERT_TRUE(s.touchValid);
+    EXPECT_TRUE(s.touch0Active);
+    EXPECT_EQ(-559, s.touch0X);
+    EXPECT_EQ(8480, s.touch0Y);
+}
+
+TEST(SteamBleDecode, MotionRotatesOntoTheWireAxisOrderAndScaleAsTheWiredPadsDoes) {
+    ParserState st;
+    DeviceState s;
+    const auto packet = BlePacket(kChunkAccel | kChunkGyro)
+                            .le16(1000)
+                            .le16(2000)
+                            .le16(3000)
+                            .le16(4000)
+                            .le16(5000)
+                            .le16(6000)
+                            .bytes();
+    ASSERT_TRUE(decodeBle(packet, s, st));
+    EXPECT_TRUE(s.motionValid);
+    EXPECT_EQ(3999, s.gyroX);
+    EXPECT_EQ(5999, s.gyroY);
+    EXPECT_EQ(4999, s.gyroZ);
+    EXPECT_EQ(499, s.accelX);
+    EXPECT_EQ(1499, s.accelY);
+    EXPECT_EQ(-999, s.accelZ);
+}
+
+TEST(SteamBleDecode, APadWhoseImuHasSaidNothingPublishesNoMotion) {
+    ParserState st;
+    DeviceState s;
+    ASSERT_TRUE(decodeBle(BlePacket(kChunkButtons).le24(kBtnSouth).bytes(), s, st));
+    EXPECT_FALSE(s.motionValid);
+}
+
+TEST(SteamBleDecode, TheChunksSdlSkipsAreStillSteppedOver) {
+    ParserState st;
+    DeviceState s;
+    const auto packet = BlePacket(kChunkButtonsHigh | kChunkStick | kChunkGyro | kChunkQuat)
+                            .le24(0xFFFFFF)
+                            .le16(700)
+                            .le16(-700)
+                            .le16(0)
+                            .le16(0)
+                            .le16(4000)
+                            .le16(1)
+                            .le16(2)
+                            .le16(3)
+                            .le16(4)
+                            .bytes();
+    ASSERT_TRUE(decodeBle(packet, s, st));
+    EXPECT_EQ(0, s.wButtons);
+    EXPECT_EQ(700, s.sLX);
+    EXPECT_EQ(-700, s.sLY);
+    EXPECT_EQ(3999, s.gyroY);
+}
+
+TEST(SteamBleDecode, TheGripsAndTheFullPullClicksRideTheExtendedButtons) {
+    ParserState st;
+    DeviceState s;
+    ASSERT_TRUE(decodeBle(BlePacket(kChunkButtons).le24(kBleBackLeft).bytes(), s, st));
+    EXPECT_EQ(dish_wire::EXT_BUTTON_LEFT_PADDLE1, s.extButtons);
+}
+
+TEST(SteamBleDecode, APacketOverTwoSegmentsDecodesOnceItsLastIsIn) {
+    ParserState st;
+    DeviceState s;
+    const auto packet = BlePacket(kChunkButtons | kChunkTriggers | kChunkStick | kChunkLeftPad |
+                                  kChunkRightPad | kChunkAccel)
+                            .le24(kBtnNorth)
+                            .u8(0)
+                            .u8(0)
+                            .le16(1)
+                            .le16(2)
+                            .le16(3)
+                            .le16(4)
+                            .le16(5)
+                            .le16(6)
+                            .le16(7)
+                            .le16(8)
+                            .le16(9)
+                            .bytes();
+    const auto segments = bleSegments(packet);
+    ASSERT_EQ(2u, segments.size());
+    EXPECT_FALSE(decodeBleSegment(segments[0], s, st));
+    ASSERT_TRUE(decodeBleSegment(segments[1], s, st));
+    EXPECT_EQ(XUSB_Y, s.wButtons);
+    EXPECT_EQ(1, s.sLX);
+}
+
+TEST(SteamBleDecode, ASegmentOutOfTurnIsDroppedAndTheNextPacketStartsAfresh) {
+    ParserState st;
+    DeviceState s;
+    const auto longPacket =
+        BlePacket(kChunkButtons | kChunkStick | kChunkLeftPad | kChunkRightPad | kChunkAccel)
+            .le24(kBtnNorth)
+            .le16(1)
+            .le16(2)
+            .le16(3)
+            .le16(4)
+            .le16(5)
+            .le16(6)
+            .le16(7)
+            .le16(8)
+            .le16(9)
+            .bytes();
+    const auto longSegments = bleSegments(longPacket);
+    ASSERT_EQ(2u, longSegments.size());
+    EXPECT_FALSE(decodeBleSegment(longSegments[1], s, st));
+    ASSERT_TRUE(decodeBle(BlePacket(kChunkButtons).le24(kBtnWest).bytes(), s, st));
+    EXPECT_EQ(XUSB_X, s.wButtons);
+}
+
+TEST(SteamBleDecode, AFirstSegmentRestartsAPacketLeftUnfinished) {
+    ParserState st;
+    DeviceState s;
+    const auto longPacket =
+        BlePacket(kChunkButtons | kChunkStick | kChunkLeftPad | kChunkRightPad | kChunkAccel)
+            .le24(kBtnNorth)
+            .le16(1)
+            .le16(2)
+            .le16(3)
+            .le16(4)
+            .le16(5)
+            .le16(6)
+            .le16(7)
+            .le16(8)
+            .le16(9)
+            .bytes();
+    EXPECT_FALSE(decodeBleSegment(bleSegments(longPacket)[0], s, st));
+    ASSERT_TRUE(decodeBle(BlePacket(kChunkButtons).le24(kBtnWest).bytes(), s, st));
+    EXPECT_EQ(XUSB_X, s.wButtons);
+}
+
+TEST(SteamBleDecode, ASegmentWithoutItsDataFlagIsSkippedWithoutLosingTheAssembly) {
+    ParserState st;
+    DeviceState s;
+    const auto packet =
+        BlePacket(kChunkButtons | kChunkStick | kChunkLeftPad | kChunkRightPad | kChunkAccel)
+            .le24(kBtnNorth)
+            .le16(1)
+            .le16(2)
+            .le16(3)
+            .le16(4)
+            .le16(5)
+            .le16(6)
+            .le16(7)
+            .le16(8)
+            .le16(9)
+            .bytes();
+    const auto segments = bleSegments(packet);
+    std::vector<uint8_t> empty(kSegmentHeader + kSegmentPayload, 0);
+    empty[0] = kBleReportNumber;
+    EXPECT_FALSE(decodeBleSegment(segments[0], s, st));
+    EXPECT_FALSE(decodeBleSegment(empty, s, st));
+    ASSERT_TRUE(decodeBleSegment(segments[1], s, st));
+    EXPECT_EQ(XUSB_Y, s.wButtons);
+}
+
+TEST(SteamBleDecode, ANotificationThatIsNoSegmentDoesNotDecode) {
+    ParserState st;
+    DeviceState s;
+    auto segment = bleSegments(BlePacket(kChunkButtons).le24(kBtnSouth).bytes())[0];
+    auto otherReport = segment;
+    otherReport[0] = 0x01;
+    EXPECT_FALSE(decodeBleSegment(otherReport, s, st));
+    auto shortSegment = segment;
+    shortSegment.pop_back();
+    EXPECT_FALSE(decodeBleSegment(shortSegment, s, st));
+    auto longSegment = segment;
+    longSegment.push_back(0);
+    EXPECT_FALSE(decodeBleSegment(longSegment, s, st));
+    EXPECT_TRUE(decodeBleSegment(segment, s, st));
+}
+
+TEST(SteamBleDecode, AStatusPacketIsNoState) {
+    ParserState st;
+    DeviceState s;
+    EXPECT_FALSE(
+        decodeBle(BlePacket(kChunkButtons, kBleStatusType).le24(kBtnSouth).bytes(), s, st));
+}
+
+TEST(SteamBleDecode, APacketNamingMoreChunksThanItCarriesDoesNotDecodeOrMoveTheHeldState) {
+    ParserState st;
+    DeviceState s;
+    ASSERT_TRUE(decodeBle(BlePacket(kChunkStick).le16(300).le16(400).bytes(), s, st));
+    std::vector<uint8_t> overrun = BlePacket(kChunkStick | kChunkLeftPad | kChunkRightPad |
+                                             kChunkAccel | kChunkGyro | kChunkQuat)
+                                       .le16(-1)
+                                       .le16(-1)
+                                       .bytes();
+    EXPECT_FALSE(decodeBle(overrun, s, st));
+    ASSERT_TRUE(decodeBle(BlePacket(kChunkButtons).le24(0).bytes(), s, st));
+    EXPECT_EQ(300, s.sLX);
+    EXPECT_EQ(400, s.sLY);
+}
+
+TEST(SteamBleReports, ANotificationIsItsReportWithTheIdPutBackInFront) {
+    const uint8_t value[] = {0x10, 0x20};
+    uint8_t out[8] = {};
+    ASSERT_EQ(
+        3u, usbparsers::bleInputReport(kTritonStateBleId, value, sizeof(value), out, sizeof(out)));
+    EXPECT_EQ(kTritonStateBleId, out[0]);
+    EXPECT_EQ(0x10, out[1]);
+    EXPECT_EQ(0x20, out[2]);
+}
+
+TEST(SteamBleReports, ANotificationTooLongForTheReportIsDropped) {
+    const uint8_t value[] = {0x10, 0x20};
+    uint8_t out[2] = {};
+    EXPECT_EQ(
+        0u, usbparsers::bleInputReport(kTritonStateBleId, value, sizeof(value), out, sizeof(out)));
+}
+
+// SDL's Android bridge prefixes the report id of the characteristic it subscribed to (0x45 on
+// 100F6C7A, 0x47 on 100F6C7C) to each 45-byte notification.
+TEST(SteamBleReports, A2026NotificationDecodesAsTheStateReportItCarries) {
+    for (const uint8_t id : {kTritonStateBleId, kTritonStateTimestampId}) {
+        auto report = tritonState(id, kTritonA | kTritonL4);
+        setLe16(report, kTritonSticks, 1234);
+        const std::vector<uint8_t> notification(report.begin() + 1, report.end());
+        uint8_t framed[usbparsers::BLE_REPORT_MAX_BYTES];
+        const size_t n = usbparsers::bleInputReport(id, notification.data(), notification.size(),
+                                                    framed, sizeof(framed));
+        DeviceState viaBluetooth;
+        DeviceState wired;
+        ParserState a;
+        ParserState b;
+        ASSERT_TRUE(decodeReport(Parser::STEAM_TRITON, framed, n, viaBluetooth, &a)) << (int)id;
+        ASSERT_TRUE(decodeReport(Parser::STEAM_TRITON, report.data(), report.size(), wired, &b));
+        EXPECT_EQ(wired.wButtons, viaBluetooth.wButtons) << (int)id;
+        EXPECT_EQ(wired.extButtons, viaBluetooth.extButtons) << (int)id;
+        EXPECT_EQ(1234, viaBluetooth.sLX) << (int)id;
+    }
+}
+
+TEST(SteamBleWrites, The2015PadGoesQuietWithSdlsResetThenItsSensorEnable) {
+    const std::vector<std::vector<uint8_t>> expected = {
+        bleFeatureWrite({0x81}),       // ID_CLEAR_DIGITAL_MAPPINGS
+        bleFeatureWrite({0x8E, 0x00}), // ID_LOAD_DEFAULT_SETTINGS
+        // ID_SET_SETTINGS_VALUES, 12 bytes: WIRELESS_PACKET_VERSION 2, LEFT_TRACKPAD_MODE and
+        // RIGHT_TRACKPAD_MODE TRACKPAD_NONE, SMOOTH_ABSOLUTE_MOUSE 0.
+        bleFeatureWrite(
+            {0x87, 0x0C, 0x31, 0x02, 0x00, 0x07, 0x07, 0x00, 0x08, 0x07, 0x00, 0x18, 0x00, 0x00}),
+        // SETTING_IMU_MODE SEND_RAW_ACCEL | SEND_RAW_GYRO.
+        bleFeatureWrite({0x87, 0x03, 0x30, 0x18, 0x00}),
+    };
+    for (size_t i = 0; i < expected.size(); i++) {
+        const usbparsers::BleWrite w =
+            configWrite(Parser::STEAM_CONTROLLER_BLE, SteamConfig::QUIET, (int)i);
+        EXPECT_EQ(usbparsers::BLE_FEATURE_TARGET, w.target) << i;
+        EXPECT_EQ(expected[i], bytesOf(w)) << i;
+    }
+    usbparsers::BleWrite past;
+    EXPECT_FALSE(usbparsers::buildSteamBleConfigWrite(Parser::STEAM_CONTROLLER_BLE,
+                                                      SteamConfig::QUIET, 4, past));
+}
+
+TEST(SteamBleWrites, The2015PadIsGivenBackWithTheWiredPadsRestore) {
+    const std::vector<std::vector<uint8_t>> expected = {
+        bleFeatureWrite({0x85, 0x00}),
+        bleFeatureWrite({0x8E, 0x00}),
+        bleFeatureWrite({0x87, 0x03, 0x08, 0x00, 0x00}),
+    };
+    for (size_t i = 0; i < expected.size(); i++) {
+        const usbparsers::BleWrite w =
+            configWrite(Parser::STEAM_CONTROLLER_BLE, SteamConfig::RESTORE, (int)i);
+        EXPECT_EQ(usbparsers::BLE_FEATURE_TARGET, w.target) << i;
+        EXPECT_EQ(expected[i], bytesOf(w)) << i;
+    }
+    usbparsers::BleWrite past;
+    EXPECT_FALSE(usbparsers::buildSteamBleConfigWrite(Parser::STEAM_CONTROLLER_BLE,
+                                                      SteamConfig::RESTORE, 3, past));
+}
+
+TEST(SteamBleWrites, The2026PadGoesQuietWithItsTwoSettingsReports) {
+    const std::vector<std::vector<uint8_t>> expected = {
+        tritonSettingsWrite(usbparsers::TritonSetting::LIZARD_OFF),
+        tritonSettingsWrite(usbparsers::TritonSetting::RAW_IMU),
+    };
+    for (size_t i = 0; i < expected.size(); i++) {
+        const usbparsers::BleWrite w =
+            configWrite(Parser::STEAM_TRITON, SteamConfig::QUIET, (int)i);
+        EXPECT_EQ(usbparsers::BLE_FEATURE_TARGET, w.target) << i;
+        EXPECT_EQ(62u, w.len) << i;
+        EXPECT_EQ(expected[i], bytesOf(w)) << i;
+    }
+    usbparsers::BleWrite past;
+    EXPECT_FALSE(
+        usbparsers::buildSteamBleConfigWrite(Parser::STEAM_TRITON, SteamConfig::QUIET, 2, past));
+}
+
+// SDL's HIDAPI_DriverSteamTriton_CloseJoystick: the firmware's watchdog turns lizard mode back on.
+TEST(SteamBleWrites, The2026PadIsGivenBackByItsOwnWatchdog) {
+    usbparsers::BleWrite w;
+    EXPECT_FALSE(
+        usbparsers::buildSteamBleConfigWrite(Parser::STEAM_TRITON, SteamConfig::RESTORE, 0, w));
+}
+
+TEST(SteamBleWrites, NoUsbFamilyHasABluetoothConfigWrite) {
+    usbparsers::BleWrite w;
+    EXPECT_FALSE(
+        usbparsers::buildSteamBleConfigWrite(Parser::STEAM_CONTROLLER, SteamConfig::QUIET, 0, w));
+    EXPECT_FALSE(usbparsers::buildSteamBleConfigWrite(Parser::DUALSENSE, SteamConfig::QUIET, 0, w));
+}
+
+TEST(SteamBleWrites, TheSettingsRefreshIsThe2026PadsLizardSwitchAlone) {
+    usbparsers::BleWrite w;
+    ASSERT_TRUE(usbparsers::buildSteamBleSettingsRefresh(Parser::STEAM_TRITON, w));
+    EXPECT_EQ(usbparsers::BLE_FEATURE_TARGET, w.target);
+    EXPECT_EQ(tritonSettingsWrite(usbparsers::TritonSetting::LIZARD_OFF), bytesOf(w));
+    usbparsers::BleWrite none;
+    EXPECT_FALSE(usbparsers::buildSteamBleSettingsRefresh(Parser::STEAM_CONTROLLER_BLE, none));
+}
+
+// SDL writes output report 0x80 to the characteristic 0x35 past its id, 100F6CB5, as the report
+// without its id or its last byte.
+TEST(SteamBleWrites, The2026RumbleIsItsHapticReportOnTheOutputReportsOwnCharacteristic) {
+    usbparsers::FeedbackState st;
+    st.strong = 0x1234;
+    st.weak = 0xABCD;
+    usbparsers::BleWrite w;
+    ASSERT_TRUE(usbparsers::buildSteamBleRumbleWrite(Parser::STEAM_TRITON, st, w));
+    EXPECT_EQ(0x80, w.target);
+    const std::vector<uint8_t> expected = {0x00, 0x00, 0x00, 0x34, 0x12, 0x00, 0xCD, 0xAB};
+    EXPECT_EQ(expected, bytesOf(w));
+}
+
+TEST(SteamBleWrites, The2015PadHasNoRumbleToWrite) {
+    usbparsers::FeedbackState st;
+    st.strong = 0xFFFF;
+    usbparsers::BleWrite w;
+    EXPECT_FALSE(usbparsers::buildSteamBleRumbleWrite(Parser::STEAM_CONTROLLER_BLE, st, w));
 }

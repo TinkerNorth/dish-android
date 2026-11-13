@@ -140,7 +140,7 @@ class ConfigureBindingsDefaultTypeTest {
             ConfigureBindingsViewModel(
                 context,
                 hub,
-                PhysicalPadSources(gamepadRegistry, native, usbGamepadManager, mockk(relaxed = true)),
+                PhysicalPadSources(gamepadRegistry, native, usbGamepadManager, mockk(relaxed = true), mockk(relaxed = true)),
                 SlotToggleStores(
                     motionEnabledStore,
                     rumbleEnabledStore,

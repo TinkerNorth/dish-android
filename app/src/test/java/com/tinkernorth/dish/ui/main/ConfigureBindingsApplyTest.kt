@@ -128,7 +128,7 @@ class ConfigureBindingsApplyTest {
             ConfigureBindingsViewModel(
                 context = context,
                 hub = hub,
-                pads = PhysicalPadSources(registry, native, usb, mockk(relaxed = true)),
+                pads = PhysicalPadSources(registry, native, usb, mockk(relaxed = true), mockk(relaxed = true)),
                 toggles =
                     SlotToggleStores(
                         motion = motionStore,

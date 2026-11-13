@@ -33,6 +33,7 @@ import com.tinkernorth.dish.source.audio.MicEngine
 import com.tinkernorth.dish.source.audio.PadAudioRouteResolver
 import com.tinkernorth.dish.source.audio.SpeakerEngine
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
+import com.tinkernorth.dish.source.bluetooth.SteamBleManager
 import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.sensor.PhysicalBatterySource
 import com.tinkernorth.dish.source.sensor.PhysicalMotionSource
@@ -110,6 +111,8 @@ class DishApplication : Application() {
     @Inject lateinit var themePreferenceStore: ThemePreferenceStore
 
     @Inject lateinit var usbGamepadManager: UsbGamepadManager
+
+    @Inject lateinit var steamBleManager: SteamBleManager
 
     @Inject lateinit var pollRateSampler: PollRateSampler
 
@@ -227,6 +230,7 @@ class DishApplication : Application() {
     private fun installInputSources(lifecycle: Lifecycle) {
         physicalGamepadRegistry.install()
         usbGamepadManager.install()
+        steamBleManager.install()
         pollRateSampler.install()
         inputRateStore.install()
         padAudioRouteResolver.install()

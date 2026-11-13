@@ -115,7 +115,62 @@ class UsbOutput final : public dish_usb::OutputDevice {
     }
 };
 
-struct DeviceCtx {
+// One write of a Bluetooth LE pad's, through the JVM's GATT client.
+bool writeBle(const int32_t padId, const usbparsers::BleWrite& w) {
+    return dispatch::writeBlePad(padId, w.target, w.bytes, w.len);
+}
+
+// A Bluetooth LE pad's writes, which its output worker times as it does a USB pad's: the 2026
+// pad's lizard switch every 3 s and a running rumble every 40 ms. A Steam Controller has none of
+// the other outputs, and a link that drops ends its claim rather than leaving a slot behind.
+class BleOutput final : public dish_usb::OutputDevice {
+  public:
+    void rumble(const uint16_t strong, const uint16_t weak) override {
+        feedback.strong = strong;
+        feedback.weak = weak;
+        writeRumble(dish_usb::outputClockMs());
+    }
+
+    void triggerRumble(uint16_t, uint16_t) override {}
+    void lightbar(uint8_t, uint8_t, uint8_t) override {}
+    void playerLeds(uint8_t) override {}
+    void triggerEffects(const uint8_t*, const uint8_t*) override {}
+    void micLed(uint8_t) override {}
+    void ack(const uint8_t*, size_t) override {}
+    void reconnected() override {}
+    void left() override {}
+
+    // A write is stamped when it is attempted, so a pad that refuses one is not retried at once.
+    uint32_t refresh(const int64_t nowMs) override {
+        const usbparsers::RefreshDue due = usbparsers::refreshDue(parser, feedback, nowMs);
+        if (due.settings) {
+            writeSettingsRefresh();
+            feedback.settingsSentMs = nowMs;
+        }
+        if (due.rumble) writeRumble(nowMs);
+        return usbparsers::nextRefreshInMs(parser, feedback, nowMs);
+    }
+
+    int32_t padId = 0;
+    usbparsers::Parser parser = usbparsers::Parser::NONE;
+    usbparsers::FeedbackState feedback;
+
+  private:
+    void writeRumble(const int64_t nowMs) {
+        feedback.rumbleSentMs = nowMs;
+        usbparsers::BleWrite w;
+        if (!usbparsers::buildSteamBleRumbleWrite(parser, feedback, w)) return;
+        if (!writeBle(padId, w)) LOGI("dev=%d Bluetooth LE rumble write refused", padId);
+    }
+
+    void writeSettingsRefresh() {
+        usbparsers::BleWrite w;
+        if (!usbparsers::buildSteamBleSettingsRefresh(parser, w)) return;
+        if (!writeBle(padId, w)) LOGI("dev=%d Bluetooth LE settings refresh refused", padId);
+    }
+};
+
+struct DeviceCtx final : public dish_usb::ReportSink {
     int32_t syntheticDeviceId = 0;
     int fd = -1;
     uint16_t vid = 0;
@@ -151,6 +206,15 @@ struct DeviceCtx {
 
     std::atomic<bool> stop{false};
     std::thread poller;
+
+    // A Bluetooth LE pad's: the report id SDL's Android bridge puts back in front of each
+    // notification, its writes, and the scratch its notifications decode into, one at a time.
+    uint8_t bleReportId = 0;
+    BleOutput bleOutput;
+    gamepad::DeviceState bleScratch{};
+    bool bleLastMicMuted = false;
+
+    void report(const uint8_t* value, size_t len) override;
 };
 
 // The diagnostics the Kotlin pollers read every 500 ms and the output workers the feedback paths
@@ -355,33 +419,41 @@ void ackGipReport(DeviceCtx& ctx, const uint8_t* report, const size_t len) {
     ctx.entry->output.postAck(ctx.syntheticDeviceId, ack, n);
 }
 
-void publishCompletedUrb(DeviceCtx& ctx, const UrbSlot& completed, const int actualLength,
-                         gamepad::DeviceState& scratch, bool& lastMicMuted) {
+// A URB's report, or a Bluetooth LE notification's, published the same way.
+void publishReport(DeviceCtx& ctx, const uint8_t* report, const size_t len,
+                   gamepad::DeviceState& scratch, bool& lastMicMuted) {
     hotpath::markInputRead(ctx.syntheticDeviceId); // stage-1 start: a fresh input report is in hand
     dish_usb::bump(ctx.entry->stats.urbCount);
-    ackGipReport(ctx, completed.buf.data(), (size_t)actualLength);
+    ackGipReport(ctx, report, len);
     memset(&scratch, 0, sizeof(scratch));
 
-    const usbparsers::WirelessEvent wev =
-        usbparsers::checkWirelessEvent(ctx.parser, completed.buf.data(), (size_t)actualLength);
+    const usbparsers::WirelessEvent wev = usbparsers::checkWirelessEvent(ctx.parser, report, len);
     if (wev != usbparsers::WirelessEvent::NONE) {
         publishWirelessEvent(ctx, wev, scratch);
         return;
     }
     // A report that carries only the charge must not publish as input: that would be a neutral pad.
-    const bool isABatteryReport = usbparsers::decodePadBatteryReport(
-        ctx.parser, completed.buf.data(), (size_t)actualLength, scratch);
+    const bool isABatteryReport =
+        usbparsers::decodePadBatteryReport(ctx.parser, report, len, scratch);
     if (isABatteryReport) {
         publishBattery(ctx, scratch);
         return;
     }
     ctx.stickRange.trackpadPick =
         static_cast<gamepad::TrackpadPick>(ctx.trackpadPick.load(std::memory_order_relaxed));
-    const bool decoded = usbparsers::decodeReport(ctx.parser, completed.buf.data(),
-                                                  (size_t)actualLength, scratch, &ctx.stickRange);
+    const bool decoded =
+        usbparsers::decodeReport(ctx.parser, report, len, scratch, &ctx.stickRange);
     if (!decoded) return;
     if (ctx.receiverSlot) followSlotLink(ctx, usbparsers::WirelessEvent::NONE, decoded);
     publishDecodedReport(ctx, scratch, lastMicMuted);
+}
+
+// The notification as the report it carries, its id back in front, on the URB's publish path.
+void DeviceCtx::report(const uint8_t* value, const size_t len) {
+    uint8_t framed[usbparsers::BLE_REPORT_MAX_BYTES];
+    const size_t n = usbparsers::bleInputReport(bleReportId, value, len, framed, sizeof(framed));
+    if (n == 0) return;
+    publishReport(*this, framed, n, bleScratch, bleLastMicMuted);
 }
 
 void discardPendingUrbs(DeviceCtx& ctx, UrbSlot* (&slots)[kInFlightUrbs]) {
@@ -428,7 +500,8 @@ bool reapReadyUrbs(DeviceCtx& ctx, UrbSlot* (&slots)[kInFlightUrbs], gamepad::De
         }
         const bool carriesAReport = reaped->status == 0 && reaped->actual_length > 0;
         if (carriesAReport) {
-            publishCompletedUrb(ctx, *completed, reaped->actual_length, scratch, lastMicMuted);
+            publishReport(ctx, completed->buf.data(), (size_t)reaped->actual_length, scratch,
+                          lastMicMuted);
         }
         if (!submitUrb(ctx, *completed)) {
             dish_usb::bump(ctx.entry->stats.urbErrorCount);
@@ -808,22 +881,114 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
     return attachPad(t);
 }
 
-void detachDevice(int32_t syntheticDeviceId) {
-    std::shared_ptr<DeviceCtx> ctx;
-    {
-        std::lock_guard<TrackedMutex> lock(g_mtx);
-        auto it = g_devices.find(syntheticDeviceId);
-        if (it == g_devices.end()) return;
-        ctx = it->second;
-        g_devices.erase(it);
+namespace {
+
+std::shared_ptr<DeviceCtx> findDevice(const int32_t deviceId) {
+    std::lock_guard<TrackedMutex> lock(g_mtx);
+    auto it = g_devices.find(deviceId);
+    if (it == g_devices.end()) return nullptr;
+    return it->second;
+}
+
+// Out of the map, so nothing new reaches the pad; the caller holds it while it shuts down.
+std::shared_ptr<DeviceCtx> takeDevice(const int32_t deviceId) {
+    std::lock_guard<TrackedMutex> lock(g_mtx);
+    auto it = g_devices.find(deviceId);
+    if (it == g_devices.end()) return nullptr;
+    std::shared_ptr<DeviceCtx> ctx = it->second;
+    g_devices.erase(it);
+    return ctx;
+}
+
+// The entry back, and the pad's slot neutral and forgotten.
+void finishDetach(const int32_t deviceId, const DeviceCtx& ctx) {
+    g_usbDevices.release(deviceId);
+    dispatch::resetAndPublish(deviceId);
+    dispatch::forgetDevice(deviceId);
+    hotpath::forgetDevice(deviceId);
+    LOGI("detach dev=%d (%s) done", deviceId, ctx.modelName.c_str());
+}
+
+// Each write of the sequence in turn; false at the first the pad refuses.
+bool runBleConfig(const DeviceCtx& ctx, const usbparsers::SteamConfig stage) {
+    usbparsers::BleWrite w;
+    for (int i = 0; usbparsers::buildSteamBleConfigWrite(ctx.parser, stage, i, w); i++) {
+        if (!writeBle(ctx.syntheticDeviceId, w)) return false;
     }
+    return true;
+}
+
+} // namespace
+
+void detachDevice(int32_t syntheticDeviceId) {
+    const std::shared_ptr<DeviceCtx> ctx = takeDevice(syntheticDeviceId);
     if (!ctx) return;
     shutdownLocked(ctx);
-    g_usbDevices.release(syntheticDeviceId);
-    dispatch::resetAndPublish(syntheticDeviceId);
-    dispatch::forgetDevice(syntheticDeviceId);
-    hotpath::forgetDevice(syntheticDeviceId);
-    LOGI("detach dev=%d (%s) done", syntheticDeviceId, ctx->modelName.c_str());
+    finishDetach(syntheticDeviceId, *ctx);
+}
+
+AttachResult attachBlePad(const uint16_t vid, const uint16_t pid, const uint8_t inputReportId) {
+    const usbparsers::KnownDevice* model = usbparsers::lookupBluetoothModel(vid, pid);
+    if (model == nullptr) {
+        LOGE("Bluetooth LE attach %04X:%04X: no Steam Controller identity", vid, pid);
+        return AttachResult{};
+    }
+    auto ctx = std::make_shared<DeviceCtx>();
+    ctx->syntheticDeviceId = allocSyntheticId();
+    ctx->entry = g_usbDevices.claim(ctx->syntheticDeviceId);
+    if (ctx->entry == nullptr) {
+        LOGE("Bluetooth LE attach %04X:%04X: %u pads already claimed", vid, pid,
+             (unsigned)dish_usb::MAX_USB_DEVICES);
+        return AttachResult{};
+    }
+    ctx->vid = vid;
+    ctx->pid = pid;
+    ctx->parser = model->parser;
+    ctx->init = model->init;
+    ctx->modelName = model->name;
+    ctx->parserName = usbparsers::parserName(model->parser);
+    ctx->stickRange.productId = pid;
+    ctx->bleReportId = inputReportId;
+    ctx->bleOutput.padId = ctx->syntheticDeviceId;
+    ctx->bleOutput.parser = model->parser;
+    {
+        std::lock_guard<TrackedMutex> lock(g_mtx);
+        g_devices[ctx->syntheticDeviceId] = ctx;
+    }
+    dispatch::prewarmDevice(ctx->syntheticDeviceId);
+    LOGI("Bluetooth LE attach: %04X:%04X (%s) dev=%d parser=%s report=0x%02X", vid, pid,
+         ctx->modelName.c_str(), ctx->syntheticDeviceId, ctx->parserName.c_str(), inputReportId);
+    return AttachResult{ctx->syntheticDeviceId, true};
+}
+
+bool startBlePad(const int32_t padId) {
+    const std::shared_ptr<DeviceCtx> ctx = findDevice(padId);
+    if (!ctx) return false;
+    if (!runBleConfig(*ctx, usbparsers::SteamConfig::QUIET)) {
+        LOGI("dev=%d (%s): a Bluetooth LE quiet write was refused", padId, ctx->modelName.c_str());
+        return false;
+    }
+    ctx->bleOutput.feedback.settingsSentMs = dish_usb::outputClockMs();
+    ctx->entry->reports.store(ctx.get(), std::memory_order_release);
+    ctx->entry->output.start(padId, ctx->bleOutput);
+    return true;
+}
+
+void deliverBleReport(const int32_t padId, const uint8_t* value, const size_t len) {
+    g_usbDevices.deliver(padId, value, len);
+}
+
+// The pad's reports stop and its worker's last write finishes before the restore goes out.
+void detachBlePad(const int32_t padId, const bool restore) {
+    const std::shared_ptr<DeviceCtx> ctx = takeDevice(padId);
+    if (!ctx) return;
+    g_usbDevices.retire(padId);
+    ctx->entry->output.stop();
+    const bool restored = !restore || runBleConfig(*ctx, usbparsers::SteamConfig::RESTORE);
+    if (!restored)
+        LOGI("dev=%d (%s): a Bluetooth LE restore write was refused", padId,
+             ctx->modelName.c_str());
+    finishDetach(padId, *ctx);
 }
 
 uint64_t getUrbCount(int32_t deviceId) {

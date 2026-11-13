@@ -141,7 +141,14 @@ class ConfigureBindingsAudioTogglesTest {
             ConfigureBindingsViewModel(
                 context = mockk<Context>(relaxed = true),
                 hub = hub,
-                pads = PhysicalPadSources(registry, mockk<PhysicalInputNative>(relaxed = true), usb, mockk(relaxed = true)),
+                pads =
+                    PhysicalPadSources(
+                        registry,
+                        mockk<PhysicalInputNative>(relaxed = true),
+                        usb,
+                        mockk(relaxed = true),
+                        mockk(relaxed = true),
+                    ),
                 toggles =
                     SlotToggleStores(
                         motion = mockk<MotionEnabledStore>(relaxed = true),

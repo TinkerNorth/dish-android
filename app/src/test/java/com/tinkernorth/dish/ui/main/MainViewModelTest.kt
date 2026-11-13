@@ -22,6 +22,7 @@ import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
 import com.tinkernorth.dish.core.net.moonlight.XBOX
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
+import com.tinkernorth.dish.source.bluetooth.SteamBleManager
 import com.tinkernorth.dish.source.connection.ConnectionError
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
@@ -51,6 +52,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
@@ -77,6 +79,8 @@ class MainViewModelTest {
     private lateinit var native: PhysicalInputNative
     private lateinit var pathPrefs: UsbPathPreferenceStore
     private lateinit var usbGamepadManager: UsbGamepadManager
+    private lateinit var steamBle: SteamBleManager
+    private val steamBlePermissionNeeded = MutableStateFlow(false)
     private lateinit var inputRateStore: InputRateStore
     private val hostFeaturesStore = SatelliteHostFeaturesStore()
     private lateinit var vm: MainViewModel
@@ -109,6 +113,8 @@ class MainViewModelTest {
         pathPrefs = mockk(relaxed = true)
         usbGamepadManager = mockk(relaxed = true)
         every { usbGamepadManager.controllers } returns usbControllersFlow
+        steamBle = mockk(relaxed = true)
+        every { steamBle.permissionNeeded } returns steamBlePermissionNeeded
         every { hub.connections } returns connectionsFlow
         every { hub.bindings } returns bindingsFlow
         every { hub.moonlightSessions } returns moonlightSessions
@@ -129,7 +135,7 @@ class MainViewModelTest {
                 context,
                 satellite,
                 hub,
-                PhysicalPadSources(gamepadRegistry, native, usbGamepadManager, pathPrefs),
+                PhysicalPadSources(gamepadRegistry, native, usbGamepadManager, pathPrefs, steamBle),
                 batteryStore,
                 motionEnabledStore,
                 capabilityComposer,
@@ -148,6 +154,26 @@ class MainViewModelTest {
     fun tearDown() {
         Dispatchers.resetMain()
     }
+
+    @Test
+    fun `a Steam Controller the Bluetooth permission keeps from being a controller asks for it`() =
+        runTest(dispatcher) {
+            val seen = mutableListOf<MainEvent>()
+            backgroundScope.launch { vm.events.toList(seen) }
+            dispatcher.scheduler.runCurrent()
+            steamBlePermissionNeeded.value = true
+            dispatcher.scheduler.runCurrent()
+            assertEquals(listOf<MainEvent>(MainEvent.ShowSteamBlePermissionNeeded), seen)
+        }
+
+    @Test
+    fun `nothing is asked while no Steam Controller needs the Bluetooth permission`() =
+        runTest(dispatcher) {
+            val seen = mutableListOf<MainEvent>()
+            backgroundScope.launch { vm.events.toList(seen) }
+            dispatcher.scheduler.runCurrent()
+            assertTrue(seen.isEmpty())
+        }
 
     @Test
     fun `initial state has virtual slot only and no connections`() =

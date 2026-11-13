@@ -457,6 +457,25 @@ const KnownDevice* lookupKnown(const uint16_t vid, const uint16_t pid) {
     return findIn(kImported, vid, pid);
 }
 
+// The Bluetooth LE identities SDL gives the two Steam Controllers (controller_list.h), served over
+// Valve's own GATT service rather than USB.
+constexpr KnownDevice kBluetoothKnown[] = {
+    {0x28DE, 0x1106, "Valve Steam Controller (Bluetooth)", Parser::STEAM_CONTROLLER_BLE,
+     InitKind::STEAM_QUIET},
+    {0x28DE, 0x1303, "Valve Steam Controller (2026, Bluetooth)", Parser::STEAM_TRITON,
+     InitKind::STEAM_TRITON_QUIET},
+};
+
+const KnownDevice* lookupBluetoothModel(const uint16_t vid, const uint16_t pid) {
+    return findIn(kBluetoothKnown, vid, pid);
+}
+
+const KnownDevice* lookupModel(const uint16_t vid, const uint16_t pid) {
+    const KnownDevice* onUsb = lookupKnown(vid, pid);
+    if (onUsb != nullptr) return onUsb;
+    return lookupBluetoothModel(vid, pid);
+}
+
 bool isVerifiedFastLane(const uint16_t vid, const uint16_t pid) {
     const KnownDevice* k = findIn(kKnown, vid, pid);
     return k != nullptr && k->parser != Parser::NONE;
@@ -465,13 +484,14 @@ bool isVerifiedFastLane(const uint16_t vid, const uint16_t pid) {
 namespace {
 
 bool isASteamController(const Parser p) {
-    return p == Parser::STEAM_CONTROLLER || p == Parser::STEAM_TRITON;
+    const bool isThe2015Pad = p == Parser::STEAM_CONTROLLER || p == Parser::STEAM_CONTROLLER_BLE;
+    return isThe2015Pad || p == Parser::STEAM_TRITON;
 }
 
 } // namespace
 
 bool modelExpectsFrameworkGamepad(const uint16_t vid, const uint16_t pid) {
-    const KnownDevice* k = lookupKnown(vid, pid);
+    const KnownDevice* k = lookupModel(vid, pid);
     return k == nullptr || !isASteamController(k->parser);
 }
 
@@ -480,15 +500,17 @@ constexpr uint16_t kSwitchProProductId = 0x2009;
 constexpr uint16_t kSwitchChargingGripProductId = 0x200E;
 
 SteamTrackpads modelSteamTrackpads(const uint16_t vid, const uint16_t pid) {
-    const KnownDevice* k = lookupKnown(vid, pid);
+    const KnownDevice* k = lookupModel(vid, pid);
     if (k == nullptr) return SteamTrackpads::NONE;
-    if (k->parser == Parser::STEAM_CONTROLLER) return SteamTrackpads::PAD_2015;
+    const bool isThe2015Pad =
+        k->parser == Parser::STEAM_CONTROLLER || k->parser == Parser::STEAM_CONTROLLER_BLE;
+    if (isThe2015Pad) return SteamTrackpads::PAD_2015;
     if (k->parser == Parser::STEAM_TRITON) return SteamTrackpads::PAD_2026;
     return SteamTrackpads::NONE;
 }
 
 bool modelHasExtendedButtons(const uint16_t vid, const uint16_t pid) {
-    const KnownDevice* k = lookupKnown(vid, pid);
+    const KnownDevice* k = lookupModel(vid, pid);
     if (k == nullptr) return false;
     const bool isTheEdge = k->parser == Parser::DUALSENSE && pid == kDualSenseEdgeProductId;
     const bool hasCapture = k->parser == Parser::SWITCH_PRO_USB &&
@@ -552,6 +574,8 @@ const char* parserName(const Parser p) {
         return "Steam Controller protocol";
     case Parser::STEAM_TRITON:
         return "Steam Controller (2026) protocol";
+    case Parser::STEAM_CONTROLLER_BLE:
+        return "Steam Controller Bluetooth LE protocol";
     case Parser::NONE:
         return "Unknown";
     }
@@ -564,6 +588,7 @@ bool parserHasImu(const Parser p) {
     case Parser::DUALSHOCK4:
     case Parser::DUALSENSE:
     case Parser::STEAM_CONTROLLER:
+    case Parser::STEAM_CONTROLLER_BLE:
     case Parser::STEAM_TRITON:
         return true;
     case Parser::XINPUT_360:
@@ -592,6 +617,7 @@ bool parserHasRumble(const Parser p) {
     // The Steam Controller has no rumble motors, only trackpad voice coils driven by pulse trains;
     // its simple-rumble command is Steam Deck firmware only.
     case Parser::STEAM_CONTROLLER:
+    case Parser::STEAM_CONTROLLER_BLE:
     case Parser::STADIA:
     case Parser::GENERIC_HID_GAMEPAD:
     case Parser::NONE:
@@ -1541,23 +1567,31 @@ uint32_t steamExtendedButtons(const uint32_t btn) {
     return word;
 }
 
+struct SteamPadAxes {
+    int16_t leftX = 0;
+    int16_t leftY = 0;
+    int16_t rightX = 0;
+    int16_t rightY = 0;
+};
+
 // The two pads as the router takes them. A left-pad click with no finger on the pad is the
 // stick's (trackSteamLeftStick), so it is not the pad's here.
-gamepad::SteamPads steamPads(const uint8_t* buf, const uint32_t btn) {
+gamepad::SteamPads steamPadsFrom(const SteamPadAxes& axes, const uint32_t btn) {
     gamepad::SteamPads pads;
     pads.left.active = (btn & kSteamLeftPadFinger) != 0;
-    if (pads.left.active) {
-        steamRotateLeftPad(rdLe16(buf, kSteamLeftAxesOffset), rdLe16(buf, kSteamLeftAxesOffset + 2),
-                           pads.left.x, pads.left.y);
-    }
+    if (pads.left.active) steamRotateLeftPad(axes.leftX, axes.leftY, pads.left.x, pads.left.y);
     pads.left.click = pads.left.active && (btn & kSteamLeftPadClicked) != 0;
     pads.right.active = (btn & kSteamRightPadFinger) != 0;
-    if (pads.right.active) {
-        steamRotatePad(rdLe16(buf, kSteamRightPadOffset), rdLe16(buf, kSteamRightPadOffset + 2),
-                       pads.right.x, pads.right.y);
-    }
+    if (pads.right.active) steamRotatePad(axes.rightX, axes.rightY, pads.right.x, pads.right.y);
     pads.right.click = (btn & kSteamRightPadClicked) != 0;
     return pads;
+}
+
+gamepad::SteamPads steamPads(const uint8_t* buf, const uint32_t btn) {
+    const SteamPadAxes axes{
+        rdLe16(buf, kSteamLeftAxesOffset), rdLe16(buf, kSteamLeftAxesOffset + 2),
+        rdLe16(buf, kSteamRightPadOffset), rdLe16(buf, kSteamRightPadOffset + 2)};
+    return steamPadsFrom(axes, btn);
 }
 
 // One pair of axes carries either the stick or the left pad. The finger-down bit says which; the
@@ -1578,13 +1612,13 @@ void trackSteamLeftStick(const uint8_t* buf, const uint32_t btn, ParserState& st
     if (btn & kSteamStickButton) buttons |= XUSB_THUMB_L;
 }
 
-void decodeSteamMotion(const uint8_t* buf, DeviceState& s) {
-    const int16_t ax = rdLe16(buf, kSteamAccelOffset);
-    const int16_t ay = rdLe16(buf, kSteamAccelOffset + 2);
-    const int16_t az = rdLe16(buf, kSteamAccelOffset + 4);
-    const int16_t gx = rdLe16(buf, kSteamGyroOffset);
-    const int16_t gy = rdLe16(buf, kSteamGyroOffset + 2);
-    const int16_t gz = rdLe16(buf, kSteamGyroOffset + 4);
+void publishSteamMotion(const SteamImu& imu, DeviceState& s) {
+    const int16_t ax = imu.accel[0];
+    const int16_t ay = imu.accel[1];
+    const int16_t az = imu.accel[2];
+    const int16_t gx = imu.gyro[0];
+    const int16_t gy = imu.gyro[1];
+    const int16_t gz = imu.gyro[2];
     const bool imuIsAlive = (ax | ay | az | gx | gy | gz) != 0;
     if (!imuIsAlive) return;
 
@@ -1595,6 +1629,17 @@ void decodeSteamMotion(const uint8_t* buf, DeviceState& s) {
     s.accelY = steamAccelToWire(az);
     s.accelZ = steamAccelToWire(-(int32_t)ay);
     s.motionValid = true;
+}
+
+void readSteamTriple(const uint8_t* b, int16_t (&out)[3]) {
+    for (int axis = 0; axis < 3; axis++) out[axis] = rdLe16(b, 2 * axis);
+}
+
+void decodeSteamMotion(const uint8_t* buf, DeviceState& s) {
+    SteamImu imu;
+    readSteamTriple(buf + kSteamAccelOffset, imu.accel);
+    readSteamTriple(buf + kSteamGyroOffset, imu.gyro);
+    publishSteamMotion(imu, s);
 }
 
 bool decodeSteamController(const uint8_t* buf, const size_t len, DeviceState& s, ParserState& st) {
@@ -1616,6 +1661,180 @@ bool decodeSteamController(const uint8_t* buf, const size_t len, DeviceState& s,
     gamepad::routeSteamTrackpads(st.trackpadPick, gamepad::SteamModel::CONTROLLER_2015,
                                  steamPads(buf, btn), st.padScroll, s);
     decodeSteamMotion(buf, s);
+    return true;
+}
+
+// The Steam Controller (2015) on Bluetooth LE, from SDL's SDL_hidapi_steam.c (zlib, Copyright (C)
+// Valve Corporation and Sam Lantinga; see THIRD_PARTY.md). A notification is one segment behind
+// the report number SDL's Android bridge puts in front: a header (data, the last, the segment
+// number) and 18 payload bytes. The packet the segments make is a type nibble and an option mask
+// naming the chunks that follow, in the order UpdateBLESteamControllerState reads them.
+constexpr uint8_t kSteamBleReportNumber = 0x03;
+constexpr size_t kSteamBleSegmentHeaderByte = 1;
+constexpr size_t kSteamBleSegmentPayloadOffset = 2;
+constexpr size_t kSteamBleSegmentLen = kSteamBleSegmentPayloadOffset + STEAM_BLE_SEGMENT_PAYLOAD;
+constexpr uint8_t kSteamBleSegmentData = 0x80;
+constexpr uint8_t kSteamBleSegmentLast = 0x40;
+constexpr uint8_t kSteamBleSegmentNumberMask = 0x07;
+constexpr uint8_t kSteamBleTypeMask = 0x0F;
+constexpr uint8_t kSteamBleStateType = 4;
+constexpr uint32_t kSteamBleMaskLowNibble = 0xF0;
+constexpr size_t kSteamBleChunksOffset = 2;
+constexpr uint32_t kSteamBleButtonChunk = 0x0010;
+constexpr uint32_t kSteamBleTriggerChunk = 0x0020;
+constexpr uint32_t kSteamBleHighButtonChunk = 0x0040;
+constexpr uint32_t kSteamBleStickChunk = 0x0080;
+constexpr uint32_t kSteamBleLeftPadChunk = 0x0100;
+constexpr uint32_t kSteamBleRightPadChunk = 0x0200;
+constexpr uint32_t kSteamBleAccelChunk = 0x0400;
+constexpr uint32_t kSteamBleGyroChunk = 0x0800;
+constexpr uint32_t kSteamBleQuatChunk = 0x1000;
+constexpr size_t kSteamBleButtonBytes = 3;
+constexpr size_t kSteamBleTriggerBytes = 2;
+constexpr size_t kSteamBlePairBytes = 4;
+constexpr size_t kSteamBleTripleBytes = 6;
+constexpr size_t kSteamBleQuatBytes = 8;
+
+void restartSteamBleAssembly(SteamBleAssembly& a) {
+    memset(a.packet, 0, sizeof(a.packet));
+    a.nextSegment = 0;
+}
+
+// SDL keeps a segment whose number is the one it expects, and starts over on any other, keeping
+// the segment only when it is a packet's first.
+bool keepsSteamBleSegment(const int number, SteamBleAssembly& a) {
+    if (number == a.nextSegment) return true;
+    restartSteamBleAssembly(a);
+    return number == 0;
+}
+
+// SDL's WriteSegmentToSteamControllerPacketAssembler on its BLE path: the packet's length once its
+// last segment is in; 0 before then, and for a segment it drops.
+size_t assembleSteamBleSegment(const uint8_t* seg, const size_t len, SteamBleAssembly& a) {
+    const bool isThePadsReport = len > 0 && seg[0] == kSteamBleReportNumber;
+    if (!isThePadsReport) return 0;
+    if (len != kSteamBleSegmentLen) {
+        restartSteamBleAssembly(a);
+        return 0;
+    }
+    const uint8_t header = seg[kSteamBleSegmentHeaderByte];
+    const bool carriesData = (header & kSteamBleSegmentData) != 0;
+    if (!carriesData) return 0;
+    const int number = header & kSteamBleSegmentNumberMask;
+    if (!keepsSteamBleSegment(number, a)) return 0;
+    memcpy(a.packet + (size_t)number * STEAM_BLE_SEGMENT_PAYLOAD,
+           seg + kSteamBleSegmentPayloadOffset, STEAM_BLE_SEGMENT_PAYLOAD);
+    const bool isTheLast = (header & kSteamBleSegmentLast) != 0;
+    if (!isTheLast) {
+        a.nextSegment++;
+        return 0;
+    }
+    a.nextSegment = 0;
+    return (size_t)(number + 1) * STEAM_BLE_SEGMENT_PAYLOAD;
+}
+
+// One packet's chunks, read front to back; a chunk past the packet's end overruns it.
+struct SteamBleChunks {
+    const uint8_t* packet;
+    size_t len;
+    uint32_t mask;
+    size_t at = kSteamBleChunksOffset;
+    bool overrun = false;
+};
+
+// Whether the mask names the chunk and the packet holds it; a named chunk past the end overruns.
+bool holdsSteamBleChunk(SteamBleChunks& c, const uint32_t chunk, const size_t bytes) {
+    const bool named = (c.mask & chunk) != 0;
+    if (!named) return false;
+    const bool fits = c.at + bytes <= c.len;
+    if (!fits) c.overrun = true;
+    return fits;
+}
+
+// The next chunk, or null when the mask does not name it or the packet ends first.
+const uint8_t* takeSteamBleChunk(SteamBleChunks& c, const uint32_t chunk, const size_t bytes) {
+    if (!holdsSteamBleChunk(c, chunk, bytes)) return nullptr;
+    const uint8_t* const start = c.packet + c.at;
+    c.at += bytes;
+    return start;
+}
+
+void readSteamBlePair(SteamBleChunks& c, const uint32_t chunk, int16_t& x, int16_t& y) {
+    const uint8_t* const b = takeSteamBleChunk(c, chunk, kSteamBlePairBytes);
+    if (b == nullptr) return;
+    x = rdLe16(b, 0);
+    y = rdLe16(b, 2);
+}
+
+void readSteamBleTriple(SteamBleChunks& c, const uint32_t chunk, int16_t (&out)[3]) {
+    const uint8_t* const b = takeSteamBleChunk(c, chunk, kSteamBleTripleBytes);
+    if (b != nullptr) readSteamTriple(b, out);
+}
+
+void readSteamBleButtons(SteamBleChunks& c, SteamBleHeld& held) {
+    const uint8_t* const b = takeSteamBleChunk(c, kSteamBleButtonChunk, kSteamBleButtonBytes);
+    if (b != nullptr) held.buttons = rdLe24(b);
+}
+
+void readSteamBleTriggers(SteamBleChunks& c, SteamBleHeld& held) {
+    const uint8_t* const b = takeSteamBleChunk(c, kSteamBleTriggerChunk, kSteamBleTriggerBytes);
+    if (b == nullptr) return;
+    held.leftTrigger = b[0];
+    held.rightTrigger = b[1];
+}
+
+// SDL keeps the high button bytes and the orientation quaternion but reads neither; they are
+// stepped over so the chunks after them land where they are.
+void stepOverSteamBleChunk(SteamBleChunks& c, const uint32_t chunk, const size_t bytes) {
+    if (holdsSteamBleChunk(c, chunk, bytes)) c.at += bytes;
+}
+
+// What a packet's chunks say over the held state, kept only when the packet holds every chunk it
+// names.
+bool readSteamBleChunks(const uint8_t* packet, const size_t len, SteamBleHeld& held) {
+    const uint32_t mask = (packet[0] & kSteamBleMaskLowNibble) | ((uint32_t)packet[1] << 8);
+    SteamBleChunks c{packet, len, mask};
+    SteamBleHeld next = held;
+    readSteamBleButtons(c, next);
+    readSteamBleTriggers(c, next);
+    stepOverSteamBleChunk(c, kSteamBleHighButtonChunk, kSteamBleButtonBytes);
+    readSteamBlePair(c, kSteamBleStickChunk, next.stickX, next.stickY);
+    readSteamBlePair(c, kSteamBleLeftPadChunk, next.leftPadX, next.leftPadY);
+    readSteamBlePair(c, kSteamBleRightPadChunk, next.rightPadX, next.rightPadY);
+    readSteamBleTriple(c, kSteamBleAccelChunk, next.imu.accel);
+    readSteamBleTriple(c, kSteamBleGyroChunk, next.imu.gyro);
+    stepOverSteamBleChunk(c, kSteamBleQuatChunk, kSteamBleQuatBytes);
+    if (c.overrun) return false;
+    held = next;
+    return true;
+}
+
+// The held state through the wired pad's mappings; on this transport the stick and the left pad
+// are chunks of their own, so the stick's click is only ever its own bit.
+void publishSteamBleHeld(const SteamBleHeld& held, DeviceState& s, ParserState& st) {
+    uint16_t buttons = decodeSteamButtons(held.buttons);
+    if (held.buttons & kSteamStickButton) buttons |= XUSB_THUMB_L;
+    s.wButtons = buttons;
+    s.extButtons = steamExtendedButtons(held.buttons);
+    s.bLT = steamTriggerToWire(held.leftTrigger);
+    s.bRT = steamTriggerToWire(held.rightTrigger);
+    s.sLX = held.stickX;
+    s.sLY = held.stickY;
+    const SteamPadAxes axes{held.leftPadX, held.leftPadY, held.rightPadX, held.rightPadY};
+    gamepad::routeSteamTrackpads(st.trackpadPick, gamepad::SteamModel::CONTROLLER_2015,
+                                 steamPadsFrom(axes, held.buttons), st.padScroll, s);
+    publishSteamMotion(held.imu, s);
+}
+
+bool decodeSteamControllerBle(const uint8_t* buf, const size_t len, DeviceState& s,
+                              ParserState& st) {
+    const size_t packetLen = assembleSteamBleSegment(buf, len, st.steamBleAssembly);
+    if (packetLen == 0) return false;
+    const uint8_t* const packet = st.steamBleAssembly.packet;
+    const bool isState = (packet[0] & kSteamBleTypeMask) == kSteamBleStateType;
+    if (!isState) return false;
+    if (!readSteamBleChunks(packet, packetLen, st.steamBleHeld)) return false;
+    publishSteamBleHeld(st.steamBleHeld, s, st);
     return true;
 }
 
@@ -2029,6 +2248,8 @@ bool decodeReport(const Parser p, const uint8_t* buf, const size_t len, DeviceSt
         return sticks != nullptr && decodeSteamController(buf, len, s, *sticks);
     case Parser::STEAM_TRITON:
         return sticks != nullptr && decodeSteamTriton(buf, len, s, *sticks);
+    case Parser::STEAM_CONTROLLER_BLE:
+        return sticks != nullptr && decodeSteamControllerBle(buf, len, s, *sticks);
     case Parser::GENERIC_HID_GAMEPAD: {
         const bool hasALayout = sticks != nullptr && sticks->hidLayout.valid;
         if (hasALayout) return usbhid::decodeFromLayout(buf, len, s, sticks->hidLayout);
@@ -2068,6 +2289,7 @@ WirelessEvent checkWirelessEvent(const Parser p, const uint8_t* buf, const size_
         return steamWirelessEvent(buf, len);
     case Parser::STEAM_TRITON:
         return tritonWirelessEvent(buf, len);
+    case Parser::STEAM_CONTROLLER_BLE:
     case Parser::XINPUT_360:
     case Parser::XINPUT_360_WIRELESS:
     case Parser::XBOX_ONE_GIP:
@@ -2684,6 +2906,7 @@ size_t buildMergedRumbleReport(const Parser p, FeedbackState& st, const uint8_t 
     case Parser::STEAM_TRITON:
         return buildTritonRumble(st.strong, st.weak, out, outCap);
     case Parser::STEAM_CONTROLLER:
+    case Parser::STEAM_CONTROLLER_BLE:
     case Parser::STADIA:
     case Parser::GENERIC_HID_GAMEPAD:
     case Parser::NONE:
@@ -2753,6 +2976,111 @@ size_t buildTritonSettingsReport(const TritonSetting setting, uint8_t* out, cons
     out[kTritonSettingNumberByte] = setTo.number;
     writeLe16(&out[kTritonSettingValueByte], setTo.value);
     return n;
+}
+
+size_t bleInputReport(const uint8_t reportId, const uint8_t* value, const size_t len, uint8_t* out,
+                      const size_t outCap) {
+    const size_t n = len + 1;
+    if (n > outCap) return 0;
+    out[0] = reportId;
+    memcpy(out + 1, value, len);
+    return n;
+}
+
+namespace {
+
+// SDL's Android bridge (HIDDeviceBLESteamController.writeReport) writes a report without its first
+// byte, the report id or number, and without its last.
+constexpr size_t kSdlBleTrimmedBytes = 2;
+
+bool asSdlBleWrite(const uint8_t target, const uint8_t* report, const size_t len, BleWrite& out) {
+    const bool isLongEnough = len >= kSdlBleTrimmedBytes;
+    if (!isLongEnough || len - kSdlBleTrimmedBytes > sizeof(out.bytes)) return false;
+    out.target = target;
+    out.len = len - kSdlBleTrimmedBytes;
+    memcpy(out.bytes, report + 1, out.len);
+    return true;
+}
+
+// SDL's SetFeatureReport on Bluetooth LE sends a feature report that fits one segment as that
+// segment: the report number, the header of a packet's first and last data segment, the payload.
+// The bridge's trim drops the payload's 18th byte, so one longer than 17 does not go.
+constexpr uint8_t kSteamBleOnlySegment = kSteamBleSegmentData | kSteamBleSegmentLast;
+constexpr size_t kSteamBleFeatureMaxBytes = STEAM_BLE_SEGMENT_PAYLOAD - 1;
+
+bool steamBleFeatureWrite(const InitPacket& payload, BleWrite& out) {
+    if (payload.len > kSteamBleFeatureMaxBytes) return false;
+    uint8_t segment[kSteamBleSegmentLen] = {};
+    segment[0] = kSteamBleReportNumber;
+    segment[kSteamBleSegmentHeaderByte] = kSteamBleOnlySegment;
+    memcpy(segment + kSteamBleSegmentPayloadOffset, payload.data, payload.len);
+    return asSdlBleWrite(BLE_FEATURE_TARGET, segment, sizeof(segment), out);
+}
+
+// SDL's ResetSteamController feature reports, then the sensor enable SetSensorsEnabled sends:
+// clear the button mappings, load the defaults, then wireless packet version 2, both trackpads
+// off and no smoothed mouse, then raw accel and gyro. Its attributes query is left out: its one
+// answer, the connection interval, is SDL's sensor rate.
+constexpr uint8_t kSteamBleQuietSettings[] = {0x87, 0x0C, 0x31, 0x02, 0x00, 0x07, 0x07,
+                                              0x00, 0x08, 0x07, 0x00, 0x18, 0x00, 0x00};
+constexpr uint8_t kSteamBleImuOn[] = {0x87, 0x03, 0x30, 0x18, 0x00};
+
+constexpr InitPacket kSteamBleQuietSeq[] = {
+    {kSteamClearMappings, sizeof(kSteamClearMappings)},
+    {kSteamDefaultSettings, sizeof(kSteamDefaultSettings)},
+    {kSteamBleQuietSettings, sizeof(kSteamBleQuietSettings)},
+    {kSteamBleImuOn, sizeof(kSteamBleImuOn)},
+};
+
+InitSequence steamBleSequenceFor(const SteamConfig stage) {
+    const bool quiet = stage == SteamConfig::QUIET;
+    if (quiet) return {kSteamBleQuietSeq, countOf(kSteamBleQuietSeq)};
+    return steamSequenceFor(SteamConfig::RESTORE);
+}
+
+bool steam2015BleConfigWrite(const SteamConfig stage, const int index, BleWrite& out) {
+    const InitSequence sequence = steamBleSequenceFor(stage);
+    const bool exists = index >= 0 && index < sequence.count;
+    return exists && steamBleFeatureWrite(sequence.packets[index], out);
+}
+
+bool tritonSettingsWrite(const TritonSetting setting, BleWrite& out) {
+    uint8_t report[TRITON_SETTINGS_REPORT_BYTES];
+    const size_t n = buildTritonSettingsReport(setting, report, sizeof(report));
+    return asSdlBleWrite(BLE_FEATURE_TARGET, report, n, out);
+}
+
+// The 2026 pad's watchdog hands it back, so there is nothing to restore.
+constexpr TritonSetting kTritonQuietSettings[] = {TritonSetting::LIZARD_OFF,
+                                                  TritonSetting::RAW_IMU};
+
+template <size_t N> constexpr int countOf(const TritonSetting (&)[N]) { return (int)N; }
+
+bool tritonBleConfigWrite(const SteamConfig stage, const int index, BleWrite& out) {
+    const bool quiet = stage == SteamConfig::QUIET;
+    const bool exists = index >= 0 && index < countOf(kTritonQuietSettings);
+    return quiet && exists && tritonSettingsWrite(kTritonQuietSettings[index], out);
+}
+
+} // namespace
+
+bool buildSteamBleConfigWrite(const Parser p, const SteamConfig stage, const int index,
+                              BleWrite& out) {
+    if (p == Parser::STEAM_CONTROLLER_BLE) return steam2015BleConfigWrite(stage, index, out);
+    if (p == Parser::STEAM_TRITON) return tritonBleConfigWrite(stage, index, out);
+    return false;
+}
+
+bool buildSteamBleSettingsRefresh(const Parser p, BleWrite& out) {
+    if (p != Parser::STEAM_TRITON) return false;
+    return tritonSettingsWrite(TritonSetting::LIZARD_OFF, out);
+}
+
+bool buildSteamBleRumbleWrite(const Parser p, FeedbackState& st, BleWrite& out) {
+    uint8_t report[kTritonRumbleReportLen];
+    const size_t n = buildMergedRumbleReport(p, st, 0, report, sizeof(report));
+    if (n == 0) return false;
+    return asSdlBleWrite(report[0], report, n, out);
 }
 
 namespace {

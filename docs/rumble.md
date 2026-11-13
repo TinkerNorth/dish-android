@@ -156,7 +156,9 @@ frequency, right), 0..65535. Layouts follow the Linux kernel drivers:
   so the output worker re-sends a non-zero rumble every 40 ms, as SDL does,
   until the 0,0 stop. Without an interrupt OUT endpoint on the interface the
   report goes as a SET_REPORT(Output) on the control pipe (`outputRouteFor`),
-  where hidapi would write it.
+  where hidapi would write it. On Bluetooth LE the same report goes to the
+  output report's own characteristic (100F6CB5) without its id or its last
+  byte, as SDL's Android bridge writes it (`buildSteamBleRumbleWrite`).
 
 Counters that the protocol carries (Xbox One serial, Switch Pro packet
 number) live in the pad's `UsbOutput.outSeq`. Every write is made by the

@@ -278,6 +278,8 @@
     <!-- Text der Dish-Benachrichtigungen. -->
     <string name="notif_bt_permission_title">Bluetooth-Berechtigung nötig</string>
     <string name="notif_bt_permission_body">Dish braucht Bluetooth-Zugriff, um einen Controller zu registrieren.</string>
+    <string name="notif_steam_ble_permission_title">Steam Controller über Bluetooth</string>
+    <string name="notif_steam_ble_permission_body">Dish braucht Bluetooth-Zugriff, um ihn als Controller zu nutzen. Erlaube ihn unter Verbindungen.</string>
     <string name="notif_bt_scan_permission_title">Bluetooth-Scannen erlauben</string>
     <string name="notif_bt_scan_permission_body">Erteile die Berechtigung für Geräte in der Nähe, um neue Hosts zu finden. Gekoppelte Geräte funktionieren auch ohne sie.</string>
     <string name="discovery_source_manual">Manuell</string>
