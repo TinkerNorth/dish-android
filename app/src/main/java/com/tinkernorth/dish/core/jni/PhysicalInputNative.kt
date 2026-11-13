@@ -196,6 +196,28 @@ class PhysicalInputNative
             UsbDirectNative.sendUsbMicMuteLed(syntheticDeviceId, state)
         }
 
+        fun attachBlePad(
+            vendorId: Int,
+            productId: Int,
+            inputReportId: Int,
+        ): Int = SteamBleNative.attachBlePad(vendorId, productId, inputReportId)
+
+        fun startBlePad(padId: Int): Boolean = SteamBleNative.startBlePad(padId)
+
+        fun detachBlePad(
+            padId: Int,
+            restore: Boolean,
+        ) {
+            SteamBleNative.detachBlePad(padId, restore)
+        }
+
+        fun processBleReport(
+            padId: Int,
+            value: ByteArray,
+        ) {
+            SteamBleNative.processBleReport(padId, value)
+        }
+
         fun getDeviceUrbCount(deviceId: Int): Long = UsbDirectNative.getDeviceUrbCount(deviceId)
 
         fun getDirectPadBattery(deviceId: Int): Int = UsbDirectNative.getDirectPadBattery(deviceId)

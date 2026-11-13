@@ -660,6 +660,7 @@ class PhysicalGamepadRegistry
             vendorId: Int,
             productId: Int,
             descriptor: String = "",
+            transport: Transport = Transport.Usb,
         ) {
             _devices.update { map ->
                 map +
@@ -674,6 +675,7 @@ class PhysicalGamepadRegistry
                                 pollRateHz = pollRateHz,
                                 vendorId = vendorId,
                                 productId = productId,
+                                transport = transport,
                             )
                     )
             }

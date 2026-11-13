@@ -23,6 +23,22 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
 
 void detachDevice(int32_t syntheticDeviceId);
 
+// A Steam Controller on Bluetooth LE as a Direct pad, its reports handed in from the JVM's GATT
+// client rather than read by a poller. Its id comes from the allocator the USB pads draw from, so
+// the two never collide. Nothing is written to the pad yet; not ok for a model that is no Bluetooth
+// LE Steam Controller, or with every entry taken.
+AttachResult attachBlePad(uint16_t vid, uint16_t pid, uint8_t inputReportId);
+
+// The writes that take the pad out of lizard mode, then its output worker; false when one was
+// refused.
+bool startBlePad(int32_t padId);
+
+// One notification of the pad's input characteristic, as the JVM received it.
+void deliverBleReport(int32_t padId, const uint8_t* value, size_t len);
+
+// restore gives the 2015 pad its stand-alone settings back over the link before the claim ends.
+void detachBlePad(int32_t padId, bool restore);
+
 uint64_t getUrbCount(int32_t deviceId);
 
 uint64_t getMotionCount(int32_t deviceId);

@@ -279,6 +279,8 @@
     <!-- Tekst Dish obavještenja. -->
     <string name="notif_bt_permission_title">Potrebna Bluetooth dozvola</string>
     <string name="notif_bt_permission_body">Dish-u treba pristup Bluetooth-u da registruje kontroler.</string>
+    <string name="notif_steam_ble_permission_title">Steam Controller preko Bluetooth-a</string>
+    <string name="notif_steam_ble_permission_body">Dish-u treba pristup Bluetooth-u da ga koristi kao kontroler. Dozvolite ga u Vezama.</string>
     <string name="notif_bt_scan_permission_title">Dozvoli Bluetooth skeniranje</string>
     <string name="notif_bt_scan_permission_body">Dodijelite dozvolu za uređaje u blizini da pronađete nove hostove. Upareni uređaji rade i bez nje.</string>
     <string name="discovery_source_manual">Ručno</string>

@@ -282,6 +282,8 @@
     <!-- Texto das notificações Dish. -->
     <string name="notif_bt_permission_title">Permissão de Bluetooth necessária</string>
     <string name="notif_bt_permission_body">O Dish precisa de acesso ao Bluetooth para registrar um controle.</string>
+    <string name="notif_steam_ble_permission_title">Steam Controller por Bluetooth</string>
+    <string name="notif_steam_ble_permission_body">O Dish precisa de acesso ao Bluetooth para usá-lo como controle. Permita em Conexões.</string>
     <string name="notif_bt_scan_permission_title">Permitir busca por Bluetooth</string>
     <string name="notif_bt_scan_permission_body">Conceda a permissão de dispositivos por perto para encontrar novos hosts. Dispositivos pareados continuam funcionando sem ela.</string>
     <string name="discovery_source_manual">Manual</string>

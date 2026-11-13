@@ -5,8 +5,10 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <thread>
+#include <vector>
 
 namespace {
 
@@ -112,4 +114,109 @@ TEST(UsbDeviceTable, AReaderRacingTurnoversNeverAnswersWithAnotherPadsCounters) 
     }
     turnover.join();
     EXPECT_EQ(foreign, 0u);
+}
+
+namespace {
+
+constexpr uint8_t kReport[] = {0x45, 0x01, 0x02};
+constexpr auto kAWhile = std::chrono::milliseconds(20);
+
+// What reached it; while gated, it holds each report until the gate opens.
+class RecordingSink final : public dish_usb::ReportSink {
+  public:
+    void report(const uint8_t* bytes, const size_t len) override {
+        entered.store(true);
+        while (gated.load() && !opened.load()) std::this_thread::yield();
+        last.assign(bytes, bytes + len);
+        reports.fetch_add(1);
+    }
+
+    std::atomic<bool> gated{false};
+    std::atomic<bool> opened{false};
+    std::atomic<bool> entered{false};
+    std::atomic<int> reports{0};
+    std::vector<uint8_t> last;
+};
+
+constexpr auto kLongPastAnyDelivery = std::chrono::seconds(1);
+
+// Whether the flag rose before the deadline, so a report that never arrives fails the test
+// rather than hanging it.
+bool waitFor(const std::atomic<bool>& flag) {
+    const auto deadline = std::chrono::steady_clock::now() + kLongPastAnyDelivery;
+    while (!flag.load() && std::chrono::steady_clock::now() < deadline) std::this_thread::yield();
+    return flag.load();
+}
+
+void deliverOne(dish_usb::UsbDeviceTable& table, std::atomic<bool>& delivered) {
+    delivered.store(table.deliver(kPad, kReport, sizeof(kReport)));
+}
+
+void retireThePad(dish_usb::UsbDeviceTable& table, std::atomic<bool>& retired) {
+    table.retire(kPad);
+    retired.store(true);
+}
+
+} // namespace
+
+TEST(UsbDeviceTableReports, AReportReachesThePadsSink) {
+    dish_usb::UsbDeviceTable table;
+    RecordingSink sink;
+    table.claim(kPad)->reports.store(&sink);
+    EXPECT_TRUE(table.deliver(kPad, kReport, sizeof(kReport)));
+    EXPECT_EQ(sink.reports.load(), 1);
+    EXPECT_EQ(sink.last, std::vector<uint8_t>(std::begin(kReport), std::end(kReport)));
+}
+
+TEST(UsbDeviceTableReports, APadWithNoSinkOrNoEntryTakesNoReport) {
+    dish_usb::UsbDeviceTable table;
+    ASSERT_NE(table.claim(kPad), nullptr);
+    EXPECT_FALSE(table.deliver(kPad, kReport, sizeof(kReport)));
+    EXPECT_FALSE(table.deliver(kOtherPad, kReport, sizeof(kReport)));
+}
+
+TEST(UsbDeviceTableReports, ARetiredPadTakesNoReport) {
+    dish_usb::UsbDeviceTable table;
+    RecordingSink sink;
+    table.claim(kPad)->reports.store(&sink);
+    table.retire(kPad);
+    EXPECT_FALSE(table.deliver(kPad, kReport, sizeof(kReport)));
+    EXPECT_EQ(sink.reports.load(), 0);
+}
+
+TEST(UsbDeviceTableReports, RetireWaitsOutAReportOnItsWay) {
+    dish_usb::UsbDeviceTable table;
+    RecordingSink sink;
+    sink.gated = true;
+    table.claim(kPad)->reports.store(&sink);
+    std::atomic<bool> delivered{false};
+    std::thread reporter(deliverOne, std::ref(table), std::ref(delivered));
+    const bool reportArrived = waitFor(sink.entered);
+    std::atomic<bool> retired{false};
+    std::thread retirer(retireThePad, std::ref(table), std::ref(retired));
+    std::this_thread::sleep_for(kAWhile);
+    const bool retiredUnderTheReport = retired.load();
+    sink.opened = true;
+    retirer.join();
+    reporter.join();
+    EXPECT_TRUE(reportArrived);
+    EXPECT_FALSE(retiredUnderTheReport);
+    EXPECT_TRUE(retired.load());
+    EXPECT_TRUE(delivered.load());
+}
+
+TEST(UsbDeviceTableReports, TheNextPadOnAnEntryStartsWithNoSinkAndTakesReports) {
+    dish_usb::UsbDeviceTable table;
+    RecordingSink first;
+    table.claim(kPad)->reports.store(&first);
+    table.retire(kPad);
+    table.release(kPad);
+    dish_usb::UsbDevice* next = table.claim(kOtherPad);
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ(next->reports.load(), nullptr);
+    RecordingSink second;
+    next->reports.store(&second);
+    EXPECT_TRUE(table.deliver(kOtherPad, kReport, sizeof(kReport)));
+    EXPECT_EQ(second.reports.load(), 1);
+    EXPECT_EQ(first.reports.load(), 0);
 }

@@ -27,4 +27,9 @@ void applyUsbFrame(int32_t deviceId, const dish_slots::UsbFrame& frame);
 // called from the report path when nothing changed.
 void applyPadMicMute(int32_t deviceId, bool muted);
 
+// One write of a Bluetooth LE pad's, made by the JVM's GATT client on the calling thread: target is
+// usbparsers::BLE_FEATURE_TARGET or an output report's id. Blocks until the controller answers, as
+// a USB control transfer does; false when it refused or never answered.
+bool writeBlePad(int32_t padId, uint8_t target, const uint8_t* bytes, size_t len);
+
 } // namespace dispatch

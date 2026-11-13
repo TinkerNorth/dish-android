@@ -47,6 +47,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
@@ -103,6 +104,11 @@ class MainViewModel
 
             satellite.events
                 .onEach(::onConnectionEvent)
+                .launchIn(viewModelScope)
+
+            pads.steamBle.permissionNeeded
+                .filter { it }
+                .onEach { _events.emit(MainEvent.ShowSteamBlePermissionNeeded) }
                 .launchIn(viewModelScope)
 
             capabilityComposer.state

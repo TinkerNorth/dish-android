@@ -339,7 +339,22 @@ class MainActivity :
                     // Same-key replacement so repeat pair-required events for the same id don't stack.
                     key = "pair-required:${event.connectionId}",
                 )
+            MainEvent.ShowSteamBlePermissionNeeded -> showSteamBlePermissionNeeded()
         }
+    }
+
+    // The grant itself is the connections screen's, where the Bluetooth permission banner asks.
+    private fun showSteamBlePermissionNeeded() {
+        notifications.warn(
+            glyph = R.drawable.ic_gamepad,
+            title = getString(R.string.notif_steam_ble_permission_title),
+            body = getString(R.string.notif_steam_ble_permission_body),
+            action =
+                DishNotification.Action(
+                    label = getString(R.string.action_open),
+                ) { nav.toConnections() },
+            key = "steam-ble-permission",
+        )
     }
 
     private fun openConnectionsForPairing(connectionId: String) {

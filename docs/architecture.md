@@ -35,7 +35,11 @@ USB Direct never touches an Activity: a native poller thread per
 claimed interface reads URBs and sends straight to the wire (a
 wireless receiver's Direct claim opens one per slot, and a slot is a
 pad of its own while a controller is paired to it,
-`source/usb/ReceiverSlots.kt`). Events get
+`source/usb/ReceiverSlots.kt`). A Steam Controller paired over
+Bluetooth LE is a Direct pad too (`source/bluetooth/SteamBleManager.kt`):
+a GATT client of the app's own hands each notification to native in
+one JNI call (`SteamBleNative.processBleReport`), which decodes and sends
+it on that binder thread as a poller does a URB. Events get
 normalised on the JVM, cross into the native layer via the `core.jni`
 objects (`PhysicalSlotNative`, `SlotReportNative`), and the native side runs the encoder + `sendto` on
 the same thread the event arrived on. Discovery, motion, battery, and
@@ -521,6 +525,11 @@ of its kind to the pad's mailbox and wakes the worker, which writes it
 poller queues its GIP acks there too instead of writing them before it
 decodes. So no thread that hands the pad feedback, the receive thread and
 the poller included, ever waits on a USB transfer.
+
+A Bluetooth LE Steam Controller's worker is the same worker over a
+different `OutputDevice` (`BleOutput`): each write goes up through
+`SteamBleBridge` to the pad's GATT client, which blocks until the
+controller answers, as a USB control transfer blocks.
 
 A pad that forgets a write unless the host repeats it is refreshed by the
 same worker: the Steam Controller (2026) turns lizard mode back on from a

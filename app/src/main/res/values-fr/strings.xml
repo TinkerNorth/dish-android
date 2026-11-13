@@ -281,6 +281,8 @@
     <!-- Texte des notifications Dish. -->
     <string name="notif_bt_permission_title">Autorisation Bluetooth nécessaire</string>
     <string name="notif_bt_permission_body">Dish a besoin de l\'accès Bluetooth pour enregistrer une manette.</string>
+    <string name="notif_steam_ble_permission_title">Steam Controller en Bluetooth</string>
+    <string name="notif_steam_ble_permission_body">Dish a besoin de l\'accès Bluetooth pour l\'utiliser comme manette. Autorisez-le dans Connexions.</string>
     <string name="notif_bt_scan_permission_title">Autoriser l\'analyse Bluetooth</string>
     <string name="notif_bt_scan_permission_body">Accordez l\'autorisation Appareils à proximité pour trouver de nouveaux hôtes. Les appareils associés fonctionnent sans elle.</string>
     <string name="discovery_source_manual">Manuel</string>

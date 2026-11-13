@@ -253,8 +253,8 @@ warned about cannot happen. Unverified on hardware like the rest.
 - Rumble. The pad has no motors, only trackpad voice coils driven by `ID_TRIGGER_HAPTIC_PULSE`
   pulse trains; the simple rumble command is Steam Deck firmware only, and `hid-steam` gates force
   feedback on the Deck quirk. `parserHasRumble` is false, so nothing is advertised.
-- Bluetooth. The pad speaks Valve's own BLE protocol, not HID over GATT, so it never reaches the
-  framework as a gamepad.
+- Bluetooth on this path. The pad speaks Valve's own BLE protocol, not HID over GATT, so it never
+  reaches the framework as a gamepad; item 10 claims it over the app's own GATT client instead.
 
 **Where:** `app/src/main/cpp/usb_parsers.cpp` (`decodeSteamController`, `buildSteamConfigPacket`,
 `checkWirelessEvent`, `modelExpectsFrameworkGamepad`, `runInit`, `runTeardown`, `slotLinkStep`,
@@ -353,8 +353,9 @@ emulated type has a touch surface, else `off`, and `mouse` by choice. The pads' 
 field on the wire.
 
 **Deliberately absent:**
-- Bluetooth LE (28DE:1303). The pad speaks Valve's own protocol over GATT, not HID over GATT, so it
-  never reaches the framework as a gamepad, and the Direct path is USB only.
+- Bluetooth LE (28DE:1303) on this path. The pad speaks Valve's own protocol over GATT, not HID over
+  GATT, so it never reaches the framework as a gamepad; item 10 claims it over the app's own GATT
+  client instead.
 - The other haptic reports (pulse, tone, sweep, script).
 
 **Where:** `app/src/main/cpp/usb_parsers.cpp` (`decodeSteamTriton`, `decodePadBatteryReport`,
@@ -362,10 +363,92 @@ field on the wire.
 `outputRouteFor`, `runTritonQuietInit`, `runSettingsRefresh`, `runMergedRumble`),
 `app/src/main/cpp/usb_output.{h,cpp}` (`OutputDevice::refresh`, `OutputDevice::left`,
 `postReconnected`, `postLeft`), `app/src/main/cpp/worker_wake.h` (`sleepUnlessFor`),
-`app/src/main/cpp/usb_host.cpp` (`UsbOutput`, `publishCompletedUrb`, `publishWirelessEvent`,
+`app/src/main/cpp/usb_host.cpp` (`UsbOutput`, `publishReport`, `publishWirelessEvent`,
 `followSlotLink`), and the slot files item 8 lists.
 
 **Acceptance:** A wired Steam Controller (2026) picked as Direct streams sticks, triggers, buttons
 and motion for minutes with no lizard keyboard or mouse input reaching the phone, rumbles for as long
 as the game asks, shows its own battery on the card, and is a desktop mouse again a few seconds after
 being switched back to Standard or unplugged.
+
+---
+
+## 10. Steam Controllers on Bluetooth LE (implemented from SDL, needs hardware verification)
+
+**Status:** Ported from SDL's Android `HIDDeviceManager.java` and `HIDDeviceBLESteamController.java`
+(how the controller is found and connected, and how reports and writes are framed over GATT) and
+from the drivers item 8 and item 9 name, never run against the hardware. A Steam Controller paired
+to the phone in Android's Bluetooth settings is claimed as a Direct pad by a GATT client of the
+app's own, beside the system's HID-over-GATT one, which binds the controller's lizard keyboard and
+mouse. The Bluetooth identities are SDL's: 28DE:1106 for the 2015 pad (`Parser::STEAM_CONTROLLER_BLE`)
+and 28DE:1303 for the 2026 one (`Parser::STEAM_TRITON`), in their own table (`lookupBluetoothModel`)
+so a USB device is never classified as either.
+
+What SDL does over Bluetooth LE, and so what is built:
+
+| | 2015 | 2026 |
+|---|---|---|
+| State | yes: segments of 18 bytes on 100F6C33, assembled into option-masked chunks | yes: report 0x45 on 100F6C7A or 0x47 on 100F6C7C, the USB layouts without their id |
+| Lizard mode off | yes, once: SDL's ResetSteamController feature reports | yes, re-sent every 3 s against the watchdog |
+| IMU | yes: SDL's sensor enable, then the accel and gyro chunks | yes: the raw IMU setting, then the state reports' IMU block |
+| Rumble | no (SDL has none on any transport) | yes: output report 0x80 on 100F6CB5, re-sent every 40 ms while running |
+| Battery | no (SDL reads none on any transport) | no: SDL subscribes only to the state characteristic, so report 0x43 never arrives |
+
+- **Finding the controller:** the paired devices whose name is `SteamController` or starts with
+  `Steam Ctrl` and that speak LE, at start and on `ACTION_ACL_CONNECTED`, as SDL does.
+- **Bring-up** (`SteamBleLink`): connect over LE (not a background connection), discover services,
+  take the model from the input characteristic the Valve service (100F6C32) lists last, ask a 2026
+  controller for the 517-byte MTU its 45-byte reports need, switch on the input characteristic's
+  notifications, then claim: native attaches the pad, writes its quiet sequence and starts its
+  output worker, and the card is listed. A start that fails part way hands the 2015 pad back with
+  its restore sequence over the link that is still up.
+- **Framing:** a notification goes to native with the report id SDL's bridge puts back in front of
+  it (`bleInputReport`), so the 2026 pad's reports reach `decodeSteamTriton` unchanged and the 2015
+  pad's segments reach the new `decodeSteamControllerBle` as SDL's assembler sees them. A write goes
+  out as SDL's bridge writes it: the report without its first byte and without its last
+  (`buildSteamBleConfigWrite`, `buildSteamBleSettingsRefresh`, `buildSteamBleRumbleWrite`), a
+  feature report to the report characteristic (100F6C34) and an output report to the characteristic
+  0x35 past its id. A 2015 feature report goes as SDL's one-segment frame (header 0xC0).
+- **Writes:** native's output worker times them as it does a USB pad's and hands each up through
+  `SteamBleBridge`; the link writes it and blocks until the controller answers, as a USB control
+  transfer does, or until the link drops.
+- **Lifecycle:** a lost link (the controller asleep or out of range, `ACTION_ACL_DISCONNECTED`, or
+  the GATT client's own disconnect), Bluetooth turned off or the permission taken away ends the claim
+  without a word to the pad; the next connect is a new claim with a new id from the allocator the
+  USB pads share, so the two never collide. Native retires the pad's entry before it tears it down,
+  waiting out a notification on its way (`UsbDeviceTable::retire`).
+- **Permission:** BLUETOOTH_CONNECT from Android 12; below it the manifest's install-time BLUETOOTH.
+  Refused, nothing is connected (`SteamBleStatus.PERMISSION_REFUSED`), and when the controller's
+  keyboard and mouse are there, carrying its Bluetooth identity, the main screen says so and points
+  to the connections screen's grant.
+
+**Unverified and worth checking first:**
+- All of it on hardware: there is no Bluetooth Steam Controller here.
+- That the 2015 pad sends the chunked state packets once its wireless packet version is 2 (SDL sets
+  it and decodes them; the `ValveInReport_t` forms SDL also accepts are not decoded here, as on USB).
+- That the HID-over-GATT keyboard and mouse carry 28DE:1106 or 28DE:1303 on Android, which the
+  permission notice relies on; SDL's Windows and macOS paths see those identities.
+- That the trimmed writes land: SDL's bridge drops each report's last byte, and this port writes the
+  same bytes rather than guess what the firmware would make of one more.
+
+**Deliberately absent (SDL-only workarounds and choices to revisit):**
+- The 2015 pad's battery and the 2026 pad's (report 0x43 would sit on 100F6C78, which SDL never
+  subscribes to); the wire carries the phone's battery for these pads, as for a USB pad that reports
+  none.
+- SDL's attributes query in its reset (its one use is the sensor rate), its 500 ms delay and second
+  try on the notification switch (an Amazon Fire TV quirk), and its Chromebook polling.
+- A Standard path: a Bluetooth Steam Controller is always claimed; there is no switch back to its
+  lizard keyboard and mouse while the app runs.
+
+**Where:** `app/src/main/cpp/usb_parsers.cpp` (`decodeSteamControllerBle`, `bleInputReport`,
+`buildSteamBleConfigWrite`, `buildSteamBleSettingsRefresh`, `buildSteamBleRumbleWrite`,
+`lookupBluetoothModel`), `app/src/main/cpp/usb_device_table.h` (`ReportSink`, `deliver`, `retire`),
+`app/src/main/cpp/usb_host.cpp` (`attachBlePad`, `startBlePad`, `deliverBleReport`, `detachBlePad`,
+`BleOutput`), `app/src/main/cpp/satellite_jni.cpp` (`dispatch::writeBlePad`, `SteamBleNative`),
+`source/bluetooth/SteamBleModel.kt`, `SteamBleLink.kt`, `SteamBleLinks.kt`, `AndroidSteamGatt.kt`,
+`SteamBleManager.kt`, `hotpath/input/SteamBleBridge.kt`.
+
+**Acceptance:** A Steam Controller of each model, paired to the phone, becomes a Direct card within a
+few seconds of waking, streams sticks, triggers, buttons, trackpads and motion with no lizard
+keyboard or mouse input reaching the phone, rumbles (2026) for as long as the game asks, ends its
+card when it sleeps or Bluetooth goes off, and comes back as a card when it wakes.

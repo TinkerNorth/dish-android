@@ -344,6 +344,8 @@
          across data + UI sites. -->
     <string name="notif_bt_permission_title">Bluetooth permission needed</string>
     <string name="notif_bt_permission_body">Dish needs Bluetooth access to register a controller.</string>
+    <string name="notif_steam_ble_permission_title">Steam Controller on Bluetooth</string>
+    <string name="notif_steam_ble_permission_body">Dish needs Bluetooth access to use it as a controller. Grant it under Connections.</string>
     <string name="notif_bt_scan_permission_title">Allow Bluetooth scanning</string>
     <string name="notif_bt_scan_permission_body">Grant the Nearby devices permission to find new hosts. Paired devices still work without it.</string>
     <string name="notif_bt_discoverability_denied_title">Discoverability denied</string>
