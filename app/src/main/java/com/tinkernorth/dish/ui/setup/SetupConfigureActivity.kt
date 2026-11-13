@@ -8,6 +8,7 @@ import androidx.activity.addCallback
 import androidx.activity.viewModels
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE_EDGE
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_SWITCHPRO
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
@@ -103,6 +104,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         binding.cardTypePlaystation.typeCard.setOnClickListener { pickType(CONTROLLER_TYPE_PLAYSTATION) }
         binding.cardTypeDualsense.typeCard.setOnClickListener { pickType(CONTROLLER_TYPE_DUALSENSE) }
         binding.cardTypeSwitchpro.typeCard.setOnClickListener { pickType(CONTROLLER_TYPE_SWITCHPRO) }
+        binding.cardTypeDualsenseEdge.typeCard.setOnClickListener { pickType(CONTROLLER_TYPE_DUALSENSE_EDGE) }
 
         binding.cardMlAuto.typeCard.setOnClickListener { pickType(AUTO) }
         binding.cardMlXbox.typeCard.setOnClickListener { pickType(XBOX) }
@@ -163,6 +165,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
             binding.cardTypePlaystation to CONTROLLER_TYPE_PLAYSTATION,
             binding.cardTypeDualsense to CONTROLLER_TYPE_DUALSENSE,
             binding.cardTypeSwitchpro to CONTROLLER_TYPE_SWITCHPRO,
+            binding.cardTypeDualsenseEdge to CONTROLLER_TYPE_DUALSENSE_EDGE,
         )
 
     // A Bluetooth host locks to one type, so its other cards never show, and a Moonlight host

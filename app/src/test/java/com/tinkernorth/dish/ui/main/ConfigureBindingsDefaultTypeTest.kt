@@ -199,6 +199,31 @@ class ConfigureBindingsDefaultTypeTest {
         }
 
     @Test
+    fun `a catalog that ends on the DualSense Edge never defaults to it`() =
+        runTest(dispatcher) {
+            connectionsFlow.value = listOf(satelliteHost())
+            val everyType =
+                CatalogDto(
+                    controllerTypes =
+                        listOf(
+                            CatalogTypeDto(id = TYPE_XBOX360, slug = "xbox360", name = "Xbox 360 Controller"),
+                            CatalogTypeDto(id = TYPE_DS4, slug = "ds4", name = "DualShock 4"),
+                            CatalogTypeDto(id = 2, slug = "dualsense", name = "DualSense"),
+                            CatalogTypeDto(id = 3, slug = "switchpro", name = "Switch Pro Controller"),
+                            CatalogTypeDto(id = 4, slug = "dualsenseedge", name = "DualSense Edge"),
+                        ),
+                )
+            coEvery { catalogRepo.catalogFor(any(), any()) } returns everyType
+            vm.load(SLOT)
+            vm.setHost(HOST)
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(TYPE_XBOX360, currentDraft()?.type)
+            val options = vm.ui.value.typeOptions
+            assertEquals(5, options.size)
+            assertEquals(4, options.last().id)
+        }
+
+    @Test
     fun `an xbox-first catalog snaps the type to xbox`() =
         runTest(dispatcher) {
             connectionsFlow.value = listOf(satelliteHost())

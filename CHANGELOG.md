@@ -21,6 +21,11 @@ computer. Those lines say "update Satellite too".
   computer makes of them is up to the controller type Dish emulates there,
   which the next updates extend. Not tried on a real Steam Controller or
   DualSense Edge yet.
+- **DualSense Edge as a controller type.** A Satellite that offers it (update
+  Satellite too) can be asked to plug in a DualSense Edge: a DualSense whose
+  two back buttons and two Fn buttons are the extra buttons a controller sends
+  on protocol 4, so a Steam Controller's back buttons or a real Edge's reach the
+  game. It sits last in the list and Dish never picks it on its own.
 - **Room on the wire for a controller's extra buttons.** `[wire-coordinated]`
   Protocol 4. Dish now speaks Satellite protocol 4: on a connection that
   settled on it, every controller report carries a second word for the buttons

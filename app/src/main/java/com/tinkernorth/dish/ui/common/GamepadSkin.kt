@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.ui.common
 
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE_EDGE
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_SWITCHPRO
 import com.tinkernorth.dish.core.input.GamepadProfile
@@ -32,7 +33,7 @@ enum class GamepadSkin(
 fun gamepadSkinForControllerType(type: Int): GamepadSkin =
     when (type) {
         CONTROLLER_TYPE_PLAYSTATION -> GamepadSkin.PlayStation
-        CONTROLLER_TYPE_DUALSENSE -> GamepadSkin.DualSense
+        CONTROLLER_TYPE_DUALSENSE, CONTROLLER_TYPE_DUALSENSE_EDGE -> GamepadSkin.DualSense
         CONTROLLER_TYPE_SWITCHPRO -> GamepadSkin.Switch
         else -> GamepadSkin.Xbox360
     }
