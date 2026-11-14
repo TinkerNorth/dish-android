@@ -598,6 +598,9 @@
     <string name="inspector_accel_value">Acel: %1$.2f · %2$.2f · %3$.2f g</string>
     <string name="inspector_motion_missing">No hay datos de movimiento en esta vía.</string>
     <string name="inspector_touch_missing">No hay datos táctiles en esta vía (los trackpads transmiten por USB directo).</string>
+    <string name="inspector_button_start">Start</string>
+    <string name="inspector_button_back">Atrás</string>
+    <string name="inspector_button_guide">Guía</string>
     <string name="inspector_ext_right_paddle_1">Paleta derecha 1</string>
     <string name="inspector_ext_left_paddle_1">Paleta izquierda 1</string>
     <string name="inspector_ext_right_paddle_2">Paleta derecha 2</string>

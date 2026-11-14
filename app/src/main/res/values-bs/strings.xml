@@ -597,6 +597,9 @@
     <string name="inspector_accel_value">Akcel: %1$.2f · %2$.2f · %3$.2f g</string>
     <string name="inspector_motion_missing">Nema podataka o pokretu na ovom putu.</string>
     <string name="inspector_touch_missing">Nema podataka o dodiru na ovom putu (trackpad se prenosi preko USB-a direktno).</string>
+    <string name="inspector_button_start">Start</string>
+    <string name="inspector_button_back">Natrag</string>
+    <string name="inspector_button_guide">Guide</string>
     <string name="inspector_ext_right_paddle_1">Desna lopatica 1</string>
     <string name="inspector_ext_left_paddle_1">Lijeva lopatica 1</string>
     <string name="inspector_ext_right_paddle_2">Desna lopatica 2</string>
