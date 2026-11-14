@@ -1,6 +1,6 @@
 # Dish for Android: Privacy Policy
 
-**Effective date:** 2026-09-06.
+**Effective date:** 2026-11-13.
 **Hosted copy:** [`https://dish.tinkernorth.com/privacy/dish-android/`](https://dish.tinkernorth.com/privacy/dish-android/).
 The hosted copy at that URL is the canonical version; this file mirrors it
 in-repo so the code and the policy ship together. Google Play points at the
@@ -65,10 +65,34 @@ The following data never leaves your phone except to your own
 | Moonlight client identity: an RSA key pair with a self-signed certificate, plus a random client id | The private key in the Android Keystore, where it cannot be exported; the certificate and id in app-private storage | Proving to a Moonlight host that this is the phone it paired with. Sent only to Moonlight hosts you pair with, never to us. |
 | Last per-slot controller binding (slot → satellite/BT host) | Same SharedPreferences | Restoring your last setup on launch. |
 | Per-slot battery readings (transient) | In-memory only | Showing the battery indicator on the controller card. |
+| Your phone's battery level and charging state | In-memory only | Read from Android's battery status broadcast (`ACTION_BATTERY_CHANGED`) every 30 seconds while Dish is on screen; while it is, Dish also listens to that broadcast so a change in charging state is reported at once. Sent in a controller's battery report to the satellite or Moonlight host that controller is bound to, under the rule in section 2.2. |
 | Gamepad input events (button presses, sticks, gyroscope) | In-memory only | Forwarded over encrypted UDP to the satellite you paired with, or over Bluetooth HID. Not logged or stored. |
 | Per-slot Microphone / Controller sound switches | App-private SharedPreferences (`user_preferences.xml`) | Remembering which controllers you gave a microphone or a speaker. The microphone switch defaults to off. |
+| Per-slot Steam Controller trackpad pick (Right stick, Touchpad, Mouse or Off) | App-private SharedPreferences (`trackpad_pick_preferences.xml`) | Remembering what each Steam Controller's trackpads do. A slot with no pick takes its model's default. Included in cloud backup and device transfer. |
+| The names and device types of the Bluetooth devices paired with your phone, and the addresses of the Steam Controllers among them | In-memory only | Finding Steam Controllers paired over Bluetooth (below). Each name is checked and dropped; only a Steam Controller's address is kept, until the controller disconnects, Bluetooth goes off or the Bluetooth permission is withdrawn. |
 | Microphone audio, while the controller microphone is on and unmuted | In-memory only, one 20 ms window at a time | Encoded and forwarded over the same encrypted UDP session to the satellite you paired with. Never written to storage, never logged, never sent to TinkerNorth. |
 | Update preferences (GitHub build only): the *Check for updates automatically* switch, the one version you skipped, and when the last check ran | App-private SharedPreferences (`user_preferences.xml`) | Deciding whether and when to ask GitHub for a newer release (section 2.5). Included in cloud backup, like the crash-reporting choice. |
+
+**Steam Controllers paired over Bluetooth.** While Dish is running, with
+Bluetooth on and the Bluetooth permission granted, it lists the devices
+paired with your phone and reads each one's name and device type to pick out
+Steam Controllers: a Bluetooth LE device named `SteamController`, or with a
+name starting `Steam Ctrl`. It makes the same check for any Bluetooth device
+that connects later; when a device disconnects it reads only its address, to
+let go of a controller it was using. It does not scan for Steam Controllers;
+it looks only at devices already paired with your phone. Nothing it reads
+about your other devices is kept, written to storage, or sent anywhere. Dish
+opens a Bluetooth LE (GATT) connection only to a Steam Controller found this
+way, beside the keyboard-and-mouse connection Android keeps for it. Over that
+connection it reads which characteristics Valve's service offers, to tell the
+2015 model from the 2026 one; subscribes to the controller's input reports;
+and writes the controller's settings (out of its keyboard-and-mouse mode
+while Dish uses it, and back when Dish lets go) and, on a model that has it,
+rumble. Nothing from this connection is written to storage; the controller's
+slot keeps the per-slot settings in the table above, such as its trackpad
+pick. The controller's input goes where a controller on a USB cable's does,
+to the host its slot is bound to, with the battery report described in
+section 2.2, and nowhere else.
 
 ### 2.2 Sent to your own LAN (not to TinkerNorth)
 
@@ -120,6 +144,18 @@ The following data never leaves your phone except to your own
   without decoding them and never stores or shows them. The host learns the
   phone's client id, a device name and the client certificate. All of this
   stays on your local network.
+- **Battery.** Each controller bound to a satellite or Moonlight host sends
+  that host a battery report, a level and a charging state, every 30 seconds
+  while Dish is on screen, and again whenever the phone's charging state
+  changes or a controller or binding comes or goes. The report carries the
+  lower of the controller's own battery and the phone's: a reading whose level
+  is unknown counts as the higher one, a tie goes to the controller, and a
+  controller with no battery reading of its own sends the phone's. The
+  on-screen controller sends the phone's. A satellite receives the report in
+  the same encrypted UDP session as your input (`MSG_BATTERY`); a Moonlight
+  host receives it on the protocol's encrypted control channel. Bluetooth HID
+  hosts receive no battery report. The controller card keeps showing the
+  controller's own charge.
 - **Bluetooth HID.** As an alternative to Wi-Fi, the app can present
   itself to a paired host as a Bluetooth HID gamepad. In that mode no
   data crosses Wi-Fi; the host receives a standard HID report. Bluetooth
@@ -227,7 +263,7 @@ updates it, and it carries no update code either.
 | Permission | Why | When asked |
 |---|---|---|
 | `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE` | Sending the encrypted UDP stream and discovery beacons over your local network. | Install-time (normal permissions). |
-| `BLUETOOTH_CONNECT` (API 31+) | Pairing with a Bluetooth host (PC, console, set-top box) and presenting as a HID gamepad, or connecting a Bluetooth game controller. | Runtime, when you add a Bluetooth host or controller. |
+| `BLUETOOTH_CONNECT` (API 31+) | Pairing with a Bluetooth host (PC, console, set-top box) and presenting as a HID gamepad, or connecting a Bluetooth game controller. It also lets Dish look through the devices paired with your phone for a Steam Controller and connect to it (section 2.1). | Runtime, when you add a Bluetooth host or controller. When a Steam Controller paired over Bluetooth is waiting on it, the main screen says so and *Connections* asks for it. |
 | `BLUETOOTH_SCAN` (API 31+) | Discovering nearby Bluetooth hosts and controllers so you can pair them. Declared with `neverForLocation`: we do not derive your location from Bluetooth results and collect no scan data. | Runtime, when you scan for a Bluetooth host or controller. |
 | `BLUETOOTH`, `BLUETOOTH_ADMIN` (API ≤ 30 only) | Legacy Bluetooth equivalent for Android ≤ 11. Those versions report nearby devices only to an app holding a location permission, which Dish does not request, so there Dish lists paired devices only and you pair a new one in the system Bluetooth settings. | Install-time. |
 | `POST_NOTIFICATIONS` (API 33+) | Showing the ongoing-session notification while a controller is streaming, plus actionable error banners. | Runtime, on first launch on Android 13+. Declining still lets the app run; the notification just isn't visible. |

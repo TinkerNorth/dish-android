@@ -92,6 +92,13 @@ computer. Those lines say "update Satellite too".
   first. A controller with no battery still sends the phone's, the on-screen
   pad still sends the phone's, and the controller card still shows the
   controller's own charge.
+- **The privacy policy describes the battery rule, the trackpad pick and
+  Steam Controllers on Bluetooth.** It now says that your phone's battery level
+  and charging state go, in a controller's battery report, only to the
+  computer that controller is bound to; that each Steam Controller's trackpad
+  pick is kept on your phone; and that to find a Steam Controller paired over
+  Bluetooth, Dish checks the names of the devices paired with your phone,
+  keeps nothing about the others, and connects only to the controller.
 
 ### Fixed
 
