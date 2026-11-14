@@ -110,8 +110,10 @@ section 2.2, and nowhere else.
   destroyed.
 - **Gamepad stream.** Once paired, the app sends ChaCha20-Poly1305-
   authenticated UDP packets to the satellite on port 9876. The payload
-  is your controller state (12-byte XUSB report, plus optional
-  encrypted MSG_MOTION, MSG_BATTERY, and MSG_TOUCHPAD frames). The app
+  is your controller state (a 12-byte XUSB report, followed on a
+  protocol-4 session by a 4-byte word of the extra buttons a pad has,
+  such as paddles and trackpad clicks, plus optional encrypted
+  MSG_MOTION, MSG_BATTERY, and MSG_TOUCHPAD frames). The app
   also listens on the same socket for MSG_RUMBLE and MSG_LIGHTBAR
   return-path packets from the satellite.
 - **Controller audio.** A satellite can give its emulated pad the audio
