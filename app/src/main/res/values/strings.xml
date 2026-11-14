@@ -573,6 +573,21 @@
     <string name="inspector_accel_value">Accel: %1$.2f · %2$.2f · %3$.2f g</string>
     <string name="inspector_motion_missing">No motion data on this path.</string>
     <string name="inspector_touch_missing">No touch data on this path (trackpads stream on USB Direct).</string>
+    <string name="inspector_button_dpad_up" translatable="false">▲</string>
+    <string name="inspector_button_dpad_down" translatable="false">▼</string>
+    <string name="inspector_button_dpad_left" translatable="false">◀</string>
+    <string name="inspector_button_dpad_right" translatable="false">▶</string>
+    <string name="inspector_button_start">Start</string>
+    <string name="inspector_button_back">Back</string>
+    <string name="inspector_button_left_stick" translatable="false">LS</string>
+    <string name="inspector_button_right_stick" translatable="false">RS</string>
+    <string name="inspector_button_lb" translatable="false">LB</string>
+    <string name="inspector_button_rb" translatable="false">RB</string>
+    <string name="inspector_button_guide">Guide</string>
+    <string name="inspector_button_a" translatable="false">A</string>
+    <string name="inspector_button_b" translatable="false">B</string>
+    <string name="inspector_button_x" translatable="false">X</string>
+    <string name="inspector_button_y" translatable="false">Y</string>
     <string name="inspector_ext_right_paddle_1">Right paddle 1</string>
     <string name="inspector_ext_left_paddle_1">Left paddle 1</string>
     <string name="inspector_ext_right_paddle_2">Right paddle 2</string>

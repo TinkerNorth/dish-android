@@ -102,6 +102,11 @@ computer. Those lines say "update Satellite too".
 
 ### Fixed
 
+- **The controller inspector names Start, Back and Guide in your language.**
+  Its Pressed line showed those three buttons in English whatever language
+  Dish was in, next to the extra buttons in your own. They now follow the
+  app's language too; the d-pad arrows and the letter buttons (A, B, X, Y,
+  LB, RB, LS, RS) read the same in every language, as before.
 - **Two controllers of the same model each work in Direct mode.** Two
   DualSense pads on USB cables, two Steam Controller receivers or two of the
   new Steam Controller's adapters used to share one entry in Dish: only one of

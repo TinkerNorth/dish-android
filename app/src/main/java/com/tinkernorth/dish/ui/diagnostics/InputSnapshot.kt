@@ -65,23 +65,23 @@ fun parseInputSnapshot(
 // Wire XUSB button bits (mirror of gamepad_input.h): what the snapshot's `buttons` mask means.
 enum class WireButton(
     val bit: Int,
-    val label: String,
+    @StringRes val label: Int,
 ) {
-    DPAD_UP(0x0001, "▲"),
-    DPAD_DOWN(0x0002, "▼"),
-    DPAD_LEFT(0x0004, "◀"),
-    DPAD_RIGHT(0x0008, "▶"),
-    START(0x0010, "Start"),
-    BACK(0x0020, "Back"),
-    THUMB_L(0x0040, "LS"),
-    THUMB_R(0x0080, "RS"),
-    LB(0x0100, "LB"),
-    RB(0x0200, "RB"),
-    GUIDE(0x0400, "Guide"),
-    A(0x1000, "A"),
-    B(0x2000, "B"),
-    X(0x4000, "X"),
-    Y(0x8000, "Y"),
+    DPAD_UP(0x0001, R.string.inspector_button_dpad_up),
+    DPAD_DOWN(0x0002, R.string.inspector_button_dpad_down),
+    DPAD_LEFT(0x0004, R.string.inspector_button_dpad_left),
+    DPAD_RIGHT(0x0008, R.string.inspector_button_dpad_right),
+    START(0x0010, R.string.inspector_button_start),
+    BACK(0x0020, R.string.inspector_button_back),
+    THUMB_L(0x0040, R.string.inspector_button_left_stick),
+    THUMB_R(0x0080, R.string.inspector_button_right_stick),
+    LB(0x0100, R.string.inspector_button_lb),
+    RB(0x0200, R.string.inspector_button_rb),
+    GUIDE(0x0400, R.string.inspector_button_guide),
+    A(0x1000, R.string.inspector_button_a),
+    B(0x2000, R.string.inspector_button_b),
+    X(0x4000, R.string.inspector_button_x),
+    Y(0x8000, R.string.inspector_button_y),
 }
 
 // Protocol 4 extended-button bits (mirror of dish_wire::EXT_BUTTON_* in wire_encoders.h): what the
@@ -106,7 +106,7 @@ enum class ExtendedButton(
 }
 
 internal fun Context.pressedText(snapshot: InputSnapshot): String {
-    val wire = WireButton.entries.filter { (snapshot.buttons and it.bit) != 0 }.map { it.label }
+    val wire = WireButton.entries.filter { (snapshot.buttons and it.bit) != 0 }.map { getString(it.label) }
     val extended = ExtendedButton.entries.filter { (snapshot.extButtons and it.bit) != 0 }.map { getString(it.label) }
     val pressed = (wire + extended).joinToString(SEPARATOR)
     return getString(R.string.inspector_pressed, pressed.ifEmpty { getString(R.string.inspector_none) })

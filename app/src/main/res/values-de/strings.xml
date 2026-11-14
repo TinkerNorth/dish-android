@@ -591,6 +591,9 @@
     <string name="inspector_accel_value">Beschl.: %1$.2f · %2$.2f · %3$.2f g</string>
     <string name="inspector_motion_missing">Keine Bewegungsdaten auf diesem Pfad.</string>
     <string name="inspector_touch_missing">Keine Touch-Daten auf diesem Pfad (Trackpads streamen über USB direkt).</string>
+    <string name="inspector_button_start">Start</string>
+    <string name="inspector_button_back">Zurück</string>
+    <string name="inspector_button_guide">Guide</string>
     <string name="inspector_ext_right_paddle_1">Rechtes Paddle 1</string>
     <string name="inspector_ext_left_paddle_1">Linkes Paddle 1</string>
     <string name="inspector_ext_right_paddle_2">Rechtes Paddle 2</string>

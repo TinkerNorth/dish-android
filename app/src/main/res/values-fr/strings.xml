@@ -597,6 +597,9 @@
     <string name="inspector_accel_value">Accél : %1$.2f · %2$.2f · %3$.2f g</string>
     <string name="inspector_motion_missing">Pas de données de mouvement sur cette voie.</string>
     <string name="inspector_touch_missing">Pas de données tactiles sur cette voie (les pavés passent par l\'USB direct).</string>
+    <string name="inspector_button_start">Start</string>
+    <string name="inspector_button_back">Retour</string>
+    <string name="inspector_button_guide">Guide</string>
     <string name="inspector_ext_right_paddle_1">Palette droite 1</string>
     <string name="inspector_ext_left_paddle_1">Palette gauche 1</string>
     <string name="inspector_ext_right_paddle_2">Palette droite 2</string>

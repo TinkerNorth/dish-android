@@ -57,8 +57,23 @@ class InputSnapshotTest {
     }
 
     @Test
+    fun `each wire button has its own name`() {
+        val names = WireButton.entries.map { it.label }.toSet()
+        assertEquals(WireButton.entries.size, names.size)
+    }
+
+    @Test
     fun `a pad holding nothing reads none`() {
         assertEquals("pressed s${R.string.inspector_none}", context.pressedText(InputSnapshot()))
+    }
+
+    @Test
+    fun `the pressed readout names Start, Back and Guide in the context's language, not in English`() {
+        val snapshot = InputSnapshot(buttons = WireButton.START.bit or WireButton.BACK.bit or WireButton.GUIDE.bit)
+        val start = "s${R.string.inspector_button_start}"
+        val back = "s${R.string.inspector_button_back}"
+        val guide = "s${R.string.inspector_button_guide}"
+        assertEquals("pressed $start · $back · $guide", context.pressedText(snapshot))
     }
 
     @Test
@@ -68,8 +83,9 @@ class InputSnapshotTest {
                 buttons = WireButton.A.bit,
                 extButtons = ExtendedButton.LEFT_PADDLE1.bit or ExtendedButton.MISC1.bit,
             )
-        val expected = "pressed A · s${R.string.inspector_ext_left_paddle_1} · s${R.string.inspector_ext_misc_1}"
-        assertEquals(expected, context.pressedText(snapshot))
+        val wire = "s${R.string.inspector_button_a}"
+        val extended = "s${R.string.inspector_ext_left_paddle_1} · s${R.string.inspector_ext_misc_1}"
+        assertEquals("pressed $wire · $extended", context.pressedText(snapshot))
     }
 
     @Test
