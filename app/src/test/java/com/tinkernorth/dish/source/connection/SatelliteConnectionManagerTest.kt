@@ -832,6 +832,57 @@ class SatelliteConnectionManagerTest : SatelliteConnectionManagerFixture() {
         }
 
     @Test
+    fun `pairWithPin 409 with a speakable version retries once at it with the same PIN`() =
+        runMgrTest { mgr, events ->
+            coEvery {
+                discoveryRepo.pair(any(), any(), any(), any(), "1234", any(), any(), eq(DISH_PROTOCOL_CURRENT))
+            } returns reply(409, """{"error":"protocol version unsupported","supported":1}""")
+            coEvery {
+                discoveryRepo.pair(any(), any(), any(), any(), "1234", any(), any(), eq(1))
+            } returns ok("""{"ok":false,"error":"Invalid PIN"}""")
+
+            mgr.pairWithPin(server, "1234")
+            scope.testScheduler.advanceUntilIdle()
+
+            assertTrue(
+                "the downgraded retry should reach the PIN check, got $events",
+                events.any { it is ConnectionEvent.Error && it.error == ConnectionError.PairingRefused("Invalid PIN") },
+            )
+            coVerify(exactly = 1) {
+                discoveryRepo.pair(any(), any(), any(), any(), "1234", any(), any(), eq(1))
+            }
+        }
+
+    @Test
+    fun `requestApproval 409 with a speakable version retries once at it with the same client PIN`() =
+        runMgrTest { mgr, events ->
+            coEvery {
+                discoveryRepo.pair(any(), any(), any(), any(), "", "4242", any(), eq(DISH_PROTOCOL_CURRENT))
+            } returns reply(409, """{"error":"protocol version unsupported","supported":1}""")
+            coEvery {
+                discoveryRepo.pair(any(), any(), any(), any(), "", "4242", any(), eq(1))
+            } returns ok("""{"status":"pending"}""")
+            var polls = 0
+            coEvery { discoveryRepo.pairStatus(any(), any(), any()) } coAnswers {
+                polls++
+                ok("""{"status":"pending"}""")
+            }
+
+            mgr.requestApproval(server, "4242")
+            scope.testScheduler.advanceTimeBy(5000)
+            scope.testScheduler.runCurrent()
+
+            assertTrue("the downgraded retry should reach the approval poll, got $events", polls > 0)
+            assertTrue(events.none { it is ConnectionEvent.Error })
+            coVerify(exactly = 1) {
+                discoveryRepo.pair(any(), any(), any(), any(), "", "4242", any(), eq(1))
+            }
+
+            mgr.disconnect(serverId)
+            scope.testScheduler.advanceUntilIdle()
+        }
+
+    @Test
     fun `session PUT 409 from a newer satellite tells the user to update the app`() =
         runMgrTest { mgr, events ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
