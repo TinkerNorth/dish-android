@@ -7,7 +7,10 @@ computer. Those lines say "update Satellite too".
 
 ---
 
-## [Unreleased]
+## [2.6.0] - 2026-11-15
+
+Steam Controllers over Bluetooth, a trackpad pick for each, and extra buttons
+for the controllers that have them.
 
 ### Added
 
@@ -78,7 +81,7 @@ computer. Those lines say "update Satellite too".
   its own binding, within half a second; one that is switched off leaves,
   and comes back to the same card and binding when it is switched on again.
   Direct stays one choice for the whole adapter. Two adapters of the same
-  model plugged in together are still read as one. This follows SDL and the
+  model plugged in together each get their own slots. This follows SDL and the
   Linux driver and has not been tried on an adapter yet.
 
 ### Changed

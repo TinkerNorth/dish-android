@@ -1,0 +1,7 @@
+Dish 2.6.0: Steam Controller por Bluetooth, escolha dos trackpads e botões extras.
+
+• Um Steam Controller pareado por Bluetooth funciona como controle no modo Direto.
+• Escolha o que são os trackpads: analógico direito, touchpad, mouse ou desligado.
+• Os botões traseiros e outros botões extras chegam ao PC (atualize o Satellite também). Novo tipo: DualSense Edge.
+• O PC recebe a bateria mais baixa entre o controle e o celular.
+• Ainda não testado em um Steam Controller nem em um Edge reais.
