@@ -7,7 +7,10 @@ computer. Those lines say "update Satellite too".
 
 ---
 
-## [Unreleased]
+## [2.6.0] - 2026-11-15
+
+Steam Controllers over Bluetooth, a trackpad pick for each, and extra buttons
+for the controllers that have them.
 
 ### Added
 
