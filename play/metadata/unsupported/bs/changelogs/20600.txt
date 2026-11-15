@@ -3,4 +3,5 @@ Dish 2.6.0: Steam Controller preko Bluetooth-a, izbor trackpadova i dodatna dugm
 • Steam Controller uparen preko Bluetooth-a radi kao kontroler u Brzom načinu.
 • Odaberite šta su trackpadovi: desna palica, touchpad, miš ili isključeno.
 • Stražnja i druga dodatna dugmad stižu na računar (ažurirajte i Satellite). Novi tip: DualSense Edge.
+• Računar dobija nižu od dvije baterije: kontrolera ili telefona.
 • Još nije isprobano na pravom Steam Controlleru ni Edgeu.

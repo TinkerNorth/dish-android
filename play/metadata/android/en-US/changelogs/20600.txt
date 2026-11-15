@@ -3,4 +3,5 @@ Dish 2.6.0: Steam Controllers over Bluetooth, a trackpad pick and extra buttons.
 • A Steam Controller paired over Bluetooth works as a Direct controller.
 • Choose what its trackpads are: right stick, touchpad, mouse or off.
 • Back buttons and other extra buttons reach the PC (update Satellite too). New DualSense Edge type.
+• Your PC is told the lower of the controller's and the phone's battery.
 • Not yet tried on real Steam Controller or Edge hardware.

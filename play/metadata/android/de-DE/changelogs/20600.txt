@@ -2,5 +2,6 @@ Dish 2.6.0: Steam Controller über Bluetooth, Trackpad-Auswahl und Zusatztasten.
 
 • Ein per Bluetooth gekoppelter Steam Controller funktioniert als Direkt-Controller.
 • Wähle, was die Trackpads sind: rechter Stick, Touchpad, Maus oder aus.
-• Rückseiten- und weitere Zusatztasten erreichen den PC (Satellite ebenfalls aktualisieren). Neuer Typ: DualSense Edge.
+• Rückseiten- und weitere Zusatztasten erreichen den PC (auch Satellite aktualisieren). Neuer Typ: DualSense Edge.
+• Der PC erfährt den niedrigeren Akkustand von Controller und Handy.
 • Noch nicht an echter Steam-Controller- oder Edge-Hardware getestet.

@@ -1,6 +1,7 @@
 Dish 2.6.0 : Steam Controller en Bluetooth, choix des trackpads et boutons en plus.
 
-• Un Steam Controller associé en Bluetooth fonctionne comme manette en mode Direct.
+• Un Steam Controller associé en Bluetooth fonctionne en mode Direct.
 • Choisissez le rôle de ses trackpads : stick droit, pavé tactile, souris ou désactivé.
 • Les boutons arrière et autres boutons en plus arrivent sur le PC (mettez aussi Satellite à jour). Nouveau type : DualSense Edge.
-• Pas encore testé sur un vrai Steam Controller ni un vrai Edge.
+• Le PC reçoit la batterie la plus faible, manette ou téléphone.
+• Pas encore testé sur un vrai Steam Controller ou Edge.
