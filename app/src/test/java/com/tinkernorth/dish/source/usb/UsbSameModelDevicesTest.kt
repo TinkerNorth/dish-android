@@ -140,6 +140,9 @@ class UsbSameModelDevicesTest {
             every { this@mockk.productId } returns productId
             every { deviceName } returns node
             every { interfaceCount } returns interfaces.size
+            every { version } returns "1.00"
+            every { productName } returns null
+            every { manufacturerName } returns null
             interfaces.forEachIndexed { index, intf -> every { getInterface(index) } returns intf }
         }
 
@@ -191,7 +194,18 @@ class UsbSameModelDevicesTest {
         val broadcasts = slot<BroadcastReceiver>()
         every { ContextCompat.registerReceiver(ctx, capture(broadcasts), any(), ContextCompat.RECEIVER_NOT_EXPORTED) } returns null
         val scope = CoroutineScope(SupervisorJob() + dispatcher)
-        val manager = UsbGamepadManager(ctx, registry, Provider { hub }, notifications, scope, native, pathPrefs, UsbDescriptorStore())
+        val manager =
+            UsbGamepadManager(
+                ctx,
+                registry,
+                Provider { hub },
+                notifications,
+                scope,
+                native,
+                pathPrefs,
+                UsbDescriptorStore(),
+                UsbHardwareStore(),
+            )
         manager.install()
         usbBroadcasts = broadcasts.captured
         return manager

@@ -3,6 +3,8 @@
 
 package com.tinkernorth.dish.ui.diagnostics
 
+import com.tinkernorth.dish.core.diagnostics.WriteRoute
+import com.tinkernorth.dish.core.diagnostics.WriteVerdict
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
@@ -13,6 +15,8 @@ import com.tinkernorth.dish.source.inputrate.FrameworkInputTimingStore
 import com.tinkernorth.dish.source.inputrate.FrameworkTimingSummary
 import com.tinkernorth.dish.source.store.StickTestHistoryStore
 import com.tinkernorth.dish.source.store.StickTestRecord
+import com.tinkernorth.dish.source.store.TestOutcomeStore
+import com.tinkernorth.dish.source.usb.UsbHardwareStore
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -42,6 +46,7 @@ class PadSourcesTest {
             every { getDeviceUrbErrorCount(any()) } returns URB_ERRORS
             every { getDeviceUrbCount(any()) } returns URB_COUNT
             every { getDeviceInputEventCount(any()) } returns EVENT_COUNT
+            every { lastWriteVerdict(any()) } returns longArrayOf(1, 1, 3, 2, 0, 32, 12)
         }
     private val timing = mockk<FrameworkInputTimingStore> { every { summary(any()) } returns null }
     private val bluetoothLink = mockk<BluetoothPadLinkReader> { every { linkType(any()) } returns BluetoothLinkType.CLASSIC }
@@ -54,6 +59,8 @@ class PadSourcesTest {
             bluetoothLink,
             stickHistory,
             PadAudioFactsStore(),
+            UsbHardwareStore(),
+            TestOutcomeStore(),
             Json { ignoreUnknownKeys = true },
         )
 
@@ -81,6 +88,15 @@ class PadSourcesTest {
             assertTrue(world.frameworkTiming.isEmpty())
             assertTrue(world.btLinkTypes.isEmpty())
             verify(exactly = 0) { native.getDeviceInputEventCount(any()) }
+        }
+
+    @Test
+    fun `a direct pad carries its last write verdict and a framework pad none`() =
+        runTest(dispatcher) {
+            devices.value = mapOf(-5 to direct(-5), 4 to framework(4, Transport.Usb))
+            val world = collectWorlds().last()
+            assertEquals(WriteVerdict(WriteRoute.INTERRUPT_OUT, 3, 2, ok = false, err = 32, ageMs = 12), world.lastWrite[-5])
+            assertEquals(null, world.lastWrite[4])
         }
 
     @Test

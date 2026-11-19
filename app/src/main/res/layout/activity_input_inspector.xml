@@ -314,6 +314,12 @@
                 android:text="@string/inspector_no_audio"
                 android:visibility="gone" />
 
+            <include
+                android:id="@+id/rowOutcome"
+                layout="@layout/inspector_outcome_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </LinearLayout>

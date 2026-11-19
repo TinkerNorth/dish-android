@@ -1,6 +1,6 @@
 # Dish for Android: Privacy Policy
 
-**Effective date:** 2026-11-13.
+**Effective date:** 2026-11-19.
 **Hosted copy:** [`https://dish.tinkernorth.com/privacy/dish-android/`](https://dish.tinkernorth.com/privacy/dish-android/).
 The hosted copy at that URL is the canonical version; this file mirrors it
 in-repo so the code and the policy ship together. Google Play points at the
@@ -22,6 +22,16 @@ policy, as do the desktop clients; do not read one as describing another.
   `satellite` server, a Moonlight host (Sunshine, Apollo, Wolf) or a
   Bluetooth host you paired with. It does not stream to any
   TinkerNorth-operated server.
+- **Every build** (GitHub, Google Play and Amazon Appstore) checks
+  `dish.tinkernorth.com` for a newer list of the controllers it recognises,
+  about ten seconds after launch and every six hours while it runs. The
+  request carries no identifier; the host sees your IP address and the time.
+  *Check for controller updates automatically* in Settings turns it off, and
+  then no request for it leaves your phone (section 2.6).
+- **Diagnostics by email** happens only when you tap *Email diagnostics*: the
+  app writes one file and hands it to your own mail app, addressed to
+  `support@tinkernorth.com`. Nothing is sent until you press Send there
+  (section 2.7).
 - We do not sell, share, or rent your data. We do not show ads. We do not
   profile you for marketing.
 - We collect **crash reports** via Google Firebase Crashlytics so we can
@@ -32,8 +42,9 @@ policy, as do the desktop clients; do not read one as describing another.
 - The **GitHub build** (the APK from our releases page) checks for a newer
   release by fetching one small file from GitHub while the app is open, at
   most once an hour, and sends nothing about you. You can turn that off in
-  Settings. The Google Play and Amazon Appstore builds never do this: each
-  store updates its build itself.
+  Settings. The Google Play and Amazon Appstore builds never check GitHub for
+  app updates: each store updates its build itself. They do make the
+  controller database check above, unless you switch it off.
 - Dish can act as your controller's **microphone**, so voice chat on your
   PC hears you through the emulated pad. That is off unless you switch it
   on for a controller, it needs the microphone permission, and the audio
@@ -71,6 +82,9 @@ The following data never leaves your phone except to your own
 | Per-slot Steam Controller trackpad pick (Right stick, Touchpad, Mouse or Off) | App-private SharedPreferences (`trackpad_pick_preferences.xml`) | Remembering what each Steam Controller's trackpads do. A slot with no pick takes its model's default. Included in cloud backup and device transfer. |
 | The names and device types of the Bluetooth devices paired with your phone, and the addresses of the Steam Controllers among them | In-memory only | Finding Steam Controllers paired over Bluetooth (below). Each name is checked and dropped; only a Steam Controller's address is kept, until the controller disconnects, Bluetooth goes off or the Bluetooth permission is withdrawn. |
 | Microphone audio, while the controller microphone is on and unmuted | In-memory only, one 20 ms window at a time | Encoded and forwarded over the same encrypted UDP session to the satellite you paired with. Never written to storage, never logged, never sent to TinkerNorth. |
+| Controller database preferences (every build): the *Check for controller updates automatically* switch, when the last check ran, how it ended, and the last manifest's `ETag` | App-private SharedPreferences (`user_preferences.xml`) | Deciding whether to check `dish.tinkernorth.com` and sending `If-None-Match` so an unchanged list is not downloaded again (section 2.6). Included in cloud backup, like the crash-reporting choice. |
+| The controller database the app last downloaded | App-private files (`files/controller-db/v1/`) | Recognising controllers this release does not list yet (section 2.6). Checked against its manifest's SHA-256 every time it is read. |
+| Controller test answers ("Did it work?") and a controller capture you asked for | In-memory only, for the run | Shown in the inspector and carried in a diagnostics file only if you send one (section 2.7). |
 | Update preferences (GitHub build only): the *Check for updates automatically* switch, the one version you skipped, and when the last check ran | App-private SharedPreferences (`user_preferences.xml`) | Deciding whether and when to ask GitHub for a newer release (section 2.5). Included in cloud backup, like the crash-reporting choice. |
 
 **Steam Controllers paired over Bluetooth.** While Dish is running, with
@@ -256,7 +270,73 @@ any kind, including from the *Check for updates* button.
 **The Google Play build** never contacts GitHub for this. Play updates it, as
 Google's policy requires, and the update code is not compiled into that
 build at all. **The Amazon Appstore build** is the same: the Appstore
-updates it, and it carries no update code either.
+updates it, and it carries no update code either. Both store builds do make
+the controller database check in section 2.6, which fetches data about
+controllers, never code, and which you can switch off.
+
+### 2.6 Controller database updates (every build)
+
+Dish ships with a list of the controllers it recognises: their USB and
+Bluetooth ids, how each one talks, and the known issues its Diagnostics card
+shows. So that a newly supported controller does not wait for an app
+release, the app checks for a newer list. About ten seconds after launch, and
+then every six hours while it runs, it fetches a small manifest from
+`https://dish.tinkernorth.com/controllers/v1/` that names the newest version.
+Only when that version is newer than the one the app has does it fetch the
+rest: the controller list and its text in each language. These files are
+data, never code. The app checks each one's size and SHA-256 checksum against
+the manifest before using it, and keeps the copy it has when anything does
+not match.
+
+**Where it goes.** `dish.tinkernorth.com` is an Amazon S3 bucket behind
+Amazon CloudFront, operated for TinkerNorth by Amazon Web Services. The
+requests carry no identifier, no cookie and no query, and use the system's
+default User-Agent; the manifest request also sends the `ETag` of the last
+manifest (`If-None-Match`), so an unchanged list costs one small reply. What
+the host's access logs can see is what any web server sees: the IP address
+the request came from, and the time. We use those logs as we use the rest of
+the website's: for capacity planning and abuse detection only.
+
+**Turning it off.** *Check for controller updates automatically* in Settings,
+on by default, turns the check off. With it off, no request for the
+controller list leaves your device, *Check now* is disabled, and the app
+keeps using the copy it has. *Check now* runs one check when you tap it. The
+Google Play and Amazon Appstore builds make this check too. They still never
+contact GitHub for app updates (section 2.5): their stores update them.
+
+### 2.7 Diagnostics by email
+
+When something does not work, you can send us a diagnostics file from the
+app's Diagnostics page. Nothing happens unless you start it with *Email
+diagnostics*. The app writes one file and hands it to your own mail app, in a
+new message addressed to `support@tinkernorth.com` with a summary in the
+body. Nothing is sent until you press Send in your mail app, and you can read
+the file or remove it first. The message then travels like any email you
+send, through your own mail provider.
+
+The file holds:
+
+- The app's version and build, and which build it is (GitHub, Google Play or
+  Amazon Appstore).
+- Your device model, Android version and processor architecture.
+- Which controller database version the app uses, where it came from, and
+  when the last check ran and how it ended.
+- For each attached controller, its identity and hardware facts: the USB or
+  Bluetooth ids, the product and maker names the controller reports, its USB
+  interfaces and endpoints, its firmware version, how Dish reads it, and the
+  last feedback and output it received.
+- The hosts you use, as "Host 1", "Host 2", with their kind, version and link
+  state, never their names or addresses.
+- The app's in-app log and its own logcat lines, nothing from other apps.
+- The results of the tests you ran on a controller and confirmed, such as
+  whether you felt the rumble.
+- Only if you chose one controller for a capture: its USB descriptors and
+  twenty input reports taken while you were not pressing anything.
+
+It never holds pairing keys or secrets, certificate fingerprints, IP
+addresses, Wi-Fi names, the names of your paired hosts or devices, or any
+microphone or speaker audio. The controller's serial number is never read.
+We use what you send only to look into the problem you wrote to us about.
 
 ---
 
@@ -291,9 +371,14 @@ microphone on, and it is never used for anything but that.
   from the GitHub build: a plain HTTPS request carrying your IP address and
   a `User-Agent` header, nothing else. GitHub is not our processor for it;
   its own privacy statement applies, and you can turn the check off.
-- We do **not** share data with advertising networks, analytics vendors
-  beyond Crashlytics (we have not enabled Firebase Analytics), or any
-  TinkerNorth-operated server. Dish has no TinkerNorth-operated server.
+- **Amazon Web Services** hosts `dish.tinkernorth.com` for us and sees the IP
+  address and time of each controller database check (**section 2.6**).
+- A diagnostics email you send (**section 2.7**) reaches us through your own
+  mail provider, under that provider's terms.
+- We do **not** share data with advertising networks or analytics vendors
+  beyond Crashlytics (we have not enabled Firebase Analytics). The only
+  TinkerNorth-operated server the app contacts is `dish.tinkernorth.com`, for
+  the controller database, and never with your controller input.
 
 We do not sell personal information as defined under California's CCPA
 or comparable laws in other jurisdictions.
@@ -316,6 +401,11 @@ or comparable laws in other jurisdictions.
   button. *Skip this version* on the update notice mutes that one version
   instead. The Play and Amazon Appstore builds have neither, because their
   stores update them.
+- **Controller database opt-out (every build):** tap the gear icon on the
+  main screen, then flip *Check for controller updates automatically* off.
+  Off means no request for the controller list leaves the phone, and *Check
+  now* is disabled; the app keeps the copy it has.
+- **Diagnostics by email:** only ever sent by you, from your own mail app.
 - **Controller microphone opt-out:** it is off until you switch it on, per
   controller, on that controller's binding screen. Switching it off stops
   capture and stops the client advertising a microphone to the host at all.
@@ -348,7 +438,9 @@ contact `privacy@tinkernorth.com` and we will delete it.
 Crash data may be processed in Google data centres outside your country
 of residence. Google publishes the relevant transfer-mechanism
 documentation (Standard Contractual Clauses, etc.) on its terms page
-linked above.
+linked above. The controller database check (section 2.6) is answered by
+Amazon CloudFront, which may serve it from any country where it operates,
+including the United States.
 
 ---
 

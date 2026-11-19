@@ -992,4 +992,69 @@
     <string name="donate_bar_dismiss">Dismiss donation banner</string>
     <string name="donate_title">Support Dish</string>
     <string name="settings_support_title">Support Dish</string>
+    <string name="settings_section_controller_db">CONTROLLER DATABASE</string>
+    <string name="settings_controller_db_checks_title">Check for controller updates automatically</string>
+    <string name="settings_controller_db_checks_body">Ten seconds after launch and every six hours while Dish runs, it asks dish.tinkernorth.com whether a newer list of controllers exists. The request carries no identifier.</string>
+    <string name="settings_controller_db_check_now_title">Check now</string>
+    <string name="controller_db_version">Version %1$d, %2$s</string>
+    <string name="controller_db_status" translatable="false">%1$s · %2$s</string>
+    <string name="controller_db_checked_ago" translatable="false">%1$s, %2$s</string>
+    <string name="controller_db_source_bundled">built in</string>
+    <string name="controller_db_source_cache">downloaded</string>
+    <string name="controller_db_result_never">Not checked yet</string>
+    <string name="controller_db_result_checking">Checking…</string>
+    <string name="controller_db_result_up_to_date">Up to date</string>
+    <string name="controller_db_result_updated">Updated</string>
+    <string name="controller_db_result_offline">Could not reach the server</string>
+    <string name="controller_db_result_invalid">The download did not check out</string>
+    <string name="controller_db_result_off">Automatic checks are off</string>
+    <string name="inspector_outcome_question">%1$s: did it work?</string>
+    <string name="inspector_outcome_yes">Yes</string>
+    <string name="inspector_outcome_no">No</string>
+    <string name="inspector_outcome_last">Last test: %1$s · %2$s · %3$s</string>
+    <string name="inspector_outcome_worked">worked</string>
+    <string name="inspector_outcome_failed">did not work</string>
+    <string name="inspector_outcome_test_rumble_weak">Rumble, weak</string>
+    <string name="inspector_outcome_test_rumble_strong">Rumble, strong</string>
+    <string name="inspector_outcome_test_rumble_both">Rumble, both motors</string>
+    <string name="inspector_outcome_test_trigger_pulse">Trigger pulse</string>
+    <string name="inspector_outcome_test_lamp_on">Mic lamp on</string>
+    <string name="inspector_outcome_test_lamp_pulse">Mic lamp pulsing</string>
+    <string name="inspector_outcome_test_tone">Test tone</string>
+    <string name="inspector_outcome_test_mic">Microphone</string>
+    <string name="diagnostics_record">Record</string>
+    <string name="diagnostics_record_name">Known as</string>
+    <string name="diagnostics_verification">Checked</string>
+    <string name="diagnostics_verification_verified">Verified on hardware</string>
+    <string name="diagnostics_verification_guessed">Layout guessed</string>
+    <string name="diagnostics_verification_flagged">Problems reported</string>
+    <string name="diagnostics_known_issue">Known issue</string>
+    <string name="diagnostics_expect_mismatch">Unexpected hardware</string>
+    <string name="diagnostics_firmware">Firmware</string>
+    <string name="diagnostics_last_write">Last write</string>
+    <string name="diagnostics_ms_ago">%1$d ms ago</string>
+    <string name="write_verdict_report">report %1$s</string>
+    <string name="write_verdict_bulk_out">bulk OUT 0x%1$02X</string>
+    <string name="write_verdict_set_report" translatable="false">SET_REPORT</string>
+    <string name="write_verdict_no_out">no OUT endpoint</string>
+    <string name="write_verdict_ok">OK, %1$s</string>
+    <string name="write_verdict_line" translatable="false">%1$s · %2$s · %3$s</string>
+    <string name="diagnostics_section_support">SUPPORT</string>
+    <string name="diagnostics_email_hint">Email diagnostics prepares a file about this phone, your controllers and your connections, addressed to support@tinkernorth.com in your own mail app. Nothing leaves the phone until you press Send.</string>
+    <string name="diagnostics_email_button">Email diagnostics</string>
+    <string name="diagnostics_email_subject" translatable="false">Dish diagnostics: Dish for Android %1$s on %2$s</string>
+    <string name="diagnostics_email_attachment">The file holds this page and its log, never pairing keys, fingerprints, IP addresses, Wi-Fi names or PC names.</string>
+    <string name="diagnostics_email_chooser">Send diagnostics with</string>
+    <string name="diagnostics_email_no_app">No app on this phone can send the file.</string>
+    <string name="diagnostics_email_failed">The diagnostics file could not be written.</string>
+    <string name="diagnostics_summary_app">Dish for Android %1$s (%2$s) on %3$s, Android %4$s</string>
+    <string name="diagnostics_host_alias" translatable="false">Host %1$d</string>
+    <string name="diagnostics_capture_button">Capture</string>
+    <string name="diagnostics_capture_started">Capturing %1$s. Keep it still for a moment.</string>
+    <string name="diagnostics_capture_done">Captured %1$s. The capture rides the next diagnostics email.</string>
+    <string name="diagnostics_capture_failed">Could not capture %1$s.</string>
+    <string name="diagnostics_controller_db_bundled">Built-in version</string>
+    <string name="diagnostics_controller_db_active">Version in use</string>
+    <string name="diagnostics_controller_db_last_check">Last check</string>
+    <string name="diagnostics_controller_db_title">Controller database</string>
 </resources>

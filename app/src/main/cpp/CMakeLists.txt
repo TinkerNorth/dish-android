@@ -144,6 +144,9 @@ add_library(satellite SHARED
     usb_hid_descriptor.cpp
     hotpath_latency.cpp)
 
+include(controller_tables.cmake)
+dish_use_controller_tables(satellite)
+
 # Release (RelWithDebInfo) is the streaming hot path: -O3 + ThinLTO cross-inlines the JNI dispatch,
 # parsers, and encoders; --gc-sections drops the dead code that opens up. Debug stays -O0 for fast
 # iteration (AGP still supplies -g).

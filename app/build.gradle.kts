@@ -344,6 +344,7 @@ val nativeTestConfigure =
         inputs.file(layout.projectDirectory.file("src/main/cpp/bridge_connection_ids.h"))
         inputs.file(layout.projectDirectory.file("src/main/cpp/audio_codec.h"))
         inputs.file(layout.projectDirectory.file("src/main/cpp/audio_codec.cpp"))
+        inputs.file(layout.projectDirectory.file("src/main/cpp/controller_tables.cmake"))
         outputs.dir(nativeTestBuildDir)
         // Ninja on Windows (no make in a stock environment); Make everywhere else, matching CI.
         val generator =
@@ -384,7 +385,34 @@ tasks.named("check") {
     dependsOn("nativeTest")
 }
 
+// The compiled identity tables, generated from the bundled controller database exactly as both
+// CMake builds generate them, for GeneratedTablesSyncTest to hold against the asset.
+val controllerDbDir = layout.projectDirectory.dir("src/main/assets/controllers/v1")
+val controllerTablesScript = rootProject.layout.projectDirectory.file("scripts/gen_controller_tables.py")
+val controllerTablesHeader = layout.buildDirectory.file("generated/controller-db/known_devices.generated.h")
+
+val generateControllerTablesForTests =
+    tasks.register<Exec>("generateControllerTablesForTests") {
+        group = "verification"
+        description = "Generate the native identity tables the JVM sync test reads."
+        inputs.file(controllerTablesScript)
+        inputs.file(controllerDbDir.file("controllers.json"))
+        inputs.file(controllerDbDir.file("strings/en.json"))
+        outputs.file(controllerTablesHeader)
+        val python = if (System.getProperty("os.name").startsWith("Windows")) "python" else "python3"
+        commandLine(
+            python,
+            "-I",
+            controllerTablesScript.asFile.absolutePath,
+            controllerDbDir.file("controllers.json").asFile.absolutePath,
+            controllerDbDir.file("strings/en.json").asFile.absolutePath,
+            controllerTablesHeader.get().asFile.absolutePath,
+        )
+    }
+
 tasks.withType<Test>().configureEach {
+    dependsOn(generateControllerTablesForTests)
+    systemProperty("dish.controllerTablesHeader", controllerTablesHeader.get().asFile.absolutePath)
     maxHeapSize = "1g"
     // An OOM in a test worker must kill the worker loudly, not wedge the
     // JVM mid-instrumentation and hang the build until a CI timeout.

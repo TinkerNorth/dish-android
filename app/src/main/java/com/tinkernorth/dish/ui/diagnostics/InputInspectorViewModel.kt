@@ -12,7 +12,12 @@ import com.tinkernorth.dish.hotpath.input.RumbleRouter
 import com.tinkernorth.dish.source.audio.MicLevelProbe
 import com.tinkernorth.dish.source.audio.MicProbeReading
 import com.tinkernorth.dish.source.audio.SpeakerTestTone
+import com.tinkernorth.dish.source.store.BenchTest
+import com.tinkernorth.dish.source.store.MIC_LED_ON
+import com.tinkernorth.dish.source.store.MIC_LED_PULSE
 import com.tinkernorth.dish.source.store.StickTestHistoryStore
+import com.tinkernorth.dish.source.store.TestOutcome
+import com.tinkernorth.dish.source.store.TestOutcomeStore
 import com.tinkernorth.dish.source.store.stickHistoryKeyFor
 import com.tinkernorth.dish.source.system.MicPermissionGate
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
@@ -27,6 +32,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -89,6 +95,14 @@ fun featureBenchFor(
     )
 }
 
+// The lamp's on and pulse are worth asking about; turning it off is not a test.
+internal fun lampTestFor(state: Int): BenchTest? =
+    when (state) {
+        MIC_LED_ON -> BenchTest.LAMP_ON
+        MIC_LED_PULSE -> BenchTest.LAMP_PULSE
+        else -> null
+    }
+
 // Left block (0..10) then right (11..21); byte 0 is the DualSense mode, byte 1 the start
 // position, byte 2 the force.
 internal fun rigidTriggerBlocks(): ByteArray =
@@ -137,6 +151,7 @@ class InputInspectorViewModel
         private val micProbe: MicLevelProbe,
         private val testTone: SpeakerTestTone,
         private val stickHistory: StickTestHistoryStore,
+        private val outcomes: TestOutcomeStore,
     ) : ViewModel() {
         val slotId: String = savedState.get<String>(EXTRA_SLOT_ID) ?: VIRTUAL_SLOT_ID
         val deviceId: Int? = slotId.toIntOrNull()
@@ -165,14 +180,31 @@ class InputInspectorViewModel
         private val _micPermissionRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
         val micPermissionRequests: SharedFlow<Unit> = _micPermissionRequests.asSharedFlow()
 
+        // The test whose "Did it work?" is waiting for an answer, if any.
+        private val _pendingTest = MutableStateFlow<BenchTest?>(null)
+        val pendingTest: StateFlow<BenchTest?> = _pendingTest.asStateFlow()
+
+        val lastOutcome: StateFlow<TestOutcome?> =
+            outcomes.state
+                .map { it[slotId]?.lastOrNull() }
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), outcomes.lastOutcomeFor(slotId))
+
         private var micJob: Job? = null
         private var toneJob: Job? = null
 
         fun buzz(
             strong: Int,
             weak: Int,
+            asking: BenchTest,
         ) {
             rumble.testBuzz(slotId, strong, weak, TEST_BUZZ_MS)
+            _pendingTest.value = asking
+        }
+
+        fun answer(worked: Boolean) {
+            val test = _pendingTest.value ?: return
+            outcomes.note(slotId, test, worked)
+            _pendingTest.value = null
         }
 
         fun triggerRumble(
@@ -207,6 +239,7 @@ class InputInspectorViewModel
         }
 
         fun pulseTriggerEffects() {
+            _pendingTest.value = BenchTest.TRIGGER_PULSE
             viewModelScope.launch {
                 feedback.dispatchTriggerEffectsToSlot(slotId, rigidTriggerBlocks())
                 delay(TRIGGER_EFFECT_HOLD_MS)
@@ -216,6 +249,7 @@ class InputInspectorViewModel
 
         fun micLed(state: Int) {
             feedback.dispatchMicLedToSlot(slotId, state)
+            lampTestFor(state)?.let { _pendingTest.value = it }
         }
 
         fun playTestTone() {
@@ -225,6 +259,7 @@ class InputInspectorViewModel
                     _speakerTest.value = SpeakerTestUi.Playing
                     val played = testTone.play(slotId)
                     _speakerTest.value = if (played) SpeakerTestUi.Idle else SpeakerTestUi.Unavailable
+                    if (played) _pendingTest.value = BenchTest.TONE
                 }
         }
 
@@ -238,6 +273,7 @@ class InputInspectorViewModel
                 return
             }
             micJob?.cancel()
+            _pendingTest.value = BenchTest.MIC
             micJob =
                 viewModelScope.launch {
                     _micTest.value = MicTestUi.Running(meterPercent = 0, peakPercent = 0)

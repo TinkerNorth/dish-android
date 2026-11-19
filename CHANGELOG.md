@@ -7,6 +7,63 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [2.7.0] - 2026-11-19
+
+A controller list that can update itself, diagnostics at every level, and a
+way to email them to support.
+
+### Added
+
+- **Dish checks for newer controller support.** The controllers Dish
+  recognises now come from one controller database, shared by every Dish app
+  and published at dish.tinkernorth.com. The app ships a copy and, about ten
+  seconds after launch and then every six hours while it runs, asks the
+  website whether a newer one exists; only then does it download it, and it
+  uses the download only once every file matches the sizes and checksums the
+  website published. A controller a newer database adds is recognised at its
+  next plug-in without an app update. Settings has *Check for controller
+  updates automatically*, on by default, and *Check now*; with the switch off
+  nothing is requested. The Google Play and Amazon Appstore builds make this
+  check too, and still never check GitHub for app updates. The privacy
+  policy says what the request carries and what the website sees.
+- **Diagnostics shows what Dish knows about each controller.** A
+  controller's Diagnostics card names its record in the database, the name it
+  goes by there, whether it was verified on hardware (an unconfirmed one
+  reads "Layout guessed"), any known issue for that controller on your phone,
+  and, for a Direct controller, anything its USB description does not match
+  in the record, such as a missing output endpoint.
+- **Last write.** For a controller in Direct mode, Diagnostics and the
+  binding inspector show the last output Dish wrote to it: which report, by
+  which route, and whether the controller took it ("report 02 · bulk OUT 0x03
+  · OK, 12 ms ago", or the error it gave). A controller with no way to take
+  output says so.
+- **"Did it work?"** After each rumble, trigger, mic lamp, test tone and
+  microphone test in the controller inspector, Dish asks whether it worked
+  and shows the last answer. The answers are kept for the run.
+- **Email diagnostics.** The Diagnostics page can write one file about the
+  phone, the app, the controller database, your controllers and your
+  connections, and hand it to your own mail app addressed to
+  support@tinkernorth.com, with a summary in your language. Nothing is sent
+  until you press Send. Hosts appear as "Host 1", "Host 2"; the file never
+  holds pairing keys, fingerprints, IP addresses, Wi-Fi names or the names of
+  your computers.
+- **Capture this controller.** A Direct controller's Diagnostics card has
+  *Capture*, which keeps its USB descriptors, its HID report descriptor and
+  twenty input reports at rest for the next diagnostics email, so support can
+  add a controller nobody on the team owns.
+
+### Changed
+
+- **The two PowerA FUSION controllers (24C6:551A and 24C6:561A) are read as
+  Xbox One controllers, and no longer start in Direct mode on their own.**
+  The app's controller list named each of them twice, once as an Xbox 360
+  controller and once as an Xbox One one, and only the Xbox 360 entry was
+  ever used. The shared controller database keeps them as the Xbox One
+  controllers the Linux kernel and SDL say they are, marked as not yet
+  confirmed on hardware, so Direct mode is theirs only if you pick it. Nobody
+  has confirmed either way on a real controller yet; if yours misbehaves,
+  Email diagnostics from the Diagnostics page tells us.
+
 ## [2.6.1] - 2026-11-19
 
 ### Fixed

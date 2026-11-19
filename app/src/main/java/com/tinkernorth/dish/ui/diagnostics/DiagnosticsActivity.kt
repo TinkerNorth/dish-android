@@ -2,25 +2,35 @@
 
 package com.tinkernorth.dish.ui.diagnostics
 
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.CompoundButton
+import android.widget.Toast
 import androidx.activity.viewModels
+import androidx.core.content.FileProvider
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.databinding.ActivityDiagnosticsBinding
 import com.tinkernorth.dish.databinding.DiagnosticsCardActionsBinding
+import com.tinkernorth.dish.source.controllerdb.ControllerDbStatus
 import com.tinkernorth.dish.source.store.DiagnosticsLogEntry
 import com.tinkernorth.dish.source.store.LatencyProfilingStore
 import com.tinkernorth.dish.source.system.WifiLink
 import com.tinkernorth.dish.source.system.wifiBandForFrequency
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.controllerDbCheckNowEnabled
+import com.tinkernorth.dish.ui.common.controllerDbSourceLabel
+import com.tinkernorth.dish.ui.common.controllerDbStatusResultLabel
 import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.diagnostics.DiagnosticsViewModel.LatencyPanelUi
@@ -47,6 +57,10 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
         binding = setScaffoldContent(ActivityDiagnosticsBinding::inflate)
         setupDishToolbar(binding.toolbar)
 
+        binding.sectionSupport.labelSection.setText(R.string.diagnostics_section_support)
+        binding.sectionControllerDb.labelSection.setText(R.string.settings_section_controller_db)
+        binding.btnEmailDiagnostics.setOnClickListener { onEmailTapped() }
+        binding.btnControllerDbCheckNow.setOnClickListener { viewModel.checkControllerDbNow() }
         binding.sectionRadios.labelSection.setText(R.string.diagnostics_section_radios)
         binding.sectionControllers.labelSection.setText(R.string.section_controllers)
         binding.sectionConnections.labelSection.setText(R.string.section_connections)
@@ -64,6 +78,8 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
         observe(viewModel.latencyPanel, ::renderLatency)
         observe(viewModel.events, ::renderEvents)
         observe(latencyProfilingStore.state, ::syncLatencySwitch)
+        observe(viewModel.controllerDb, ::renderControllerDb)
+        observe(viewModel.supportEvents, ::onSupportEvent)
         wireLatencySwitch()
     }
 
@@ -126,7 +142,82 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
                 btnSecondary.visibility = if (diag.host == null) View.GONE else View.VISIBLE
                 btnSecondary.setText(R.string.diagnostics_binding_button)
                 btnSecondary.setOnClickListener { nav.toBindingInspector(diag.slotId, diag.name) }
+                btnTertiary.visibility = if (diag.isUsbSynthetic) View.VISIBLE else View.GONE
+                btnTertiary.setText(R.string.diagnostics_capture_button)
+                btnTertiary.setOnClickListener { onCaptureTapped(diag) }
             }.root
+
+    private fun onCaptureTapped(diag: ControllerDiag) {
+        Toast.makeText(this, getString(R.string.diagnostics_capture_started, diag.name), Toast.LENGTH_SHORT).show()
+        viewModel.capture(diag)
+    }
+
+    // ── Controller database ─────────────────────────────────────────────────
+
+    private fun renderControllerDb(status: ControllerDbStatus) {
+        val container = binding.containerControllerDb
+        container.removeAllViews()
+        container.addView(container.card(getString(R.string.diagnostics_controller_db_title), controllerDbLines(status)))
+        binding.btnControllerDbCheckNow.isEnabled = controllerDbCheckNowEnabled(status)
+    }
+
+    private fun controllerDbLines(status: ControllerDbStatus): List<String> {
+        val active = getString(R.string.controller_db_version, status.activeVersion, getString(controllerDbSourceLabel(status.source)))
+        val result = getString(controllerDbStatusResultLabel(status))
+        val lastCheck =
+            if (status.lastCheckAtMs > 0L) {
+                getString(R.string.diagnostics_joined, result, agoLabel(System.currentTimeMillis(), status.lastCheckAtMs))
+            } else {
+                result
+            }
+        return listOf(
+            diagKv(R.string.diagnostics_controller_db_bundled, status.bundledVersion.toString()),
+            diagKv(R.string.diagnostics_controller_db_active, active),
+            diagKv(R.string.diagnostics_controller_db_last_check, lastCheck),
+        )
+    }
+
+    // ── Email diagnostics ───────────────────────────────────────────────────
+
+    private fun onEmailTapped() {
+        binding.btnEmailDiagnostics.isEnabled = false
+        viewModel.emailDiagnostics()
+    }
+
+    private fun onSupportEvent(event: DiagnosticsViewModel.SupportEvent) {
+        when (event) {
+            is DiagnosticsViewModel.SupportEvent.MailReady -> sendMail(event.mail)
+            DiagnosticsViewModel.SupportEvent.MailFailed -> mailFailed()
+            is DiagnosticsViewModel.SupportEvent.Captured -> captured(event)
+        }
+    }
+
+    private fun mailFailed() {
+        binding.btnEmailDiagnostics.isEnabled = true
+        Toast.makeText(this, R.string.diagnostics_email_failed, Toast.LENGTH_LONG).show()
+    }
+
+    private fun captured(event: DiagnosticsViewModel.SupportEvent.Captured) {
+        val text = if (event.ok) R.string.diagnostics_capture_done else R.string.diagnostics_capture_failed
+        Toast.makeText(this, getString(text, event.name), Toast.LENGTH_LONG).show()
+    }
+
+    private fun sendMail(mail: DiagnosticsViewModel.PreparedMail) {
+        binding.btnEmailDiagnostics.isEnabled = true
+        val uri = FileProvider.getUriForFile(this, "$packageName$DIAGNOSTICS_AUTHORITY_SUFFIX", mail.file)
+        val app = appFacts()
+        val device = deviceFacts()
+        val appLine = getString(R.string.diagnostics_summary_app, app.version, app.flavor, device.model, Build.VERSION.RELEASE.orEmpty())
+        val body = mailBody(mail.overview, mail.world, appLine)
+        val hasAMailApp = packageManager.queryIntentActivities(mailAppQuery(), 0).isNotEmpty()
+        val intent = diagnosticsMailIntent(uri, mailSubject(app.version, device.model), body, mailLaunchFor(hasAMailApp))
+        try {
+            startActivity(Intent.createChooser(intent, getString(R.string.diagnostics_email_chooser)))
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "no app takes the diagnostics mail", e)
+            Toast.makeText(this, R.string.diagnostics_email_no_app, Toast.LENGTH_LONG).show()
+        }
+    }
 
     // ── Hosts ───────────────────────────────────────────────────────────────
 
@@ -264,5 +355,9 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
 
     private companion object {
         const val SHOWN_EVENTS = 20
+        const val TAG = "DiagnosticsActivity"
+
+        // AndroidManifest.xml's FileProvider authority, after the application id.
+        const val DIAGNOSTICS_AUTHORITY_SUFFIX = ".diagnostics"
     }
 }

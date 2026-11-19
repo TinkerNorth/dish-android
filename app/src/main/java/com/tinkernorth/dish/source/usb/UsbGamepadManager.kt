@@ -20,6 +20,7 @@ import androidx.core.content.IntentCompat
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionCoordinator
+import com.tinkernorth.dish.core.controllerdb.sha256Hex
 import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.jni.UsbInterfaceClaim
@@ -60,6 +61,7 @@ class UsbGamepadManager
         private val native: PhysicalInputNative,
         private val pathPrefs: UsbPathPreferenceStore,
         private val descriptors: UsbDescriptorStore,
+        private val hardware: UsbHardwareStore,
     ) {
         private val usbManager = context.getSystemService(Context.USB_SERVICE) as? UsbManager
 
@@ -191,6 +193,7 @@ class UsbGamepadManager
             val key = unitKeyOf(device, usbDevices)
             usbDevices[key] = device
             noteEndpointFacts(device)
+            hardware.note(hardwareFactsOf(device, findInterruptInPair(device)))
 
             val existing = _controllersByUnit.value[key]
             if (existing == null) {
@@ -500,6 +503,7 @@ class UsbGamepadManager
                 return ClaimOutcome.Fail(DirectClaimFailure.InitFailed, frameworkStolen = true)
             }
             claimedConns[key] = ClaimedConn(conn, pads)
+            conn.rawDescriptors?.let { hardware.noteDescriptorSha256(device.vendorId, device.productId, sha256Hex(it)) }
             if (receiver) listenOnSlots(key, pads) else listPad(device, pads.single(), routedFrameworkId)
             Log.i(TAG, "claimed ${device.vendorId.toHex4()}:${device.productId.toHex4()} → dev=${pads.map { it.syntheticId }}")
             return ClaimOutcome.Ok(pads.first().syntheticId)
@@ -794,6 +798,13 @@ class UsbGamepadManager
                 productName = device::getProductName,
             )
 
+        // The Direct connection a claim holds for this pad, and the interface it reads, for
+        // "Capture this controller"; null for a pad that is no Direct claim.
+        fun claimedPadFor(syntheticId: Int): Pair<UsbDeviceConnection, UsbInterface>? =
+            claimedConns.values.firstNotNullOfOrNull { held ->
+                held.pads.firstOrNull { it.syntheticId == syntheticId }?.let { held.connection to it.intf }
+            }
+
         private fun isGamepadShaped(device: UsbDevice): Boolean = findInterruptInPair(device) != null
 
         private fun UsbInterface.facts(): UsbInterfaceFacts = UsbInterfaceFacts(interfaceClass, interfaceSubclass, interfaceProtocol)
@@ -855,3 +866,31 @@ internal fun resolvePathChoice(
 ): PathChoice = stored ?: if (isFastLaneModel && priorFailure == null) PathChoice.Direct else PathChoice.Standard
 
 private const val FULL_SPEED_MAX_PACKET = 64
+
+// What enumeration says about the pad; the manufacturer's strings need no open connection, and a
+// device that refuses them without a grant is noted without them.
+private fun hardwareFactsOf(
+    device: UsbDevice,
+    pair: Triple<UsbInterface, UsbEndpoint, UsbEndpoint?>?,
+): UsbHardwareFacts =
+    UsbHardwareFacts(
+        vendorId = device.vendorId,
+        productId = device.productId,
+        bcdDevice = device.version,
+        product = readDeviceString(device::getProductName),
+        manufacturer = readDeviceString(device::getManufacturerName),
+        interfaces = (0 until device.interfaceCount).map { interfaceSummaryOf(device.getInterface(it)) },
+        endpointIn = pair?.second?.address,
+        endpointOut = pair?.third?.address,
+    )
+
+private fun interfaceSummaryOf(intf: UsbInterface): UsbInterfaceSummary =
+    UsbInterfaceSummary(intf.id, intf.interfaceClass, intf.interfaceSubclass, intf.interfaceProtocol)
+
+private fun readDeviceString(read: () -> String?): String? =
+    try {
+        read()?.takeIf { it.isNotBlank() }
+    } catch (e: SecurityException) {
+        Log.i("UsbGamepadManager", "a USB device string needs a grant first", e)
+        null
+    }

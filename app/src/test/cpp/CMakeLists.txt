@@ -36,6 +36,9 @@ find_package(Threads REQUIRED)
 
 set(SATELLITE_CPP "${CMAKE_SOURCE_DIR}/../../main/cpp")
 
+# The identity tables usb_parsers.cpp compiles, generated from the bundled controller database.
+include("${SATELLITE_CPP}/controller_tables.cmake")
+
 # The pinned libsodium the app seals with (src/main/cpp/CMakeLists.txt), built from the same
 # release tarball, so the send path's bytes and its seal cost are those of the one that ships.
 FetchContent_Declare(
@@ -142,6 +145,7 @@ add_executable(usb_parsers_test
 target_include_directories(usb_parsers_test PRIVATE "${SATELLITE_CPP}")
 target_compile_options(usb_parsers_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(usb_parsers_test PRIVATE GTest::gtest_main)
+dish_use_controller_tables(usb_parsers_test)
 
 # Pure HID report-descriptor parser + layout-driven decode (no Android/USB I/O).
 add_executable(usb_hid_descriptor_test

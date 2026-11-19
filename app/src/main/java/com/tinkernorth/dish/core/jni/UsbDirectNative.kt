@@ -90,6 +90,17 @@ object UsbDirectNative {
     // {"model","parser","init","reportBytes","endpointOut","lastUrbStatus"}; empty for an unknown device.
     external fun deviceInfoJson(deviceId: Int): String
 
+    // {recorded, route, endpoint, reportId, ok, err, ageMs} of the pad's last output write
+    // (usb_parsers.h WriteVerdict); recorded is 0 before the first write and for a pad that is gone.
+    external fun lastWriteVerdict(deviceId: Int): LongArray
+
+    // Keeps the pad's next twenty input reports for "Capture this controller"; false for a pad
+    // that is gone or already capturing. A person's command, never the report path's.
+    external fun armReportCapture(deviceId: Int): Boolean
+
+    // [{"ageMs","hex"}] of the reports the capture kept so far, oldest first.
+    external fun capturedReportsJson(deviceId: Int): String
+
     // Per-device stage-1 / URB-gap percentiles; n=0 blocks while the bench is off.
     external fun deviceLatencyJson(deviceId: Int): String
 }

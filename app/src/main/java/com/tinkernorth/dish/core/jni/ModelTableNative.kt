@@ -83,6 +83,18 @@ object ModelTableNative {
         productId: Int,
     ): Boolean
 
+    // The active controller database's usb rows as parallel arrays (usb_parsers.h ServedDevice):
+    // vendor and product ids, then Parser, InitKind and ButtonOrder values, and whether each record
+    // is verified. Replaces the whole served set; arrays of unequal length set nothing.
+    external fun setServedModels(
+        vendorIds: IntArray,
+        productIds: IntArray,
+        parsers: IntArray,
+        inits: IntArray,
+        orders: IntArray,
+        verified: BooleanArray,
+    )
+
     external fun lookupKnownModelName(
         vendorId: Int,
         productId: Int,

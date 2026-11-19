@@ -116,6 +116,9 @@ class UsbGamepadManagerTest {
             deviceNode?.let { node -> every { deviceName } returns node }
             every { interfaceCount } returns 1
             every { getInterface(0) } returns intf
+            every { version } returns "1.00"
+            every { productName } returns null
+            every { manufacturerName } returns null
         }
     }
 
@@ -134,7 +137,7 @@ class UsbGamepadManagerTest {
         // an unstubbed choiceFor would read as Direct and short-circuit resolvePath. Pin it to "no pick".
         every { pathPrefs.choiceFor(vid, pid) } returns null
         val scope = CoroutineScope(SupervisorJob() + dispatcher)
-        return UsbGamepadManager(ctx, registry, Provider { hub }, notifications, scope, native, pathPrefs, descriptors)
+        return UsbGamepadManager(ctx, registry, Provider { hub }, notifications, scope, native, pathPrefs, descriptors, UsbHardwareStore())
     }
 
     private fun mockConn(): UsbDeviceConnection =
@@ -324,6 +327,9 @@ class UsbGamepadManagerTest {
             every { productId } returns pid
             every { deviceName } returns "xbox360"
             every { interfaceCount } returns 2
+            every { version } returns "1.00"
+            every { productName } returns null
+            every { manufacturerName } returns null
             every { getInterface(0) } returns audio
             every { getInterface(1) } returns game
         }
@@ -338,7 +344,7 @@ class UsbGamepadManagerTest {
         every { native.modelExpectsFrameworkGamepad(vid, pid) } returns true
         every { pathPrefs.choiceFor(vid, pid) } returns null
         val scope = CoroutineScope(SupervisorJob() + dispatcher)
-        return UsbGamepadManager(ctx, registry, Provider { hub }, notifications, scope, native, pathPrefs, descriptors)
+        return UsbGamepadManager(ctx, registry, Provider { hub }, notifications, scope, native, pathPrefs, descriptors, UsbHardwareStore())
     }
 
     @Test
@@ -413,6 +419,9 @@ class UsbGamepadManagerTest {
             every { productId } returns pid
             every { deviceName } returns "composite-hid"
             every { interfaceCount } returns 3
+            every { version } returns "1.00"
+            every { productName } returns null
+            every { manufacturerName } returns null
             every { getInterface(0) } returns keyboard
             every { getInterface(1) } returns mouse
             every { getInterface(2) } returns pad
@@ -426,6 +435,9 @@ class UsbGamepadManagerTest {
             every { productId } returns pid
             every { deviceName } returns "boot-only"
             every { interfaceCount } returns 1
+            every { version } returns "1.00"
+            every { productName } returns null
+            every { manufacturerName } returns null
             every { getInterface(0) } returns keyboard
         }
     }
@@ -500,7 +512,7 @@ class UsbGamepadManagerTest {
         every { native.modelExpectsFrameworkGamepad(vid, pid) } returns true
         every { pathPrefs.choiceFor(vid, pid) } returns null
         val scope = CoroutineScope(SupervisorJob() + dispatcher)
-        return UsbGamepadManager(ctx, reg, Provider { hub }, notifications, scope, native, pathPrefs, descriptors)
+        return UsbGamepadManager(ctx, reg, Provider { hub }, notifications, scope, native, pathPrefs, descriptors, UsbHardwareStore())
     }
 
     @Test
@@ -912,7 +924,7 @@ class UsbGamepadManagerTest {
         every { registry.devices } returns registryDevices
         every { pathPrefs.choiceFor(vid, pid) } returns null
         val scope = CoroutineScope(SupervisorJob() + dispatcher)
-        return UsbGamepadManager(ctx, registry, Provider { hub }, notifications, scope, native, pathPrefs, descriptors)
+        return UsbGamepadManager(ctx, registry, Provider { hub }, notifications, scope, native, pathPrefs, descriptors, UsbHardwareStore())
     }
 
     @Test

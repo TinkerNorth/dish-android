@@ -3,11 +3,14 @@
 package com.tinkernorth.dish.ui.diagnostics
 
 import android.content.Context
+import android.os.Build
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
+import com.tinkernorth.dish.core.controllerdb.ActiveControllerDb
+import com.tinkernorth.dish.core.controllerdb.stringsLocaleFor
 import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.core.model.SlotCapabilities
@@ -15,6 +18,8 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.controllerdb.ControllerDbStatus
+import com.tinkernorth.dish.source.controllerdb.ControllerDbUpdater
 import com.tinkernorth.dish.source.inputrate.FrameworkInputTimingStore
 import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
@@ -54,6 +59,7 @@ internal data class ExtraInputs(
     val pads: PadWorld,
     val links: LinkWorld,
     val audio: AudioWorld,
+    val db: DbWorld,
 )
 
 // The per-slot facts the report overlays on the live topology.
@@ -71,7 +77,8 @@ class FactSources
             }
     }
 
-// The four side worlds (radios, pads, links, audio), each polled on the shared telemetry tick.
+// The side worlds (radios, pads, links, audio, the controller database), each polled on the
+// shared telemetry tick or following its own source.
 class ExtraSources
     @Inject
     constructor(
@@ -79,6 +86,7 @@ class ExtraSources
         private val padSources: PadSources,
         private val linkSources: LinkSources,
         private val audioSources: AudioSources,
+        private val dbSources: DbSources,
     ) {
         internal fun flow(ticks: Flow<Unit>): Flow<ExtraInputs> =
             combine(
@@ -86,8 +94,33 @@ class ExtraSources
                 padSources.flow(ticks),
                 linkSources.flow(ticks),
                 audioSources.flow(ticks),
+                dbSources.flow,
                 ::ExtraInputs,
             )
+    }
+
+// The controller database as the report reads it, with the phone facts its issues match against.
+class DbSources
+    @Inject
+    constructor(
+        @ApplicationContext private val context: Context,
+        private val controllerDb: ControllerDbUpdater,
+    ) {
+        internal val flow: Flow<DbWorld> get() = combine(controllerDb.status, controllerDb.active, ::dbWorldOf)
+
+        private fun dbWorldOf(
+            status: ControllerDbStatus,
+            active: ActiveControllerDb?,
+        ): DbWorld {
+            val locale = context.resources.configuration.locales[0]
+            return DbWorld(
+                status = status,
+                active = active,
+                stringsLocale = stringsLocaleFor(locale.language, locale.country),
+                deviceModel = Build.MODEL.orEmpty(),
+                androidMajor = androidMajorOf(Build.VERSION.RELEASE.orEmpty()),
+            )
+        }
     }
 
 class DiagnosticsSources
@@ -137,6 +170,7 @@ class DiagnosticsSources
                     pads = extra.pads,
                     links = extra.links,
                     audio = extra.audio,
+                    db = extra.db,
                     nowMs = System.currentTimeMillis(),
                 )
             }.onStart { timing.arm() }
@@ -211,3 +245,6 @@ class SatelliteSnapshotSources
             )
         }
     }
+
+// "15" of Android 15, "13" of "13.0.1"; 0 for a release name that starts with no number.
+internal fun androidMajorOf(release: String): Int = release.takeWhile { it.isDigit() }.toIntOrNull() ?: 0

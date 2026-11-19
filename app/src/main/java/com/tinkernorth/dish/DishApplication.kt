@@ -34,6 +34,7 @@ import com.tinkernorth.dish.source.audio.PadAudioRouteResolver
 import com.tinkernorth.dish.source.audio.SpeakerEngine
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.bluetooth.SteamBleManager
+import com.tinkernorth.dish.source.controllerdb.ControllerDbUpdater
 import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.sensor.PhysicalBatterySource
 import com.tinkernorth.dish.source.sensor.PhysicalMotionSource
@@ -132,6 +133,8 @@ class DishApplication : Application() {
 
     @Inject lateinit var linkHistoryRecorder: LinkHistoryRecorder
 
+    @Inject lateinit var controllerDbUpdater: ControllerDbUpdater
+
     // Exposed so StreamingService (framework-owned lifecycle) can reuse the Hilt singleton scope.
     @Inject lateinit var processScope: CoroutineScope
 
@@ -167,6 +170,8 @@ class DishApplication : Application() {
             HotPathBenchController.install(this, processScope)
             diagnosticsLogRecorder.install()
             linkHistoryRecorder.install()
+            // The controller database's active rows reach native, and its update checks start.
+            controllerDbUpdater.start()
             // Re-arm latency profiling only if the user previously left it on (they accepted the
             // warning then). Default is false, so a fresh install keeps the hot path
             // measurement-free.

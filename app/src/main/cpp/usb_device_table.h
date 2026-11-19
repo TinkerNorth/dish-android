@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <thread>
 
 #include "usb_output.h"
@@ -26,6 +27,66 @@ struct UsbDeviceStats {
     std::atomic<int32_t> lastBattery{-1};
     // Whether the pad's controller is there: a receiver slot's while one is connected to it.
     std::atomic<bool> linked{true};
+    // The last output write's verdict, posted by the pad's output worker (and its attach, for the
+    // init) and read by Diagnostics.
+    Mailbox<usbparsers::WriteVerdict> lastWrite;
+};
+
+// The reports a "Capture this controller" keeps, and the longest one kept whole.
+inline constexpr size_t CAPTURE_REPORTS = 20;
+inline constexpr size_t CAPTURE_REPORT_MAX_BYTES = 64;
+
+struct CapturedReport {
+    int64_t atMs = 0;
+    uint8_t len = 0;
+    uint8_t bytes[CAPTURE_REPORT_MAX_BYTES] = {};
+};
+
+// The next CAPTURE_REPORTS reports of a pad, kept on a person's command for the diagnostics bundle.
+// The poller offers each report and keeps it only while a capture is armed; the JVM reads what was
+// kept. A capture is armed only while none is running, so the poller is never mid-write when the
+// slots are reset.
+class ReportCapture {
+  public:
+    // False while a capture is still running.
+    bool arm() {
+        if (armed_.load(std::memory_order_acquire)) return false;
+        filled_.store(0, std::memory_order_relaxed);
+        armed_.store(true, std::memory_order_release);
+        return true;
+    }
+
+    bool armed() const { return armed_.load(std::memory_order_relaxed); }
+
+    // The poller's: one report at atMs, kept while armed; the last slot disarms it.
+    void offer(const uint8_t* bytes, const size_t len, const int64_t atMs) {
+        if (!armed_.load(std::memory_order_acquire)) return;
+        const size_t i = filled_.load(std::memory_order_relaxed);
+        if (i >= CAPTURE_REPORTS) {
+            armed_.store(false, std::memory_order_release);
+            return;
+        }
+        CapturedReport& kept = reports_[i];
+        const size_t keptLen = len < CAPTURE_REPORT_MAX_BYTES ? len : CAPTURE_REPORT_MAX_BYTES;
+        kept.atMs = atMs;
+        kept.len = static_cast<uint8_t>(keptLen);
+        memcpy(kept.bytes, bytes, keptLen);
+        filled_.store(i + 1, std::memory_order_release);
+        if (i + 1 == CAPTURE_REPORTS) armed_.store(false, std::memory_order_release);
+    }
+
+    // Copies the reports kept so far into out; answers how many.
+    size_t copyTo(CapturedReport* out, const size_t cap) const {
+        const size_t filled = filled_.load(std::memory_order_acquire);
+        const size_t n = filled < cap ? filled : cap;
+        for (size_t i = 0; i < n; i++) out[i] = reports_[i];
+        return n;
+    }
+
+  private:
+    std::atomic<bool> armed_{false};
+    std::atomic<size_t> filled_{0};
+    CapturedReport reports_[CAPTURE_REPORTS];
 };
 
 // Where the reports of a pad with no poller go: a Bluetooth LE pad's arrive from the JVM's GATT
@@ -43,6 +104,7 @@ class ReportSink {
 struct UsbDevice {
     UsbDeviceStats stats;
     OutputWorker output;
+    ReportCapture capture;
     std::atomic<ReportSink*> reports{nullptr};
 };
 
@@ -81,6 +143,7 @@ class UsbDeviceTable {
             stats.lastUrbStatus.store(0, std::memory_order_relaxed);
             stats.lastBattery.store(-1, std::memory_order_relaxed);
             stats.linked.store(true, std::memory_order_relaxed);
+            stats.lastWrite.post(usbparsers::WriteVerdict{});
             devices_[i].reports.store(nullptr, std::memory_order_relaxed);
             retired_[i].store(false, std::memory_order_relaxed);
             ids_[i].store(tagOf(deviceId), std::memory_order_release);
@@ -105,6 +168,27 @@ class UsbDeviceTable {
         const bool stillTheSame =
             ids_[static_cast<size_t>(index)].load(std::memory_order_acquire) == tagOf(deviceId);
         return stillTheSame ? value : fallback;
+    }
+
+    // The last write's verdict; unrecorded for a pad with no entry, or one that changed pads.
+    usbparsers::WriteVerdict lastWrite(const int32_t deviceId) const {
+        return read<usbparsers::WriteVerdict>(
+            deviceId, usbparsers::WriteVerdict{},
+            [](const UsbDeviceStats& s) { return s.lastWrite.read(); });
+    }
+
+    // Arms the pad's capture; false for a pad with no entry or one already capturing.
+    bool armCapture(const int32_t deviceId) {
+        const int index = indexOf(deviceId);
+        if (index < 0) return false;
+        return devices_[static_cast<size_t>(index)].capture.arm();
+    }
+
+    // The reports the pad's capture kept so far; 0 for a pad with no entry.
+    size_t capturedReports(const int32_t deviceId, CapturedReport* out, const size_t cap) const {
+        const int index = indexOf(deviceId);
+        if (index < 0) return 0;
+        return devices_[static_cast<size_t>(index)].capture.copyTo(out, cap);
     }
 
     // Hands the pad's entry to post: what it posts names the pad, so a post that races the entry

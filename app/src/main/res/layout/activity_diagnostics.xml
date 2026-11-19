@@ -38,11 +38,61 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
+            <!-- ═══ SUPPORT ════════════════════════════════════════════
+                 Email diagnostics: the bundle goes to the person's own mail
+                 app; nothing leaves the phone until they press Send. -->
+            <include
+                android:id="@+id/sectionSupport"
+                layout="@layout/section_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+            <TextView
+                android:id="@+id/tvSupportHint"
+                style="@style/TextAppearance.Dish.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/diagnostics_email_hint" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnEmailDiagnostics"
+                style="@style/Widget.Dish.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:text="@string/diagnostics_email_button" />
+
+            <!-- ═══ CONTROLLER DATABASE ════════════════════════════════ -->
+            <include
+                android:id="@+id/sectionControllerDb"
+                layout="@layout/section_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/section_header_gap_above"
+                android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+            <LinearLayout
+                android:id="@+id/containerControllerDb"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnControllerDbCheckNow"
+                style="@style/Widget.Dish.Button.Outlined"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:text="@string/settings_controller_db_check_now_title" />
+
+            <!-- ═══ RADIOS ═════════════════════════════════════════════ -->
             <include
                 android:id="@+id/sectionRadios"
                 layout="@layout/section_header"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/section_header_gap_above"
                 android:layout_marginBottom="@dimen/section_header_gap_below" />
 
             <LinearLayout

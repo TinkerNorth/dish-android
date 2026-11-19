@@ -256,6 +256,25 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
+        <!-- Serves the diagnostics bundle to the person's mail app, read-only, for the one send. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.diagnostics"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/diagnostics_paths" />
+        </provider>
+
     </application>
+
+    <!-- Whether a mail app is installed, so "Email diagnostics" can offer mail apps only. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
+    </queries>
 
 </manifest>

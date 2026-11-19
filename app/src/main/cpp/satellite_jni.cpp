@@ -1189,7 +1189,39 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_lo
     JNIEnv* env, jobject, jint vid, jint pid) {
     const usbparsers::KnownDevice* k =
         usbparsers::lookupModel((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
-    return env->NewStringUTF(k ? k->name : "");
+    // A served row carries no name: the JVM names it from the controller database's strings.
+    const bool hasAName = k != nullptr && k->name != nullptr;
+    return env->NewStringUTF(hasAName ? k->name : "");
+}
+
+// The active controller database's rows, as parallel arrays; a row this build cannot apply is
+// left out, and arrays of unequal length hand down nothing. Startup and every update only.
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_setServedModels(
+    JNIEnv* env, jobject, jintArray vids, jintArray pids, jintArray parsers, jintArray inits,
+    jintArray orders, jbooleanArray verified) {
+    const jsize n = env->GetArrayLength(vids);
+    const bool sameLength = env->GetArrayLength(pids) == n && env->GetArrayLength(parsers) == n &&
+                            env->GetArrayLength(inits) == n && env->GetArrayLength(orders) == n &&
+                            env->GetArrayLength(verified) == n;
+    if (!sameLength) return;
+    std::vector<jint> v((size_t)n), p((size_t)n), parser((size_t)n), init((size_t)n),
+        order((size_t)n);
+    std::vector<jboolean> isVerified((size_t)n);
+    env->GetIntArrayRegion(vids, 0, n, v.data());
+    env->GetIntArrayRegion(pids, 0, n, p.data());
+    env->GetIntArrayRegion(parsers, 0, n, parser.data());
+    env->GetIntArrayRegion(inits, 0, n, init.data());
+    env->GetIntArrayRegion(orders, 0, n, order.data());
+    env->GetBooleanArrayRegion(verified, 0, n, isVerified.data());
+    std::vector<usbparsers::ServedDevice> rows;
+    rows.reserve((size_t)n);
+    for (size_t i = 0; i < (size_t)n; i++) {
+        usbparsers::ServedDevice row;
+        const bool applicable = usbparsers::servedDeviceOf(v[i], p[i], parser[i], init[i], order[i],
+                                                           isVerified[i] == JNI_TRUE, row);
+        if (applicable) rows.push_back(row);
+    }
+    usbparsers::setServedDevices(rows.data(), rows.size());
 }
 
 JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_isKnownFastLaneModel(
@@ -1317,6 +1349,30 @@ Java_com_tinkernorth_dish_core_jni_UsbDirectNative_isUsbPadLinked(JNIEnv*, jobje
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_deviceInfoJson(
     JNIEnv* env, jobject, jint deviceId) {
     return env->NewStringUTF(usbhost::deviceInfoJson((int32_t)deviceId).c_str());
+}
+
+// {recorded, route, endpoint, reportId, ok, err, ageMs} of the pad's last output write.
+JNIEXPORT jlongArray JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_lastWriteVerdict(
+    JNIEnv* env, jobject, jint deviceId) {
+    const usbhost::LastWrite last = usbhost::lastWrite((int32_t)deviceId);
+    const usbparsers::WriteVerdict& v = last.verdict;
+    const jlong fields[] = {v.recorded ? 1 : 0, (jlong)v.route, (jlong)v.endpoint,
+                            (jlong)v.reportId,  v.ok ? 1 : 0,   (jlong)v.err,
+                            (jlong)last.ageMs};
+    const jsize n = (jsize)(sizeof(fields) / sizeof(fields[0]));
+    jlongArray out = env->NewLongArray(n);
+    if (out != nullptr) env->SetLongArrayRegion(out, 0, n, fields);
+    return out;
+}
+
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_armReportCapture(
+    JNIEnv*, jobject, jint deviceId) {
+    return usbhost::armReportCapture((int32_t)deviceId) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_capturedReportsJson(
+    JNIEnv* env, jobject, jint deviceId) {
+    return env->NewStringUTF(usbhost::capturedReportsJson((int32_t)deviceId).c_str());
 }
 
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_deviceLatencyJson(

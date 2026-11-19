@@ -74,6 +74,7 @@ internal fun parseDeviceInfo(
         reportBytes = root.intField("reportBytes") ?: 0,
         endpointOut = runCatching { root["endpointOut"]?.jsonPrimitive?.boolean }.getOrNull() ?: false,
         lastUrbStatus = root.intField("lastUrbStatus") ?: 0,
+        firmware = root.stringField("firmware"),
     )
 }
 

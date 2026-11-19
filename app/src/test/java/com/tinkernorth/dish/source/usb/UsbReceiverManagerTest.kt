@@ -128,6 +128,9 @@ class UsbReceiverManagerTest {
             every { this@mockk.productId } returns productId
             every { deviceName } returns "receiver"
             every { interfaceCount } returns interfaces.size
+            every { version } returns "1.00"
+            every { productName } returns null
+            every { manufacturerName } returns null
             interfaces.forEachIndexed { index, intf -> every { getInterface(index) } returns intf }
         }
 
@@ -157,7 +160,17 @@ class UsbReceiverManagerTest {
         every { native.attachUsbDevice(any(), vid, pid, any()) } answers { slotPad(arg<UsbInterfaceClaim>(3).interfaceNumber) }
         every { native.isUsbPadLinked(any()) } answers { firstArg<Int>() in linked }
         val scope = CoroutineScope(SupervisorJob() + dispatcher)
-        return UsbGamepadManager(ctx, registry, Provider { hub }, notifications, scope, native, pathPrefs, UsbDescriptorStore())
+        return UsbGamepadManager(
+            ctx,
+            registry,
+            Provider { hub },
+            notifications,
+            scope,
+            native,
+            pathPrefs,
+            UsbDescriptorStore(),
+            UsbHardwareStore(),
+        )
     }
 
     private fun connect(vararg interfaceNumbers: Int) {

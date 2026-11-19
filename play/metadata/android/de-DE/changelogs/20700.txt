@@ -1,0 +1,6 @@
+Dish 2.7.0: eine Controller-Liste, die sich selbst aktualisiert, und Diagnose per E-Mail.
+
+• Dish fragt dish.tinkernorth.com nach neuer Controller-Unterstützung. In den Einstellungen: Automatisch nach Controller-Updates suchen, standardmäßig an.
+• Die Diagnose zeigt bekannte Probleme und den letzten Schreibvorgang jedes Controllers; Diagnose per E-Mail schickt eine Datei an den Support.
+• Der Inspektor fragt nach jedem Test, ob es funktioniert hat.
+• Satellite braucht kein Update.

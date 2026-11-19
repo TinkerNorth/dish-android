@@ -5,6 +5,8 @@ package com.tinkernorth.dish.ui.diagnostics
 import com.tinkernorth.dish.composer.MicCaptureComposer
 import com.tinkernorth.dish.composer.SpeakerPlayoutComposer
 import com.tinkernorth.dish.composer.WakeStateController
+import com.tinkernorth.dish.core.diagnostics.WriteVerdict
+import com.tinkernorth.dish.core.diagnostics.writeVerdictOf
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
@@ -25,11 +27,13 @@ import com.tinkernorth.dish.source.store.MoonlightHostFactsStore
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import com.tinkernorth.dish.source.store.StickTestHistoryStore
 import com.tinkernorth.dish.source.store.StickTestRecord
+import com.tinkernorth.dish.source.store.TestOutcomeStore
 import com.tinkernorth.dish.source.system.BluetoothAdapterStateObserver
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import com.tinkernorth.dish.source.system.NetworkStateObserver
 import com.tinkernorth.dish.source.system.WifiLinkSource
 import com.tinkernorth.dish.source.usb.UsbDescriptorStore
+import com.tinkernorth.dish.source.usb.UsbHardwareStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -77,6 +81,8 @@ class PadSources
         private val bluetoothLink: BluetoothPadLinkReader,
         private val stickHistory: StickTestHistoryStore,
         private val audioFacts: PadAudioFactsStore,
+        private val hardware: UsbHardwareStore,
+        private val outcomes: TestOutcomeStore,
         private val json: Json,
     ) {
         private val linkTypes = ConcurrentHashMap<Int, BluetoothLinkType>()
@@ -86,6 +92,7 @@ class PadSources
             val info: Map<Int, DirectDeviceInfo>,
             val urbErrors: Map<Int, Long>,
             val reportCounts: Map<Int, Long>,
+            val lastWrite: Map<Int, WriteVerdict>,
         )
 
         private data class FrameworkPadFacts(
@@ -95,9 +102,13 @@ class PadSources
         )
 
         internal fun flow(ticks: Flow<Unit>): Flow<PadWorld> =
-            combine(ticks, registry.devices, stickHistory.state, audioFacts.state) { _, devices, history, audio ->
-                padWorldFor(devices, history, audio)
-            }
+            combine(
+                combine(ticks, registry.devices, stickHistory.state, audioFacts.state) { _, devices, history, audio ->
+                    padWorldFor(devices, history, audio)
+                },
+                hardware.state,
+                outcomes.state,
+            ) { world, enumerated, answers -> world.copy(hardware = enumerated, outcomes = answers) }
 
         private fun padWorldFor(
             devices: Map<Int, PhysicalGamepadRegistry.Device>,
@@ -116,6 +127,7 @@ class PadSources
                 btLinkTypes = framework.linkTypes,
                 stickHistory = history,
                 audio = audio,
+                lastWrite = direct.lastWrite,
             )
         }
 
@@ -126,6 +138,7 @@ class PadSources
                 info = ids.mapNotNull { id -> parseDeviceInfo(json, native.deviceInfoJson(id))?.let { id to it } }.toMap(),
                 urbErrors = ids.associateWith { native.getDeviceUrbErrorCount(it) },
                 reportCounts = ids.associateWith { native.getDeviceUrbCount(it) },
+                lastWrite = ids.mapNotNull { id -> writeVerdictOf(native.lastWriteVerdict(id))?.let { id to it } }.toMap(),
             )
 
         // A framework pad is read from the event timing store, and a Bluetooth one also carries

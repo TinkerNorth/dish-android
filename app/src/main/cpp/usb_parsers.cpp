@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 #include "usb_parsers.h"
+#include "known_devices.generated.h"
 #include "wire_encoders.h"
 
 #include <string.h>
 #include <algorithm>
+#include <memory>
+#include <mutex>
+#include <vector>
 
 // The decoders and report builders here are pure and host-tested (usb_parsers_test.cpp). Only the
 // USB transfer helpers need the kernel ioctls, so they are fenced to the Android build.
@@ -49,375 +53,12 @@ constexpr int32_t kPsAccelResPerG = 8192;
 
 } // namespace
 
-constexpr KnownDevice kKnown[] = {
-    {0x045E, 0x028E, "Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x045E, 0x028F, "Xbox 360 Wireless Receiver (wired)", Parser::XINPUT_360, InitKind::NONE},
-    {0x045E, 0x02A1, "Xbox 360 Wireless Controller (PC)", Parser::XINPUT_360_WIRELESS,
-     InitKind::NONE},
-    {0x045E, 0x0291, "Xbox 360 Wireless Receiver (rev 1)", Parser::XINPUT_360_WIRELESS,
-     InitKind::NONE},
-    {0x045E, 0x0719, "Xbox 360 Wireless Receiver (rev 2)", Parser::XINPUT_360_WIRELESS,
-     InitKind::NONE},
-
-    {0x045E, 0x02D1, "Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x045E, 0x02DD, "Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x045E, 0x02E3, "Xbox One Elite Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x045E, 0x02EA, "Xbox One S Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_S},
-    {0x045E, 0x02FD, "Xbox One S Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x045E, 0x0B00, "Xbox Elite Series 2 Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_S},
-    {0x045E, 0x0B0A, "Xbox Adaptive Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x045E, 0x0B12, "Xbox Series X|S Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x045E, 0x0B13, "Xbox Series X|S Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-
-    {0x046D, 0xC218, "Logitech F310 (XInput)", Parser::XINPUT_360, InitKind::NONE},
-    {0x046D, 0xC219, "Logitech F710 (XInput)", Parser::XINPUT_360, InitKind::NONE},
-    {0x046D, 0xC21D, "Logitech F310 (XInput)", Parser::XINPUT_360, InitKind::NONE},
-    {0x046D, 0xC21E, "Logitech F510 (XInput)", Parser::XINPUT_360, InitKind::NONE},
-    {0x046D, 0xC21F, "Logitech F710 (XInput)", Parser::XINPUT_360, InitKind::NONE},
-    {0x046D, 0xCAA3, "Logitech G29 Driving Force (XInput)", Parser::XINPUT_360, InitKind::NONE},
-
-    {0x2DC8, 0x9003, "8BitDo SN30 Pro+", Parser::XINPUT_360, InitKind::NONE},
-    {0x2DC8, 0x310A, "8BitDo Ultimate 2C Wireless Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x2DC8, 0x310B, "8BitDo Ultimate 2 Wireless Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x2DC8, 0x6001, "8BitDo SN30 Pro (XInput)", Parser::XINPUT_360, InitKind::NONE},
-
-    {0x0738, 0x4716, "Mad Catz Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x0738, 0x4726, "Mad Catz Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x0738, 0x4728, "Mad Catz Street Fighter IV FightPad", Parser::XINPUT_360, InitKind::NONE},
-    {0x0738, 0x4736, "Mad Catz MicroCon Gamepad", Parser::XINPUT_360, InitKind::NONE},
-    {0x0738, 0x4738, "Mad Catz Wired Xbox 360 Controller (SFIV)", Parser::XINPUT_360,
-     InitKind::NONE},
-    {0x0738, 0x4740, "Mad Catz Beat Pad", Parser::XINPUT_360, InitKind::NONE},
-    {0x0738, 0xCB02, "Saitek Cyborg Rumble Pad PC/Xbox 360", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0x0105, "HSM3 Xbox360 dancepad", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0x0113, "Afterglow AX.1 Gamepad for Xbox 360", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0x011F, "Rock Candy Wired Controller for Xbox 360", Parser::XINPUT_360,
-     InitKind::NONE},
-    {0x0E6F, 0x0301, "Logic3 Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0x0401, "Logic3 Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0x0413, "Afterglow AX.1 Gen 2 for Xbox 360", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0x0501, "PDP Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x0F0D, 0x000A, "Hori Co. DOA4 FightStick", Parser::XINPUT_360, InitKind::NONE},
-    {0x0F0D, 0x000D, "Hori Fighting Stick EX2", Parser::XINPUT_360, InitKind::NONE},
-    {0x0F0D, 0x0016, "Hori Real Arcade Pro.EX", Parser::XINPUT_360, InitKind::NONE},
-    {0x0F0D, 0x001B, "Hori Real Arcade Pro VX", Parser::XINPUT_360, InitKind::NONE},
-    {0x1038, 0x1430, "SteelSeries Stratus Duo", Parser::XINPUT_360, InitKind::NONE},
-    {0x1038, 0x1431, "SteelSeries Stratus Duo", Parser::XINPUT_360, InitKind::NONE},
-    {0x12AB, 0x0004, "PowerA Pro Ex", Parser::XINPUT_360, InitKind::NONE},
-    {0x12AB, 0x0301, "PDP AFTERGLOW AX.1", Parser::XINPUT_360, InitKind::NONE},
-    {0x1532, 0x0037, "Razer Sabertooth", Parser::XINPUT_360, InitKind::NONE},
-    {0x1532, 0x0A00, "Razer Atrox Arcade Stick", Parser::XINPUT_360, InitKind::NONE},
-    {0x1949, 0x041A, "Amazon Luna Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x5000, "Razer Atrox Arcade Stick", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x5300, "PowerA MINI PROEX", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x5303, "Xbox Airflo Wired Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x5500, "Hori XBOX 360 EX 2 with Turbo", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x5501, "Hori Real Arcade Pro VX-SA", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x5506, "Hori SOULCALIBUR V Stick", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x550D, "Hori GEM Xbox controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x550E, "Hori Real Arcade Pro V Kai 360", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x551A, "PowerA FUSION Pro Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x561A, "PowerA FUSION Controller", Parser::XINPUT_360, InitKind::NONE},
-
-    {0x0E6F, 0x0139, "Afterglow Prismatic Wired Xbox One", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x013B, "PDP Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x0146, "Rock Candy Xbox One", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x0161, "PDP Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x0162, "PDP Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x0163, "PDP Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x0164, "PDP Battlefield One", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x0165, "PDP Titanfall 2", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x0F0D, 0x0063, "Hori Real Arcade Pro Hayabusa (Xbox One)", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x0F0D, 0x0067, "Hori HORIPAD ONE", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x0F0D, 0x0078, "Hori Real Arcade Pro V Kai (Xbox One)", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x24C6, 0x541A, "PowerA Xbox One Mini Wired", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x24C6, 0x542A, "Xbox 360 Pro EX Controller (XOne)", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x24C6, 0x543A, "PowerA Xbox One Wired", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x24C6, 0x551A, "PowerA FUSION Pro Wired Xbox One", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x24C6, 0x561A, "PowerA FUSION Wired Xbox One", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x24C6, 0x791A, "PowerA Fusion FightPad", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x1532, 0x0A03, "Razer Wildcat", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-
-    {0x054C, 0x05C4, "Sony DualShock 4 (CUH-ZCT1)", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x054C, 0x09CC, "Sony DualShock 4 v2 (CUH-ZCT2)", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x054C, 0x0BA0, "Sony DualShock 4 USB Wireless Adapter", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0F0D, 0x005C, "Hori Real Arcade Pro 4", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0F0D, 0x005E, "Hori Fighting Commander PS4", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0F0D, 0x008C, "Hori Real Arcade Pro 4 V", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0F0D, 0x00EE, "Hori Wired Mini PS4 Controller", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x146B, 0x0D01, "Nacon Revolution Pro Controller", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x146B, 0x0D02, "Nacon Revolution Pro Controller v2", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x146B, 0x0D08, "Nacon Daija Arcade Stick", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x146B, 0x0D10, "Nacon Revolution Infinite", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x1532, 0x0401, "Razer Panthera Arcade Stick", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x1532, 0x1000, "Razer Raiju", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x1532, 0x1100, "Razer Raiju Tournament", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x1532, 0x1200, "Razer Raiju Ultimate", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x7545, 0x0104, "Armor3 Armor Titan", Parser::DUALSHOCK4, InitKind::NONE},
-
-    {0x054C, 0x0CE6, "Sony DualSense", Parser::DUALSENSE, InitKind::NONE},
-    {0x054C, 0x0DF2, "Sony DualSense Edge", Parser::DUALSENSE, InitKind::NONE},
-
-    {0x057E, 0x2009, "Nintendo Switch Pro Controller", Parser::SWITCH_PRO_USB,
-     InitKind::SWITCH_PRO_HANDSHAKE},
-    {0x057E, 0x200E, "Nintendo Joy-Con Charging Grip", Parser::SWITCH_PRO_USB,
-     InitKind::SWITCH_PRO_HANDSHAKE},
-    {0x057E, 0x2017, "Nintendo SNES Online Controller", Parser::SWITCH_PRO_USB,
-     InitKind::SWITCH_PRO_HANDSHAKE},
-    {0x057E, 0x2019, "Nintendo N64 Online Controller", Parser::SWITCH_N64_USB,
-     InitKind::SWITCH_PRO_HANDSHAKE},
-
-    {0x18D1, 0x9400, "Google Stadia Controller", Parser::STADIA, InitKind::NONE},
-};
-
-// The 8BitDo D-input identities and the PlayStation Classic controller are placed by their own
-// descriptors (usb_hid_descriptor_test.cpp carries the bytes). The other device IDs below are a
-// curated subset of SDL's src/joystick/controller_list.h and its hidapi
-// drivers (zlib license, Copyright (C) Valve Corporation; see THIRD_PARTY.md). They are NOT
-// hardware-verified here:
-// lookupKnown recognises them (name + the family parser) and the user can opt into Direct, where
-// probeDecodable still guards the byte layout, but isVerifiedFastLane returns false for them so
-// auto-claim never silently moves an untested model onto Direct. Bluetooth-only PIDs, USB-differs
-// entries, dongles that re-enumerate, and non-gamepads (wheels/guitars) from SDL are omitted.
-constexpr KnownDevice kImported[] = {
-    {0x2DC8, 0x5006, "8BitDo M30 (D-input)", Parser::GENERIC_HID_GAMEPAD, InitKind::NONE,
-     ButtonOrder::EIGHTBITDO},
-    {0x2DC8, 0x3100, "8BitDo USB Wireless Adapter (D-input)", Parser::GENERIC_HID_GAMEPAD,
-     InitKind::NONE, ButtonOrder::EIGHTBITDO},
-    {0x2DC8, 0x3105, "8BitDo USB Wireless Adapter 2 (D-input)", Parser::GENERIC_HID_GAMEPAD,
-     InitKind::NONE, ButtonOrder::EIGHTBITDO},
-    {0x054C, 0x0CDA, "PlayStation Classic controller", Parser::GENERIC_HID_GAMEPAD, InitKind::NONE,
-     ButtonOrder::PLAYSTATION_CLASSIC},
-    {0x0079, 0x18D4, "GPD Win 2 Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x044F, 0xB326, "Thrustmaster Gamepad GP XID", Parser::XINPUT_360, InitKind::NONE},
-    {0x046D, 0xC242, "Logitech ChillStream", Parser::XINPUT_360, InitKind::NONE},
-    {0x056E, 0x2004, "Elecom JC-U3613M", Parser::XINPUT_360, InitKind::NONE},
-    {0x0738, 0x4718, "Mad Catz SFIV FightStick SE", Parser::XINPUT_360, InitKind::NONE},
-    {0x0738, 0xB726, "Mad Catz Xbox 360 Controller (MW2)", Parser::XINPUT_360, InitKind::NONE},
-    {0x0738, 0xBEEF, "Mad Catz JOYTECH NEO SE", Parser::XINPUT_360, InitKind::NONE},
-    {0x0738, 0xCB03, "Saitek P3200 Rumble Pad", Parser::XINPUT_360, InitKind::NONE},
-    {0x0738, 0xF738, "Mad Catz Super SFIV FightStick TE S", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0x0125, "PDP Injustice FightStick (360)", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0x0127, "PDP Injustice FightPad (360)", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0x0131, "PDP EA Soccer Gamepad", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0x0133, "PDP Battlefield 4 Gamepad", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0x0143, "PDP Mortal Kombat X FightStick (360)", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0x0147, "PDP Marvel Controller (360)", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0x0201, "PDP Gamepad for Xbox 360", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0x0213, "PDP Afterglow Gamepad (360)", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0x021F, "PDP Rock Candy Gamepad (360)", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0x0313, "PDP Afterglow Gamepad (360)", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0x0314, "PDP Afterglow Gamepad (360)", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0xF900, "PDP Afterglow AX.1 (360)", Parser::XINPUT_360, InitKind::NONE},
-    {0x0F0D, 0x000C, "Hori Pad EX Turbo", Parser::XINPUT_360, InitKind::NONE},
-    {0x0F0D, 0x00DB, "Hori Dragon Quest Slime Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x0F0D, 0x011E, "Hori Fighting Stick Alpha (360)", Parser::XINPUT_360, InitKind::NONE},
-    {0x11C9, 0x55F0, "Nacon GC-100XF", Parser::XINPUT_360, InitKind::NONE},
-    {0x12AB, 0x0303, "Mortal Kombat Klassic FightStick", Parser::XINPUT_360, InitKind::NONE},
-    {0x146B, 0x0601, "BigBen Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x15E4, 0x3F00, "PowerA Mini Pro Elite", Parser::XINPUT_360, InitKind::NONE},
-    {0x15E4, 0x3F0A, "Xbox Airflo Wired Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x15E4, 0x3F10, "Batarang Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x162E, 0xBEEF, "Joytech Neo-Se Take2", Parser::XINPUT_360, InitKind::NONE},
-    {0x1689, 0xFD00, "Razer Onza Tournament Edition", Parser::XINPUT_360, InitKind::NONE},
-    {0x1689, 0xFD01, "Razer Onza Classic Edition", Parser::XINPUT_360, InitKind::NONE},
-    {0x1689, 0xFE00, "Razer Sabertooth", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF016, "Mad Catz Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF018, "Mad Catz SFIV SE FightStick", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF019, "Mad Catz Brawlstick (360)", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF021, "Mad Catz Ghost Recon FS Gamepad", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF023, "MLG Pro Circuit Controller (Xbox)", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF025, "Mad Catz Call of Duty FightPad", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF027, "Mad Catz FPS Pro", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF028, "Street Fighter IV FightPad", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF02E, "Mad Catz FightPad", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF036, "Mad Catz MicroCon Gamepad Pro", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF038, "Street Fighter IV FightStick TE", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF039, "Mad Catz MvC2 TE", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF03A, "Mad Catz SFxT FightStick Pro", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF03D, "SFIV Arcade Stick TE (Chun Li)", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF03E, "Mad Catz MLG FightStick TE", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF03F, "Mad Catz FightStick SoulCalibur", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF042, "Mad Catz FightStick TES+", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF080, "Mad Catz FightStick TE2", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF501, "HoriPad EX2 Turbo", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF502, "Hori Real Arcade Pro VX SA", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF503, "Hori Fighting Stick VX", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF504, "Hori Real Arcade Pro EX", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF505, "Hori Fighting Stick EX2B", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF506, "Hori Real Arcade Pro EX Premium VLX", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF900, "Harmonix Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF901, "GameStop Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF902, "Mad Catz Gamepad 2", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF903, "Tron Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF904, "PDP Versus Fighting Pad", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xF906, "Mortal Kombat FightStick", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xFA01, "Mad Catz Gamepad", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xFD00, "Razer Onza TE", Parser::XINPUT_360, InitKind::NONE},
-    {0x1BAD, 0xFD01, "Razer Onza", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x530A, "Xbox 360 Pro EX Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x531A, "PowerA Pro Ex", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x5397, "FUS1ON Tournament Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x5502, "Hori Fighting Stick VX Alt", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x5503, "Hori Fighting Edge", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x5508, "Hori Pad A", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x5510, "Hori Fighting Commander ONE", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x5B02, "Thrustmaster GPX Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0x5D04, "Razer Sabertooth", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0xFAFA, "Aplay Controller", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0xFAFC, "Afterglow Gamepad 1", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0xFAFD, "Afterglow Gamepad 3", Parser::XINPUT_360, InitKind::NONE},
-    {0x24C6, 0xFAFE, "Rock Candy Gamepad (360)", Parser::XINPUT_360, InitKind::NONE},
-
-    {0x03F0, 0x0495, "HP HyperX Clutch Gladiate", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x044F, 0xD012, "Thrustmaster eSwap Pro (Xbox)", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x045E, 0x02FF, "Xbox One Controller (GIP)", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x0738, 0x4A01, "Mad Catz FightStick TE 2 (Xbox One)", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x013A, "PDP Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x0145, "PDP Mortal Kombat X FightPad (Xbox One)", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x015C, "PDP @Play Wired Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x015D, "PDP Mirror's Edge Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x015F, "PDP Metallic Wired Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x0160, "PDP NFL Face-Off Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x0166, "PDP Mass Effect Andromeda Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x0167, "PDP Halo Wars 2 Face-Off Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x0205, "PDP Victrix Pro Fight Stick", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x0246, "PDP Rock Candy Controller (Xbox One)", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x0262, "PDP Wired Controller (Xbox One)", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x02B3, "PDP Afterglow Prismatic Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x02C8, "PDP Kingdom Hearts Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x02D6, "Victrix Gambit Tournament Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x02DA, "PDP Xbox Series X Afterglow", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x0F0D, 0x00C5, "Hori Fighting Commander (Xbox One)", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x0F0D, 0x0150, "Hori Fighting Commander OCTA (Xbox)", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x10F5, 0x7009, "Turtle Beach Recon Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x10F5, 0x7013, "Turtle Beach REACT-R", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x1532, 0x0A14, "Razer Wolverine Ultimate", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x1532, 0x0A15, "Razer Wolverine Tournament Edition", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x20D6, 0x2001, "PowerA Xbox Series X EnWired Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x20D6, 0x2002, "PowerA Xbox Series X EnWired Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x20D6, 0x2003, "PowerA Xbox Series X EnWired Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x20D6, 0x2004, "PowerA Xbox Series X EnWired Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x20D6, 0x2005, "PowerA Xbox Series X Wired Controller Core", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x20D6, 0x2006, "PowerA Xbox Series X Wired Controller Core", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x20D6, 0x2009, "PowerA Xbox Series X EnWired Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x20D6, 0x200A, "PowerA Xbox Series X EnWired Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x20D6, 0x4001, "PowerA Fusion Pro 2 Wired (Xbox)", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x20D6, 0x4002, "PowerA Spectra Infinity Wired (Xbox)", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x24C6, 0x581A, "BDA XB1 Classic Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x24C6, 0x591A, "PowerA FUSION Pro Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x24C6, 0x592A, "BDA XB1 Spectra Pro", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x2DC8, 0x2002, "8BitDo Ultimate Wired Controller for Xbox", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-    {0x2E24, 0x0652, "Hyperkin Duke", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x2E24, 0x1618, "Hyperkin Duke", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x2E24, 0x1688, "Hyperkin X91", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x146B, 0x0611, "Nacon Revolution 3 (Xbox mode)", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
-
-    {0x054C, 0x05C5, "STRIKEPAD PS4 Grip Add-on", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0738, 0x8250, "Mad Catz FightPad Pro PS4", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0738, 0x8384, "Mad Catz FightStick TE S+ PS4", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0738, 0x8480, "Mad Catz FightStick TE 2 PS4", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0738, 0x8481, "Mad Catz FightStick TE 2+ PS4", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0C12, 0x0E10, "Armor 3 Pad PS4", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0C12, 0x0E15, "Game:Pad 4", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0C12, 0x0EF6, "Hitbox Arcade Stick", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0C12, 0x1CF6, "EMIO PS4 Elite Controller", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0E6F, 0x0207, "Victrix Pro FS V2 (PS4)", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0E6F, 0x020A, "Victrix Pro FS PS4/PS5 (PS4 mode)", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0F0D, 0x0055, "Hori HORIPAD 4 FPS", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0F0D, 0x0066, "Hori HORIPAD 4 FPS Plus", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0F0D, 0x0084, "Hori Fighting Commander PS4", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0F0D, 0x0087, "Hori Fighting Stick mini 4", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0F0D, 0x008A, "Hori Real Arcade Pro 4", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x0F0D, 0x0162, "Hori Fighting Commander OCTA (PS4)", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x11C0, 0x4001, "PS4 Fun Controller", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x146B, 0x0D09, "Nacon Daija Fight Stick", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x146B, 0x0D13, "Nacon Revolution Pro Controller 3", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x1532, 0x1004, "Razer Raiju 2 Ultimate", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x1532, 0x1007, "Razer Raiju 2 Tournament Edition", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x1532, 0x1008, "Razer Panthera Evo Fightstick", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x20D6, 0x792A, "PowerA Fusion Fight Pad (PS4)", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x2C22, 0x2000, "Qanba Drone", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x2C22, 0x2300, "Qanba Obsidian", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x2C22, 0x2500, "Qanba Dragon", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x3285, 0x0D16, "Nacon Revolution 5 Pro (PS4 dongle)", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x3285, 0x0D17, "Nacon Revolution 5 Pro (PS4 wired)", Parser::DUALSHOCK4, InitKind::NONE},
-    {0x9886, 0x0025, "Astro C40", Parser::DUALSHOCK4, InitKind::NONE},
-
-    {0x0E6F, 0x0209, "Victrix Pro FS PS4/PS5 (PS5 mode)", Parser::DUALSENSE, InitKind::NONE},
-    {0x1532, 0x100B, "Razer Wolverine V2 Pro (Wired)", Parser::DUALSENSE, InitKind::NONE},
-    {0x1532, 0x1012, "Razer Kitsune", Parser::DUALSENSE, InitKind::NONE},
-    {0x3285, 0x0D18, "Nacon Revolution 5 Pro (PS5 dongle)", Parser::DUALSENSE, InitKind::NONE},
-    {0x3285, 0x0D19, "Nacon Revolution 5 Pro (PS5 wired)", Parser::DUALSENSE, InitKind::NONE},
-
-    {0x0E6F, 0x0180, "PDP Faceoff Wired Pro Controller (Switch)", Parser::GENERIC_HID_GAMEPAD,
-     InitKind::NONE, ButtonOrder::SWITCH},
-    {0x0E6F, 0x0181, "PDP Faceoff Deluxe Wired Pro Controller (Switch)",
-     Parser::GENERIC_HID_GAMEPAD, InitKind::NONE, ButtonOrder::SWITCH},
-    {0x0E6F, 0x0184, "PDP Faceoff Deluxe+ Audio Controller (Switch)", Parser::GENERIC_HID_GAMEPAD,
-     InitKind::NONE, ButtonOrder::SWITCH},
-    {0x0E6F, 0x0185, "PDP Wired Fight Pad Pro (Switch)", Parser::GENERIC_HID_GAMEPAD,
-     InitKind::NONE, ButtonOrder::SWITCH},
-    {0x0E6F, 0x0187, "PDP Rock Candy Wired Controller (Switch)", Parser::GENERIC_HID_GAMEPAD,
-     InitKind::NONE, ButtonOrder::SWITCH},
-
-    {0x28DE, 0x1102, "Valve Steam Controller", Parser::STEAM_CONTROLLER, InitKind::STEAM_QUIET},
-    {0x28DE, 0x1142, "Valve Steam Controller (dongle)", Parser::STEAM_CONTROLLER,
-     InitKind::STEAM_QUIET},
-
-    // The Steam Controller (2026) wired, and its two wireless dongles, whose paired pads sit on
-    // HID interfaces 2..5 (SDL's HIDAPI_DriverSteamTriton_IsSupportedDevice). The Bluetooth LE
-    // identity, 0x1303, speaks Valve's own GATT protocol and never enumerates on USB.
-    {0x28DE, 0x1302, "Valve Steam Controller (2026)", Parser::STEAM_TRITON,
-     InitKind::STEAM_TRITON_QUIET},
-    {0x28DE, 0x1304, "Valve Steam Controller (2026, Proteus dongle)", Parser::STEAM_TRITON,
-     InitKind::STEAM_TRITON_QUIET},
-    {0x28DE, 0x1305, "Valve Steam Controller (2026, Nereid dongle)", Parser::STEAM_TRITON,
-     InitKind::STEAM_TRITON_QUIET},
-};
+// kKnown, kImported and kBluetoothKnown come from known_devices.generated.h, written at build time
+// from the bundled controller database (scripts/gen_controller_tables.py). The imported rows are a
+// curated subset of SDL's src/joystick/controller_list.h and its hidapi drivers (zlib license,
+// Copyright (C) Valve Corporation; see THIRD_PARTY.md), not hardware-verified here: lookupKnown
+// names them, probeDecodable still guards the byte layout, and isVerifiedFastLane is false for them
+// so auto-claim never silently moves an untested model onto Direct.
 
 namespace {
 
@@ -451,20 +92,103 @@ bool isGipInterface(const uint8_t ifClass, const uint8_t ifSubclass, const uint8
 
 } // namespace
 
-const KnownDevice* lookupKnown(const uint16_t vid, const uint16_t pid) {
+namespace {
+
+// One served set as the JVM handed it down. A set is never freed once installed: lookupKnown hands
+// out pointers into it, and an attach that read one keeps it while a newer set arrives. A set is
+// installed once per launch and once per controller database update, so the sets a process keeps
+// stay a handful.
+struct ServedSet {
+    std::vector<KnownDevice> devices;
+    std::vector<bool> verified;
+};
+
+std::mutex g_servedMtx;
+std::vector<std::unique_ptr<const ServedSet>> g_servedSets;
+const ServedSet* g_served = nullptr;
+
+// The served row for an identity, and whether the record behind it is verified.
+struct ServedHit {
+    const KnownDevice* device = nullptr;
+    bool verified = false;
+};
+
+ServedHit findServed(const uint16_t vid, const uint16_t pid) {
+    const std::lock_guard<std::mutex> lock(g_servedMtx);
+    if (g_served == nullptr) return {};
+    const std::vector<KnownDevice>& devices = g_served->devices;
+    for (size_t i = 0; i < devices.size(); i++) {
+        const bool isTheModel = devices[i].vid == vid && devices[i].pid == pid;
+        if (isTheModel) return {&devices[i], g_served->verified[i]};
+    }
+    return {};
+}
+
+const KnownDevice* lookupCompiled(const uint16_t vid, const uint16_t pid) {
     const KnownDevice* verified = findIn(kKnown, vid, pid);
     if (verified != nullptr) return verified;
     return findIn(kImported, vid, pid);
 }
 
-// The Bluetooth LE identities SDL gives the two Steam Controllers (controller_list.h), served over
-// Valve's own GATT service rather than USB.
-constexpr KnownDevice kBluetoothKnown[] = {
-    {0x28DE, 0x1106, "Valve Steam Controller (Bluetooth)", Parser::STEAM_CONTROLLER_BLE,
-     InitKind::STEAM_QUIET},
-    {0x28DE, 0x1303, "Valve Steam Controller (2026, Bluetooth)", Parser::STEAM_TRITON,
-     InitKind::STEAM_TRITON_QUIET},
-};
+constexpr int32_t kMaxUsbId = 0xFFFF;
+
+bool isAParser(const int32_t value) {
+    const bool namesAFamily = value > static_cast<int32_t>(Parser::NONE);
+    return namesAFamily && value <= static_cast<int32_t>(Parser::STEAM_CONTROLLER_BLE);
+}
+
+bool isAnInitKind(const int32_t value) {
+    return value >= static_cast<int32_t>(InitKind::NONE) &&
+           value <= static_cast<int32_t>(InitKind::STEAM_TRITON_QUIET);
+}
+
+bool isAButtonOrder(const int32_t value) {
+    return value >= static_cast<int32_t>(ButtonOrder::WESTERN) &&
+           value <= static_cast<int32_t>(ButtonOrder::PLAYSTATION_CLASSIC);
+}
+
+bool isAUsbId(const int32_t value) { return value >= 0 && value <= kMaxUsbId; }
+
+} // namespace
+
+bool servedDeviceOf(const int32_t vid, const int32_t pid, const int32_t parser, const int32_t init,
+                    const int32_t order, const bool verified, ServedDevice& out) {
+    const bool identifies = isAUsbId(vid) && isAUsbId(pid);
+    const bool compiledHere = isAParser(parser) && isAnInitKind(init) && isAButtonOrder(order);
+    if (!identifies || !compiledHere) return false;
+    out.vid = static_cast<uint16_t>(vid);
+    out.pid = static_cast<uint16_t>(pid);
+    out.parser = static_cast<Parser>(parser);
+    out.init = static_cast<InitKind>(init);
+    out.order = static_cast<ButtonOrder>(order);
+    out.verified = verified;
+    return true;
+}
+
+void setServedDevices(const ServedDevice* rows, const size_t count) {
+    auto set = std::make_unique<ServedSet>();
+    set->devices.reserve(count);
+    set->verified.reserve(count);
+    for (size_t i = 0; i < count; i++) {
+        const ServedDevice& row = rows[i];
+        set->devices.push_back({row.vid, row.pid, nullptr, row.parser, row.init, row.order});
+        set->verified.push_back(row.verified);
+    }
+    const std::lock_guard<std::mutex> lock(g_servedMtx);
+    g_served = set.get();
+    g_servedSets.push_back(std::move(set));
+}
+
+size_t servedDeviceCount() {
+    const std::lock_guard<std::mutex> lock(g_servedMtx);
+    return g_served == nullptr ? 0 : g_served->devices.size();
+}
+
+const KnownDevice* lookupKnown(const uint16_t vid, const uint16_t pid) {
+    const KnownDevice* compiled = lookupCompiled(vid, pid);
+    if (compiled != nullptr) return compiled;
+    return findServed(vid, pid).device;
+}
 
 const KnownDevice* lookupBluetoothModel(const uint16_t vid, const uint16_t pid) {
     return findIn(kBluetoothKnown, vid, pid);
@@ -478,7 +202,10 @@ const KnownDevice* lookupModel(const uint16_t vid, const uint16_t pid) {
 
 bool isVerifiedFastLane(const uint16_t vid, const uint16_t pid) {
     const KnownDevice* k = findIn(kKnown, vid, pid);
-    return k != nullptr && k->parser != Parser::NONE;
+    if (k != nullptr) return k->parser != Parser::NONE;
+    const bool compiledAsImported = findIn(kImported, vid, pid) != nullptr;
+    if (compiledAsImported) return false;
+    return findServed(vid, pid).verified;
 }
 
 namespace {
@@ -651,9 +378,10 @@ __attribute__((format(printf, 1, 2))) void logError(const char* fmt, ...) {
     va_end(args);
 }
 
-bool bulkWrite(const int fd, const uint8_t epOut, const uint8_t* data, const size_t len,
-               const unsigned timeoutMs) {
-    if (epOut == 0) return false;
+// WRITE_OK, WRITE_ERR_SHORT, or the errno the transfer failed with.
+int32_t bulkWrite(const int fd, const uint8_t epOut, const uint8_t* data, const size_t len,
+                  const unsigned timeoutMs) {
+    if (epOut == 0) return EINVAL;
     struct usbdevfs_bulktransfer xfer = {};
     xfer.ep = epOut;
     xfer.len = (unsigned int)len;
@@ -662,10 +390,11 @@ bool bulkWrite(const int fd, const uint8_t epOut, const uint8_t* data, const siz
     blockingRegion("usb.bulk");
     const int n = ioctl(fd, USBDEVFS_BULK, &xfer);
     if (n < 0) {
-        logError("USBDEVFS_BULK out to 0x%02X failed: %s", epOut, strerror(errno));
-        return false;
+        const int32_t err = errno;
+        logError("USBDEVFS_BULK out to 0x%02X failed: %s", epOut, strerror(err));
+        return err;
     }
-    return (size_t)n == len;
+    return (size_t)n == len ? WRITE_OK : WRITE_ERR_SHORT;
 }
 
 constexpr size_t kFeatureReportBytes = 64;
@@ -680,9 +409,9 @@ constexpr uint8_t kSteamFeatureReportId = 0;
 // both retry it rather than give up. hid-steam allows 50 tries; the cap is lower here so that even
 // a wholly unresponsive device finishes init and teardown well inside the Kotlin side's 4s
 // path-transition timeout.
-bool sendFeatureReport(const int fd, const int interfaceNumber, const uint8_t reportId,
-                       const uint8_t* data, const size_t len, const int attempts) {
-    if (interfaceNumber < 0 || len > kFeatureReportBytes) return false;
+int32_t sendFeatureReport(const int fd, const int interfaceNumber, const uint8_t reportId,
+                          const uint8_t* data, const size_t len, const int attempts) {
+    if (interfaceNumber < 0 || len > kFeatureReportBytes) return EINVAL;
     uint8_t buf[kFeatureReportBytes] = {};
     memcpy(buf, data, len);
     for (int attempt = 0; attempt < attempts; attempt++) {
@@ -695,22 +424,23 @@ bool sendFeatureReport(const int fd, const int interfaceNumber, const uint8_t re
         ct.timeout = USB_CONTROL_TIMEOUT_MS;
         ct.data = buf;
         blockingRegion("usb.control");
-        if (ioctl(fd, USBDEVFS_CONTROL, &ct) >= 0) return true;
+        if (ioctl(fd, USBDEVFS_CONTROL, &ct) >= 0) return WRITE_OK;
         if (errno != EPIPE) break;
         usleep(kFeatureReportRetryUs);
     }
-    logError("SET_REPORT 0x%02X to iface %d failed: %s", data[0], interfaceNumber, strerror(errno));
-    return false;
+    const int32_t err = errno;
+    logError("SET_REPORT 0x%02X to iface %d failed: %s", data[0], interfaceNumber, strerror(err));
+    return err;
 }
 
-bool sendSteamFeatureReport(const int fd, const int interfaceNumber, const uint8_t* data,
-                            const size_t len) {
+int32_t sendSteamFeatureReport(const int fd, const int interfaceNumber, const uint8_t* data,
+                               const size_t len) {
     return sendFeatureReport(fd, interfaceNumber, kSteamFeatureReportId, data, len,
                              kFeatureReportAttempts);
 }
 
-bool sendTritonSetting(const int fd, const int interfaceNumber, const TritonSetting setting,
-                       const int attempts) {
+int32_t sendTritonSetting(const int fd, const int interfaceNumber, const TritonSetting setting,
+                          const int attempts) {
     uint8_t buf[TRITON_SETTINGS_REPORT_BYTES];
     const size_t n = buildTritonSettingsReport(setting, buf, sizeof(buf));
     return sendFeatureReport(fd, interfaceNumber, TRITON_SETTINGS_REPORT_ID, buf, n, attempts);
@@ -3114,6 +2844,26 @@ OutputRoute outputRouteFor(const Parser p, const uint8_t epOut) {
     return writesHidOutputReports ? OutputRoute::CONTROL_SET_REPORT : OutputRoute::NONE;
 }
 
+OutputRoute endpointRouteFor(const uint8_t epOut) {
+    return epOut != 0 ? OutputRoute::INTERRUPT_OUT : OutputRoute::NONE;
+}
+
+WriteVerdict writeVerdictOf(const OutputRoute route, const uint8_t epOut, const uint8_t* report,
+                            const size_t n, const int32_t err, const int64_t atMs) {
+    const bool builtAReport = n > 0 && report != nullptr;
+    const bool hasARoute = route != OutputRoute::NONE;
+    if (hasARoute && !builtAReport) return WriteVerdict{};
+    WriteVerdict verdict;
+    verdict.recorded = true;
+    verdict.route = route;
+    verdict.endpoint = route == OutputRoute::INTERRUPT_OUT ? epOut : 0;
+    verdict.reportId = builtAReport ? report[0] : 0;
+    verdict.ok = hasARoute && err == WRITE_OK;
+    verdict.err = hasARoute ? err : WRITE_OK;
+    verdict.atMs = atMs;
+    return verdict;
+}
+
 #ifdef __ANDROID__
 namespace {
 
@@ -3123,12 +2873,15 @@ constexpr unsigned kGipWriteTimeoutMs = 200;
 constexpr unsigned kOutWriteTimeoutMs = 100;
 constexpr unsigned kGipInterPacketUs = 10000;
 
-bool runSteamQuietInit(const int fd, const int interfaceNumber) {
+bool runSteamQuietInit(const int fd, const int interfaceNumber, const int64_t atMs,
+                       WriteVerdict& verdict) {
     uint8_t buf[kInitPacketMaxBytes];
     for (int i = 0;; i++) {
         const size_t n = buildSteamConfigPacket(SteamConfig::QUIET, i, buf, sizeof(buf));
         if (n == 0) break;
-        if (!sendSteamFeatureReport(fd, interfaceNumber, buf, n)) {
+        const int32_t err = sendSteamFeatureReport(fd, interfaceNumber, buf, n);
+        verdict = writeVerdictOf(OutputRoute::CONTROL_SET_REPORT, 0, buf, n, err, atMs);
+        if (err != WRITE_OK) {
             logError("Steam Controller: quiet-mode packet %d failed", i);
             return false;
         }
@@ -3139,10 +2892,15 @@ bool runSteamQuietInit(const int fd, const int interfaceNumber) {
 
 // SDL sends the lizard switch from its update loop and the IMU mode when sensors are enabled;
 // both go out here so the pad streams motion and stops typing before the probe reads it.
-bool runTritonQuietInit(const int fd, const int interfaceNumber) {
+bool runTritonQuietInit(const int fd, const int interfaceNumber, const int64_t atMs,
+                        WriteVerdict& verdict) {
     const TritonSetting quiet[] = {TritonSetting::LIZARD_OFF, TritonSetting::RAW_IMU};
     for (const TritonSetting setting : quiet) {
-        if (!sendTritonSetting(fd, interfaceNumber, setting, kFeatureReportAttempts)) {
+        const int32_t err = sendTritonSetting(fd, interfaceNumber, setting, kFeatureReportAttempts);
+        const uint8_t reportId[] = {TRITON_SETTINGS_REPORT_ID};
+        verdict = writeVerdictOf(OutputRoute::CONTROL_SET_REPORT, 0, reportId, sizeof(reportId),
+                                 err, atMs);
+        if (err != WRITE_OK) {
             logError("Steam Controller (2026): setting %d failed", (int)setting);
             return false;
         }
@@ -3153,9 +2911,9 @@ bool runTritonQuietInit(const int fd, const int interfaceNumber) {
 
 // One HID output report on the control pipe, its id the report's first byte, as hidapi writes one
 // to an interface without an interrupt OUT endpoint.
-bool writeHidOutputReport(const int fd, const int interfaceNumber, const uint8_t* buf,
-                          const size_t n) {
-    if (interfaceNumber < 0) return false;
+int32_t writeHidOutputReport(const int fd, const int interfaceNumber, const uint8_t* buf,
+                             const size_t n) {
+    if (interfaceNumber < 0) return EINVAL;
     struct usbdevfs_ctrltransfer ct = {};
     ct.bRequestType = USB_REQUEST_TYPE_OUT_CLASS_INTERFACE;
     ct.bRequest = USB_REQUEST_SET_REPORT;
@@ -3165,35 +2923,48 @@ bool writeHidOutputReport(const int fd, const int interfaceNumber, const uint8_t
     ct.timeout = USB_CONTROL_TIMEOUT_MS;
     ct.data = (void*)buf;
     blockingRegion("usb.control");
-    if (ioctl(fd, USBDEVFS_CONTROL, &ct) >= 0) return true;
+    if (ioctl(fd, USBDEVFS_CONTROL, &ct) >= 0) return WRITE_OK;
+    const int32_t err = errno;
     logError("SET_REPORT(Output) 0x%02X to iface %d failed: %s", buf[0], interfaceNumber,
-             strerror(errno));
-    return false;
+             strerror(err));
+    return err;
 }
 
-bool writeRoutedReport(const OutputRoute route, const int fd, const int interfaceNumber,
-                       const uint8_t epOut, const uint8_t* buf, const size_t n) {
-    if (n == 0) return false;
+int32_t writeRoutedReport(const OutputRoute route, const int fd, const int interfaceNumber,
+                          const uint8_t epOut, const uint8_t* buf, const size_t n) {
     switch (route) {
     case OutputRoute::INTERRUPT_OUT:
         return bulkWrite(fd, epOut, buf, n, kOutWriteTimeoutMs);
     case OutputRoute::CONTROL_SET_REPORT:
         return writeHidOutputReport(fd, interfaceNumber, buf, n);
     case OutputRoute::NONE:
-        return false;
+        return EINVAL;
     }
-    return false;
+    return EINVAL;
+}
+
+// A built report written by its route, and the verdict; a report that built to nothing is no
+// write.
+WriteVerdict writeBuilt(const OutputRoute route, const int fd, const int interfaceNumber,
+                        const uint8_t epOut, const uint8_t* buf, const size_t n,
+                        const int64_t atMs) {
+    if (n == 0) return WriteVerdict{};
+    const int32_t err = writeRoutedReport(route, fd, interfaceNumber, epOut, buf, n);
+    return writeVerdictOf(route, epOut, buf, n, err, atMs);
 }
 
 // GIP init: power-on tells the pad to start sending input reports; the rest of the sequence (LED,
 // auth-done, and the S set-mode) starts the models the lone power-on left silent.
-bool runGipInit(const int fd, const uint8_t epOut, const InitKind init) {
+bool runGipInit(const int fd, const uint8_t epOut, const InitKind init, const int64_t atMs,
+                WriteVerdict& verdict) {
+    const OutputRoute route = endpointRouteFor(epOut);
     uint8_t buf[kInitPacketMaxBytes];
     for (int i = 0;; i++) {
         const size_t n = buildGipInitPacket(init, i, (uint8_t)i, buf, sizeof(buf));
         if (n == 0) break;
-        const bool ok = bulkWrite(fd, epOut, buf, n, kGipWriteTimeoutMs);
-        const bool powerOnFailed = i == 0 && !ok;
+        const int32_t err = bulkWrite(fd, epOut, buf, n, kGipWriteTimeoutMs);
+        verdict = writeVerdictOf(route, epOut, buf, n, err, atMs);
+        const bool powerOnFailed = i == 0 && err != WRITE_OK;
         if (powerOnFailed) {
             logError("Xbox One power-on write failed");
             return false;
@@ -3203,8 +2974,12 @@ bool runGipInit(const int fd, const uint8_t epOut, const InitKind init) {
     return true;
 }
 
-bool runSwitchInitStep(const int fd, const uint8_t epOut, const SwitchInitStep& step) {
-    const bool sent = bulkWrite(fd, epOut, step.packet.data, step.packet.len, step.timeoutMs);
+bool runSwitchInitStep(const int fd, const uint8_t epOut, const SwitchInitStep& step,
+                       const int64_t atMs, WriteVerdict& verdict) {
+    const int32_t err = bulkWrite(fd, epOut, step.packet.data, step.packet.len, step.timeoutMs);
+    verdict = writeVerdictOf(OutputRoute::INTERRUPT_OUT, epOut, step.packet.data, step.packet.len,
+                             err, atMs);
+    const bool sent = err == WRITE_OK;
     if (!sent && step.isFatal) {
         logError("Switch Pro: %s failed", step.what);
         return false;
@@ -3214,13 +2989,17 @@ bool runSwitchInitStep(const int fd, const uint8_t epOut, const SwitchInitStep& 
     return true;
 }
 
-bool runSwitchProHandshake(const int fd, const uint8_t epOut) {
+bool runSwitchProHandshake(const int fd, const uint8_t epOut, const int64_t atMs,
+                           WriteVerdict& verdict) {
     if (epOut == 0) {
+        const SwitchInitStep& first = kSwitchInitSequence[0];
+        verdict = writeVerdictOf(OutputRoute::NONE, 0, first.packet.data, first.packet.len,
+                                 WRITE_OK, atMs);
         logError("Switch Pro: no OUT endpoint, cannot init");
         return false;
     }
     for (const SwitchInitStep& step : kSwitchInitSequence) {
-        if (!runSwitchInitStep(fd, epOut, step)) return false;
+        if (!runSwitchInitStep(fd, epOut, step, atMs, verdict)) return false;
     }
     logInfo("Switch Pro USB init sequence sent");
     return true;
@@ -3231,22 +3010,23 @@ bool runSwitchProHandshake(const int fd, const uint8_t epOut) {
 // One OUT report, as built by the feedback builders: nothing to write is a refusal, not a no-op.
 bool writeOutReport(const int fd, const uint8_t epOut, const uint8_t* buf, const size_t n) {
     if (n == 0) return false;
-    return bulkWrite(fd, epOut, buf, n, kOutWriteTimeoutMs);
+    return bulkWrite(fd, epOut, buf, n, kOutWriteTimeoutMs) == WRITE_OK;
 }
 
-bool runInit(const int fd, const int interfaceNumber, const uint8_t epOut, const InitKind init) {
+bool runInit(const int fd, const int interfaceNumber, const uint8_t epOut, const InitKind init,
+             const int64_t atMs, WriteVerdict& verdict) {
     switch (init) {
     case InitKind::NONE:
         return true;
     case InitKind::STEAM_QUIET:
-        return runSteamQuietInit(fd, interfaceNumber);
+        return runSteamQuietInit(fd, interfaceNumber, atMs, verdict);
     case InitKind::STEAM_TRITON_QUIET:
-        return runTritonQuietInit(fd, interfaceNumber);
+        return runTritonQuietInit(fd, interfaceNumber, atMs, verdict);
     case InitKind::XBOX_ONE_POWERON:
     case InitKind::XBOX_ONE_S:
-        return runGipInit(fd, epOut, init);
+        return runGipInit(fd, epOut, init, atMs, verdict);
     case InitKind::SWITCH_PRO_HANDSHAKE:
-        return runSwitchProHandshake(fd, epOut);
+        return runSwitchProHandshake(fd, epOut, atMs, verdict);
     }
     return false;
 }
@@ -3266,55 +3046,74 @@ bool runReceiverStateRequest(const int fd, const int interfaceNumber, const Pars
     uint8_t buf[kInitPacketMaxBytes];
     const size_t n = buildReceiverStateRequest(p, buf, sizeof(buf));
     if (n == 0) return false;
-    return sendSteamFeatureReport(fd, interfaceNumber, buf, n);
+    return sendSteamFeatureReport(fd, interfaceNumber, buf, n) == WRITE_OK;
 }
 
 bool runSettingsRefresh(const int fd, const int interfaceNumber, const Parser p) {
     if (p != Parser::STEAM_TRITON) return false;
     return sendTritonSetting(fd, interfaceNumber, TritonSetting::LIZARD_OFF,
-                             kFeatureReportOneAttempt);
+                             kFeatureReportOneAttempt) == WRITE_OK;
 }
 
-bool runMergedRumble(const int fd, const int interfaceNumber, const uint8_t epOut, const Parser p,
-                     FeedbackState& st, const uint8_t seq) {
+WriteVerdict runMergedRumble(const int fd, const int interfaceNumber, const uint8_t epOut,
+                             const Parser p, FeedbackState& st, const uint8_t seq,
+                             const int64_t atMs) {
     const OutputRoute route = outputRouteFor(p, epOut);
-    if (route == OutputRoute::NONE) return false;
     uint8_t buf[kOutReportMaxBytes];
+    if (route == OutputRoute::NONE) {
+        FeedbackState unsent = st;
+        const size_t n = buildMergedRumbleReport(p, unsent, seq, buf, sizeof(buf));
+        return writeVerdictOf(route, epOut, buf, n, WRITE_OK, atMs);
+    }
     const size_t n = buildMergedRumbleReport(p, st, seq, buf, sizeof(buf));
-    return writeRoutedReport(route, fd, interfaceNumber, epOut, buf, n);
+    return writeBuilt(route, fd, interfaceNumber, epOut, buf, n, atMs);
 }
 
-bool runLightbar(const int fd, const uint8_t epOut, const Parser p, FeedbackState& st,
-                 const uint8_t r, const uint8_t g, const uint8_t b) {
-    if (epOut == 0) return false;
+WriteVerdict runLightbar(const int fd, const uint8_t epOut, const Parser p, FeedbackState& st,
+                         const uint8_t r, const uint8_t g, const uint8_t b, const int64_t atMs) {
+    const OutputRoute route = endpointRouteFor(epOut);
     uint8_t buf[kOutReportMaxBytes];
+    if (route == OutputRoute::NONE) {
+        FeedbackState unsent = st;
+        const size_t n = buildLightbarReport(p, unsent, r, g, b, buf, sizeof(buf));
+        return writeVerdictOf(route, epOut, buf, n, WRITE_OK, atMs);
+    }
     const size_t n = buildLightbarReport(p, st, r, g, b, buf, sizeof(buf));
-    return writeOutReport(fd, epOut, buf, n);
+    return writeBuilt(route, fd, -1, epOut, buf, n, atMs);
 }
 
-bool runPlayerLeds(const int fd, const uint8_t epOut, const Parser p, const FeedbackState& st,
-                   const uint8_t ledMask, const uint8_t seq) {
-    if (epOut == 0) return false;
+WriteVerdict runPlayerLeds(const int fd, const uint8_t epOut, const Parser p,
+                           const FeedbackState& st, const uint8_t ledMask, const uint8_t seq,
+                           const int64_t atMs) {
+    const OutputRoute route = endpointRouteFor(epOut);
     uint8_t buf[kOutReportMaxBytes];
     const size_t n = buildPlayerLedsReport(p, st, ledMask, seq, buf, sizeof(buf));
-    return writeOutReport(fd, epOut, buf, n);
+    if (route == OutputRoute::NONE) return writeVerdictOf(route, epOut, buf, n, WRITE_OK, atMs);
+    return writeBuilt(route, fd, -1, epOut, buf, n, atMs);
 }
 
-bool runTriggerEffects(const int fd, const uint8_t epOut, const Parser p, const FeedbackState& st,
-                       const uint8_t left[TRIGGER_EFFECT_BLOCK_LEN],
-                       const uint8_t right[TRIGGER_EFFECT_BLOCK_LEN]) {
-    if (epOut == 0) return false;
+WriteVerdict runTriggerEffects(const int fd, const uint8_t epOut, const Parser p,
+                               const FeedbackState& st,
+                               const uint8_t left[TRIGGER_EFFECT_BLOCK_LEN],
+                               const uint8_t right[TRIGGER_EFFECT_BLOCK_LEN], const int64_t atMs) {
+    const OutputRoute route = endpointRouteFor(epOut);
     uint8_t buf[kOutReportMaxBytes];
     const size_t n = buildTriggerEffectsReport(p, st, left, right, buf, sizeof(buf));
-    return writeOutReport(fd, epOut, buf, n);
+    if (route == OutputRoute::NONE) return writeVerdictOf(route, epOut, buf, n, WRITE_OK, atMs);
+    return writeBuilt(route, fd, -1, epOut, buf, n, atMs);
 }
 
-bool runMicMuteLed(const int fd, const uint8_t epOut, const Parser p, FeedbackState& st,
-                   const uint8_t state) {
-    if (epOut == 0) return false;
+WriteVerdict runMicMuteLed(const int fd, const uint8_t epOut, const Parser p, FeedbackState& st,
+                           const uint8_t state, const int64_t atMs) {
+    const OutputRoute route = endpointRouteFor(epOut);
     uint8_t buf[kOutReportMaxBytes];
+    if (route == OutputRoute::NONE) {
+        FeedbackState unsent = st;
+        const size_t n = buildMicMuteLedReport(p, unsent, state, buf, sizeof(buf));
+        return writeVerdictOf(route, epOut, buf, n, WRITE_OK, atMs);
+    }
     const size_t n = buildMicMuteLedReport(p, st, state, buf, sizeof(buf));
-    return writeOutReport(fd, epOut, buf, n);
+    return writeBuilt(route, fd, -1, epOut, buf, n, atMs);
 }
 #endif
 

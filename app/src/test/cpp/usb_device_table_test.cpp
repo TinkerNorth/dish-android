@@ -220,3 +220,101 @@ TEST(UsbDeviceTableReports, TheNextPadOnAnEntryStartsWithNoSinkAndTakesReports) 
     EXPECT_EQ(second.reports.load(), 1);
     EXPECT_EQ(first.reports.load(), 0);
 }
+
+// ── The last write's verdict and the report capture ───────────────────────────────────────────
+
+namespace {
+
+constexpr int64_t kReportAtMs = 500;
+constexpr uint8_t kRestReport[] = {0x01, 0x80, 0x80, 0x80, 0x80};
+
+usbparsers::WriteVerdict landedVerdict() {
+    usbparsers::WriteVerdict v;
+    v.recorded = true;
+    v.route = usbparsers::OutputRoute::INTERRUPT_OUT;
+    v.endpoint = 0x03;
+    v.reportId = 0x02;
+    v.ok = true;
+    v.atMs = kReportAtMs;
+    return v;
+}
+
+} // namespace
+
+TEST(UsbDeviceTableVerdicts, AFreshlyClaimedPadHasNoWriteRecorded) {
+    dish_usb::UsbDeviceTable table;
+    table.claim(kPad);
+    EXPECT_FALSE(table.lastWrite(kPad).recorded);
+}
+
+TEST(UsbDeviceTableVerdicts, ThePostedVerdictReadsBack) {
+    dish_usb::UsbDeviceTable table;
+    dish_usb::UsbDevice* entry = table.claim(kPad);
+    entry->stats.lastWrite.post(landedVerdict());
+    const usbparsers::WriteVerdict v = table.lastWrite(kPad);
+    EXPECT_TRUE(v.recorded);
+    EXPECT_EQ(0x02, v.reportId);
+    EXPECT_EQ(0x03, v.endpoint);
+    EXPECT_TRUE(v.ok);
+}
+
+TEST(UsbDeviceTableVerdicts, AReclaimedEntryForgetsThePreviousPadsVerdict) {
+    dish_usb::UsbDeviceTable table;
+    dish_usb::UsbDevice* entry = table.claim(kPad);
+    entry->stats.lastWrite.post(landedVerdict());
+    table.release(kPad);
+    table.claim(kOtherPad);
+    EXPECT_FALSE(table.lastWrite(kOtherPad).recorded);
+    EXPECT_FALSE(table.lastWrite(kPad).recorded);
+}
+
+TEST(ReportCaptureTest, NothingIsKeptUntilACaptureIsArmed) {
+    dish_usb::ReportCapture capture;
+    capture.offer(kRestReport, sizeof(kRestReport), kReportAtMs);
+    dish_usb::CapturedReport out[dish_usb::CAPTURE_REPORTS];
+    EXPECT_EQ(0u, capture.copyTo(out, dish_usb::CAPTURE_REPORTS));
+    EXPECT_FALSE(capture.armed());
+}
+
+TEST(ReportCaptureTest, AnArmedCaptureKeepsTwentyReportsWithTheirTimesThenStops) {
+    dish_usb::ReportCapture capture;
+    ASSERT_TRUE(capture.arm());
+    for (int64_t i = 0; i < 25; i++) capture.offer(kRestReport, sizeof(kRestReport), i);
+    dish_usb::CapturedReport out[dish_usb::CAPTURE_REPORTS];
+    ASSERT_EQ(dish_usb::CAPTURE_REPORTS, capture.copyTo(out, dish_usb::CAPTURE_REPORTS));
+    EXPECT_FALSE(capture.armed());
+    EXPECT_EQ(0, out[0].atMs);
+    EXPECT_EQ(19, out[19].atMs);
+    EXPECT_EQ(sizeof(kRestReport), out[19].len);
+    EXPECT_EQ(0x80, out[19].bytes[1]);
+}
+
+TEST(ReportCaptureTest, ACaptureStillRunningRefusesToBeArmedAgain) {
+    dish_usb::ReportCapture capture;
+    ASSERT_TRUE(capture.arm());
+    capture.offer(kRestReport, sizeof(kRestReport), kReportAtMs);
+    EXPECT_FALSE(capture.arm());
+    dish_usb::CapturedReport out[dish_usb::CAPTURE_REPORTS];
+    EXPECT_EQ(1u, capture.copyTo(out, dish_usb::CAPTURE_REPORTS));
+}
+
+TEST(ReportCaptureTest, AReportLongerThanASlotIsKeptToTheSlot) {
+    dish_usb::ReportCapture capture;
+    ASSERT_TRUE(capture.arm());
+    const std::vector<uint8_t> longReport(dish_usb::CAPTURE_REPORT_MAX_BYTES + 10, 0xAB);
+    capture.offer(longReport.data(), longReport.size(), kReportAtMs);
+    dish_usb::CapturedReport out[1];
+    ASSERT_EQ(1u, capture.copyTo(out, 1));
+    EXPECT_EQ(dish_usb::CAPTURE_REPORT_MAX_BYTES, out[0].len);
+}
+
+TEST(ReportCaptureTest, TheTableArmsAndReadsThePadsOwnCapture) {
+    dish_usb::UsbDeviceTable table;
+    dish_usb::UsbDevice* entry = table.claim(kPad);
+    EXPECT_FALSE(table.armCapture(kOtherPad));
+    ASSERT_TRUE(table.armCapture(kPad));
+    entry->capture.offer(kRestReport, sizeof(kRestReport), kReportAtMs);
+    dish_usb::CapturedReport out[dish_usb::CAPTURE_REPORTS];
+    EXPECT_EQ(1u, table.capturedReports(kPad, out, dish_usb::CAPTURE_REPORTS));
+    EXPECT_EQ(0u, table.capturedReports(kOtherPad, out, dish_usb::CAPTURE_REPORTS));
+}

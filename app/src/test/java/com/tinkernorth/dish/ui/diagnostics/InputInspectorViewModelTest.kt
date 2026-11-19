@@ -11,6 +11,7 @@ import com.tinkernorth.dish.source.audio.MicLevelProbe
 import com.tinkernorth.dish.source.audio.MicProbeReading
 import com.tinkernorth.dish.source.audio.SpeakerTestTone
 import com.tinkernorth.dish.source.store.StickTestHistoryStore
+import com.tinkernorth.dish.source.store.TestOutcomeStore
 import com.tinkernorth.dish.source.store.stickHistoryKeyFor
 import com.tinkernorth.dish.source.system.MicPermissionGate
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
@@ -44,6 +45,8 @@ import kotlin.math.roundToInt
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class InputInspectorViewModelTest {
+    private val outcomes = TestOutcomeStore()
+
     private val dispatcher = StandardTestDispatcher()
     private val grantedState = MutableStateFlow(true)
     private val sources = mockk<DiagnosticsSources>(relaxed = true)
@@ -96,6 +99,7 @@ class InputInspectorViewModelTest {
             micProbe,
             testTone,
             stickHistory,
+            outcomes,
         )
 
     private fun percent(fraction: Float): Int = (fraction * 100).roundToInt().coerceIn(0, 100)

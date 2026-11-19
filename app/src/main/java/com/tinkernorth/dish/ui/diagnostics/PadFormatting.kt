@@ -74,6 +74,7 @@ internal fun Context.padDeviceLines(
 ): List<String> {
     val facts = diag.facts ?: return emptyList()
     val lines = mutableListOf<String>()
+    lines += recordLines(facts)
     facts.direct?.let { direct ->
         if (direct.model.isNotBlank()) lines += diagKv(R.string.diagnostics_model, direct.model)
         if (direct.parser.isNotBlank()) lines += diagKv(R.string.diagnostics_host_protocol, direct.parser)
@@ -93,6 +94,7 @@ internal fun Context.padDeviceLines(
     val countLabel = if (diag.isUsbSynthetic) R.string.diagnostics_reports else R.string.diagnostics_events_count
     lines += diagKv(countLabel, facts.reportCount.toString())
     lines += diagKv(R.string.diagnostics_last_input, agoLabel(nowMs, facts.lastInputAtMs))
+    lastWriteLine(facts, nowMs)?.let { lines += it }
     lines += padTimingLines(facts)
     lines += stickHistoryLines(facts.stickHistory)
     return lines
