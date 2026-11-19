@@ -1488,6 +1488,16 @@ class CapabilityComposerTest {
         composerTest {
             val mic = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to true))
             val speaker = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to true))
+            // The audio caps read the whole path, the host's grant included.
+            val hostCarryingAudio =
+                HostFeatureSet(
+                    hasCatalog = true,
+                    mouseControl = true,
+                    keyboardControl = false,
+                    rumbleReturn = true,
+                    controllerMic = true,
+                    controllerSpeaker = true,
+                )
             val composer =
                 composerFor(
                     phoneAvailable = true,
@@ -1499,6 +1509,7 @@ class CapabilityComposerTest {
                         StoreStates(
                             micEnabled = mic,
                             speakerEnabled = speaker,
+                            hostFeaturesState = MutableStateFlow(mapOf("sat-A" to hostCarryingAudio)),
                         ),
                 )
             composer.probe(this)

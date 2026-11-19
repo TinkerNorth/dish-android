@@ -11,9 +11,13 @@ import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.TrackpadPick
 import com.tinkernorth.dish.source.audio.PadAudioRoute
 import com.tinkernorth.dish.source.audio.PadAudioRoutes
+import com.tinkernorth.dish.source.audio.PlayoutLane
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
 import com.tinkernorth.dish.source.store.MouseSurfaceStore
+import com.tinkernorth.dish.source.store.PadAudioRefusal
+import com.tinkernorth.dish.source.store.PadAudioRefusalStore
+import com.tinkernorth.dish.source.store.PadAudioStores
 import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SatelliteHostRuntime
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
@@ -72,6 +76,7 @@ internal data class StoreStates(
     val speakerEnabled: MutableStateFlow<Map<String, Boolean>> = MutableStateFlow(emptyMap()),
     val trackpadPicks: MutableStateFlow<Map<String, TrackpadPick>> = MutableStateFlow(emptyMap()),
     val padAudioRoutes: MutableStateFlow<Map<Int, PadAudioRoute>> = MutableStateFlow(emptyMap()),
+    val padAudioRefusals: MutableStateFlow<Map<Pair<String, PlayoutLane>, PadAudioRefusal>> = MutableStateFlow(emptyMap()),
     val mouseSurface: MutableStateFlow<Set<String>> = MutableStateFlow(emptySet()),
     val hostFeaturesState: MutableStateFlow<Map<String, HostFeatureSet>> = MutableStateFlow(emptyMap()),
     val backendStatus: MutableStateFlow<Map<Pair<String, String>, SatelliteMotionBackendStatus>> =
@@ -154,6 +159,7 @@ internal fun composerFor(
                 stores.padAudioRoutes.value[vidPidKey(firstArg(), secondArg())] ?: PadAudioRoute.NONE
             }
         }
+    val refusals: PadAudioRefusalStore = mockk { every { state } returns stores.padAudioRefusals }
     val mouseSurfaceStore: MouseSurfaceStore =
         mockk {
             every { state } returns stores.mouseSurface
@@ -177,7 +183,7 @@ internal fun composerFor(
         hub,
         native,
         toggles,
-        routes,
+        PadAudioStores(routes, refusals),
         mouseSurfaceStore,
         hostFacts,
         scope,

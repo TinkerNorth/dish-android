@@ -6,9 +6,14 @@ import com.tinkernorth.dish.architecture.testing.composerTest
 import com.tinkernorth.dish.architecture.testing.probe
 import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.model.HostFeatureSet
+import com.tinkernorth.dish.core.net.ControllerDescriptor
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.audio.PadAudioRoute
+import com.tinkernorth.dish.source.audio.PlayoutLane
+import com.tinkernorth.dish.source.store.PadAudioRefusal
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -211,4 +216,110 @@ class CapabilityComposerPadAudioTest {
             assertTrue(Feature.SPEAKER in controller)
             assertFalse(Feature.HAPTIC_AUDIO in controller)
         }
+
+    @Test
+    fun `a host granting the microphone alone gets the microphone alone, on the card and on the wire`() =
+        composerTest {
+            // A USB Direct DualSense whose route names all three endpoints at four channels, every
+            // switch on, bound to a satellite that grants the microphone and nothing else: the
+            // pills and the descriptor read one answer, so the host is never promised a lane the
+            // phone will not open.
+            val routes =
+                MutableStateFlow(
+                    mapOf(
+                        vidPidKey(0x054C, 0x0CE6) to
+                            PadAudioRoute(microphone = true, speaker = true, haptics = true, playbackChannels = 4),
+                    ),
+                )
+            val devices =
+                MutableStateFlow(mapOf(9 to device(9, vendorId = 0x054C, productId = 0x0CE6, isUsbSynthetic = true)))
+            val hostFeatures = MutableStateFlow(mapOf("sat-A" to hostGranting(mic = true, speaker = false, haptics = false)))
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(mapOf("9" to "sat-A")),
+                    connections = MutableStateFlow(listOf(summary("sat-A"))),
+                    scope = backgroundScope,
+                    stores =
+                        StoreStates(
+                            micEnabled = MutableStateFlow(mapOf("9" to true)),
+                            padAudioRoutes = routes,
+                            hostFeaturesState = hostFeatures,
+                        ),
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val micGrantedAlone = composer.capabilityFor("9")
+            assertTrue(Feature.MIC in micGrantedAlone.enabled)
+            assertFalse(Feature.SPEAKER in micGrantedAlone.enabled)
+            assertFalse(Feature.HAPTIC_AUDIO in micGrantedAlone.enabled)
+            assertEquals(ControllerDescriptor.CAP_MIC, wireCaps(micGrantedAlone) and AUDIO_BITS)
+
+            // The grant arriving, as the probe of the next session delivers it, puts both lanes on
+            // the wire without anything else moving.
+            hostFeatures.value = mapOf("sat-A" to hostGranting(mic = true, speaker = true, haptics = true))
+            testScheduler.runCurrent()
+            assertEquals(AUDIO_BITS, wireCaps(composer.capabilityFor("9")) and AUDIO_BITS)
+        }
+
+    @Test
+    fun `an output the phone refused takes its lane off the wire until the endpoint changes`() =
+        composerTest {
+            val padRoute = PadAudioRoute(microphone = false, speaker = true, haptics = true, playbackDeviceId = 11, playbackChannels = 4)
+            val routes = MutableStateFlow(mapOf(vidPidKey(0x054C, 0x0CE6) to padRoute))
+            val devices =
+                MutableStateFlow(mapOf(9 to device(9, vendorId = 0x054C, productId = 0x0CE6, isUsbSynthetic = true)))
+            val hapticsRefusedAtEleven =
+                PadAudioRefusal("9", PlayoutLane.HAPTICS, playbackDeviceId = 11, deviceChannels = 4)
+            val refusals = MutableStateFlow(mapOf(("9" to PlayoutLane.HAPTICS) to hapticsRefusedAtEleven))
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(mapOf("9" to "sat-A")),
+                    connections = MutableStateFlow(listOf(summary("sat-A"))),
+                    scope = backgroundScope,
+                    stores =
+                        StoreStates(
+                            padAudioRoutes = routes,
+                            padAudioRefusals = refusals,
+                            hostFeaturesState =
+                                MutableStateFlow(mapOf("sat-A" to hostGranting(mic = false, speaker = true, haptics = true))),
+                        ),
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val refused = composer.capabilityFor("9")
+            assertTrue(Feature.HAPTIC_AUDIO in refused.enabled)
+            assertFalse(Feature.HAPTIC_AUDIO in refused.live)
+            assertEquals(ControllerDescriptor.CAP_SPEAKER, wireCaps(refused) and AUDIO_BITS)
+
+            // The pad enumerates afresh under another device id: the refusal is spent.
+            routes.value = mapOf(vidPidKey(0x054C, 0x0CE6) to padRoute.copy(playbackDeviceId = 12))
+            testScheduler.runCurrent()
+            val replugged = composer.capabilityFor("9")
+            assertTrue(Feature.HAPTIC_AUDIO in replugged.live)
+            assertEquals(ControllerDescriptor.CAP_SPEAKER or ControllerDescriptor.CAP_HAPTIC_AUDIO, wireCaps(replugged) and AUDIO_BITS)
+        }
 }
+
+private const val AUDIO_BITS =
+    ControllerDescriptor.CAP_MIC or ControllerDescriptor.CAP_SPEAKER or ControllerDescriptor.CAP_HAPTIC_AUDIO
+
+private fun hostGranting(
+    mic: Boolean,
+    speaker: Boolean,
+    haptics: Boolean,
+) = HostFeatureSet(
+    hasCatalog = true,
+    mouseControl = true,
+    keyboardControl = false,
+    rumbleReturn = true,
+    controllerMic = mic,
+    controllerSpeaker = speaker,
+    controllerHapticAudio = haptics,
+    protocolVersion = 4,
+)

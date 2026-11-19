@@ -7,6 +7,28 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **A controller's microphone, speaker and haptics are promised to the
+  computer only when the phone will carry them.** The app told Satellite it
+  would play a DualSense's haptics as audio whenever the controller's sound
+  output had four channels and Controller sound was on, and the same for the
+  speaker and the microphone, but it opened the player, or the microphone,
+  only once Satellite had also said it carries that direction, and never for
+  an output the phone refused to open. Satellite trusts the promise: for the
+  haptics lane it sends the game's haptics as audio instead of turning them
+  into rumble, so in that gap a game's haptics went silent while every screen
+  said all was well. The promise now follows the same rule as the player: the
+  controller's output, the emulated controller type, Satellite's own switch as
+  the app last read it, the Controller sound switch, and an output the phone
+  actually opened. An output the phone cannot open takes its lane off the
+  promise until the controller is plugged in again or the app comes back to
+  the foreground, and Satellite turns the haptics into rumble meanwhile.
+  Satellite's switches reach a connected phone at its next session, as they
+  did for the card's pills before.
+
 ## [2.6.0] - 2026-11-15
 
 Steam Controllers over Bluetooth, a trackpad pick for each, and extra buttons

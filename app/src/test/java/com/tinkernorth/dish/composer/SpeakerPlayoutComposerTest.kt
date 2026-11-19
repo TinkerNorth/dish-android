@@ -9,6 +9,7 @@ import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.core.model.capabilitySetOf
 import com.tinkernorth.dish.source.audio.MapSlotAudioRoutes
 import com.tinkernorth.dish.source.audio.PadAudioRoute
+import com.tinkernorth.dish.source.audio.PlayoutLane
 import com.tinkernorth.dish.source.audio.SpeakerPlayoutPlan
 import com.tinkernorth.dish.source.audio.speakerRouteKey
 import com.tinkernorth.dish.source.connection.SatelliteConnection
@@ -178,6 +179,45 @@ class SpeakerPlayoutComposerTest {
             slots.value = emptyMap()
             assertTrue(plan().voices.isEmpty())
         }
+
+    @Test
+    fun `the haptic voice follows the host's grant, not the pad's lane alone`() =
+        runTest(scope.testScheduler) {
+            padRoutes[SLOT] =
+                PadAudioRoute(
+                    microphone = false,
+                    speaker = true,
+                    playbackDeviceId = PAD_ENDPOINT,
+                    haptics = true,
+                    playbackChannels = PlayoutLane.QUAD_CHANNELS,
+                )
+            routeTable.value = mapOf(vidPidKey(0x054C, 0x0CE6) to padRoutes[SLOT]!!)
+            val hapticKey = speakerRouteKey(HANDLE, CTRL_IDX, PlayoutLane.HAPTICS)
+
+            caps.value = mapOf(SLOT to capsWithLanes(hostGrantsHaptics = false))
+            assertTrue("the speaker lane still plays", plan().voices.containsKey(speakerRouteKey(HANDLE, CTRL_IDX)))
+            assertNull("a lane the host has not granted opens no voice", plan().voices[hapticKey])
+
+            caps.value = mapOf(SLOT to capsWithLanes(hostGrantsHaptics = true))
+            assertEquals(PlayoutLane.HAPTICS, plan().voices[hapticKey]!!.lane)
+        }
+
+    @Test
+    fun `a lane the phone refused to open leaves the plan, and the other lane plays on`() =
+        runTest(scope.testScheduler) {
+            padRoutes[SLOT] =
+                PadAudioRoute(
+                    microphone = false,
+                    speaker = true,
+                    playbackDeviceId = PAD_ENDPOINT,
+                    haptics = true,
+                    playbackChannels = PlayoutLane.QUAD_CHANNELS,
+                )
+            routeTable.value = mapOf(vidPidKey(0x054C, 0x0CE6) to padRoutes[SLOT]!!)
+            caps.value = mapOf(SLOT to capsWithLanes(hostGrantsHaptics = true, hapticsRefused = true))
+            assertNull(plan().voices[speakerRouteKey(HANDLE, CTRL_IDX, PlayoutLane.HAPTICS)])
+            assertEquals(PlayoutLane.SPEAKER, voice()!!.lane)
+        }
 }
 
 private const val SLOT = "virtual"
@@ -220,5 +260,24 @@ private fun capsWithSpeaker(
         host = speaker,
         userEnabled = if (on) speaker else CapabilitySet.EMPTY,
         runtimeDown = if (down) speaker else CapabilitySet.EMPTY,
+    )
+}
+
+// Both lanes on the pad, the type and the switch; the host's word on the haptics lane and the
+// phone's refusal of it are what move.
+private fun capsWithLanes(
+    hostGrantsHaptics: Boolean,
+    hapticsRefused: Boolean = false,
+): SlotCapabilities {
+    val lanes = capabilitySetOf(Feature.SPEAKER, Feature.HAPTIC_AUDIO)
+    val granted = if (hostGrantsHaptics) lanes else capabilitySetOf(Feature.SPEAKER)
+    val refused = if (hapticsRefused) capabilitySetOf(Feature.HAPTIC_AUDIO) else CapabilitySet.EMPTY
+    return SlotCapabilities(
+        controller = lanes,
+        transport = lanes,
+        type = lanes,
+        host = granted,
+        userEnabled = lanes,
+        runtimeDown = refused,
     )
 }

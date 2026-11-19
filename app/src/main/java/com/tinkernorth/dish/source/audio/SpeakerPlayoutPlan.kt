@@ -123,7 +123,10 @@ private val SpeakerSlotInput.isAddressable: Boolean
 
 // The endpoint's own width when the platform reported one, so a 4-channel pad gets its stereo on
 // the speaker pair and not spread across the actuators.
-private fun SpeakerSlotInput.endpointChannels(): Int = if (playbackChannels > 0) playbackChannels else PlayoutLane.STEREO_CHANNELS
+private fun SpeakerSlotInput.endpointChannels(): Int = endpointChannelsOf(playbackChannels)
+
+/** The width an endpoint is opened at: what the platform reported, else the wire's stereo. */
+internal fun endpointChannelsOf(playbackChannels: Int): Int = if (playbackChannels > 0) playbackChannels else PlayoutLane.STEREO_CHANNELS
 
 private fun MutableMap<Long, SpeakerTarget>.putVoice(
     slot: SpeakerSlotInput,

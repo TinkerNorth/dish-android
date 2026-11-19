@@ -20,13 +20,23 @@ private val HARDWARE_CAPS =
         Feature.EXTENDED_BUTTONS to ControllerDescriptor.CAP_EXTENDED_BUTTONS,
     )
 
-// These advertise the client's own source or actuator like the hardware caps above, but they
-// follow their toggle as well: capture and playback are things the user switches off, and an
-// advertised cap the client will not honor would have the host stream audio into nothing and,
-// for the mic, light a mute lamp for a microphone that is not running.
+// Motion advertises the client's own source like the hardware caps above, but follows its toggle
+// as well, and it reads nothing of the host or the runtime: the descriptor must keep advertising
+// motion across a link drop, so the session recovers without a re-handshake.
 private val TOGGLED_CAPS =
     listOf(
         Feature.MOTION to ControllerDescriptor.CAP_MOTION,
+    )
+
+// The audio caps are promises the host acts on alone: it opens a stream on the strength of the
+// claim, and for the haptics lane it then never falls back to rumble. The client opens the
+// player, or the microphone, only where the whole path carries the lane (`live`: the pad's
+// function, the emulated type, the host's grant, the user's switch, and no output the device
+// refused), so the claim reads that same set and a lane the client will not play is never
+// promised. An advertised cap the client would not honor has the host stream audio into
+// nothing and, for the mic, light a mute lamp for a microphone that is not running.
+private val AUDIO_CAPS =
+    listOf(
         Feature.MIC to ControllerDescriptor.CAP_MIC,
         Feature.SPEAKER to ControllerDescriptor.CAP_SPEAKER,
         Feature.HAPTIC_AUDIO to ControllerDescriptor.CAP_HAPTIC_AUDIO,
@@ -85,7 +95,8 @@ private fun typeOffersFeature(
 // The feedback caps (lightbar/triggerEffects/playerLeds) advertise the ACTUATOR:
 // they ride only when the bound input can land them (a Direct-claimed pad with the
 // hardware), independent of the type layer, since a satellite that cannot source
-// them simply never sends the message.
+// them simply never sends the message. The audio caps alone read `live`, the set the
+// card's pills and the playout plan read, for the reason given at AUDIO_CAPS.
 internal fun wireCaps(slot: SlotCapabilities): Int {
     var caps = ControllerDescriptor.CAP_ANALOG_TRIGGERS or ControllerDescriptor.CAP_RUMBLE
     for ((feature, bit) in HARDWARE_CAPS) {
@@ -93,6 +104,9 @@ internal fun wireCaps(slot: SlotCapabilities): Int {
     }
     for ((feature, bit) in TOGGLED_CAPS) {
         if (feature in slot.controller && feature in slot.userEnabled) caps = caps or bit
+    }
+    for ((feature, bit) in AUDIO_CAPS) {
+        if (feature in slot.live) caps = caps or bit
     }
     return caps
 }
