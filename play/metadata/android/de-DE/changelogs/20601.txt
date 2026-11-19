@@ -1,0 +1,5 @@
+Dish 2.6.1: Korrektur für stumme DualSense-Haptik per USB.
+
+• Dish versprach dem PC, die Haptik eines DualSense als Audio abzuspielen, auch wenn das Handy das gar nicht tun würde; die Haptik eines Spiels blieb so stumm, statt zu Vibration zu werden. Das Versprechen folgt jetzt dem, was das Handy wirklich abspielt, sonst macht Satellite Vibration daraus.
+• Ein Ausgang, den das Handy nicht öffnen kann, wird auch nicht mehr versprochen.
+• Satellite braucht dafür kein Update.

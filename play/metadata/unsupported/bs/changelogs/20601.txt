@@ -1,0 +1,5 @@
+Dish 2.6.1: ispravka za nijemu haptiku DualSensea preko USB-a.
+
+• Dish je obećavao računaru da će haptiku DualSensea pustiti kao zvuk i kad je telefon ne bi pustio, pa je haptika igre ostajala nijema umjesto da postane vibracija. Obećanje sada prati ono što će telefon stvarno pustiti; inače Satellite haptiku pretvara u vibraciju.
+• Izlaz koji telefon ne može otvoriti više se ni ne obećava.
+• Satellite za ovo ne treba ažuriranje.

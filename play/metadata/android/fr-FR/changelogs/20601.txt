@@ -1,0 +1,5 @@
+Dish 2.6.1 : correctif pour les haptiques DualSense muettes en USB.
+
+• Dish promettait au PC de jouer les haptiques d'une DualSense en audio même quand le téléphone n'allait pas le faire ; les haptiques d'un jeu restaient donc muettes au lieu de devenir des vibrations. La promesse suit désormais ce que le téléphone jouera vraiment, sinon Satellite les convertit en vibrations.
+• Une sortie que le téléphone ne peut pas ouvrir n'est plus promise non plus.
+• Satellite n'a pas besoin de mise à jour.

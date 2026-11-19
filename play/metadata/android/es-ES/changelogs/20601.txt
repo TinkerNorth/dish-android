@@ -1,0 +1,5 @@
+Dish 2.6.1: corrección de la háptica muda del DualSense por USB.
+
+• Dish prometía al PC reproducir la háptica de un DualSense como audio aunque el teléfono no fuera a hacerlo, así que la háptica de un juego quedaba muda en vez de convertirse en vibración. La promesa ahora sigue lo que el teléfono reproducirá de verdad; si no, Satellite la convierte en vibración.
+• Una salida que el teléfono no puede abrir tampoco se promete ya.
+• Satellite no necesita actualizarse.

@@ -1,0 +1,5 @@
+Dish 2.6.1: a fix for silent DualSense haptics on USB.
+
+• Dish promised the PC it would play a DualSense's haptics as audio even when the phone was not going to, so a game's haptics went silent instead of becoming rumble. The promise now follows what the phone will actually play, and Satellite turns the haptics into rumble otherwise.
+• An output the phone cannot open is no longer promised either.
+• Satellite needs no update for this.
