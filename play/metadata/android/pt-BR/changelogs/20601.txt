@@ -1,0 +1,5 @@
+Dish 2.6.1: correção para a háptica muda do DualSense por USB.
+
+• O Dish prometia ao PC tocar a háptica de um DualSense como áudio mesmo quando o celular não iria tocá-la, então a háptica de um jogo ficava muda em vez de virar vibração. A promessa agora segue o que o celular realmente vai tocar; caso contrário, o Satellite a transforma em vibração.
+• Uma saída que o celular não consegue abrir também não é mais prometida.
+• O Satellite não precisa de atualização.
