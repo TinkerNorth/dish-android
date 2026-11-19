@@ -26,6 +26,7 @@ import com.tinkernorth.dish.source.connection.satelliteConnectionIdFor
 import com.tinkernorth.dish.source.store.MIC_LED_OFF
 import com.tinkernorth.dish.source.store.MIC_LED_ON
 import com.tinkernorth.dish.source.store.MIC_LED_PULSE
+import com.tinkernorth.dish.source.store.PadAudioRefusalStore
 import com.tinkernorth.dish.source.store.SlotToggleStores
 import com.tinkernorth.dish.source.store.SpeakerEnabledStore
 import com.tinkernorth.dish.source.store.VirtualPadFeedbackStore
@@ -179,7 +180,7 @@ class SpeakerPlaybackIntegrationTest {
                 SlotAudioRoutes.NONE,
                 engineScope,
             )
-        return SpeakerEngine(composer, sink, NativeSpeakerFrameSource(), engineScope).also {
+        return SpeakerEngine(composer, sink, NativeSpeakerFrameSource(), PadAudioRefusalStore(), engineScope).also {
             engine = it
             owner.registry.addObserver(it)
             owner.registry.currentState = Lifecycle.State.STARTED
