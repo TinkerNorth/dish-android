@@ -16,6 +16,8 @@ import com.tinkernorth.dish.source.audio.PadAudioRoute
 import com.tinkernorth.dish.source.audio.PadAudioRoutes
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
 import com.tinkernorth.dish.source.store.MouseSurfaceStore
+import com.tinkernorth.dish.source.store.PadAudioRefusalStore
+import com.tinkernorth.dish.source.store.PadAudioStores
 import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SlotToggleStores
 import io.mockk.every
@@ -94,6 +96,7 @@ class CapabilityComposerLightbarTest {
                 every { state } returns MutableStateFlow(emptyMap())
                 every { routeFor(any(), any()) } returns PadAudioRoute.NONE
             }
+        val refusals: PadAudioRefusalStore = mockk { every { state } returns MutableStateFlow(emptyMap()) }
         val mouseSurface: MouseSurfaceStore =
             mockk {
                 every { state } returns MutableStateFlow(emptySet())
@@ -129,7 +132,7 @@ class CapabilityComposerLightbarTest {
             hub,
             native,
             toggles,
-            routes,
+            PadAudioStores(routes, refusals),
             mouseSurface,
             hostFacts,
             scope,

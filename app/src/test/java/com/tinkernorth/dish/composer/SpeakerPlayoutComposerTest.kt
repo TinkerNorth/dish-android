@@ -201,6 +201,23 @@ class SpeakerPlayoutComposerTest {
             caps.value = mapOf(SLOT to capsWithLanes(hostGrantsHaptics = true))
             assertEquals(PlayoutLane.HAPTICS, plan().voices[hapticKey]!!.lane)
         }
+
+    @Test
+    fun `a lane the phone refused to open leaves the plan, and the other lane plays on`() =
+        runTest(scope.testScheduler) {
+            padRoutes[SLOT] =
+                PadAudioRoute(
+                    microphone = false,
+                    speaker = true,
+                    playbackDeviceId = PAD_ENDPOINT,
+                    haptics = true,
+                    playbackChannels = PlayoutLane.QUAD_CHANNELS,
+                )
+            routeTable.value = mapOf(vidPidKey(0x054C, 0x0CE6) to padRoutes[SLOT]!!)
+            caps.value = mapOf(SLOT to capsWithLanes(hostGrantsHaptics = true, hapticsRefused = true))
+            assertNull(plan().voices[speakerRouteKey(HANDLE, CTRL_IDX, PlayoutLane.HAPTICS)])
+            assertEquals(PlayoutLane.SPEAKER, voice()!!.lane)
+        }
 }
 
 private const val SLOT = "virtual"
@@ -246,16 +263,21 @@ private fun capsWithSpeaker(
     )
 }
 
-// Both lanes on the pad, the type and the switch; the host's word on the haptics lane is what moves.
-private fun capsWithLanes(hostGrantsHaptics: Boolean): SlotCapabilities {
+// Both lanes on the pad, the type and the switch; the host's word on the haptics lane and the
+// phone's refusal of it are what move.
+private fun capsWithLanes(
+    hostGrantsHaptics: Boolean,
+    hapticsRefused: Boolean = false,
+): SlotCapabilities {
     val lanes = capabilitySetOf(Feature.SPEAKER, Feature.HAPTIC_AUDIO)
     val granted = if (hostGrantsHaptics) lanes else capabilitySetOf(Feature.SPEAKER)
+    val refused = if (hapticsRefused) capabilitySetOf(Feature.HAPTIC_AUDIO) else CapabilitySet.EMPTY
     return SlotCapabilities(
         controller = lanes,
         transport = lanes,
         type = lanes,
         host = granted,
         userEnabled = lanes,
-        runtimeDown = CapabilitySet.EMPTY,
+        runtimeDown = refused,
     )
 }

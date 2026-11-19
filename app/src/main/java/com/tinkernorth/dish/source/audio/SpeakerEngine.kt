@@ -7,6 +7,8 @@ import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.architecture.abstracts.AbstractController
 import com.tinkernorth.dish.composer.SpeakerPlayoutComposer
 import com.tinkernorth.dish.hotpath.audio.SpeakerAudioBridge
+import com.tinkernorth.dish.source.store.PadAudioRefusal
+import com.tinkernorth.dish.source.store.PadAudioRefusalStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -76,6 +78,7 @@ class SpeakerEngine
         private val plans: SpeakerPlayoutComposer,
         private val sink: SpeakerPlayoutSink,
         private val frames: SpeakerFrameSource,
+        private val refusals: PadAudioRefusalStore,
         scope: CoroutineScope,
     ) : AbstractController<AudioPlanEmission<SpeakerPlayoutPlan>>(scope),
         SpeakerAudioBridge.Sink {
@@ -83,8 +86,9 @@ class SpeakerEngine
         constructor(
             plans: SpeakerPlayoutComposer,
             sink: AudioTrackSpeakerSink,
+            refusals: PadAudioRefusalStore,
             scope: CoroutineScope,
-        ) : this(plans, sink, NativeSpeakerFrameSource(), scope)
+        ) : this(plans, sink, NativeSpeakerFrameSource(), refusals, scope)
 
         private val _state = MutableStateFlow(SpeakerPlayoutState.Idle)
         val state: StateFlow<SpeakerPlayoutState> = _state.asStateFlow()
@@ -130,6 +134,7 @@ class SpeakerEngine
                 generation++
                 stopped = false
             }
+            refusals.clearAll()
         }
 
         // Public because it IS the engine: the eligibility decision arrives here and nothing else
@@ -242,8 +247,12 @@ class SpeakerEngine
                 val session = sink.open(FRAME_SAMPLES, target.playbackDeviceId, target.deviceChannels, target.lane)
                 if (session == null) {
                     refused++
+                    refusals.record(
+                        PadAudioRefusal(target.slotId, target.lane, target.playbackDeviceId, target.deviceChannels),
+                    )
                     continue
                 }
+                refusals.clear(target.slotId, target.lane)
                 created += session
                 open[key] = Voice(target, session)
             }

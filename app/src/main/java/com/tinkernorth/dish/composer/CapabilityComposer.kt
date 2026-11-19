@@ -16,18 +16,23 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.TOUCHPAD_MODE_OFF
 import com.tinkernorth.dish.repository.TrackpadPick
-import com.tinkernorth.dish.source.audio.PadAudioRoutes
+import com.tinkernorth.dish.source.audio.PadAudioRoute
+import com.tinkernorth.dish.source.audio.PlayoutLane
+import com.tinkernorth.dish.source.audio.endpointChannelsOf
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightPad
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
 import com.tinkernorth.dish.source.store.MicEnabledStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.MouseSurfaceStore
+import com.tinkernorth.dish.source.store.PadAudioRefusal
+import com.tinkernorth.dish.source.store.PadAudioStores
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
 import com.tinkernorth.dish.source.store.SlotToggleStores
 import com.tinkernorth.dish.source.store.SpeakerEnabledStore
+import com.tinkernorth.dish.source.store.refusedAudioFeatures
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -63,6 +68,8 @@ private data class SlotToggles(
 private data class HostInputs(
     val features: Map<String, HostFeatureSet>,
     val motionBackend: Map<Pair<String, String>, SatelliteMotionBackendStatus>,
+    // The outputs the phone refused, per slot and lane: runtime state like the motion backend's.
+    val audioRefusals: Map<Pair<String, PlayoutLane>, PadAudioRefusal>,
 )
 
 // Where each slot is bound, what those destinations are, and every held Moonlight pad as it was
@@ -139,7 +146,7 @@ class CapabilityComposer
         private val hub: ConnectionCoordinator,
         private val native: PhysicalInputNative,
         private val toggles: SlotToggleStores,
-        private val padAudioRoutes: PadAudioRoutes,
+        private val padAudio: PadAudioStores,
         private val mouseSurface: MouseSurfaceStore,
         private val hostFacts: SatelliteHostFacts,
         scope: CoroutineScope,
@@ -152,13 +159,13 @@ class CapabilityComposer
                 toggles.rumble.state,
                 toggles.mic.state,
                 toggles.speaker.state,
-                padAudioRoutes.state,
+                padAudio.routes.state,
             ) { motion, rumble, mic, speaker, _ ->
                 SlotToggles(motion, rumble, mic, speaker)
             }
 
         private val hostInputs: Flow<HostInputs> =
-            combine(hostFacts.features.state, hostFacts.motionBackend.state, ::HostInputs)
+            combine(hostFacts.features.state, hostFacts.motionBackend.state, padAudio.refusals.state, ::HostInputs)
 
         private val bindingInputs: Flow<BindingInputs> =
             combine(hub.bindings, hub.connections, announcedMoonlightPads(hub.moonlightSessions), ::BindingInputs)
@@ -185,6 +192,7 @@ class CapabilityComposer
                 slotFor(
                     slotId = VIRTUAL_SLOT_ID,
                     controller = virtualControllerLayer(),
+                    route = PadAudioRoute.NONE,
                     bound = bound,
                     summariesById = summariesById,
                     userToggles = userToggles,
@@ -197,6 +205,7 @@ class CapabilityComposer
                     slotFor(
                         slotId = slotId,
                         controller = deviceControllerLayer(device),
+                        route = audioRouteFor(device),
                         bound = bound,
                         summariesById = summariesById,
                         userToggles = userToggles,
@@ -348,13 +357,20 @@ class CapabilityComposer
                     ),
                 host = candidateHostLayer(candidateHostKind, candidateHostId),
                 userEnabled = ALL,
-                runtimeDown = candidateRuntimeDownLayer(candidateHostKind, candidateHostId),
+                runtimeDown =
+                    withRefusedLanes(
+                        candidateRuntimeDownLayer(candidateHostKind, candidateHostId),
+                        padAudio.refusals.state.value,
+                        slotId,
+                        candidateAudioRoute(slotId),
+                    ),
             )
         }
 
         private fun slotFor(
             slotId: String,
             controller: CapabilitySet,
+            route: PadAudioRoute,
             bound: BindingInputs,
             summariesById: Map<String, ConnectionSummary>,
             userToggles: SlotToggles,
@@ -372,8 +388,40 @@ class CapabilityComposer
                 type = typeLayer(slotId, summary, controller, bound.announcedPads),
                 host = hostLayer(connId, summary, hosts.features),
                 userEnabled = userEnabledCapabilities(motionOn, rumbleOn, micOn, speakerOn),
-                runtimeDown = runtimeDownLayer(connId, slotId, hosts.motionBackend),
+                runtimeDown =
+                    withRefusedLanes(
+                        runtimeDownLayer(connId, slotId, hosts.motionBackend),
+                        hosts.audioRefusals,
+                        slotId,
+                        route,
+                    ),
             )
+        }
+
+        // The lanes the phone refused at the slot's current endpoint join the runtime-down layer,
+        // so `live`, and with it the descriptor and the playout plan, lose them until the endpoint
+        // changes or the engine starts afresh.
+        private fun withRefusedLanes(
+            base: CapabilitySet,
+            refusals: Map<Pair<String, PlayoutLane>, PadAudioRefusal>,
+            slotId: String,
+            route: PadAudioRoute,
+        ): CapabilitySet {
+            val width = endpointChannelsOf(route.playbackChannels)
+            val refused = refusedAudioFeatures(refusals, slotId, route.playbackDeviceId, width)
+            return CapabilitySet(base.features + refused.features)
+        }
+
+        // The pad's own audio function, which the OS keeps on either HID path; a Bluetooth pad has
+        // none and resolves to nothing.
+        private fun audioRouteFor(device: PhysicalGamepadRegistry.Device): PadAudioRoute =
+            if (device.transport == Transport.Usb) padAudio.routes.routeFor(device.vendorId, device.productId) else PadAudioRoute.NONE
+
+        // The candidate report's route: the slot's pad as it is attached now. The on-screen pad
+        // and a slot no pad backs have none.
+        private fun candidateAudioRoute(slotId: String): PadAudioRoute {
+            val device = slotId.toIntOrNull()?.let { registry.devices.value[it] } ?: return PadAudioRoute.NONE
+            return audioRouteFor(device)
         }
 
         private fun virtualControllerLayer(): CapabilitySet {
@@ -415,12 +463,10 @@ class CapabilityComposer
             // source here, and the OS route table the right one: a pad whose audio function
             // the OS never enumerated can't be captured from or played to, whatever its model
             // says it has. A Bluetooth pad has no such function and resolves to nothing.
-            if (device.transport == Transport.Usb) {
-                val audio = padAudioRoutes.routeFor(vid, pid)
-                if (audio.microphone) out += Feature.MIC
-                if (audio.speaker) out += Feature.SPEAKER
-                if (audio.haptics) out += Feature.HAPTIC_AUDIO
-            }
+            val audio = audioRouteFor(device)
+            if (audio.microphone) out += Feature.MIC
+            if (audio.speaker) out += Feature.SPEAKER
+            if (audio.haptics) out += Feature.HAPTIC_AUDIO
             return CapabilitySet(out)
         }
 

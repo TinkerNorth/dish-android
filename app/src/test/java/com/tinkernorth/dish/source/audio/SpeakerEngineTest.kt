@@ -7,6 +7,8 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import com.tinkernorth.dish.composer.SpeakerPlayoutComposer
 import com.tinkernorth.dish.hotpath.audio.SpeakerAudioBridge
+import com.tinkernorth.dish.source.store.PadAudioRefusal
+import com.tinkernorth.dish.source.store.PadAudioRefusalStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import io.mockk.every
 import io.mockk.mockk
@@ -110,7 +112,8 @@ class SpeakerEngineTest {
     private val scope = TestScope(StandardTestDispatcher())
     private val plans = MutableStateFlow(SpeakerPlayoutPlan.IDLE)
     private val composer = mockk<SpeakerPlayoutComposer> { every { state } returns plans }
-    private val engine = SpeakerEngine(composer, sink, frames, scope)
+    private val refusals = PadAudioRefusalStore()
+    private val engine = SpeakerEngine(composer, sink, frames, refusals, scope)
 
     private fun target(
         slotId: String = VIRTUAL_SLOT_ID,
@@ -212,6 +215,35 @@ class SpeakerEngineTest {
         deliver()
         assertEquals(0, sink.written.size)
         assertEquals("no sink means no reason to start the native dispatch thread", 0, frames.installs.get())
+    }
+
+    @Test
+    fun `a refused output is recorded for the slot's lane at its endpoint, and a later open clears it`() {
+        val hapticVoice = target(playbackDeviceId = PAD_ENDPOINT, lane = PlayoutLane.HAPTICS, channels = PlayoutLane.QUAD_CHANNELS)
+        val key = VIRTUAL_SLOT_ID to PlayoutLane.HAPTICS
+        sink.refuse.set(true)
+        engine.apply(plan(hapticVoice))
+        assertEquals(
+            PadAudioRefusal(VIRTUAL_SLOT_ID, PlayoutLane.HAPTICS, PAD_ENDPOINT, PlayoutLane.QUAD_CHANNELS),
+            refusals.state.value[key],
+        )
+
+        sink.refuse.set(false)
+        engine.apply(plan(hapticVoice))
+        assertEquals("the voice opened this time", 1, sink.opens.size)
+        assertEquals(null, refusals.state.value[key])
+    }
+
+    @Test
+    fun `a fresh start forgets every refusal, so the next plan is a new attempt`() {
+        sink.refuse.set(true)
+        engine.apply(plan(target()))
+        assertEquals(1, refusals.state.value.size)
+
+        val owner = TestOwner()
+        owner.registry.addObserver(engine)
+        owner.registry.currentState = Lifecycle.State.STARTED
+        assertTrue(refusals.state.value.isEmpty())
     }
 
     @Test

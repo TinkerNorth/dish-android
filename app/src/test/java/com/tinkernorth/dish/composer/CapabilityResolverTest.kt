@@ -299,6 +299,8 @@ class CapabilityResolverTest {
         controllerSpeaker: Boolean,
         userMic: Boolean,
         userSpeaker: Boolean,
+        hostMic: Boolean = true,
+        hostSpeaker: Boolean = true,
     ): SlotCapabilities {
         fun set(
             mic: Boolean,
@@ -309,13 +311,13 @@ class CapabilityResolverTest {
                 if (speaker) add(Feature.SPEAKER)
             },
         )
-        // Type and host are deliberately empty: like the other wire projections this one
-        // describes what the CLIENT will do, not what the far end can accept.
+        // The audio caps are promises the host acts on alone, so they ride the whole path: the
+        // type is permissive here and the host grants both unless a test moves it.
         return SlotCapabilities(
             controller = set(controllerMic, controllerSpeaker),
             transport = CapabilitySet(Feature.entries.toSet()),
-            type = CapabilitySet.EMPTY,
-            host = CapabilitySet.EMPTY,
+            type = CapabilitySet(Feature.entries.toSet()),
+            host = set(hostMic, hostSpeaker),
             userEnabled = set(userMic, userSpeaker),
             runtimeDown = CapabilitySet.EMPTY,
         )
@@ -363,6 +365,36 @@ class CapabilityResolverTest {
             )
         assertEquals(ControllerDescriptor.CAP_MIC, micOnly and ControllerDescriptor.CAP_MIC)
         assertEquals(0, micOnly and ControllerDescriptor.CAP_SPEAKER)
+    }
+
+    @Test
+    fun `wireCaps claims an audio cap only where the host grants the direction`() {
+        // The host opens a stream on the strength of the claim alone, and the client opens the
+        // player only where the host grants the lane: a cap the host does not grant is a promise
+        // with nothing behind it, so it stays off the wire.
+        val noMicGrant =
+            wireCaps(
+                audioSlot(controllerMic = true, controllerSpeaker = true, userMic = true, userSpeaker = true, hostMic = false),
+            )
+        assertEquals(0, noMicGrant and ControllerDescriptor.CAP_MIC)
+        assertEquals(ControllerDescriptor.CAP_SPEAKER, noMicGrant and ControllerDescriptor.CAP_SPEAKER)
+
+        val noSpeakerGrant =
+            wireCaps(
+                audioSlot(controllerMic = true, controllerSpeaker = true, userMic = true, userSpeaker = true, hostSpeaker = false),
+            )
+        assertEquals(ControllerDescriptor.CAP_MIC, noSpeakerGrant and ControllerDescriptor.CAP_MIC)
+        assertEquals(0, noSpeakerGrant and ControllerDescriptor.CAP_SPEAKER)
+    }
+
+    @Test
+    fun `wireCaps drops an audio cap the runtime marked down, and the other direction stays`() {
+        val speakerRefused =
+            audioSlot(controllerMic = true, controllerSpeaker = true, userMic = true, userSpeaker = true)
+                .copy(runtimeDown = capabilitySetOf(Feature.SPEAKER))
+        val caps = wireCaps(speakerRefused)
+        assertEquals(ControllerDescriptor.CAP_MIC, caps and ControllerDescriptor.CAP_MIC)
+        assertEquals(0, caps and ControllerDescriptor.CAP_SPEAKER)
     }
 
     @Test
@@ -457,17 +489,29 @@ class CapabilityResolverTest {
     private fun hapticSlot(
         controllerHaptics: Boolean,
         userSpeaker: Boolean,
+        hostHaptics: Boolean = true,
+        deviceRefused: Boolean = false,
     ): SlotCapabilities {
         val controller = if (controllerHaptics) capabilitySetOf(Feature.HAPTIC_AUDIO) else CapabilitySet.EMPTY
         val userEnabled = if (userSpeaker) capabilitySetOf(Feature.SPEAKER, Feature.HAPTIC_AUDIO) else CapabilitySet.EMPTY
+        val host = if (hostHaptics) capabilitySetOf(Feature.SPEAKER, Feature.HAPTIC_AUDIO) else capabilitySetOf(Feature.SPEAKER)
+        val runtimeDown = if (deviceRefused) capabilitySetOf(Feature.HAPTIC_AUDIO) else CapabilitySet.EMPTY
         return SlotCapabilities(
             controller = controller,
             transport = CapabilitySet(Feature.entries.toSet()),
-            type = CapabilitySet.EMPTY,
-            host = CapabilitySet.EMPTY,
+            type = CapabilitySet(Feature.entries.toSet()),
+            host = host,
             userEnabled = userEnabled,
-            runtimeDown = CapabilitySet.EMPTY,
+            runtimeDown = runtimeDown,
         )
+    }
+
+    @Test
+    fun `wireCaps claims the haptics lane only where the host grants it and the device opened it`() {
+        val lane = ControllerDescriptor.CAP_HAPTIC_AUDIO
+        assertEquals(lane, wireCaps(hapticSlot(controllerHaptics = true, userSpeaker = true)) and lane)
+        assertEquals(0, wireCaps(hapticSlot(controllerHaptics = true, userSpeaker = true, hostHaptics = false)) and lane)
+        assertEquals(0, wireCaps(hapticSlot(controllerHaptics = true, userSpeaker = true, deviceRefused = true)) and lane)
     }
 
     @Test
@@ -508,8 +552,9 @@ class CapabilityResolverTest {
             SlotCapabilities(
                 controller = capabilitySetOf(Feature.MIC, Feature.SPEAKER, Feature.HAPTIC_AUDIO),
                 transport = CapabilitySet(Feature.entries.toSet()),
-                type = CapabilitySet.EMPTY,
-                host = CapabilitySet.EMPTY,
+                // The audio caps read the whole path: a DualSense type and a host granting all three.
+                type = CapabilitySet(Feature.entries.toSet()),
+                host = capabilitySetOf(Feature.MIC, Feature.SPEAKER, Feature.HAPTIC_AUDIO),
                 userEnabled = capabilitySetOf(Feature.MIC, Feature.SPEAKER, Feature.HAPTIC_AUDIO),
                 runtimeDown = CapabilitySet.EMPTY,
             )

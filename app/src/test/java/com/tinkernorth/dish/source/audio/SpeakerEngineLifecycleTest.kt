@@ -6,6 +6,7 @@ package com.tinkernorth.dish.source.audio
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.composer.SpeakerPlayoutComposer
 import com.tinkernorth.dish.hotpath.audio.SpeakerAudioBridge
+import com.tinkernorth.dish.source.store.PadAudioRefusalStore
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
@@ -83,7 +84,7 @@ class SpeakerEngineLifecycleTest {
         val outputs = Outputs()
         val frames = Frames()
         private val composer = mockk<SpeakerPlayoutComposer> { every { state } returns plans }
-        val engine = SpeakerEngine(composer, outputs, frames, scope)
+        val engine = SpeakerEngine(composer, outputs, frames, PadAudioRefusalStore(), scope)
 
         fun collector(): Job = scope.coroutineContext[Job]!!.children.single()
 
