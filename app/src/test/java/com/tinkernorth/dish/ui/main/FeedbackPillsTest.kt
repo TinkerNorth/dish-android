@@ -137,6 +137,24 @@ class FeedbackPillsTest {
     }
 
     @Test
+    fun `a haptics lane the host has not granted shows no pill, while the microphone it granted does`() {
+        // The pad's route carries all three and every switch is on; the host grants the mic alone.
+        val lanes = capabilitySetOf(Feature.MIC, Feature.SPEAKER, Feature.HAPTIC_AUDIO)
+        val facts =
+            audioFuncFacts(
+                SlotCapabilities(
+                    controller = lanes,
+                    transport = lanes,
+                    type = lanes,
+                    host = capabilitySetOf(Feature.MIC),
+                    userEnabled = lanes,
+                    runtimeDown = CapabilitySet.EMPTY,
+                ),
+            )
+        assertEquals(listOf(AudioPillFact.MIC), facts)
+    }
+
+    @Test
     fun `a plain pad lists no audio pills`() {
         assertTrue(audioFuncFacts(caps(Feature.GAMEPAD, Feature.RUMBLE)).isEmpty())
         assertTrue(audioFuncFacts(SlotCapabilities.NONE).isEmpty())

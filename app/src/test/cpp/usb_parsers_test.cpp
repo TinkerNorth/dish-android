@@ -305,6 +305,35 @@ TEST(Rumble, DualSenseOnRevisedFirmwareTakesTheSecondVibrationMode) {
     EXPECT_EQ(0xAA, out[4]);
 }
 
+TEST(Rumble, DualSenseStopKeepsTheClassicSelection) {
+    usbparsers::FeedbackState st;
+    uint8_t out[64];
+    ASSERT_EQ(63u, usbparsers::buildMergedRumbleReport(Parser::DUALSENSE, st, 0, out, sizeof(out)));
+    EXPECT_EQ(0x02 | 0x01, out[1]) << "a stop still selects classic haptics on the original mode";
+    EXPECT_EQ(0x00, out[3]);
+    EXPECT_EQ(0x00, out[4]);
+
+    st.ds5VibrationV2 = true;
+    ASSERT_EQ(63u, usbparsers::buildMergedRumbleReport(Parser::DUALSENSE, st, 0, out, sizeof(out)));
+    EXPECT_EQ(0x02, out[1]) << "and on the revised mode";
+    EXPECT_EQ(0x04, out[39]);
+    EXPECT_EQ(0x00, out[3]);
+    EXPECT_EQ(0x00, out[4]);
+}
+
+TEST(Rumble, DualSenseRumbleWriteRepaintsNeitherTheBarNorThePlayerLeds) {
+    // The lamp rides every DualSense report by design (EveryOtherDualSenseReportReassertsTheLamp);
+    // the light bar and the player LEDs do not, so a rumble never repaints them.
+    usbparsers::FeedbackState st;
+    st.ds5LightbarSetupSent = true;
+    st.strong = 0xFFFF;
+    st.weak = 0xFFFF;
+    uint8_t out[64];
+    ASSERT_EQ(63u, usbparsers::buildMergedRumbleReport(Parser::DUALSENSE, st, 0, out, sizeof(out)));
+    EXPECT_EQ(0x00, out[2] & (0x04 | 0x10)) << "no light bar or player-LED claim in valid_flag1";
+    EXPECT_EQ(0x00, out[39] & 0x02) << "no LIGHTBAR_SETUP in valid_flag2";
+}
+
 constexpr uint16_t kDualSensePid = 0x0CE6;
 constexpr uint16_t kDualSenseEdgePid = 0x0DF2;
 
@@ -476,6 +505,33 @@ TEST(Feedback, TriggerEffectsAreDualSenseOnlyAndByteExact) {
                                                         sizeof(out)));
     EXPECT_EQ(0u, usbparsers::buildTriggerEffectsReport(Parser::XBOX_ONE_GIP, st, left, right, out,
                                                         sizeof(out)));
+}
+
+// A running rumble is a level the pad holds until the next motor write, so a write for another
+// surface must not carry a motor claim over zeroed motor bytes.
+static void expectNoMotorClaim(const uint8_t* out, const char* what) {
+    EXPECT_EQ(0x00, out[1] & (0x01 | 0x02)) << what << ": motor claim in valid_flag0";
+    EXPECT_EQ(0x00, out[39] & 0x04) << what << ": COMPATIBLE_VIBRATION2 in valid_flag2";
+    EXPECT_EQ(0x00, out[3]) << what << ": weak motor byte";
+    EXPECT_EQ(0x00, out[4]) << what << ": strong motor byte";
+}
+
+TEST(Feedback, DualSenseLightLedTriggerAndLampWritesLeaveTheMotorsAlone) {
+    usbparsers::FeedbackState st;
+    const uint8_t block[11] = {};
+    uint8_t out[64];
+    ASSERT_EQ(63u,
+              usbparsers::buildLightbarReport(Parser::DUALSENSE, st, 1, 2, 3, out, sizeof(out)));
+    expectNoMotorClaim(out, "light bar");
+    ASSERT_EQ(63u,
+              usbparsers::buildPlayerLedsReport(Parser::DUALSENSE, st, 0x01, 0, out, sizeof(out)));
+    expectNoMotorClaim(out, "player LEDs");
+    ASSERT_EQ(63u, usbparsers::buildTriggerEffectsReport(Parser::DUALSENSE, st, block, block, out,
+                                                         sizeof(out)));
+    expectNoMotorClaim(out, "trigger effects");
+    ASSERT_EQ(63u, usbparsers::buildMicMuteLedReport(
+                       Parser::DUALSENSE, st, usbparsers::MIC_MUTE_LED_ON, out, sizeof(out)));
+    expectNoMotorClaim(out, "mic lamp");
 }
 
 // ---- DualSense mic-mute lamp (MSG_MIC_LED) ----

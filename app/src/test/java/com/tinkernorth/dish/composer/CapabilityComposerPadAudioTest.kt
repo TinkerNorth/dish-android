@@ -6,9 +6,12 @@ import com.tinkernorth.dish.architecture.testing.composerTest
 import com.tinkernorth.dish.architecture.testing.probe
 import com.tinkernorth.dish.core.input.vidPidKey
 import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.model.HostFeatureSet
+import com.tinkernorth.dish.core.net.ControllerDescriptor
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.audio.PadAudioRoute
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -210,5 +213,57 @@ class CapabilityComposerPadAudioTest {
             val controller = composer.capabilityFor("9").controller
             assertTrue(Feature.SPEAKER in controller)
             assertFalse(Feature.HAPTIC_AUDIO in controller)
+        }
+
+    @Test
+    fun `a host granting the microphone alone shows that pill while the wire still claims speaker and haptics`() =
+        composerTest {
+            // A USB Direct DualSense whose route names all three endpoints at four channels, every
+            // switch on, bound to a satellite that grants the microphone and nothing else.
+            val routes =
+                MutableStateFlow(
+                    mapOf(
+                        vidPidKey(0x054C, 0x0CE6) to
+                            PadAudioRoute(microphone = true, speaker = true, haptics = true, playbackChannels = 4),
+                    ),
+                )
+            val devices =
+                MutableStateFlow(mapOf(9 to device(9, vendorId = 0x054C, productId = 0x0CE6, isUsbSynthetic = true)))
+            val micGrantedAlone =
+                HostFeatureSet(
+                    hasCatalog = true,
+                    mouseControl = true,
+                    keyboardControl = false,
+                    rumbleReturn = true,
+                    controllerMic = true,
+                    controllerSpeaker = false,
+                    controllerHapticAudio = false,
+                    protocolVersion = 4,
+                )
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(mapOf("9" to "sat-A")),
+                    connections = MutableStateFlow(listOf(summary("sat-A"))),
+                    scope = backgroundScope,
+                    stores =
+                        StoreStates(
+                            micEnabled = MutableStateFlow(mapOf("9" to true)),
+                            padAudioRoutes = routes,
+                            hostFeaturesState = MutableStateFlow(mapOf("sat-A" to micGrantedAlone)),
+                        ),
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            // What the card's pills read.
+            val caps = composer.capabilityFor("9")
+            assertTrue(Feature.MIC in caps.enabled)
+            assertFalse(Feature.SPEAKER in caps.enabled)
+            assertFalse(Feature.HAPTIC_AUDIO in caps.enabled)
+            // What the descriptor says on the wire for the same slot.
+            val lanes = ControllerDescriptor.CAP_SPEAKER or ControllerDescriptor.CAP_HAPTIC_AUDIO
+            assertEquals(lanes, wireCaps(caps) and lanes)
         }
 }
