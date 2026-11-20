@@ -339,7 +339,12 @@ The file holds:
   facts: the USB or Bluetooth ids, the product and maker names the controller
   reports, its USB interfaces and endpoints, its firmware version, and how the
   phone reads it (Direct, standard, Bluetooth, or on screen). For a Bluetooth
-  controller, its profile and link type, never its Bluetooth address. How many
+  controller, its profile and link type, never its Bluetooth address. For a
+  phone-paired controller that supports both Bluetooth radios, the app reads
+  the service list your phone cached when it paired (a local read that
+  needs the Bluetooth permission the app already asks for, and no scan) to
+  tell which radio it uses; only the answer, "classic" or "le", enters the
+  file, never the list. How many
   input reports arrived and the last one (the buttons, sticks and triggers it
   held at that moment, nothing earlier), and for each output, such as rumble
   or the light bar, how many arrived, the last value and where it went, plus
@@ -353,7 +358,7 @@ The file holds:
 - **The Satellite connection snapshot.** While the file is prepared, the app
   asks each Satellite you are connected to, over the same encrypted and
   paired connection your controllers use, for its own view of this
-  connection, and waits at most two seconds. A Satellite 2.3.0 or later
+  connection, and waits at most two seconds in all, connecting and reading together. A Satellite 2.3.0 or later
   answers with its version and platform, its controller backends and their
   driver versions, the virtual controllers it plugged for this connection
   with their input and output counts, the audio it grants, its message

@@ -72,6 +72,13 @@ file.
   *Capture*, which keeps its USB descriptors, its HID report descriptor and
   twenty input reports at rest; it rides your next report when you pick that
   controller, so support can add a controller nobody on the team owns.
+- **The file names the radio and the driver.** A controller paired over both
+  Bluetooth radios now says which one it is on (read from the service list
+  your phone cached when it paired, nothing scanned), and each Satellite
+  controller slot names the driver backing it, as the computer reported it.
+- **A report waits two seconds for a host, not four.** Connecting to a
+  Satellite for its snapshot and reading its answer now share one two-second
+  limit.
 
 ### Changed
 

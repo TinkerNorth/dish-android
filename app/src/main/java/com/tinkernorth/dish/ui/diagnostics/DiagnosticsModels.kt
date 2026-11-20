@@ -300,6 +300,8 @@ internal data class PadWorld(
     val reportCounts: Map<Int, Long> = emptyMap(),
     val frameworkTiming: Map<Int, FrameworkTimingSummary> = emptyMap(),
     val btLinkTypes: Map<Int, BluetoothLinkType> = emptyMap(),
+    // A dual-mode pad's cached service UUIDs, which decide the radio it is on.
+    val btServiceUuids: Map<Int, List<String>> = emptyMap(),
     val stickHistory: Map<String, StickTestRecord> = emptyMap(),
     val audio: Map<Int, PadAudioFacts> = emptyMap(),
     val lastWrite: Map<Int, WriteVerdict> = emptyMap(),

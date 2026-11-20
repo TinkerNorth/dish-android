@@ -70,4 +70,22 @@ class ControllerStringsTest {
         assertEquals("bs", stringsLocaleFor("bs", ""))
         assertEquals("en", stringsLocaleFor("ja", "JP"))
     }
+
+    @Test
+    fun `every device locale the app is read in lands on its file`() {
+        assertEquals("bs", stringsLocaleFor("bs", "BA"))
+        assertEquals("pt-BR", stringsLocaleFor("pt", "BR"))
+        assertEquals("fr", stringsLocaleFor("fr", "CA"))
+        assertEquals("es", stringsLocaleFor("es", "419"))
+        assertEquals("en", stringsLocaleFor("en", "GB"))
+    }
+
+    @Test
+    fun `the first language in the device list that the app ships is the one the ui shows`() {
+        assertEquals("de", stringsLocaleForList(listOf("ja" to "JP", "de" to "AT")))
+        assertEquals("en", stringsLocaleForList(listOf("en" to "GB", "de" to "DE")))
+        assertEquals("pt-BR", stringsLocaleForList(listOf("pt" to "PT")))
+        assertEquals("en", stringsLocaleForList(listOf("ja" to "JP", "ko" to "KR")))
+        assertEquals("en", stringsLocaleForList(emptyList()))
+    }
 }

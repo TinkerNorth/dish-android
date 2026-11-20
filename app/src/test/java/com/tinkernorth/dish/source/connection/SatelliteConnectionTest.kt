@@ -57,10 +57,12 @@ class SatelliteConnectionTest {
         appliedType: Int = 0,
         sinkSupported: Boolean = false,
         backendOk: Boolean = true,
+        backend: String? = null,
     ) = ControllerApplyDto(
         ctrlIdx = ctrlIdx,
         result = ControllerApplyDto.APPLY_OK,
         appliedType = appliedType,
+        backend = backend,
         motion = SessionMotionDto(sinkSupportedForType = sinkSupported, backendOk = backendOk),
     )
 
@@ -468,6 +470,17 @@ class SatelliteConnectionTest {
         conn.applyResults(listOf(okApply(0, appliedType = 2)), conn.desiredDescriptors())
 
         assertEquals(2, conn.slots.value["slot-1"]?.lastAppliedType)
+    }
+
+    @Test
+    fun `an apply acknowledgement records the backend the satellite named`() {
+        conn.attachSlot("slot-1", controllerType = 1)
+
+        conn.applyResults(listOf(okApply(0, appliedType = 2, backend = "hidmaestro")), conn.desiredDescriptors())
+        assertEquals("hidmaestro", conn.slots.value["slot-1"]?.lastBackend)
+
+        conn.applyResults(listOf(failedApply(0, result = "noSlots")), conn.desiredDescriptors())
+        assertEquals(null, conn.slots.value["slot-1"]?.lastBackend)
     }
 
     @Test

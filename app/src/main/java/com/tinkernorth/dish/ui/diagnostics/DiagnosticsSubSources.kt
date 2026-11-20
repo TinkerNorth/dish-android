@@ -86,6 +86,7 @@ class PadSources
         private val json: Json,
     ) {
         private val linkTypes = ConcurrentHashMap<Int, BluetoothLinkType>()
+        private val serviceUuids = ConcurrentHashMap<Int, List<String>>()
 
         private data class DirectPadFacts(
             val latency: Map<Int, DeviceLatency>,
@@ -99,6 +100,7 @@ class PadSources
             val timing: Map<Int, FrameworkTimingSummary>,
             val eventCounts: Map<Int, Long>,
             val linkTypes: Map<Int, BluetoothLinkType>,
+            val serviceUuids: Map<Int, List<String>>,
         )
 
         internal fun flow(ticks: Flow<Unit>): Flow<PadWorld> =
@@ -118,6 +120,7 @@ class PadSources
             val direct = directPadFacts(devices.filterValues { it.isUsbSynthetic }.keys)
             val framework = frameworkPadFacts(devices.filterValues { !it.isUsbSynthetic })
             linkTypes.keys.retainAll(devices.keys)
+            serviceUuids.keys.retainAll(devices.keys)
             return PadWorld(
                 deviceLatency = direct.latency,
                 deviceInfo = direct.info,
@@ -125,6 +128,7 @@ class PadSources
                 reportCounts = direct.reportCounts + framework.eventCounts,
                 frameworkTiming = framework.timing,
                 btLinkTypes = framework.linkTypes,
+                btServiceUuids = framework.serviceUuids,
                 stickHistory = history,
                 audio = audio,
                 lastWrite = direct.lastWrite,
@@ -143,15 +147,21 @@ class PadSources
 
         // A framework pad is read from the event timing store, and a Bluetooth one also carries
         // its link type, looked up once per device and forgotten with it.
-        private fun frameworkPadFacts(devices: Map<Int, PhysicalGamepadRegistry.Device>): FrameworkPadFacts =
-            FrameworkPadFacts(
+        private fun frameworkPadFacts(devices: Map<Int, PhysicalGamepadRegistry.Device>): FrameworkPadFacts {
+            val bluetooth = devices.filterValues { it.transport == Transport.Bluetooth }
+            return FrameworkPadFacts(
                 timing = devices.keys.mapNotNull { id -> timing.summary(id)?.let { id to it } }.toMap(),
                 eventCounts = devices.keys.associateWith { native.getDeviceInputEventCount(it) },
-                linkTypes =
-                    devices
-                        .filterValues { it.transport == Transport.Bluetooth }
-                        .mapValues { (id, device) -> linkTypes.computeIfAbsent(id) { bluetoothLink.linkType(device.name) } },
+                linkTypes = bluetooth.mapValues { (id, device) -> linkTypes.computeIfAbsent(id) { bluetoothLink.linkType(device.name) } },
+                serviceUuids = dualUuids(bluetooth),
             )
+        }
+
+        // Only a dual-mode bond needs its UUIDs read: the other link types already name the radio.
+        private fun dualUuids(bluetooth: Map<Int, PhysicalGamepadRegistry.Device>): Map<Int, List<String>> =
+            bluetooth
+                .filter { (id, _) -> linkTypes[id] == BluetoothLinkType.DUAL }
+                .mapValues { (id, device) -> serviceUuids.computeIfAbsent(id) { bluetoothLink.serviceUuids(device.name) } }
     }
 
 class LinkSources

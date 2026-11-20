@@ -37,7 +37,7 @@ private fun satelliteSessionOf(
                     record = recordOf(slotId, controllers),
                     requestedType = typeName(binding.controllerType, typeSlugs),
                     appliedType = binding.lastAppliedType?.let { typeName(it, typeSlugs) },
-                    backend = null,
+                    backend = binding.lastBackend,
                     result = binding.lastApplyResult,
                     touchpadMode = binding.lastAdvertisedTouchpadMode,
                 )

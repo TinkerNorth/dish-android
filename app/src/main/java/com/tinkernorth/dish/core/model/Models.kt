@@ -66,6 +66,8 @@ data class ControllerApplyDto(
     val ctrlIdx: Int = 0,
     val result: String = "",
     val appliedType: Int = 0,
+    // The id of the driver that backs the slot's pad; null when the host named none.
+    val backend: String? = null,
     val motion: SessionMotionDto = SessionMotionDto(),
 ) {
     val ok: Boolean get() = result == APPLY_OK

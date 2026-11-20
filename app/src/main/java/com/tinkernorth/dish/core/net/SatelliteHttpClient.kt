@@ -39,7 +39,25 @@ data class HttpReply(
 data class RequestOptions(
     val headers: Map<String, String> = emptyMap(),
     val timeoutMs: Int = DEFAULT_TIMEOUT_MS,
+    // True when timeoutMs is the whole exchange's budget, connect and read together, rather than
+    // the allowance each of the two gets on its own.
+    val singleDeadline: Boolean = false,
 )
+
+// One budget the connect and the read draw from. remainingMs never reaches zero, because a zero
+// socket timeout means wait forever.
+internal class RequestDeadline(
+    private val totalMs: Int,
+    private val nowMs: () -> Long = { System.nanoTime() / NANOS_PER_MS },
+) {
+    private val startedMs = nowMs()
+
+    fun expired(): Boolean = nowMs() - startedMs >= totalMs
+
+    fun remainingMs(): Int = (totalMs - (nowMs() - startedMs)).coerceIn(1L, totalMs.toLong()).toInt()
+}
+
+private const val NANOS_PER_MS = 1_000_000L
 
 private const val DEFAULT_TIMEOUT_MS = 5_000
 
@@ -256,7 +274,7 @@ class SatelliteHttpClient
                 hmacProof = hmacProof,
                 body = null,
                 satelliteId = satelliteId,
-                options = RequestOptions(timeoutMs = timeoutMs),
+                options = RequestOptions(timeoutMs = timeoutMs, singleDeadline = true),
             )
 
         // No X-Device-Id: /api/pair is the only client route that bypasses clientAuthorized.
@@ -328,9 +346,11 @@ class SatelliteHttpClient
             var conn: HttpsURLConnection? = null
             var pooled = false
             var pinMismatch = false
+            val deadline = if (options.singleDeadline) RequestDeadline(options.timeoutMs) else null
             return try {
                 conn = openConnection(url, method, satelliteId, onMismatch = { pinMismatch = true }, timeoutMs = options.timeoutMs)
                 conn.applyHeaders(deviceId, hmacProof, options.headers)
+                if (deadline != null) conn.holdToDeadline(deadline)
                 if (body != null) conn.writeBody(body)
                 val status = conn.responseCode
                 val succeeded = status in SUCCESS_STATUSES
@@ -377,6 +397,14 @@ class SatelliteHttpClient
             if (deviceId != null) setRequestProperty(HEADER_DEVICE_ID, deviceId)
             if (hmacProof != null) setRequestProperty(HEADER_HMAC_PROOF, hmacProof)
             for ((k, v) in extraHeaders) setRequestProperty(k, v)
+        }
+
+        // Connects now, with the whole budget for it, then leaves the read only what is left.
+        private fun HttpsURLConnection.holdToDeadline(deadline: RequestDeadline) {
+            connectTimeout = deadline.remainingMs()
+            connect()
+            if (deadline.expired()) throw SocketTimeoutException("deadline spent connecting")
+            readTimeout = deadline.remainingMs()
         }
 
         private fun HttpsURLConnection.writeBody(body: String) {

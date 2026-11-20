@@ -38,20 +38,41 @@ internal fun bundlePathOf(diag: ControllerDiag): String {
 internal fun bundleBluetoothOf(
     diag: ControllerDiag,
     linkType: BluetoothLinkType?,
+    serviceUuids: List<String> = emptyList(),
 ): BundleBluetooth? {
     val isOverBluetooth = diag.transport == Transport.Bluetooth
     if (!isOverBluetooth) return null
     if (diag.isUsbSynthetic) return BundleBluetooth(PROFILE_BLE, LAYER_LE)
-    return BundleBluetooth(PROFILE_HID, linkType?.let(::transportLayerOf))
+    return BundleBluetooth(PROFILE_HID, linkType?.let { transportLayerOf(it, serviceUuids) })
 }
 
-// A dual-mode bond does not say which of the two the pad is on now.
-private fun transportLayerOf(linkType: BluetoothLinkType): String? =
+private const val LAYER_CLASSIC = "classic"
+private const val UUID_HID_CLASSIC = "00001124-0000-1000-8000-00805f9b34fb"
+private const val UUID_HID_OVER_GATT = "00001812-0000-1000-8000-00805f9b34fb"
+
+// A dual-mode bond does not say which radio the pad is on now, so its cached service UUIDs decide:
+// the HID profile alone is classic, HID over GATT alone is le, both or neither is no answer.
+internal fun transportLayerOf(
+    linkType: BluetoothLinkType,
+    serviceUuids: List<String>,
+): String? =
     when (linkType) {
-        BluetoothLinkType.CLASSIC -> "classic"
+        BluetoothLinkType.CLASSIC -> LAYER_CLASSIC
         BluetoothLinkType.LOW_ENERGY -> LAYER_LE
-        BluetoothLinkType.DUAL, BluetoothLinkType.UNKNOWN -> null
+        BluetoothLinkType.DUAL -> dualLayerOf(serviceUuids)
+        BluetoothLinkType.UNKNOWN -> null
     }
+
+private fun dualLayerOf(serviceUuids: List<String>): String? {
+    val lower = serviceUuids.map { it.lowercase() }
+    val hasClassic = UUID_HID_CLASSIC in lower
+    val hasGatt = UUID_HID_OVER_GATT in lower
+    return when {
+        hasClassic && !hasGatt -> LAYER_CLASSIC
+        hasGatt && !hasClassic -> LAYER_LE
+        else -> null
+    }
+}
 
 // A pad the phone's input framework reads: the sources it declared, and whether the framework
 // gave it a vibrator and lights.

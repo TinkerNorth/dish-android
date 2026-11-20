@@ -61,6 +61,7 @@ private fun bundleControllerOf(
     val state = deviceId?.let(extras.deviceStates::get)
     val sources = deviceId?.let(extras.inputSources::get)
     val linkType = deviceId?.let(world.pads.btLinkTypes::get)
+    val serviceUuids = deviceId?.let(world.pads.btServiceUuids::get).orEmpty()
     return BundleController(
         record = facts?.record?.id,
         verification = facts?.record?.verification,
@@ -84,7 +85,7 @@ private fun bundleControllerOf(
         input = bundleInputOf(diag, frames, state),
         output = bundleOutputOf(diag.slotId, facts, world, extras),
         standard = bundleStandardOf(diag, sources, device),
-        bluetooth = bundleBluetoothOf(diag, linkType),
+        bluetooth = bundleBluetoothOf(diag, linkType, serviceUuids),
     )
 }
 

@@ -495,11 +495,10 @@ These pieces were deferred or deliberately shaped differently from the contracts
   Steam Controllers' feature reports) records the verdict of the packet it stopped at, or of its
   last packet; GIP acks and the Steam Controller (2026)'s settings refreshes record none.
 - **The report's second cut carries what the client holds today, and names nulls for the rest.**
-  `backend` in each `hosts[i].session.slots` entry is null: the session PUT's apply answer names the
-  applied type but not the backend, so only the host's own snapshot says it. `speaker.frames` and
-  `haptics.frames` are null: the receive path counts speaker and haptic datagrams per session
-  (`received.speaker`, `received.haptic`), not per controller. A Moonlight session has no ack and no
-  RTT window, and counts only the reports it sent; a Bluetooth host only its reports.
+  `speaker.frames` and `haptics.frames` are null: the receive path counts speaker and haptic
+  datagrams per session (`received.speaker`, `received.haptic`), not per controller. A Moonlight
+  session has no ack and no RTT window, and counts only the reports it sent; a Bluetooth host only
+  its reports.
 - **Two hot-path additions, both one increment.** `send_path.cpp` `countFor` adds one relaxed
   load and store under the session's gate per datagram (`sentByKind`, `message_tally.h`), the same
   shape as the existing per-controller tallies; `receive_path.cpp` adds one relaxed `fetch_add` per
@@ -519,10 +518,6 @@ These pieces were deferred or deliberately shaped differently from the contracts
 - **An older Satellite is decided by its version.** `isOlderSatellite` reads the serverVersion from
   the capabilities the app last fetched (else the catalog's); an older host is never asked, and a
   404 from 2.3.0 or later is `unknownConnection`. A host whose version the app never read is asked.
-- **The two-second limit is per request, not per report.** The connect and the read each time out
-  at two seconds; hosts are asked in parallel, so a report waits at most about four seconds on the
-  slowest one.
-
 **Where:** `app/src/main/cpp/usb_host.cpp`, `app/src/main/cpp/usb_parsers.cpp`,
 `app/src/main/java/com/tinkernorth/dish/source/usb/ControllerCapturer.kt`,
 `app/src/main/java/com/tinkernorth/dish/core/controllerdb/`.

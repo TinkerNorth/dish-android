@@ -71,3 +71,11 @@ fun stringsLocaleFor(
     if (withCountry in STRINGS_LOCALES) return withCountry
     return if (language in STRINGS_LOCALES) language else ENGLISH
 }
+
+// The strings file the app's own UI resolved to: Android walks the device's locale list in order
+// and takes the first language the app ships resources for, so the database text follows the
+// same pick rather than the first locale alone (a phone set to Japanese then German shows German).
+fun stringsLocaleForList(locales: List<Pair<String, String>>): String {
+    val shipped = locales.firstOrNull { (language, _) -> language == ENGLISH || language == PORTUGUESE || language in STRINGS_LOCALES }
+    return shipped?.let { (language, country) -> stringsLocaleFor(language, country) } ?: ENGLISH
+}

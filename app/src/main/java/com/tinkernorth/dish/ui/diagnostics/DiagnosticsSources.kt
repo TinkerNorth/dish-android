@@ -10,7 +10,7 @@ import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.core.controllerdb.ActiveControllerDb
-import com.tinkernorth.dish.core.controllerdb.stringsLocaleFor
+import com.tinkernorth.dish.core.controllerdb.stringsLocaleForList
 import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.core.model.SlotCapabilities
@@ -112,11 +112,11 @@ class DbSources
             status: ControllerDbStatus,
             active: ActiveControllerDb?,
         ): DbWorld {
-            val locale = context.resources.configuration.locales[0]
+            val locales = context.resources.configuration.locales
             return DbWorld(
                 status = status,
                 active = active,
-                stringsLocale = stringsLocaleFor(locale.language, locale.country),
+                stringsLocale = stringsLocaleForList((0 until locales.size()).map { locales[it].let { l -> l.language to l.country } }),
                 deviceModel = Build.MODEL.orEmpty(),
                 androidMajor = androidMajorOf(Build.VERSION.RELEASE.orEmpty()),
             )

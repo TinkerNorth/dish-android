@@ -121,6 +121,33 @@ class BundleMappersTest {
         assertNull(unknown?.transportLayer)
     }
 
+    private val hidClassic = "00001124-0000-1000-8000-00805f9b34fb"
+    private val hidGatt = "00001812-0000-1000-8000-00805f9b34fb"
+    private val battery = "0000180f-0000-1000-8000-00805f9b34fb"
+
+    @Test
+    fun `a dual-mode bond is decided by its cached service uuids`() {
+        assertEquals("classic", transportLayerOf(BluetoothLinkType.DUAL, listOf(battery, hidClassic)))
+        assertEquals("le", transportLayerOf(BluetoothLinkType.DUAL, listOf(hidGatt, battery)))
+        assertNull(transportLayerOf(BluetoothLinkType.DUAL, listOf(hidClassic, hidGatt)))
+        assertNull(transportLayerOf(BluetoothLinkType.DUAL, listOf(battery)))
+        assertNull(transportLayerOf(BluetoothLinkType.DUAL, emptyList()))
+        assertEquals("le", transportLayerOf(BluetoothLinkType.DUAL, listOf(hidGatt.uppercase())))
+    }
+
+    @Test
+    fun `the uuids never override a link type the platform already named`() {
+        assertEquals("classic", transportLayerOf(BluetoothLinkType.CLASSIC, listOf(hidGatt)))
+        assertEquals("le", transportLayerOf(BluetoothLinkType.LOW_ENERGY, listOf(hidClassic)))
+        assertNull(transportLayerOf(BluetoothLinkType.UNKNOWN, listOf(hidClassic)))
+    }
+
+    @Test
+    fun `a dual bond reaches the file through its uuids`() {
+        val classic = bundleBluetoothOf(diag(transport = Transport.Bluetooth), BluetoothLinkType.DUAL, listOf(hidClassic))
+        assertEquals("classic", classic?.transportLayer)
+    }
+
     @Test
     fun `the app's own bluetooth client is ble over le`() {
         val ble = bundleBluetoothOf(diag(slotId = "-9", transport = Transport.Bluetooth, direct = true), null)
@@ -245,6 +272,27 @@ class BundleMappersTest {
         assertEquals("dualsense", slots[1].appliedType)
         assertEquals("sony-dualsense", slots[1].record)
         assertEquals("ok", slots[1].result)
+        assertNull(slots[1].backend)
+    }
+
+    @Test
+    fun `a slot's backend is the one the satellite's apply answer named`() {
+        val bindings =
+            mapOf(
+                "-5" to
+                    SatelliteConnection.SlotBinding(
+                        0,
+                        2,
+                        registered = true,
+                        lastApplyResult = "ok",
+                        lastAppliedType = 2,
+                        lastBackend = "hidmaestro",
+                    ),
+                "-6" to SatelliteConnection.SlotBinding(1, 2, registered = true, lastApplyResult = "ok", lastAppliedType = 2),
+            )
+        val snapshot = SatelliteSnapshot(live = true, slots = bindings, telemetry = null)
+        val slots = bundleSessionOf(host(ConnectionKind.SATELLITE, satellite = snapshot), emptyList(), emptyMap())?.slots.orEmpty()
+        assertEquals("hidmaestro", slots[0].backend)
         assertNull(slots[1].backend)
     }
 
