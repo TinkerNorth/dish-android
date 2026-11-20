@@ -251,7 +251,7 @@ app, JNI and test code alike.
   `app/build.gradle.kts`, all under the same rules.
 - `app/src/test/cpp`: googletest over the host-buildable JNI split, one
   target per layer (`gamepad_input`, `wire_encoders`, `usb_parsers`,
-  `usb_hid_descriptor`, `send_counter`, `audio_jitter`, `heartbeat_thread`,
+  `usb_hid_descriptor`, `send_counter`, `message_tally`, `audio_jitter`, `heartbeat_thread`,
   `hotpath_latency`, `audio_codec`, `bridge_connection_ids`), run by
   `./gradlew :app:nativeTest`. CI also cross-compiles them for 32-bit ARM
   and runs them under `qemu-arm`, so a `size_t`, `long` or pointer-width

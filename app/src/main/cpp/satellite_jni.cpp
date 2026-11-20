@@ -1388,6 +1388,23 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_sessi
         hotpath::sessionStatsJson(s->rtt, s->missedAcks.load(std::memory_order_relaxed)).c_str());
 }
 
+// The session's sent and received counts by message kind (message_tally.h); "" once closed.
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_sessionMessageCountsJson(
+    JNIEnv* env, jobject, jint handle) {
+    const dish_session::SessionRef s = g_sessionTable.find(handle);
+    if (!s) return env->NewStringUTF("");
+    uint32_t sent[dish_tally::SENT_KINDS] = {};
+    uint32_t received[dish_tally::RECEIVED_KINDS] = {};
+    for (size_t i = 0; i < dish_tally::SENT_KINDS; i++) {
+        sent[i] = s->sentByKind[i].load(std::memory_order_relaxed);
+    }
+    for (size_t i = 0; i < dish_tally::RECEIVED_KINDS; i++) {
+        received[i] = s->receivedByKind[i].load(std::memory_order_relaxed);
+    }
+    if (!g_sessionTable.stillOpen(s)) return env->NewStringUTF("");
+    return env->NewStringUTF(dish_tally::messageCountsJson(sent, received).c_str());
+}
+
 JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_getSlotSendCount(
     JNIEnv*, jobject, jint handle, jint controllerIndex) {
     return readOpenSession<jlong>(handle, 0, [controllerIndex](const dish_session::Session& s) {
@@ -1432,6 +1449,11 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_InstrumentationNative_
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_InstrumentationNative_setInputInspection(
     JNIEnv*, jobject, jboolean on) {
     g_slotTable.setInspecting(on == JNI_TRUE);
+}
+
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_core_jni_InstrumentationNative_refreshDeviceStates(JNIEnv*, jobject) {
+    g_slotTable.refreshMirrors();
 }
 
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_deviceStateJson(

@@ -134,6 +134,15 @@ target_include_directories(wire_encoders_test PRIVATE "${SATELLITE_CPP}")
 target_compile_options(wire_encoders_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(wire_encoders_test PRIVATE GTest::gtest_main)
 
+# What each wire message counts as in a session's sent and received tallies, and their JSON: pure
+# and header-only, so the names the bundle reads are pinned without a socket.
+add_executable(message_tally_test
+    message_tally_test.cpp
+)
+target_include_directories(message_tally_test PRIVATE "${SATELLITE_CPP}")
+target_compile_options(message_tally_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_link_libraries(message_tally_test PRIVATE GTest::gtest_main)
+
 # usb_parsers.cpp fences its USB I/O behind __ANDROID__, so the decoders and rumble
 # builders build and test host-side.
 add_executable(usb_parsers_test
@@ -344,6 +353,7 @@ gtest_discover_tests(wire_encoders_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(usb_parsers_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(usb_hid_descriptor_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(send_counter_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(message_tally_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(send_path_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(udp_socket_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(session_table_test DISCOVERY_MODE PRE_TEST)

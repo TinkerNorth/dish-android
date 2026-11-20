@@ -167,6 +167,8 @@ TEST_F(SessionTable, ASessionInAReusedEntryStartsFresh) {
     old->connectionAlive.store(false);
     old->closeReason.store(1);
     old->sentByCtrl[2].store(11);
+    old->sentByKind[dish_tally::SENT_BATTERY].store(5);
+    old->receivedByKind[dish_tally::RECEIVED_RUMBLE].store(6);
     old->protocolVersion.store(3);
     old->audio[0];
     table.close(first);
@@ -178,6 +180,8 @@ TEST_F(SessionTable, ASessionInAReusedEntryStartsFresh) {
     EXPECT_TRUE(s->connectionAlive.load());
     EXPECT_EQ(s->closeReason.load(), -1);
     EXPECT_EQ(s->sentByCtrl[2].load(), 0u);
+    EXPECT_EQ(s->sentByKind[dish_tally::SENT_BATTERY].load(), 0u);
+    EXPECT_EQ(s->receivedByKind[dish_tally::RECEIVED_RUMBLE].load(), 0u);
     EXPECT_EQ(s->protocolVersion.load(), 1);
     EXPECT_EQ(s->audioHandle, second);
     EXPECT_TRUE(s->audio.empty());

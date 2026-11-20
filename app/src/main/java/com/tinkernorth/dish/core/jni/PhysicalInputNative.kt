@@ -256,4 +256,6 @@ class PhysicalInputNative
         fun setInputInspection(on: Boolean) = InstrumentationNative.setInputInspection(on)
 
         fun deviceStateJson(deviceId: Int): String = PhysicalSlotNative.deviceStateJson(deviceId)
+
+        fun refreshDeviceStates() = InstrumentationNative.refreshDeviceStates()
     }

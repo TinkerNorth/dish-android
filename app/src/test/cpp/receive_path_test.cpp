@@ -14,6 +14,7 @@
 
 #include "audio_codec.h"
 #include "fake_satellite.h"
+#include "message_tally.h"
 #include "recording_sinks.h"
 #include "send_path.h"
 #include "session_table.h"
@@ -165,6 +166,26 @@ TEST_F(ReceivePath, SpeakerAndHapticAudioAreHandedOnWithTheirLane) {
     EXPECT_EQ(sink.audioSeen[1].lane, dish_receive::AUDIO_LANE_HAPTICS);
     EXPECT_EQ(sink.audioSeen[1].seq, 9);
     EXPECT_EQ(sink.audioSeen[1].opus, (Bytes{0xCC}));
+}
+
+TEST_F(ReceivePath, EachMessageThatOpensIsCountedUnderItsKindAndAnAckUnderNone) {
+    EXPECT_EQ(
+        deliver(fromSatellite(1, dish_wire::MSG_RUMBLE, {2, 0xFF, 0xEE, 0x01, 0x02, 0x03, 0xE8})),
+        1);
+    EXPECT_EQ(deliver(fromSatellite(2, dish_wire::MSG_LIGHTBAR, {1, 0x10, 0x20, 0x30})), 1);
+    EXPECT_EQ(deliver(fromSatellite(3, dish_wire::MSG_HAPTIC_AUDIO, {5, 0x00, 0x09, 0xCC})), 1);
+    EXPECT_EQ(deliver(fromSatellite(4, dish_wire::MSG_HEARTBEAT_ACK, {})), 1);
+    EXPECT_EQ(session->receivedByKind[dish_tally::RECEIVED_RUMBLE].load(), 1u);
+    EXPECT_EQ(session->receivedByKind[dish_tally::RECEIVED_LIGHTBAR].load(), 1u);
+    EXPECT_EQ(session->receivedByKind[dish_tally::RECEIVED_HAPTIC].load(), 1u);
+    EXPECT_EQ(session->receivedByKind[dish_tally::RECEIVED_SPEAKER].load(), 0u);
+}
+
+TEST_F(ReceivePath, AForgedDatagramCountsUnderNoKind) {
+    Bytes forged = fromSatellite(1, dish_wire::MSG_RUMBLE, {2, 0xFF, 0xEE, 0x01, 0x02, 0x03, 0xE8});
+    forged.back() ^= 0x01;
+    EXPECT_EQ(deliver(forged), 0);
+    EXPECT_EQ(session->receivedByKind[dish_tally::RECEIVED_RUMBLE].load(), 0u);
 }
 
 TEST_F(ReceivePath, ADatagramForAnotherTokenIsDropped) {

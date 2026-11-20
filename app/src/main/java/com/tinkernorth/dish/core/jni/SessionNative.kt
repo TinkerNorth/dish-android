@@ -58,6 +58,9 @@ object SessionNative {
     // One session's own RTT window plus ping/ack/missed tallies; empty for an unknown handle.
     external fun sessionStatsJson(handle: Int): String
 
+    // {"sent":{...},"received":{...}} per wire message kind (message_tally.h); "" once closed.
+    external fun sessionMessageCountsJson(handle: Int): String
+
     // BLOCKING. Call on Dispatchers.IO. Returns JSON array of beacon objects.
     external fun discoverServers(
         discPort: Int,

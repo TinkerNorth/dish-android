@@ -9,6 +9,7 @@
 
 #include "hotpath_latency.h"
 #include "log_port.h"
+#include "message_tally.h"
 #include "udp_socket.h"
 
 namespace dish_receive {
@@ -49,6 +50,13 @@ void handleHeartbeatAck(Session& s, const uint8_t* decrypted, const uint16_t msg
         s.serverEpoch.store(epoch, std::memory_order_release);
         s.activeBitmap.store(bitmap, std::memory_order_release);
     }
+}
+
+// The receive thread is each session's one writer of its received tallies.
+void countReceived(Session& s, const uint16_t msgType) {
+    const int kind = dish_tally::receivedKindOf(msgType);
+    if (kind == dish_tally::NO_KIND) return;
+    s.receivedByKind[kind].fetch_add(1, std::memory_order_relaxed);
 }
 
 int handleWith(const SessionRef& session, const Material& m, const uint8_t* buf, size_t n,
@@ -129,6 +137,7 @@ int handleWith(const SessionRef& session, const Material& m, const uint8_t* buf,
     if (decLen < 4) return 0;
     uint16_t msgType = ((uint16_t)decrypted[0] << 8) | decrypted[1];
     uint16_t msgLen = ((uint16_t)decrypted[2] << 8) | decrypted[3];
+    countReceived(s, msgType);
 
     if (msgType == dish_wire::MSG_HEARTBEAT_ACK) {
         handleHeartbeatAck(s, decrypted, msgLen, decLen);
