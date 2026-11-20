@@ -70,7 +70,8 @@ class ReportCapture {
         const size_t keptLen = len < CAPTURE_REPORT_MAX_BYTES ? len : CAPTURE_REPORT_MAX_BYTES;
         kept.atMs = atMs;
         kept.len = static_cast<uint8_t>(keptLen);
-        memcpy(kept.bytes, bytes, keptLen);
+        // A loop, not memcpy: GCC's -Wstringop-overflow misreads the guarded reports_[i] as empty.
+        for (size_t b = 0; b < keptLen; b++) kept.bytes[b] = bytes[b];
         filled_.store(i + 1, std::memory_order_release);
         if (i + 1 == CAPTURE_REPORTS) armed_.store(false, std::memory_order_release);
     }

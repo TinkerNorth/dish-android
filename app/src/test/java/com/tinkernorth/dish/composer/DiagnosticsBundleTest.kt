@@ -30,7 +30,7 @@ class DiagnosticsBundleTest {
     private val ipv4 = "192.168.1.23"
     private val ipv6 = "fe80::1c2d:3e4f:5a6b:7c8d"
     private val wifiName = "HomeNet-5G"
-    private val pairingKey = "9f86d081884c7d659a2feaa0c55ad015"
+    private val pairingKey = "9f86d081884c7d659a2feaa0c55ad015" // gitleaks:allow
     private val fingerprint = "AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89"
     private val btMac = "AA:BB:CC:DD:EE:FF"
     private val machineId = "satellite:mid:5f3c2a19e0b7"
