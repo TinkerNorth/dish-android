@@ -57,3 +57,9 @@ description = "Deleted throwaway Moonlight test keys (history-only, one commit).
 commits = [
     '''7563dd10bee33b15354df8df61052b997c3b3d89''',
 ]
+
+[[allowlists]]
+description = "The diagnostics bundle test holds a made-up pairing key, fingerprint and machine id so it can prove the bundle never carries them."
+paths = [
+    '''^app/src/test/java/com/tinkernorth/dish/composer/DiagnosticsBundleTest\.kt$''',
+]
