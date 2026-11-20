@@ -242,6 +242,7 @@ class SatelliteSnapshotSources
                 closeReason = controllerRepo.getSessionCloseReason(handle),
                 slotSends = indices.associateWith { controllerRepo.getSlotSendCount(handle, it) },
                 slotMotion = indices.associateWith { controllerRepo.getSlotMotionCount(handle, it) },
+                messages = parseMessageCounts(json, controllerRepo.sessionMessageCountsJson(handle)),
             )
         }
     }

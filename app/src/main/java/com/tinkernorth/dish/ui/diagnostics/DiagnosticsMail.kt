@@ -50,24 +50,19 @@ fun mailLaunchFor(
 // The question asked of the package manager: does any app take a mailto: link.
 fun mailAppQuery(): Intent = Intent(Intent.ACTION_SENDTO, MAILTO.toUri())
 
-internal fun Context.mailSubject(
-    version: String,
-    model: String,
-): String = getString(R.string.diagnostics_email_subject, version, model)
-
 // The summary the Diagnostics page shows, in the person's language, with hosts as their aliases,
 // then the sentence that says what the file holds and never holds.
-internal fun Context.mailBody(
+internal fun Context.mailSummary(
     overview: DiagnosticsViewModel.Overview,
     world: DiagnosticsWorld,
     appLine: String,
-): String {
+): List<String> {
     val lines = mutableListOf(appLine, controllerDbStatusText(world.db.status, world.nowMs), "")
     overview.controllers.filter { !it.isVirtual }.forEach { diag -> lines += controllerSummary(diag, world.nowMs) + "" }
     overview.hosts.forEachIndexed { index, host -> lines += hostSummary(index, host) }
     lines += ""
     lines += getString(R.string.diagnostics_email_attachment)
-    return lines.joinToString("\n")
+    return lines
 }
 
 private fun Context.controllerSummary(

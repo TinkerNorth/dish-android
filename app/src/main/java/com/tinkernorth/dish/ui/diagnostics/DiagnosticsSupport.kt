@@ -25,7 +25,7 @@ import java.io.IOException
 import javax.inject.Inject
 
 // The Diagnostics screen's commands that reach past the report: the controller database's
-// "Check now", "Capture this controller", and writing the bundle the mail attaches.
+// "Check now", "Capture this controller", and preparing and writing the bundle a report attaches.
 class DiagnosticsSupport
     @Inject
     constructor(
@@ -35,20 +35,31 @@ class DiagnosticsSupport
         private val captures: ControllerCaptureStore,
         private val capturer: ControllerCapturer,
         private val log: DiagnosticsLogStore,
+        private val report: ReportSources,
         @IoDispatcher private val io: CoroutineDispatcher,
     ) {
-        // The bundle file in the cache directory the FileProvider serves; null when it could not
-        // be written. Earlier bundles are removed first, so only the one being sent is there.
-        internal suspend fun writeBundle(
+        // The bundle as it will be attached, with every host asked for its side and every fact
+        // read now; the file is written only when the person continues.
+        internal suspend fun prepare(
             world: DiagnosticsWorld,
             overview: DiagnosticsViewModel.Overview,
-        ): File? {
+            draft: ReportDraft,
+        ): PreparedReport {
             val now = System.currentTimeMillis()
-            val envelope = BundleEnvelope(now, appFacts(), deviceFacts(), logcat.ownLines())
-            val inputs = bundleInputsOf(world, overview.controllers, overview.hosts, captures.snapshot(), log.state.value, envelope)
-            val text = diagnosticsBundleText(inputs)
-            return withContext(io) { writeFile(bundleFileName(now), text) }
+            val extras = report.extras(overview, draft)
+            val text =
+                withContext(io) {
+                    val envelope = BundleEnvelope(now, appFacts(), report.device(world.radios.wifi), logcat.ownLines())
+                    val inputs =
+                        bundleInputsOf(world, overview.controllers, overview.hosts, captures.snapshot(), log.state.value, envelope, extras)
+                    diagnosticsBundleText(inputs)
+                }
+            return PreparedReport(text, bundleFileName(now), overview, world, draft)
         }
+
+        // The bundle file in the cache directory the FileProvider serves; null when it could not
+        // be written. Earlier bundles are removed first, so only the one being sent is there.
+        internal suspend fun write(prepared: PreparedReport): File? = withContext(io) { writeFile(prepared.fileName, prepared.text) }
 
         // True once the pad's descriptors and reports are kept for the next bundle.
         suspend fun capture(
@@ -81,6 +92,15 @@ class DiagnosticsSupport
             const val BUNDLE_DIR = "diagnostics"
         }
     }
+
+// A report ready to preview or send: the file's text and name, and what the mail body is made of.
+class PreparedReport internal constructor(
+    val text: String,
+    val fileName: String,
+    val overview: DiagnosticsViewModel.Overview,
+    internal val world: DiagnosticsWorld,
+    val draft: ReportDraft,
+)
 
 // The app and phone facts the bundle opens with, read once by the caller.
 internal data class BundleEnvelope(

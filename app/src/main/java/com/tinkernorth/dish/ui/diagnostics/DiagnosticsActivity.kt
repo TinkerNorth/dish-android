@@ -2,18 +2,14 @@
 
 package com.tinkernorth.dish.ui.diagnostics
 
-import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.CompoundButton
 import android.widget.Toast
 import androidx.activity.viewModels
-import androidx.core.content.FileProvider
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.tinkernorth.dish.R
@@ -58,7 +54,8 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
 
         binding.sectionSupport.labelSection.setText(R.string.diagnostics_section_support)
         binding.sectionControllerDb.labelSection.setText(R.string.settings_section_controller_db)
-        binding.btnEmailDiagnostics.setOnClickListener { onEmailTapped() }
+        binding.btnReportProblem.setOnClickListener { nav.toSupportReport(question = false) }
+        binding.btnAskQuestion.setOnClickListener { nav.toSupportReport(question = true) }
         binding.btnControllerDbCheckNow.setOnClickListener { viewModel.checkControllerDbNow() }
         binding.sectionRadios.labelSection.setText(R.string.diagnostics_section_radios)
         binding.sectionControllers.labelSection.setText(R.string.section_controllers)
@@ -176,48 +173,17 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
         )
     }
 
-    // ── Email diagnostics ───────────────────────────────────────────────────
-
-    private fun onEmailTapped() {
-        binding.btnEmailDiagnostics.isEnabled = false
-        viewModel.emailDiagnostics()
-    }
+    // ── Support ─────────────────────────────────────────────────────────────
 
     private fun onSupportEvent(event: DiagnosticsViewModel.SupportEvent) {
         when (event) {
-            is DiagnosticsViewModel.SupportEvent.MailReady -> sendMail(event.mail)
-            DiagnosticsViewModel.SupportEvent.MailFailed -> mailFailed()
             is DiagnosticsViewModel.SupportEvent.Captured -> captured(event)
         }
-    }
-
-    private fun mailFailed() {
-        binding.btnEmailDiagnostics.isEnabled = true
-        Toast.makeText(this, R.string.diagnostics_email_failed, Toast.LENGTH_LONG).show()
     }
 
     private fun captured(event: DiagnosticsViewModel.SupportEvent.Captured) {
         val text = if (event.ok) R.string.diagnostics_capture_done else R.string.diagnostics_capture_failed
         Toast.makeText(this, getString(text, event.name), Toast.LENGTH_LONG).show()
-    }
-
-    private fun sendMail(mail: DiagnosticsViewModel.PreparedMail) {
-        binding.btnEmailDiagnostics.isEnabled = true
-        val uri = FileProvider.getUriForFile(this, "$packageName$DIAGNOSTICS_AUTHORITY_SUFFIX", mail.file)
-        val app = appFacts()
-        val device = deviceFacts()
-        val appLine = getString(R.string.diagnostics_summary_app, app.version, app.flavor, device.model, Build.VERSION.RELEASE.orEmpty())
-        val body = mailBody(mail.overview, mail.world, appLine)
-        val send = diagnosticsMailIntent(uri, mailSubject(app.version, device.model), body)
-        val mailPackages = packageManager.queryIntentActivities(mailAppQuery(), 0).map { it.activityInfo.packageName }.toSet()
-        val sendHandlers = packageManager.queryIntentActivities(send, 0).map(::sendHandlerOf)
-        val launch = mailLaunchFor(sendHandlers, mailPackages)
-        try {
-            startActivity(diagnosticsChooser(send, getString(R.string.diagnostics_email_chooser), launch))
-        } catch (e: ActivityNotFoundException) {
-            Log.w(TAG, "no app takes the diagnostics mail", e)
-            Toast.makeText(this, R.string.diagnostics_email_no_app, Toast.LENGTH_LONG).show()
-        }
     }
 
     // ── Hosts ───────────────────────────────────────────────────────────────
@@ -356,9 +322,5 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
 
     private companion object {
         const val SHOWN_EVENTS = 20
-        const val TAG = "DiagnosticsActivity"
-
-        // AndroidManifest.xml's FileProvider authority, after the application id.
-        const val DIAGNOSTICS_AUTHORITY_SUFFIX = ".diagnostics"
     }
 }

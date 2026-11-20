@@ -18,11 +18,16 @@ internal class Scrubber(
     private val values = forbidden.filter { it.length >= SHORTEST_SCRUBBED }.sortedByDescending { it.length }
 
     operator fun invoke(text: String): String {
-        var out = text
-        for (value in values) out = out.replace(value, REMOVED, ignoreCase = true)
+        var out = forbiddenOnly(text)
         out = MAC.replace(out, ADDRESS)
         out = IPV4.replace(out, ADDRESS)
         return IPV6.replace(out, ::keepIfNotAnAddress)
+    }
+
+    fun forbiddenOnly(text: String): String {
+        var out = text
+        for (value in values) out = out.replace(value, REMOVED, ignoreCase = true)
+        return out
     }
 
     // A vid:pid pair has one colon and a clock time two; an IPv6 address has three or more, or a

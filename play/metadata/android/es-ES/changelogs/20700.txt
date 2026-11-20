@@ -1,6 +1,6 @@
-Dish 2.7.0: una lista de mandos que se actualiza sola y diagnósticos por correo.
+Dish 2.7.0: una lista de mandos que se actualiza sola y una forma de informar de problemas.
 
 • Dish consulta dish.tinkernorth.com para obtener soporte de mandos nuevos. En Ajustes está Buscar actualizaciones de mandos automáticamente, activado por defecto.
-• Diagnósticos muestra los problemas conocidos y la última escritura de cada mando, y Enviar diagnósticos manda un archivo a soporte.
+• Diagnósticos muestra los problemas conocidos y la última escritura de cada mando; Informar de un problema envía tu texto y un archivo a soporte.
 • El inspector pregunta si ha funcionado tras cada prueba.
 • Satellite no necesita actualizarse.

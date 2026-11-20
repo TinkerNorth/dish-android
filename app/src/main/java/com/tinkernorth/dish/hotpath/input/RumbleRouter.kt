@@ -17,6 +17,7 @@ import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.store.FeedbackActivityStore
 import com.tinkernorth.dish.source.store.FeedbackKind
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
+import com.tinkernorth.dish.source.store.feedbackPair
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -151,7 +152,7 @@ class RumbleRouter
             durationMs: Int,
         ) {
             if (target is RumbleTarget.None) return
-            feedbackActivity.note(slotId, FeedbackKind.RUMBLE)
+            feedbackActivity.note(slotId, FeedbackKind.RUMBLE, feedbackPair(strongMagnitude, weakMagnitude))
             if (!rumbleEnabled.isEnabled(slotId)) return
             if (isRumbleStop(strongMagnitude, weakMagnitude, durationMs)) {
                 cancel(target)

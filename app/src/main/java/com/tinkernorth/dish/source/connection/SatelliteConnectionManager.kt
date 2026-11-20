@@ -129,12 +129,37 @@ private fun unreachableMessage(reply: HttpReply?): ConnectionError =
 private fun rejectsOurCredentials(code: String?): Boolean =
     code == SessionResponse.CODE_NOT_PAIRED || code == SessionResponse.CODE_BAD_PROOF
 
+// How a diagnostics request for one satellite went: never asked for want of a live session or
+// of the pairing key to prove with, or asked and answered as the transport saw it.
+sealed interface DiagnosticsAnswer {
+    data object NotLive : DiagnosticsAnswer
+
+    data object NoKey : DiagnosticsAnswer
+
+    data class Asked(
+        val reply: HttpReply,
+    ) : DiagnosticsAnswer
+}
+
 /**
  * The session a live connection's callbacks and converge steps speak for: the generation it was
  * adopted under, the server connection id, and its native socket handle. A fresh PUT keeps the
  * generation and server id while rotating token/key; the monotonically assigned handle separates
  * callbacks from the old UDP session from the replacement.
  */
+private const val PREFS_NAME = "satellite"
+private const val KEY_DEVICE_ID = "deviceId"
+
+// This install's id towards every satellite, made once and kept.
+private fun deviceIdIn(context: Context): String {
+    val p = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    return p.getString(KEY_DEVICE_ID, null) ?: java.util.UUID
+        .randomUUID()
+        .toString()
+        .replace("-", "")
+        .also { p.edit { putString(KEY_DEVICE_ID, it) } }
+}
+
 private class SessionTicket(
     val generation: Int,
     val connectionId: String,
@@ -188,7 +213,7 @@ class SatelliteConnectionManager
         private val _staleSatelliteIds = MutableStateFlow<Set<String>>(emptySet())
         val staleSatelliteIds: StateFlow<Set<String>> = _staleSatelliteIds.asStateFlow()
 
-        private val deviceId by lazy { getOrCreateDeviceId() }
+        private val deviceId by lazy { deviceIdIn(context) }
         private val deviceName by lazy { android.os.Build.MODEL ?: "Android" }
 
         // Path-B approval polls run up to APPROVAL_TIMEOUT_MS and can call openSession
@@ -246,6 +271,19 @@ class SatelliteConnectionManager
         }
 
         fun get(id: String): SatelliteConnection? = _connections.value[id]
+
+        // GET /api/connections/{id}/diagnostics over the session's own proof, for a support report.
+        suspend fun connectionDiagnostics(
+            id: String,
+            timeoutMs: Int,
+        ): DiagnosticsAnswer {
+            val conn = get(id) ?: return DiagnosticsAnswer.NotLive
+            val connectionId = conn.connectionId ?: return DiagnosticsAnswer.NotLive
+            val creds = credentialsFor(id) ?: return DiagnosticsAnswer.NoKey
+            val server = conn.server.value
+            val reply = discoveryRepo.connectionDiagnostics(server.ip, server.httpPort, connectionId, deviceId, creds.proof, timeoutMs)
+            return DiagnosticsAnswer.Asked(reply)
+        }
 
         // The version to offer [id] on the next request, or null when the satellite is
         // verifiably older than anything this client still speaks. Seeded from the
@@ -1324,19 +1362,7 @@ class SatelliteConnectionManager
             _connections.update { it - id }
         }
 
-        private fun getOrCreateDeviceId(): String {
-            val p = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            return p.getString(KEY_DEVICE_ID, null) ?: java.util.UUID
-                .randomUUID()
-                .toString()
-                .replace("-", "")
-                .also { p.edit { putString(KEY_DEVICE_ID, it) } }
-        }
-
         companion object {
-            private const val PREFS_NAME = "satellite"
-            private const val KEY_DEVICE_ID = "deviceId"
-
             private const val DISC_PORT = 9879
             private const val DISC_TIMEOUT_MS = 4000
 

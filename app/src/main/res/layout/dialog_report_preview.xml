@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "Preview file": the bundle's JSON exactly as it will be attached, scrollable both ways so a
+     long line is read rather than wrapped. -->
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingHorizontal="@dimen/spacing_4xl"
+    android:paddingTop="@dimen/spacing_lg">
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/tvReportPreview"
+            style="@style/TextAppearance.Dish.Body.Mono"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textIsSelectable="true" />
+    </HorizontalScrollView>
+</androidx.core.widget.NestedScrollView>

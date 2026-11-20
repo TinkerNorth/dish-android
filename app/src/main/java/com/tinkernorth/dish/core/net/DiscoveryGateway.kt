@@ -213,6 +213,19 @@ class DiscoveryGateway
                 http.getServerCapabilities(ip, port, pinId(satelliteId, ip))
             }
 
+        suspend fun connectionDiagnostics(
+            ip: String,
+            port: Int,
+            connectionId: String,
+            deviceId: String,
+            hmacProof: String,
+            timeoutMs: Int,
+            satelliteId: String = "",
+        ): HttpReply =
+            withContext(ioDispatcher) {
+                http.getConnectionDiagnostics(ip, port, connectionId, deviceId, hmacProof, pinId(satelliteId, ip), timeoutMs)
+            }
+
         private companion object {
             const val TAG = "DiscoveryGateway"
         }

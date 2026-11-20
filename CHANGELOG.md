@@ -10,7 +10,8 @@ computer. Those lines say "update Satellite too".
 ## [2.7.0] - 2026-11-19
 
 A controller list that can update itself, diagnostics at every level, and a
-way to email them to support.
+way to report a problem to support with both ends of the connection in the
+file.
 
 ### Added
 
@@ -40,17 +41,37 @@ way to email them to support.
 - **"Did it work?"** After each rumble, trigger, mic lamp, test tone and
   microphone test in the controller inspector, Dish asks whether it worked
   and shows the last answer. The answers are kept for the run.
-- **Email diagnostics.** The Diagnostics page can write one file about the
-  phone, the app, the controller database, your controllers and your
-  connections, and hand it to your own mail app addressed to
-  support@tinkernorth.com, with a summary in your language. Nothing is sent
-  until you press Send. Hosts appear as "Host 1", "Host 2"; the file never
-  holds pairing keys, fingerprints, IP addresses, Wi-Fi names or the names of
-  your computers.
+- **Report a problem, or ask a question.** The Diagnostics page has *Report
+  a problem* and *Ask a question*, one screen in two starting categories. You
+  pick what it is about (controller not recognised, no rumble or feedback,
+  connection or latency, audio, something else, a question), say what
+  happened, and pick the controller it concerns. The screen lists in plain
+  words what the file will hold, shows the file itself with *Preview file*,
+  and *Continue in mail app* hands it to your own mail app addressed to
+  support@tinkernorth.com, your words first in the message and the subject
+  "Dish support:" with the category in your language. Nothing is sent until
+  you press Send. Hosts appear as "Host 1", "Host 2"; the file never holds
+  pairing keys, fingerprints, IP addresses, Wi-Fi names or the names of your
+  computers.
+- **The file sees both ends of the connection.** For each connection it
+  holds the app's own view of the session (each controller slot, the type
+  asked for and the type the computer plugged, the last heartbeat answer,
+  round-trip times, and how many of each message went each way) and, from a
+  Satellite 2.3.0 or later, what Satellite says about the same session;
+  from an older Satellite, what the app last read of it; from a Moonlight
+  host, the version and state it reports. Update Satellite too for its side.
+- **Every controller path, in and out.** Each controller in the file says
+  how the phone reads it (Direct, standard, Bluetooth, or the on-screen pad),
+  how many reports came in and the last one, and for each output (rumble,
+  trigger rumble, light bar, player lights, trigger effects, mic lamp) how
+  many arrived, the last value and where it went, with the speaker and
+  haptics outputs' state. The phone's battery, temperature, power saving,
+  Wi-Fi band, signal and speed (never the network's name) and USB host
+  support ride along.
 - **Capture this controller.** A Direct controller's Diagnostics card has
   *Capture*, which keeps its USB descriptors, its HID report descriptor and
-  twenty input reports at rest for the next diagnostics email, so support can
-  add a controller nobody on the team owns.
+  twenty input reports at rest; it rides your next report when you pick that
+  controller, so support can add a controller nobody on the team owns.
 
 ### Changed
 
@@ -62,7 +83,7 @@ way to email them to support.
   controllers the Linux kernel and SDL say they are, marked as not yet
   confirmed on hardware, so Direct mode is theirs only if you pick it. Nobody
   has confirmed either way on a real controller yet; if yours misbehaves,
-  Email diagnostics from the Diagnostics page tells us.
+  Report a problem on the Diagnostics page tells us.
 
 ## [2.6.1] - 2026-11-19
 

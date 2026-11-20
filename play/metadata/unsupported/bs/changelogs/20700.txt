@@ -1,6 +1,6 @@
-Dish 2.7.0: lista kontrolera koja se sama ažurira i dijagnostika e-poštom.
+Dish 2.7.0: lista kontrolera koja se sama ažurira i prijava problema.
 
 • Dish pita dish.tinkernorth.com za podršku novim kontrolerima. U Postavkama je Automatski provjeravaj ažuriranja kontrolera, uključeno po zadanom.
-• Dijagnostika prikazuje zapis, poznate probleme i zadnji upis svakog kontrolera, a Pošalji dijagnostiku šalje datoteku podršci iz vaše aplikacije za e-poštu.
+• Dijagnostika prikazuje zapis, poznate probleme i zadnji upis svakog kontrolera, a Prijavi problem šalje vaše riječi i datoteku podršci iz aplikacije za e-poštu.
 • Inspektor nakon svakog testa pita je li radilo.
 • Satellite ne treba ažuriranje.

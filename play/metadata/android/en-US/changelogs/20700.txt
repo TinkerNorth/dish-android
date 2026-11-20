@@ -1,6 +1,6 @@
-Dish 2.7.0: a controller list that updates itself, and diagnostics you can email.
+Dish 2.7.0: a controller list that updates itself, and a way to report a problem.
 
 • Dish checks dish.tinkernorth.com for newer controller support. Settings has Check for controller updates automatically, on by default.
-• Diagnostics shows each controller's record, known issues and its last write, and Email diagnostics sends a file to support from your mail app.
+• Diagnostics shows each controller's record, known issues and last write; Report a problem sends your words and a file to support from your mail app.
 • The controller inspector asks Did it work? after each test.
 • Satellite needs no update.

@@ -5,6 +5,7 @@ package com.tinkernorth.dish.composer
 
 import com.tinkernorth.dish.source.controllerdb.ControllerDbStatus
 import com.tinkernorth.dish.source.store.DiagnosticsLogEntry
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -25,6 +26,24 @@ internal fun deviceJson(device: BundleDevice): JsonObject =
         put("model", device.model)
         put("os", device.os)
         put("arch", device.arch)
+        put("battery", device.battery?.let(::batteryJson) ?: JsonNull)
+        put("thermal", device.thermal)
+        put("powerSave", device.powerSave)
+        put("wifi", device.wifi?.let(::wifiJson) ?: JsonNull)
+        put("usbHost", device.usbHost)
+    }
+
+private fun batteryJson(battery: BundleBattery): JsonObject =
+    buildJsonObject {
+        put("level", battery.level)
+        put("charging", battery.charging)
+    }
+
+private fun wifiJson(wifi: BundleWifi): JsonObject =
+    buildJsonObject {
+        put("band", wifi.band)
+        put("rssiDbm", wifi.rssiDbm)
+        put("linkSpeedMbps", wifi.linkSpeedMbps)
     }
 
 internal fun controllerDbJson(status: ControllerDbStatus): JsonObject =
@@ -39,15 +58,31 @@ internal fun controllerDbJson(status: ControllerDbStatus): JsonObject =
 internal fun hostJson(
     index: Int,
     host: BundleHost,
+    scrub: Scrubber,
 ): JsonObject =
     buildJsonObject {
-        put("alias", "Host ${index + 1}")
+        put("alias", hostAlias(index))
         put("kind", host.kind)
         put("version", host.version)
         put("protocol", host.protocol)
         put("link", host.link)
         put("grants", host.grants?.let(::grantsJson) ?: JsonNull)
+        put("session", host.session?.let(::sessionJson) ?: JsonNull)
+        put("snapshot", host.snapshot.snapshot?.let { snapshotJson(it, host.ownNames, hostAlias(index), scrub) } ?: JsonNull)
+        put("snapshotError", host.snapshot.error?.wire)
     }
+
+internal fun hostAlias(index: Int): String = "Host ${index + 1}"
+
+private fun snapshotJson(
+    snapshot: JsonObject,
+    ownNames: Set<String>,
+    alias: String,
+    scrub: Scrubber,
+): JsonElement {
+    val aliased = aliasedJson(snapshot, AliasReplacer(ownNames, alias))
+    return scrubbedJson(aliased, scrub)
+}
 
 private fun grantsJson(grants: BundleGrants): JsonObject =
     buildJsonObject {

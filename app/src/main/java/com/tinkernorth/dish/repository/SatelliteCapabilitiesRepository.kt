@@ -12,6 +12,7 @@ import com.tinkernorth.dish.source.store.SatelliteHostRuntime
 import com.tinkernorth.dish.source.store.SatelliteHostRuntimeStore
 import kotlinx.serialization.json.Json
 import java.net.HttpURLConnection
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -29,7 +30,8 @@ import javax.inject.Singleton
  *   ([SatelliteHostFeaturesStore.noteControllerAudio]), because no other document
  *   carries it and a catalog read may already own the entry.
  *
- * Unlike the catalog this is live state, so it is not cached or ETag'd.
+ * Unlike the catalog this is live state, so it is not ETag'd; the last document read is kept
+ * only so a support report can say what the host last said about itself.
  */
 @Singleton
 class SatelliteCapabilitiesRepository
@@ -40,6 +42,10 @@ class SatelliteCapabilitiesRepository
         private val hostFeaturesStore: SatelliteHostFeaturesStore,
         private val runtimeStore: SatelliteHostRuntimeStore,
     ) {
+        private val lastFetched = ConcurrentHashMap<String, ServerCapabilitiesDto>()
+
+        fun lastFetched(satelliteId: String): ServerCapabilitiesDto? = lastFetched[satelliteId]
+
         suspend fun refresh(
             server: DiscoveredServer,
             satelliteId: String,
@@ -52,6 +58,7 @@ class SatelliteCapabilitiesRepository
             val caps =
                 runCatching { json.decodeFromString(ServerCapabilitiesDto.serializer(), reply.body) }
                     .getOrNull() ?: return null
+            lastFetched[satelliteId] = caps
 
             val probed = hostFeaturesFromServerCapabilities(caps)
             // An older satellite omits the host block (catalog.supported stays false): leave

@@ -39,8 +39,9 @@
             android:orientation="vertical">
 
             <!-- ═══ SUPPORT ════════════════════════════════════════════
-                 Email diagnostics: the bundle goes to the person's own mail
-                 app; nothing leaves the phone until they press Send. -->
+                 Report a problem / Ask a question: the same report screen in
+                 two categories; the file goes to the person's own mail app and
+                 nothing leaves the phone until they press Send. -->
             <include
                 android:id="@+id/sectionSupport"
                 layout="@layout/section_header"
@@ -53,15 +54,22 @@
                 style="@style/TextAppearance.Dish.Body"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/diagnostics_email_hint" />
+                android:text="@string/diagnostics_report_hint" />
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnEmailDiagnostics"
+                android:id="@+id/btnReportProblem"
                 style="@style/Widget.Dish.Button"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_md"
-                android:text="@string/diagnostics_email_button" />
+                android:text="@string/report_problem" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnAskQuestion"
+                style="@style/Widget.Dish.Button.Outlined"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/report_question" />
 
             <!-- ═══ CONTROLLER DATABASE ════════════════════════════════ -->
             <include

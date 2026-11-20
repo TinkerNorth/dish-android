@@ -4,6 +4,7 @@
 package com.tinkernorth.dish.ui.diagnostics
 
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.ReportCategory
 import com.tinkernorth.dish.core.controllerdb.VERIFICATION_FLAGGED
 import com.tinkernorth.dish.core.controllerdb.VERIFICATION_IMPORTED
 import com.tinkernorth.dish.core.controllerdb.VERIFICATION_VERIFIED
@@ -39,6 +40,24 @@ class DiagnosticsMailTest {
     fun `a mail app the send query did not list excludes nothing it cannot see`() {
         val launch = mailLaunchFor(sendHandlers = emptyList(), mailPackages = setOf("com.google.android.gm"))
         assertEquals(MailLaunch.MailApps(excluded = emptyList()), launch)
+    }
+
+    @Test
+    fun `the person's own words open the mail, before the summary`() {
+        val body = reportMailBody("It never rumbles.", listOf("Dish 2.7.0", "", "The file holds this page."))
+        assertEquals("It never rumbles.\n\nDish 2.7.0\n\nThe file holds this page.", body)
+    }
+
+    @Test
+    fun `a report with no words opens on the summary`() {
+        assertEquals("Dish 2.7.0", reportMailBody("  ", listOf("Dish 2.7.0")))
+    }
+
+    @Test
+    fun `every category has its label in the person's language`() {
+        val labels = ReportCategory.entries.map(::reportCategoryLabel)
+        assertEquals(ReportCategory.entries.size, labels.toSet().size)
+        assertEquals(R.string.report_category_question, reportCategoryLabel(ReportCategory.QUESTION))
     }
 
     @Test

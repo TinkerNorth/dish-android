@@ -85,6 +85,12 @@ data class SatelliteSessionStats(
     val missed: Int,
 )
 
+// A session's sent and received datagrams per wire message kind, as message_tally.h names them.
+data class SessionMessageCounts(
+    val sent: Map<String, Long>,
+    val received: Map<String, Long>,
+)
+
 data class SatelliteSnapshot(
     val live: Boolean,
     val slots: Map<String, SatelliteConnection.SlotBinding>,
@@ -95,6 +101,7 @@ data class SatelliteSnapshot(
     val closeReason: Int = -1,
     val slotSends: Map<Int, Long> = emptyMap(),
     val slotMotion: Map<Int, Long> = emptyMap(),
+    val messages: SessionMessageCounts? = null,
 )
 
 data class MoonlightSnapshot(

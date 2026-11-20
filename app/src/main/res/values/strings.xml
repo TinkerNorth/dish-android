@@ -1040,18 +1040,40 @@
     <string name="write_verdict_ok">OK, %1$s</string>
     <string name="write_verdict_line" translatable="false">%1$s · %2$s · %3$s</string>
     <string name="diagnostics_section_support">SUPPORT</string>
-    <string name="diagnostics_email_hint">Email diagnostics prepares a file about this phone, your controllers and your connections, addressed to support@tinkernorth.com in your own mail app. Nothing leaves the phone until you press Send.</string>
-    <string name="diagnostics_email_button">Email diagnostics</string>
-    <string name="diagnostics_email_subject" translatable="false">Dish diagnostics: Dish for Android %1$s on %2$s</string>
     <string name="diagnostics_email_attachment">The file holds this page and its log, never pairing keys, fingerprints, IP addresses, Wi-Fi names or PC names.</string>
     <string name="diagnostics_email_chooser">Send diagnostics with</string>
     <string name="diagnostics_email_no_app">No app on this phone can send the file.</string>
     <string name="diagnostics_email_failed">The diagnostics file could not be written.</string>
+    <string name="diagnostics_report_hint">Report a problem or ask a question. You say what happened, the app adds a file about this phone, your controllers and your connections, and your own mail app sends both to support@tinkernorth.com. Nothing leaves the phone until you press Send.</string>
+    <string name="report_problem">Report a problem</string>
+    <string name="report_question">Ask a question</string>
+    <string name="report_category_heading">What is it about?</string>
+    <string name="report_category_not_recognised">Controller not recognised</string>
+    <string name="report_category_no_feedback">No rumble or feedback</string>
+    <string name="report_category_connection">Connection or latency</string>
+    <string name="report_category_audio">Audio</string>
+    <string name="report_category_other">Something else</string>
+    <string name="report_category_question">A question</string>
+    <string name="report_text_hint">What happened, and what did you expect?</string>
+    <string name="report_controller_heading">Which controller?</string>
+    <string name="report_controller_none">None</string>
+    <string name="report_holds_heading">The file will hold</string>
+    <string name="report_holds_words">Your words and the category you picked</string>
+    <string name="report_holds_phone">This phone\'s model, Android version, battery, temperature, power saving and Wi-Fi signal</string>
+    <string name="report_holds_controllers">Each controller: its model, how the phone reads it, what it sent and what it was sent</string>
+    <string name="report_holds_capture">The capture of the controller you picked, if you took one</string>
+    <string name="report_holds_hosts">Each connection as Host 1, Host 2: its version, its session and what the PC says about it</string>
+    <string name="report_holds_log">The Diagnostics log and the app\'s own system log</string>
+    <string name="report_preview">Preview file</string>
+    <string name="report_continue">Continue in mail app</string>
+    <string name="report_preparing">Preparing the file…</string>
+    <string name="report_subject" translatable="false">Dish support: %1$s · Dish for Android %2$s on %3$s</string>
+    <string name="report_bullet" translatable="false">• %1$s</string>
     <string name="diagnostics_summary_app">Dish for Android %1$s (%2$s) on %3$s, Android %4$s</string>
     <string name="diagnostics_host_alias" translatable="false">Host %1$d</string>
     <string name="diagnostics_capture_button">Capture</string>
     <string name="diagnostics_capture_started">Capturing %1$s. Keep it still for a moment.</string>
-    <string name="diagnostics_capture_done">Captured %1$s. The capture rides the next diagnostics email.</string>
+    <string name="diagnostics_capture_done">Captured %1$s. The capture rides your next report when you pick this controller.</string>
     <string name="diagnostics_capture_failed">Could not capture %1$s.</string>
     <string name="diagnostics_controller_db_bundled">Built-in version</string>
     <string name="diagnostics_controller_db_active">Version in use</string>

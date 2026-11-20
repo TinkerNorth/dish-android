@@ -462,6 +462,24 @@ class SatelliteConnectionTest {
     }
 
     @Test
+    fun `an apply acknowledgement records the type the satellite applied`() {
+        conn.attachSlot("slot-1", controllerType = 1)
+
+        conn.applyResults(listOf(okApply(0, appliedType = 2)), conn.desiredDescriptors())
+
+        assertEquals(2, conn.slots.value["slot-1"]?.lastAppliedType)
+    }
+
+    @Test
+    fun `a failed apply leaves no applied type`() {
+        conn.attachSlot("slot-1", controllerType = 1)
+
+        conn.applyResults(listOf(failedApply(0, result = "noSlots")), conn.desiredDescriptors())
+
+        assertEquals(null, conn.slots.value["slot-1"]?.lastAppliedType)
+    }
+
+    @Test
     fun `a failed apply keeps the slot unregistered and surfaces the failure`() {
         conn.attachSlot("slot-1", controllerType = 0)
         var surfaced: List<ControllerApplyDto>? = null

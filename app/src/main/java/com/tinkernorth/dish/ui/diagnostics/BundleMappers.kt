@@ -10,14 +10,15 @@ import com.tinkernorth.dish.composer.BundleFeedback
 import com.tinkernorth.dish.composer.BundleGrants
 import com.tinkernorth.dish.composer.BundleHost
 import com.tinkernorth.dish.composer.BundleInputs
+import com.tinkernorth.dish.composer.BundleOutput
+import com.tinkernorth.dish.composer.HostSnapshot
 import com.tinkernorth.dish.composer.LinkState
-import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.audio.PadAudioReason
+import com.tinkernorth.dish.source.audio.PlayoutLane
 import com.tinkernorth.dish.source.store.DiagnosticsLogEntry
 
-// Every physical pad of the report (the on-screen pad is the phone, not a controller), every host
-// as an alias, and the values that must not leave: each host's label, id and detail, and the
-// phone's Wi-Fi address.
+// Every controller of the report, the on-screen pad on its own path, every host as an alias, and
+// the values that must not leave: each host's label, id and detail, and the phone's Wi-Fi address.
 internal fun bundleInputsOf(
     world: DiagnosticsWorld,
     controllers: List<ControllerDiag>,
@@ -25,40 +26,45 @@ internal fun bundleInputsOf(
     captures: Map<String, BundleCapture>,
     log: List<DiagnosticsLogEntry>,
     envelope: BundleEnvelope,
-): BundleInputs =
-    BundleInputs(
+    extras: BundleExtras = BundleExtras(),
+): BundleInputs {
+    val riding = capturesRiding(captures, extras.reportSlotId)
+    return BundleInputs(
         createdAtMs = envelope.createdAtMs,
         app = envelope.app,
         device = envelope.device,
         controllerDb = world.db.status,
-        controllers = controllers.filter { !it.isVirtual }.map { bundleControllerOf(it, world, captures) },
-        hosts = hosts.map(::bundleHostOf),
+        controllers = controllers.map { bundleControllerOf(it, world, riding, extras) },
+        hosts = hosts.map { bundleHostOf(it, controllers, extras) },
         log = log,
         logcat = envelope.logcat,
         forbidden = forbiddenValuesOf(world, hosts),
+        report = extras.report,
     )
+}
 
-internal fun bundlePathOf(diag: ControllerDiag): String =
-    when {
-        diag.isUsbSynthetic -> PATH_DIRECT
-        diag.transport == Transport.Bluetooth -> PATH_BLUETOOTH
-        else -> PATH_FRAMEWORK
-    }
-
-private const val PATH_DIRECT = "direct"
-private const val PATH_BLUETOOTH = "bluetooth"
-private const val PATH_FRAMEWORK = "framework"
+internal fun capturesRiding(
+    captures: Map<String, BundleCapture>,
+    slotId: String?,
+): Map<String, BundleCapture> = captures.filterKeys { it == slotId }
 
 private fun bundleControllerOf(
     diag: ControllerDiag,
     world: DiagnosticsWorld,
     captures: Map<String, BundleCapture>,
+    extras: BundleExtras,
 ): BundleController {
     val facts = diag.facts
+    val deviceId = diag.slotId.toIntOrNull()
+    val device = deviceId?.let(world.devices::get)
+    val frames = deviceId?.let(world.pads.reportCounts::get)
+    val state = deviceId?.let(extras.deviceStates::get)
+    val sources = deviceId?.let(extras.inputSources::get)
+    val linkType = deviceId?.let(world.pads.btLinkTypes::get)
     return BundleController(
         record = facts?.record?.id,
         verification = facts?.record?.verification,
-        transport = dbTransportOf(diag.transport),
+        transport = if (diag.isVirtual) null else dbTransportOf(diag.transport),
         path = bundlePathOf(diag),
         hardware = facts?.hardware,
         firmware = facts?.direct?.firmware,
@@ -75,10 +81,32 @@ private fun bundleControllerOf(
             },
         outcomes = world.pads.outcomes[diag.slotId].orEmpty(),
         capture = captures[diag.slotId],
+        input = bundleInputOf(diag, frames, state),
+        output = bundleOutputOf(diag.slotId, facts, world, extras),
+        standard = bundleStandardOf(diag, sources, device),
+        bluetooth = bundleBluetoothOf(diag, linkType),
     )
 }
 
-private fun bundleHostOf(host: HostDiag): BundleHost =
+private fun bundleOutputOf(
+    slotId: String,
+    facts: PadFacts?,
+    world: DiagnosticsWorld,
+    extras: BundleExtras,
+): BundleOutput =
+    BundleOutput(
+        target = feedbackTargetWire(feedbackTarget(slotId)),
+        lanes = bundleLanesOf(extras.lanes[slotId].orEmpty()),
+        lastWrite = facts?.lastWrite,
+        speaker = bundleVoiceOf(slotId, PlayoutLane.SPEAKER, world.audio.speakerVoices, extras.refusals),
+        haptics = bundleVoiceOf(slotId, PlayoutLane.HAPTICS, world.audio.speakerVoices, extras.refusals),
+    )
+
+private fun bundleHostOf(
+    host: HostDiag,
+    controllers: List<ControllerDiag>,
+    extras: BundleExtras,
+): BundleHost =
     BundleHost(
         kind = host.kind.name.lowercase(),
         version = host.serverVersion,
@@ -88,7 +116,16 @@ private fun bundleHostOf(host: HostDiag): BundleHost =
             host.features?.let {
                 BundleGrants(mic = it.controllerMic, speaker = it.controllerSpeaker, hapticAudio = it.controllerHapticAudio)
             },
+        session = bundleSessionOf(host, controllers, extras.typeSlugs[host.id].orEmpty()),
+        snapshot = extras.snapshots[host.id] ?: HostSnapshot.NONE,
+        ownNames = ownNamesOf(host, extras.hostAddresses[host.id]),
     )
+
+// What a host is called and where it is: its label and the address the app reaches it at.
+internal fun ownNamesOf(
+    host: HostDiag,
+    address: String?,
+): Set<String> = listOfNotNull(host.label, address).filter { it.isNotBlank() }.toSet()
 
 internal fun linkName(state: LinkState): String =
     when (state) {

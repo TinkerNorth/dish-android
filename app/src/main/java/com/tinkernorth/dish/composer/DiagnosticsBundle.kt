@@ -10,6 +10,7 @@ import com.tinkernorth.dish.source.store.TestOutcome
 import com.tinkernorth.dish.source.usb.UsbHardwareFacts
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -33,10 +34,28 @@ data class BundleApp(
     val flavor: String,
 )
 
+data class BundleBattery(
+    val level: Int?,
+    val charging: Boolean?,
+)
+
+// The phone's Wi-Fi link by its radio facts alone: never its name or its address.
+data class BundleWifi(
+    val band: String?,
+    val rssiDbm: Int,
+    val linkSpeedMbps: Int,
+)
+
+// A fact the platform does not expose, or that could not be read, is null.
 data class BundleDevice(
     val model: String,
     val os: String,
     val arch: String,
+    val battery: BundleBattery? = null,
+    val thermal: String? = null,
+    val powerSave: Boolean? = null,
+    val wifi: BundleWifi? = null,
+    val usbHost: Boolean? = null,
 )
 
 data class BundleFeedback(
@@ -75,7 +94,7 @@ data class BundleCapturedReport(
 data class BundleController(
     val record: String?,
     val verification: String?,
-    val transport: String,
+    val transport: String?,
     val path: String,
     val hardware: UsbHardwareFacts?,
     val firmware: String?,
@@ -86,6 +105,10 @@ data class BundleController(
     val audio: BundleAudio?,
     val outcomes: List<TestOutcome>,
     val capture: BundleCapture? = null,
+    val input: BundleInput? = null,
+    val output: BundleOutput? = null,
+    val standard: BundleStandard? = null,
+    val bluetooth: BundleBluetooth? = null,
 )
 
 data class BundleGrants(
@@ -94,13 +117,18 @@ data class BundleGrants(
     val hapticAudio: Boolean,
 )
 
-// A host by what it is, never by what it is called or where it is.
+// A host by what it is, never by what it is called or where it is: the client's own view of the
+// session, then whatever the host itself was able to say.
 data class BundleHost(
     val kind: String,
     val version: String?,
     val protocol: Int?,
     val link: String,
     val grants: BundleGrants?,
+    val session: BundleSession? = null,
+    val snapshot: HostSnapshot = HostSnapshot.NONE,
+    // The host's own label and address, which its snapshot names as its alias instead.
+    val ownNames: Set<String> = emptySet(),
 )
 
 data class BundleInputs(
@@ -114,6 +142,8 @@ data class BundleInputs(
     val logcat: String,
     // Every value the app knows must not leave: host labels, connection ids, Wi-Fi names, keys.
     val forbidden: Set<String>,
+    // The person's own report when they started from "Report a problem"; null otherwise.
+    val report: BundleReport? = null,
 )
 
 fun diagnosticsBundle(inputs: BundleInputs): JsonObject {
@@ -121,11 +151,12 @@ fun diagnosticsBundle(inputs: BundleInputs): JsonObject {
     return buildJsonObject {
         put("bundle", BUNDLE_VERSION)
         put("createdAt", isoUtc(inputs.createdAtMs))
+        put("report", inputs.report?.let(::reportJson) ?: JsonNull)
         put("app", appJson(inputs.app))
         put("device", deviceJson(inputs.device))
         put("controllerDb", controllerDbJson(inputs.controllerDb))
         put("controllers", JsonArray(inputs.controllers.map { controllerJson(it, inputs.createdAtMs, scrub) }))
-        put("hosts", JsonArray(inputs.hosts.mapIndexed(::hostJson)))
+        put("hosts", JsonArray(inputs.hosts.mapIndexed { index, host -> hostJson(index, host, scrub) }))
         put("log", JsonArray(inputs.log.map { logJson(it, scrub) }))
         put("extra", buildJsonObject { put("logcat", scrub(inputs.logcat)) })
     }

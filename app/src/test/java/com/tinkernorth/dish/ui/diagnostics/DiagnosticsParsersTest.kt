@@ -38,6 +38,19 @@ class DiagnosticsParsersTest {
     }
 
     @Test
+    fun `message counts are the sent and received tallies by kind`() {
+        val raw = """{"sent":{"input":12345,"motion":0},"received":{"rumble":12,"sessionClose":1}}"""
+        val counts = parseMessageCounts(json, raw) ?: error("no counts")
+        assertEquals(mapOf("input" to 12345L, "motion" to 0L), counts.sent)
+        assertEquals(mapOf("rumble" to 12L, "sessionClose" to 1L), counts.received)
+    }
+
+    @Test
+    fun `a closed session has no message counts`() {
+        assertNull(parseMessageCounts(json, ""))
+    }
+
+    @Test
     fun `device latency and device info decode the native fields`() {
         val latencyRaw =
             """{"stage1_hotpath_us":{"n":9,"p50":120.0,"p99":400.0},""" +

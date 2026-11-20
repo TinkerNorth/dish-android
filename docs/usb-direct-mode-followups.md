@@ -462,7 +462,8 @@ generates the compiled identity tables from it (`scripts/gen_controller_tables.p
 CMake builds through `app/src/main/cpp/controller_tables.cmake`), checks dish.tinkernorth.com for a
 newer copy (`source/controllerdb/`), hands the active usb rows to native
 (`ModelTableNative.setServedModels`, `usbparsers::setServedDevices`), records each Direct pad's last
-write verdict, asks "Did it work?" after the inspector's tests, and emails a diagnostics bundle.
+write verdict, asks "Did it work?" after the inspector's tests, and sends a support report with a
+diagnostics bundle that carries both ends of each connection.
 These pieces were deferred or deliberately shaped differently from the contracts:
 
 - **The guided per-button capture is deferred.** "Capture this controller" keeps the USB and HID
@@ -493,6 +494,34 @@ These pieces were deferred or deliberately shaped differently from the contracts
 - **The init verdict is the sequence's last write.** A multi-packet init (GIP, Switch Pro, the
   Steam Controllers' feature reports) records the verdict of the packet it stopped at, or of its
   last packet; GIP acks and the Steam Controller (2026)'s settings refreshes record none.
+- **The report's second cut carries what the client holds today, and names nulls for the rest.**
+  `backend` in each `hosts[i].session.slots` entry is null: the session PUT's apply answer names the
+  applied type but not the backend, so only the host's own snapshot says it. `speaker.frames` and
+  `haptics.frames` are null: the receive path counts speaker and haptic datagrams per session
+  (`received.speaker`, `received.haptic`), not per controller. A Moonlight session has no ack and no
+  RTT window, and counts only the reports it sent; a Bluetooth host only its reports.
+- **Two hot-path additions, both one increment.** `send_path.cpp` `countFor` adds one relaxed
+  load and store under the session's gate per datagram (`sentByKind`, `message_tally.h`), the same
+  shape as the existing per-controller tallies; `receive_path.cpp` adds one relaxed `fetch_add` per
+  datagram that opened (`receivedByKind`). On the Kotlin receive path `FeedbackActivityStore.note`
+  now keeps each lane's count, last value and time in per-slot atomic arrays: it no longer allocates
+  a `FeedbackActivity` per packet, but its count is an `incrementAndGet` (no relaxed increment below
+  API 33). Measure both on the hot-path bench with the rest of 2.7.0.
+- **A pad's last state is read by a mirror refresh.** The bundle's `input.last` comes from
+  `SlotTable::refreshMirrors`, the inspector's open-time copy, taken once when the report is
+  prepared; it is the slot's current state, which for a quiet pad is the last one it published.
+- **The capabilities fallback's protocol floor is written, not read.** Capabilities name only the
+  ceiling the host speaks, so `protocol` is `[1, ceiling]`: every Satellite accepts from 1, and its
+  own floor is only ever stated in a 409.
+- **A Moonlight host carries its version only.** The plaintext serverinfo the app parses reports
+  every host free and every caller unpaired, so `state` and `pairStatus` are null; the mutual-TLS
+  serverinfo would know both, and is not asked for a report.
+- **An older Satellite is decided by its version.** `isOlderSatellite` reads the serverVersion from
+  the capabilities the app last fetched (else the catalog's); an older host is never asked, and a
+  404 from 2.3.0 or later is `unknownConnection`. A host whose version the app never read is asked.
+- **The two-second limit is per request, not per report.** The connect and the read each time out
+  at two seconds; hosts are asked in parallel, so a report waits at most about four seconds on the
+  slowest one.
 
 **Where:** `app/src/main/cpp/usb_host.cpp`, `app/src/main/cpp/usb_parsers.cpp`,
 `app/src/main/java/com/tinkernorth/dish/source/usb/ControllerCapturer.kt`,

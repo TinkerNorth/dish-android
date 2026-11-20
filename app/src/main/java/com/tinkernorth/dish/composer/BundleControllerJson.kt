@@ -41,7 +41,19 @@ internal fun controllerJson(
         put("audio", controller.audio?.let(::audioJson) ?: JsonNull)
         put("outcomes", JsonArray(controller.outcomes.map(::outcomeJson)))
         put("capture", controller.capture?.let(::captureJson) ?: JsonNull)
+        put("input", controller.input?.let(::inputJson) ?: JsonNull)
+        put("output", controller.output?.let { outputAt(it, createdAtMs) } ?: JsonNull)
+        put("standard", controller.standard?.let(::standardJson) ?: JsonNull)
+        put("bluetooth", controller.bluetooth?.let(::bluetoothJson) ?: JsonNull)
     }
+
+private fun outputAt(
+    output: BundleOutput,
+    createdAtMs: Long,
+): JsonObject {
+    val lastWrite = output.lastWrite?.let { writeJson(it, createdAtMs) }
+    return outputJson(output, lastWrite)
+}
 
 private fun hardwareJson(
     hardware: UsbHardwareFacts,

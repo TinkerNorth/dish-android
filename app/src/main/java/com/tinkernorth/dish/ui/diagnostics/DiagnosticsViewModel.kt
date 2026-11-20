@@ -21,7 +21,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -30,7 +29,6 @@ import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
-import java.io.File
 import javax.inject.Inject
 
 @HiltViewModel
@@ -106,20 +104,7 @@ class DiagnosticsViewModel
 
         val controllerDb: StateFlow<ControllerDbStatus> get() = support.controllerDb.status
 
-        // A bundle written and ready to attach, with the report it was made from for the body.
-        class PreparedMail internal constructor(
-            val file: File,
-            val overview: Overview,
-            internal val world: DiagnosticsWorld,
-        )
-
         sealed interface SupportEvent {
-            data class MailReady(
-                val mail: PreparedMail,
-            ) : SupportEvent
-
-            data object MailFailed : SupportEvent
-
             data class Captured(
                 val name: String,
                 val ok: Boolean,
@@ -131,16 +116,6 @@ class DiagnosticsViewModel
 
         fun checkControllerDbNow() = support.controllerDb.checkNow()
 
-        fun emailDiagnostics() {
-            viewModelScope.launch {
-                val snapshot = world.first()
-                val overview = overviewOf(snapshot)
-                val file = support.writeBundle(snapshot, overview)
-                val event = file?.let { SupportEvent.MailReady(PreparedMail(it, overview, snapshot)) } ?: SupportEvent.MailFailed
-                _supportEvents.emit(event)
-            }
-        }
-
         fun capture(diag: ControllerDiag) {
             val deviceId = diag.slotId.toIntOrNull() ?: return
             viewModelScope.launch {
@@ -149,11 +124,7 @@ class DiagnosticsViewModel
             }
         }
 
-        private fun overviewOf(w: DiagnosticsWorld): Overview {
-            val controllers = controllerDiags(w, sources::touchpadMode)
-            val hosts = hostDiags(w, sources::touchpadMode)
-            return Overview(controllers, hosts, w.radios, latencyRows(controllers, hosts), ignoredInputDiags(w))
-        }
+        private fun overviewOf(w: DiagnosticsWorld): Overview = diagnosticsOverviewOf(w, sources::touchpadMode)
 
         private fun probeTicks(): Flow<LatencyUi> =
             flow {
@@ -174,3 +145,12 @@ class DiagnosticsViewModel
             const val WIFI_POLL_MS = 2000L
         }
     }
+
+internal fun diagnosticsOverviewOf(
+    world: DiagnosticsWorld,
+    touchpadMode: (String) -> String,
+): DiagnosticsViewModel.Overview {
+    val controllers = controllerDiags(world, touchpadMode)
+    val hosts = hostDiags(world, touchpadMode)
+    return DiagnosticsViewModel.Overview(controllers, hosts, world.radios, latencyRows(controllers, hosts), ignoredInputDiags(world))
+}
