@@ -12,10 +12,33 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class DiagnosticsMailTest {
+    private val gmailCompose = SendHandler("com.google.android.gm", "com.google.android.gm.ComposeActivityGmailExternal")
+    private val gmailDraft = SendHandler("com.google.android.gm", "com.google.android.gm.ComposeActivityGmail")
+    private val drive = SendHandler("com.google.android.apps.docs", "com.google.android.apps.docs.UploadActivity")
+    private val messages = SendHandler("com.google.android.apps.messaging", "com.google.android.apps.messaging.ui.ShareActivity")
+
     @Test
-    fun `a phone with a mail app sends to mail apps and one without to the share sheet`() {
-        assertEquals(MailLaunch.MailApps, mailLaunchFor(hasAMailApp = true))
-        assertEquals(MailLaunch.ShareSheet, mailLaunchFor(hasAMailApp = false))
+    fun `a phone with no mail app gets the whole share sheet`() {
+        val launch = mailLaunchFor(sendHandlers = listOf(drive, messages), mailPackages = emptySet())
+        assertEquals(MailLaunch.ShareSheet, launch)
+    }
+
+    @Test
+    fun `a phone with a mail app gets the share sheet without every app that takes no mail`() {
+        val launch = mailLaunchFor(sendHandlers = listOf(gmailCompose, drive, messages), mailPackages = setOf("com.google.android.gm"))
+        assertEquals(MailLaunch.MailApps(excluded = listOf(drive, messages)), launch)
+    }
+
+    @Test
+    fun `every activity of a mail app stays on the sheet`() {
+        val launch = mailLaunchFor(sendHandlers = listOf(gmailCompose, gmailDraft), mailPackages = setOf("com.google.android.gm"))
+        assertEquals(MailLaunch.MailApps(excluded = emptyList()), launch)
+    }
+
+    @Test
+    fun `a mail app the send query did not list excludes nothing it cannot see`() {
+        val launch = mailLaunchFor(sendHandlers = emptyList(), mailPackages = setOf("com.google.android.gm"))
+        assertEquals(MailLaunch.MailApps(excluded = emptyList()), launch)
     }
 
     @Test

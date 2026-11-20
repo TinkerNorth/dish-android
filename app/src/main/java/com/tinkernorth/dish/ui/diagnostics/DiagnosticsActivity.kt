@@ -5,7 +5,6 @@ package com.tinkernorth.dish.ui.diagnostics
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -209,10 +208,12 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
         val device = deviceFacts()
         val appLine = getString(R.string.diagnostics_summary_app, app.version, app.flavor, device.model, Build.VERSION.RELEASE.orEmpty())
         val body = mailBody(mail.overview, mail.world, appLine)
-        val hasAMailApp = packageManager.queryIntentActivities(mailAppQuery(), 0).isNotEmpty()
-        val intent = diagnosticsMailIntent(uri, mailSubject(app.version, device.model), body, mailLaunchFor(hasAMailApp))
+        val send = diagnosticsMailIntent(uri, mailSubject(app.version, device.model), body)
+        val mailPackages = packageManager.queryIntentActivities(mailAppQuery(), 0).map { it.activityInfo.packageName }.toSet()
+        val sendHandlers = packageManager.queryIntentActivities(send, 0).map(::sendHandlerOf)
+        val launch = mailLaunchFor(sendHandlers, mailPackages)
         try {
-            startActivity(Intent.createChooser(intent, getString(R.string.diagnostics_email_chooser)))
+            startActivity(diagnosticsChooser(send, getString(R.string.diagnostics_email_chooser), launch))
         } catch (e: ActivityNotFoundException) {
             Log.w(TAG, "no app takes the diagnostics mail", e)
             Toast.makeText(this, R.string.diagnostics_email_no_app, Toast.LENGTH_LONG).show()

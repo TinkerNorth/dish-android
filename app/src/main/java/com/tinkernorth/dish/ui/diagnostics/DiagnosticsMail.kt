@@ -4,8 +4,10 @@
 package com.tinkernorth.dish.ui.diagnostics
 
 import android.content.ClipData
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ResolveInfo
 import android.net.Uri
 import androidx.core.net.toUri
 import com.tinkernorth.dish.R
@@ -16,14 +18,34 @@ const val SUPPORT_EMAIL = "support@tinkernorth.com"
 const val BUNDLE_MIME_TYPE = "application/json"
 private const val MAILTO = "mailto:"
 
-// Where the mail goes: a mail app when the phone has one, the share sheet otherwise.
+// An app that takes the send, as the package manager names it: the app and the activity.
+data class SendHandler(
+    val packageName: String,
+    val className: String,
+)
+
+fun sendHandlerOf(info: ResolveInfo): SendHandler = SendHandler(info.activityInfo.packageName, info.activityInfo.name)
+
+// Where the mail goes: the share sheet with every app that takes no mail left out when the phone
+// has a mail app, the whole share sheet otherwise. The sheet is narrowed by exclusion because the
+// system chooser ignores an intent's selector and shows "No apps can perform this action" instead.
 sealed interface MailLaunch {
-    data object MailApps : MailLaunch
+    data class MailApps(
+        val excluded: List<SendHandler>,
+    ) : MailLaunch
 
     data object ShareSheet : MailLaunch
 }
 
-fun mailLaunchFor(hasAMailApp: Boolean): MailLaunch = if (hasAMailApp) MailLaunch.MailApps else MailLaunch.ShareSheet
+fun mailLaunchFor(
+    sendHandlers: List<SendHandler>,
+    mailPackages: Set<String>,
+): MailLaunch {
+    val noMailApp = mailPackages.isEmpty()
+    if (noMailApp) return MailLaunch.ShareSheet
+    val takesNoMail = sendHandlers.filter { handler -> handler.packageName !in mailPackages }
+    return MailLaunch.MailApps(excluded = takesNoMail)
+}
 
 // The question asked of the package manager: does any app take a mailto: link.
 fun mailAppQuery(): Intent = Intent(Intent.ACTION_SENDTO, MAILTO.toUri())
@@ -67,27 +89,35 @@ private fun Context.hostSummary(
     return getString(R.string.diagnostics_joined, alias, getString(statusChipTextRes(host.live)))
 }
 
-// ACTION_SEND with the recipient, subject, body and the file; a mail app only, where the phone has
-// one, by a mailto: selector.
+// ACTION_SEND with the recipient, subject, body and the file.
 fun diagnosticsMailIntent(
     file: Uri,
     subject: String,
     body: String,
+): Intent =
+    Intent(Intent.ACTION_SEND).apply {
+        type = BUNDLE_MIME_TYPE
+        putExtra(Intent.EXTRA_EMAIL, arrayOf(SUPPORT_EMAIL))
+        putExtra(Intent.EXTRA_SUBJECT, subject)
+        putExtra(Intent.EXTRA_TEXT, body)
+        putExtra(Intent.EXTRA_STREAM, file)
+        clipData = ClipData.newRawUri(subject, file)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+// The system share sheet for the send, narrowed to mail apps where the launch says so.
+fun diagnosticsChooser(
+    send: Intent,
+    title: CharSequence,
     launch: MailLaunch,
 ): Intent {
-    val send =
-        Intent(Intent.ACTION_SEND).apply {
-            type = BUNDLE_MIME_TYPE
-            putExtra(Intent.EXTRA_EMAIL, arrayOf(SUPPORT_EMAIL))
-            putExtra(Intent.EXTRA_SUBJECT, subject)
-            putExtra(Intent.EXTRA_TEXT, body)
-            putExtra(Intent.EXTRA_STREAM, file)
-            clipData = ClipData.newRawUri(subject, file)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
+    val chooser = Intent.createChooser(send, title)
     when (launch) {
-        MailLaunch.MailApps -> send.selector = mailAppQuery()
+        is MailLaunch.MailApps -> chooser.putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, componentsOf(launch.excluded))
         MailLaunch.ShareSheet -> Unit
     }
-    return send
+    return chooser
 }
+
+private fun componentsOf(handlers: List<SendHandler>): Array<ComponentName> =
+    handlers.map { handler -> ComponentName(handler.packageName, handler.className) }.toTypedArray()

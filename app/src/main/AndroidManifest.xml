@@ -269,11 +269,16 @@
 
     </application>
 
-    <!-- Whether a mail app is installed, so "Email diagnostics" can offer mail apps only. -->
+    <!-- Whether a mail app is installed, and which apps take the diagnostics file, so "Email
+         diagnostics" can offer the share sheet with everything but mail apps left out. -->
     <queries>
         <intent>
             <action android:name="android.intent.action.SENDTO" />
             <data android:scheme="mailto" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="application/json" />
         </intent>
     </queries>
 
