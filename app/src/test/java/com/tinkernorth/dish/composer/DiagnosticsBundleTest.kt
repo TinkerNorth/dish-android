@@ -233,6 +233,7 @@ class DiagnosticsBundleTest {
                 .jsonObject
         assertEquals(3, hid["interface"]?.jsonPrimitive?.int)
         assertEquals("05010905", hid["hex"]?.jsonPrimitive?.content)
+        assertEquals("device", hid["source"]?.jsonPrimitive?.content)
         val report =
             json
                 .getValue("restReports")

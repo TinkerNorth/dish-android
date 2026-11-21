@@ -27,10 +27,14 @@ internal fun captureJson(capture: BundleCapture): JsonObject =
         )
     }
 
+// Every descriptor here is read off the pad with a control transfer, never the OS's copy.
+private const val SOURCE_DEVICE = "device"
+
 private fun hidDescriptorJson(descriptor: BundleHidDescriptor): JsonObject =
     buildJsonObject {
         put("interface", descriptor.interfaceNumber)
         put("hex", descriptor.hex)
+        put("source", SOURCE_DEVICE)
     }
 
 private fun capturedReportJson(report: BundleCapturedReport): JsonElement =
