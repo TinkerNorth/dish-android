@@ -43,7 +43,7 @@ class DiagnosticsBundleTest {
         UsbHardwareFacts(
             vendorId = 0x054C,
             productId = 0x0CE6,
-            bcdDevice = "1.07",
+            bcdDevice = "0107",
             product = "Wireless Controller",
             manufacturer = "Sony Interactive Entertainment",
             interfaces = listOf(UsbInterfaceSummary(3, 3, 0, 0)),
@@ -210,7 +210,7 @@ class DiagnosticsBundleTest {
             BundleCapture(
                 device = "12010002",
                 configuration = "09022900",
-                strings = mapOf("2" to "0403"),
+                strings = mapOf("manufacturer" to "Sony", "product" to null),
                 hidReportDescriptors = listOf(BundleHidDescriptor(3, "05010905")),
                 restReports = listOf(BundleCapturedReport(5, "0180")),
             )
@@ -225,6 +225,9 @@ class DiagnosticsBundleTest {
         assertEquals("usb-descriptors-v1", json["format"]?.jsonPrimitive?.content)
         assertEquals("12010002", json["device"]?.jsonPrimitive?.content)
         assertEquals("09022900", json["configuration"]?.jsonPrimitive?.content)
+        val strings = json.getValue("strings").jsonObject
+        assertEquals("Sony", strings["manufacturer"]?.jsonPrimitive?.content)
+        assertEquals(JsonNull, strings["product"])
         val hid =
             json
                 .getValue("hidReportDescriptors")

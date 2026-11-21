@@ -40,12 +40,30 @@ class UsbHardwareStore
             setState { it + (vidPidKey(facts.vendorId, facts.productId) to facts) }
         }
 
-        fun noteDescriptorSha256(
+        // The raw descriptors are the descriptor's own word on bcdDevice, so they replace the
+        // enumeration's reading of it.
+        fun noteDescriptors(
             vendorId: Int,
             productId: Int,
             sha256: String,
+            bcdDevice: String?,
         ) {
             val key = vidPidKey(vendorId, productId)
-            setState { held -> held[key]?.let { held + (key to it.copy(descriptorSha256 = sha256)) } ?: held }
+            setState { held ->
+                held[key]?.let { facts ->
+                    held + (key to facts.copy(descriptorSha256 = sha256, bcdDevice = bcdDevice ?: facts.bcdDevice))
+                } ?: held
+            }
         }
     }
+
+private val RELEASE_STRING = Regex("""(\d)\.(\d)(\d)""")
+
+// UsbDevice.getVersion() back to the descriptor's bcdDevice. AOSP's UsbDeviceDescriptor
+// .getDeviceReleaseString formats it as "%d.%d%d" of (tens * 10 + ones), tenths, hundredths, one
+// nibble each. A major of ten or more can come from two values (0x0A00 and 0x1000 are both
+// "10.00"), and a nibble above nine prints two digits, so only the unambiguous form inverts.
+internal fun bcdFromReleaseString(version: String?): String? {
+    val match = version?.let(RELEASE_STRING::matchEntire) ?: return null
+    return "0" + match.groupValues.drop(1).joinToString("")
+}

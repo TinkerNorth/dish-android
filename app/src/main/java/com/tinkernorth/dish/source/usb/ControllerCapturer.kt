@@ -64,19 +64,16 @@ class ControllerCapturer
                 BundleHidDescriptor(interfaceNumber, it)
             }
 
-        // The language table, then the manufacturer's and the product's strings; the serial number
-        // identifies one unit and is never read.
+        // The manufacturer's and the product's strings, as text; the serial number identifies one
+        // unit and is never read.
         private fun stringDescriptorsOf(
             connection: UsbDeviceConnection,
             raw: ByteArray?,
-        ): Map<String, String> {
-            val indices = listOfNotNull(0, raw?.indexAt(I_MANUFACTURER), raw?.indexAt(I_PRODUCT)).filter { it >= 0 }.distinct()
+        ): Map<String, String?> {
             val language = readLanguage(connection)
-            return indices
-                .mapNotNull { index ->
-                    val lang = if (index == 0) 0 else language
-                    readControl(connection, REQUEST_IN_DEVICE, STRING_DESCRIPTOR or index, lang)?.let { index.toString() to it }
-                }.toMap()
+            return captureStringsOf(raw) { index ->
+                readBytes(connection, REQUEST_IN_DEVICE, STRING_DESCRIPTOR or index, language)
+            }
         }
 
         private fun readLanguage(connection: UsbDeviceConnection): Int {
@@ -92,11 +89,18 @@ class ControllerCapturer
             requestType: Int,
             value: Int,
             index: Int,
-        ): String? {
+        ): String? = readBytes(connection, requestType, value, index)?.let(::hexOf)
+
+        private fun readBytes(
+            connection: UsbDeviceConnection,
+            requestType: Int,
+            value: Int,
+            index: Int,
+        ): ByteArray? {
             val buffer = ByteArray(MAX_DESCRIPTOR_BYTES)
             val n = connection.controlTransfer(requestType, GET_DESCRIPTOR, value, index, buffer, buffer.size, TIMEOUT_MS)
             if (n <= 0) return null
-            return hexOf(buffer.copyOf(n))
+            return buffer.copyOf(n)
         }
 
         private suspend fun awaitReports(syntheticId: Int): List<BundleCapturedReport> {
@@ -115,8 +119,6 @@ class ControllerCapturer
             const val GET_DESCRIPTOR = 0x06
             const val STRING_DESCRIPTOR = 0x0300
             const val HID_REPORT_DESCRIPTOR = 0x2200
-            const val I_MANUFACTURER = 14
-            const val I_PRODUCT = 15
             const val MAX_STRING_BYTES = 255
             const val MAX_DESCRIPTOR_BYTES = 4096
             const val LANGUAGE_TABLE_FIRST_ID_END = 4
@@ -141,6 +143,44 @@ internal fun splitRawDescriptors(raw: ByteArray?): Pair<String?, String?> {
 }
 
 internal fun hexOf(bytes: ByteArray): String = bytes.joinToString("") { "%02x".format(it.toInt() and HEX_BYTE_MASK) }
+
+private const val STRING_DESCRIPTOR_TYPE = 3
+private const val STRING_HEADER_BYTES = 2
+private const val DEVICE_DESCRIPTOR_TYPE = 1
+private const val BCD_DEVICE_LOW = 12
+private const val BCD_DEVICE_HIGH = 13
+private const val BYTE_BITS = 8
+
+// A USB string descriptor: its length, its type (3), then UTF-16LE text. Null when it is not one.
+internal fun decodeStringDescriptor(bytes: ByteArray): String? {
+    val isString = bytes.size > STRING_HEADER_BYTES && bytes[1].toInt() == STRING_DESCRIPTOR_TYPE
+    if (!isString) return null
+    val length = ((bytes[0].toInt() and HEX_BYTE_MASK)).coerceIn(STRING_HEADER_BYTES, bytes.size)
+    return String(bytes, STRING_HEADER_BYTES, length - STRING_HEADER_BYTES, Charsets.UTF_16LE).takeIf { it.isNotEmpty() }
+}
+
+// The manufacturer's and the product's strings by role, found by the device descriptor's string
+// indices; null for a role the pad does not report. The serial number's index is never read.
+internal fun captureStringsOf(
+    raw: ByteArray?,
+    read: (Int) -> ByteArray?,
+): Map<String, String?> =
+    mapOf(
+        "manufacturer" to raw?.indexAt(I_MANUFACTURER_OFFSET)?.let(read)?.let(::decodeStringDescriptor),
+        "product" to raw?.indexAt(I_PRODUCT_OFFSET)?.let(read)?.let(::decodeStringDescriptor),
+    )
+
+private const val I_MANUFACTURER_OFFSET = 14
+private const val I_PRODUCT_OFFSET = 15
+
+// bcdDevice as the device descriptor holds it, bytes 12 and 13 (little-endian), four lowercase hex digits.
+internal fun bcdDeviceOf(raw: ByteArray?): String? {
+    val isDeviceDescriptor = raw != null && raw.size > BCD_DEVICE_HIGH && raw[1].toInt() == DEVICE_DESCRIPTOR_TYPE
+    if (raw == null || !isDeviceDescriptor) return null
+    val low = raw[BCD_DEVICE_LOW].toInt() and HEX_BYTE_MASK
+    val high = raw[BCD_DEVICE_HIGH].toInt() and HEX_BYTE_MASK
+    return "%04x".format((high shl BYTE_BITS) or low)
+}
 
 private fun ByteArray.indexAt(offset: Int): Int? = getOrNull(offset)?.toInt()?.and(HEX_BYTE_MASK)?.takeIf { it > 0 }
 

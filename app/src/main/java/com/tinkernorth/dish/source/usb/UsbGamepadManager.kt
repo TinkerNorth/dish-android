@@ -503,7 +503,7 @@ class UsbGamepadManager
                 return ClaimOutcome.Fail(DirectClaimFailure.InitFailed, frameworkStolen = true)
             }
             claimedConns[key] = ClaimedConn(conn, pads)
-            conn.rawDescriptors?.let { hardware.noteDescriptorSha256(device.vendorId, device.productId, sha256Hex(it)) }
+            conn.rawDescriptors?.let { hardware.noteDescriptors(device.vendorId, device.productId, sha256Hex(it), bcdDeviceOf(it)) }
             if (receiver) listenOnSlots(key, pads) else listPad(device, pads.single(), routedFrameworkId)
             Log.i(TAG, "claimed ${device.vendorId.toHex4()}:${device.productId.toHex4()} → dev=${pads.map { it.syntheticId }}")
             return ClaimOutcome.Ok(pads.first().syntheticId)
@@ -876,7 +876,7 @@ private fun hardwareFactsOf(
     UsbHardwareFacts(
         vendorId = device.vendorId,
         productId = device.productId,
-        bcdDevice = device.version,
+        bcdDevice = bcdFromReleaseString(device.version),
         product = readDeviceString(device::getProductName),
         manufacturer = readDeviceString(device::getManufacturerName),
         interfaces = (0 until device.interfaceCount).map { interfaceSummaryOf(device.getInterface(it)) },

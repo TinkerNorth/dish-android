@@ -72,11 +72,11 @@ data class BundleAudio(
 const val CAPTURE_FORMAT = "usb-descriptors-v1"
 
 // Section "Capture", format usb-descriptors-v1: one controller the person chose, as hex. The
-// strings are the descriptors by their index; the serial number is never among them.
+// strings are the manufacturer's and the product's text by role; the serial number is never among them.
 data class BundleCapture(
     val device: String?,
     val configuration: String?,
-    val strings: Map<String, String>,
+    val strings: Map<String, String?>,
     val hidReportDescriptors: List<BundleHidDescriptor>,
     val restReports: List<BundleCapturedReport>,
 )
