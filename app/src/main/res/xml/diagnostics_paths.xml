@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The one directory the diagnostics FileProvider serves: the bundle being emailed, written by
+     DiagnosticsSupport and replaced by the next one. -->
+<paths>
+    <cache-path
+        name="diagnostics"
+        path="diagnostics/" />
+</paths>

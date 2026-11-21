@@ -116,6 +116,7 @@ private fun Context.feedbackLines(
             )
         } ?: getString(R.string.diagnostics_none)
     lines += diagKv(R.string.diagnostics_last_feedback, last)
+    b.lastWrite?.let { lines += diagKv(R.string.diagnostics_last_write, writeVerdictLine(it, nowMs)) }
     return lines
 }
 

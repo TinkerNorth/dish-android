@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
+#include "known_devices.generated.h"
 #include "usb_parsers.h"
 #include "wire_encoders.h"
 
@@ -9,6 +10,7 @@
 #include <cstdint>
 #include <cstring>
 #include <initializer_list>
+#include <iterator>
 #include <vector>
 
 using gamepad::DeviceState;
@@ -4465,4 +4467,344 @@ TEST(SteamBleWrites, The2015PadHasNoRumbleToWrite) {
     st.strong = 0xFFFF;
     usbparsers::BleWrite w;
     EXPECT_FALSE(usbparsers::buildSteamBleRumbleWrite(Parser::STEAM_CONTROLLER_BLE, st, w));
+}
+
+// ── The compiled identity tables, generated from the bundled controller database ─────────────
+
+namespace {
+
+template <size_t N>
+const usbparsers::KnownDevice* rowIn(const usbparsers::KnownDevice (&table)[N], const uint16_t vid,
+                                     const uint16_t pid) {
+    for (const usbparsers::KnownDevice& d : table) {
+        const bool isTheModel = d.vid == vid && d.pid == pid;
+        if (isTheModel) return &d;
+    }
+    return nullptr;
+}
+
+struct ExpectedRow {
+    uint16_t vid;
+    uint16_t pid;
+    const char* name;
+    Parser parser;
+    InitKind init;
+    ButtonOrder order;
+};
+
+void expectRow(const usbparsers::KnownDevice* actual, const ExpectedRow& expected) {
+    ASSERT_NE(nullptr, actual) << std::hex << expected.vid << ":" << expected.pid;
+    EXPECT_STREQ(expected.name, actual->name);
+    EXPECT_EQ(expected.parser, actual->parser) << expected.name;
+    EXPECT_EQ(expected.init, actual->init) << expected.name;
+    EXPECT_EQ(expected.order, actual->order) << expected.name;
+}
+
+// Literal rows copied from the hand-written kKnown, kImported and kBluetoothKnown the generated
+// header replaced.
+constexpr ExpectedRow kVerifiedRows[] = {
+    {0x2DC8, 0x310B, "8BitDo Ultimate 2 Wireless Controller", Parser::XINPUT_360, InitKind::NONE,
+     ButtonOrder::WESTERN},
+    {0x045E, 0x028E, "Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE,
+     ButtonOrder::WESTERN},
+    {0x045E, 0x0719, "Xbox 360 Wireless Receiver (rev 2)", Parser::XINPUT_360_WIRELESS,
+     InitKind::NONE, ButtonOrder::WESTERN},
+    {0x045E, 0x02EA, "Xbox One S Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_S,
+     ButtonOrder::WESTERN},
+    {0x054C, 0x0CE6, "Sony DualSense", Parser::DUALSENSE, InitKind::NONE, ButtonOrder::WESTERN},
+    {0x057E, 0x2019, "Nintendo N64 Online Controller", Parser::SWITCH_N64_USB,
+     InitKind::SWITCH_PRO_HANDSHAKE, ButtonOrder::WESTERN},
+    {0x18D1, 0x9400, "Google Stadia Controller", Parser::STADIA, InitKind::NONE,
+     ButtonOrder::WESTERN},
+};
+
+constexpr ExpectedRow kImportedRows[] = {
+    {0x2DC8, 0x5006, "8BitDo M30 (D-input)", Parser::GENERIC_HID_GAMEPAD, InitKind::NONE,
+     ButtonOrder::EIGHTBITDO},
+    {0x054C, 0x0CDA, "PlayStation Classic controller", Parser::GENERIC_HID_GAMEPAD, InitKind::NONE,
+     ButtonOrder::PLAYSTATION_CLASSIC},
+    {0x0E6F, 0x0185, "PDP Wired Fight Pad Pro (Switch)", Parser::GENERIC_HID_GAMEPAD,
+     InitKind::NONE, ButtonOrder::SWITCH},
+    {0x28DE, 0x1302, "Valve Steam Controller (2026)", Parser::STEAM_TRITON,
+     InitKind::STEAM_TRITON_QUIET, ButtonOrder::WESTERN},
+};
+
+constexpr ExpectedRow kBluetoothRow = {0x28DE,
+                                       0x1106,
+                                       "Valve Steam Controller (Bluetooth)",
+                                       Parser::STEAM_CONTROLLER_BLE,
+                                       InitKind::STEAM_QUIET,
+                                       ButtonOrder::WESTERN};
+
+constexpr size_t kDbVersion1Rows = 272;
+constexpr uint16_t kPowerA = 0x24C6;
+constexpr uint16_t kFusionPro = 0x551A;
+constexpr uint16_t kFusion = 0x561A;
+
+} // namespace
+
+TEST(GeneratedTables, DbVersionOneCompilesEveryRowOfTheThreeTables) {
+    const size_t rows = std::size(usbparsers::kKnown) + std::size(usbparsers::kImported) +
+                        std::size(usbparsers::kBluetoothKnown);
+    EXPECT_EQ(kDbVersion1Rows, rows);
+    EXPECT_EQ(1, usbparsers::kGeneratedDbVersion);
+}
+
+TEST(GeneratedTables, VerifiedRowsKeepTheirHandWrittenNameFamilyAndInit) {
+    for (const ExpectedRow& expected : kVerifiedRows) {
+        expectRow(rowIn(usbparsers::kKnown, expected.vid, expected.pid), expected);
+    }
+}
+
+TEST(GeneratedTables, ImportedRowsKeepTheirHandWrittenNameFamilyInitAndButtonOrder) {
+    for (const ExpectedRow& expected : kImportedRows) {
+        expectRow(rowIn(usbparsers::kImported, expected.vid, expected.pid), expected);
+    }
+}
+
+TEST(GeneratedTables, TheBluetoothSteamControllerIsInTheBluetoothTableOnly) {
+    expectRow(rowIn(usbparsers::kBluetoothKnown, kBluetoothRow.vid, kBluetoothRow.pid),
+              kBluetoothRow);
+    EXPECT_EQ(nullptr, usbparsers::lookupKnown(kBluetoothRow.vid, kBluetoothRow.pid));
+}
+
+TEST(GeneratedTables, TheUltimate2IsAVerifiedXInputFastLaneModel) {
+    const usbparsers::Classification c = usbparsers::classifyDevice(0x2DC8, 0x310B, 0x03, 0, 0);
+    EXPECT_EQ(Parser::XINPUT_360, c.parser);
+    EXPECT_STREQ("8BitDo Ultimate 2 Wireless Controller", c.name);
+    EXPECT_TRUE(isVerifiedFastLane(0x2DC8, 0x310B));
+}
+
+// The hand-written kKnown listed the two PowerA FUSION pads twice, as XInput and then as GIP, and
+// only the XInput row was ever reachable. The database keeps them as the Xbox One pads xpad and
+// SDL type them, imported because no hardware has confirmed it, so Direct is theirs by opt-in.
+TEST(GeneratedTables, ThePowerAFusionPadsAreImportedXboxOnePadsOffTheFastLane) {
+    for (const uint16_t pid : {kFusionPro, kFusion}) {
+        const usbparsers::KnownDevice* k = usbparsers::lookupKnown(kPowerA, pid);
+        ASSERT_NE(nullptr, k) << std::hex << pid;
+        EXPECT_EQ(Parser::XBOX_ONE_GIP, k->parser) << std::hex << pid;
+        EXPECT_EQ(InitKind::XBOX_ONE_POWERON, k->init) << std::hex << pid;
+        EXPECT_EQ(nullptr, rowIn(usbparsers::kKnown, kPowerA, pid)) << std::hex << pid;
+        EXPECT_NE(nullptr, rowIn(usbparsers::kImported, kPowerA, pid)) << std::hex << pid;
+        EXPECT_FALSE(isVerifiedFastLane(kPowerA, pid)) << std::hex << pid;
+    }
+    EXPECT_STREQ("PowerA FUSION Pro Wired Xbox One",
+                 usbparsers::lookupKnown(kPowerA, kFusionPro)->name);
+}
+
+// ── Served rows: the active controller database's identities, after the compiled tables ──────
+
+namespace {
+
+constexpr uint16_t kServedVendor = 0x1D79;
+constexpr uint16_t kServedProduct = 0x0301;
+constexpr int32_t kOutOfRangeParser = 99;
+constexpr int32_t kOutOfRangeInit = 42;
+constexpr int32_t kOutOfRangeOrder = 7;
+
+usbparsers::ServedDevice servedRow(const uint16_t vid, const uint16_t pid, const Parser parser,
+                                   const bool verified) {
+    usbparsers::ServedDevice row;
+    row.vid = vid;
+    row.pid = pid;
+    row.parser = parser;
+    row.init = InitKind::NONE;
+    row.order = ButtonOrder::WESTERN;
+    row.verified = verified;
+    return row;
+}
+
+// Each test leaves no served rows behind for the next.
+class ServedRows : public ::testing::Test {
+  protected:
+    void TearDown() override { usbparsers::setServedDevices(nullptr, 0); }
+};
+
+} // namespace
+
+TEST_F(ServedRows, AServedIdentityOffTheCompiledTablesClassifiesByItsFamily) {
+    const usbparsers::ServedDevice rows[] = {
+        servedRow(kServedVendor, kServedProduct, Parser::DUALSHOCK4, false)};
+    usbparsers::setServedDevices(rows, 1);
+    const usbparsers::Classification c =
+        usbparsers::classifyDevice(kServedVendor, kServedProduct, 0x03, 0, 0);
+    EXPECT_EQ(Parser::DUALSHOCK4, c.parser);
+    EXPECT_EQ(nullptr, c.name);
+}
+
+TEST_F(ServedRows, TheCompiledRowWinsOverAServedRowForTheSameIdentity) {
+    const usbparsers::ServedDevice rows[] = {servedRow(0x045E, 0x028E, Parser::DUALSENSE, false)};
+    usbparsers::setServedDevices(rows, 1);
+    const usbparsers::KnownDevice* k = usbparsers::lookupKnown(0x045E, 0x028E);
+    ASSERT_NE(nullptr, k);
+    EXPECT_EQ(Parser::XINPUT_360, k->parser);
+    EXPECT_TRUE(isVerifiedFastLane(0x045E, 0x028E));
+}
+
+TEST_F(ServedRows, AVerifiedServedRowDoesNotLiftACompiledImportedRowOntoTheFastLane) {
+    const usbparsers::ServedDevice rows[] = {servedRow(0x20D6, 0x2001, Parser::XBOX_ONE_GIP, true)};
+    usbparsers::setServedDevices(rows, 1);
+    EXPECT_FALSE(isVerifiedFastLane(0x20D6, 0x2001));
+}
+
+TEST_F(ServedRows, AVerifiedServedRowIsOnTheFastLane) {
+    const usbparsers::ServedDevice rows[] = {
+        servedRow(kServedVendor, kServedProduct, Parser::XINPUT_360, true)};
+    usbparsers::setServedDevices(rows, 1);
+    EXPECT_TRUE(isVerifiedFastLane(kServedVendor, kServedProduct));
+}
+
+TEST_F(ServedRows, AnUnverifiedServedRowIsRecognisedButNotOnTheFastLane) {
+    const usbparsers::ServedDevice rows[] = {
+        servedRow(kServedVendor, kServedProduct, Parser::XINPUT_360, false)};
+    usbparsers::setServedDevices(rows, 1);
+    EXPECT_NE(nullptr, usbparsers::lookupKnown(kServedVendor, kServedProduct));
+    EXPECT_FALSE(isVerifiedFastLane(kServedVendor, kServedProduct));
+}
+
+TEST_F(ServedRows, ALaterSetReplacesTheWholeEarlierOne) {
+    const usbparsers::ServedDevice first[] = {
+        servedRow(kServedVendor, kServedProduct, Parser::XINPUT_360, false)};
+    usbparsers::setServedDevices(first, 1);
+    const usbparsers::ServedDevice second[] = {
+        servedRow(kServedVendor, 0x0302, Parser::STADIA, false)};
+    usbparsers::setServedDevices(second, 1);
+    EXPECT_EQ(nullptr, usbparsers::lookupKnown(kServedVendor, kServedProduct));
+    EXPECT_NE(nullptr, usbparsers::lookupKnown(kServedVendor, 0x0302));
+    EXPECT_EQ(1u, usbparsers::servedDeviceCount());
+}
+
+TEST_F(ServedRows, ARowAnAttachAlreadyReadOutlivesTheSetThatReplacedIt) {
+    const usbparsers::ServedDevice first[] = {
+        servedRow(kServedVendor, kServedProduct, Parser::DUALSENSE, false)};
+    usbparsers::setServedDevices(first, 1);
+    const usbparsers::KnownDevice* held = usbparsers::lookupKnown(kServedVendor, kServedProduct);
+    usbparsers::setServedDevices(nullptr, 0);
+    ASSERT_NE(nullptr, held);
+    EXPECT_EQ(Parser::DUALSENSE, held->parser);
+}
+
+TEST_F(ServedRows, WithNoServedSetAnUnknownIdentityFallsBackToItsInterface) {
+    EXPECT_EQ(0u, usbparsers::servedDeviceCount());
+    const usbparsers::Classification c =
+        usbparsers::classifyDevice(kServedVendor, kServedProduct, 0xFF, 0x5D, 0x01);
+    EXPECT_EQ(Parser::XINPUT_360, c.parser);
+}
+
+TEST(ServedDeviceOf, AnInRangeRowIsTakenAsTheJvmNamedIt) {
+    usbparsers::ServedDevice out;
+    ASSERT_TRUE(usbparsers::servedDeviceOf(kServedVendor, kServedProduct,
+                                           static_cast<int32_t>(Parser::GENERIC_HID_GAMEPAD),
+                                           static_cast<int32_t>(InitKind::NONE),
+                                           static_cast<int32_t>(ButtonOrder::SWITCH), true, out));
+    EXPECT_EQ(kServedVendor, out.vid);
+    EXPECT_EQ(kServedProduct, out.pid);
+    EXPECT_EQ(Parser::GENERIC_HID_GAMEPAD, out.parser);
+    EXPECT_EQ(ButtonOrder::SWITCH, out.order);
+    EXPECT_TRUE(out.verified);
+}
+
+TEST(ServedDeviceOf, AFamilyThisBuildDoesNotCompileIsInert) {
+    usbparsers::ServedDevice out;
+    EXPECT_FALSE(usbparsers::servedDeviceOf(kServedVendor, kServedProduct, kOutOfRangeParser, 0, 0,
+                                            false, out));
+    EXPECT_FALSE(usbparsers::servedDeviceOf(kServedVendor, kServedProduct,
+                                            static_cast<int32_t>(Parser::NONE), 0, 0, false, out));
+}
+
+TEST(ServedDeviceOf, AnInitKindOrButtonOrderThisBuildDoesNotCompileIsInert) {
+    usbparsers::ServedDevice out;
+    const int32_t stadia = static_cast<int32_t>(Parser::STADIA);
+    EXPECT_FALSE(usbparsers::servedDeviceOf(kServedVendor, kServedProduct, stadia, kOutOfRangeInit,
+                                            0, false, out));
+    EXPECT_FALSE(usbparsers::servedDeviceOf(kServedVendor, kServedProduct, stadia, 0,
+                                            kOutOfRangeOrder, false, out));
+}
+
+TEST(ServedDeviceOf, AnIdentityOutsideSixteenBitsIsRefused) {
+    usbparsers::ServedDevice out;
+    const int32_t stadia = static_cast<int32_t>(Parser::STADIA);
+    EXPECT_FALSE(usbparsers::servedDeviceOf(0x10000, kServedProduct, stadia, 0, 0, false, out));
+    EXPECT_FALSE(usbparsers::servedDeviceOf(kServedVendor, -1, stadia, 0, 0, false, out));
+}
+
+// ── The write verdict: what each output write came to, by route ───────────────────────────────
+
+namespace {
+
+constexpr uint8_t kOutEndpoint = 0x03;
+constexpr int64_t kWrittenAtMs = 1234;
+constexpr int32_t kEpipe = 32;
+const uint8_t kReport02[] = {0x02, 0xFF, 0x00};
+
+} // namespace
+
+TEST(WriteVerdict, AnInterruptOutWriteThatLandedIsOkWithItsEndpointAndReportId) {
+    const usbparsers::WriteVerdict v =
+        usbparsers::writeVerdictOf(usbparsers::OutputRoute::INTERRUPT_OUT, kOutEndpoint, kReport02,
+                                   sizeof(kReport02), usbparsers::WRITE_OK, kWrittenAtMs);
+    EXPECT_TRUE(v.recorded);
+    EXPECT_EQ(usbparsers::OutputRoute::INTERRUPT_OUT, v.route);
+    EXPECT_EQ(kOutEndpoint, v.endpoint);
+    EXPECT_EQ(0x02, v.reportId);
+    EXPECT_TRUE(v.ok);
+    EXPECT_EQ(usbparsers::WRITE_OK, v.err);
+    EXPECT_EQ(kWrittenAtMs, v.atMs);
+}
+
+TEST(WriteVerdict, AnInterruptOutWriteTheKernelRefusedCarriesItsErrno) {
+    const usbparsers::WriteVerdict v =
+        usbparsers::writeVerdictOf(usbparsers::OutputRoute::INTERRUPT_OUT, kOutEndpoint, kReport02,
+                                   sizeof(kReport02), kEpipe, kWrittenAtMs);
+    EXPECT_TRUE(v.recorded);
+    EXPECT_FALSE(v.ok);
+    EXPECT_EQ(kEpipe, v.err);
+}
+
+TEST(WriteVerdict, AShortTransferIsNotOk) {
+    const usbparsers::WriteVerdict v =
+        usbparsers::writeVerdictOf(usbparsers::OutputRoute::INTERRUPT_OUT, kOutEndpoint, kReport02,
+                                   sizeof(kReport02), usbparsers::WRITE_ERR_SHORT, kWrittenAtMs);
+    EXPECT_FALSE(v.ok);
+    EXPECT_EQ(usbparsers::WRITE_ERR_SHORT, v.err);
+}
+
+TEST(WriteVerdict, ASetReportWriteNamesNoEndpoint) {
+    const usbparsers::WriteVerdict v =
+        usbparsers::writeVerdictOf(usbparsers::OutputRoute::CONTROL_SET_REPORT, 0, kReport02,
+                                   sizeof(kReport02), usbparsers::WRITE_OK, kWrittenAtMs);
+    EXPECT_TRUE(v.recorded);
+    EXPECT_EQ(usbparsers::OutputRoute::CONTROL_SET_REPORT, v.route);
+    EXPECT_EQ(0, v.endpoint);
+    EXPECT_TRUE(v.ok);
+}
+
+TEST(WriteVerdict, APadWithNoRouteRecordsRouteNoneWithTheReportItWouldHaveSent) {
+    const usbparsers::WriteVerdict v =
+        usbparsers::writeVerdictOf(usbparsers::OutputRoute::NONE, 0, kReport02, sizeof(kReport02),
+                                   usbparsers::WRITE_OK, kWrittenAtMs);
+    EXPECT_TRUE(v.recorded);
+    EXPECT_EQ(usbparsers::OutputRoute::NONE, v.route);
+    EXPECT_EQ(0x02, v.reportId);
+    EXPECT_FALSE(v.ok);
+    EXPECT_EQ(usbparsers::WRITE_OK, v.err);
+}
+
+TEST(WriteVerdict, APadWithNoRouteAndNoReportStillRecordsRouteNone) {
+    const usbparsers::WriteVerdict v = usbparsers::writeVerdictOf(
+        usbparsers::OutputRoute::NONE, 0, nullptr, 0, usbparsers::WRITE_OK, kWrittenAtMs);
+    EXPECT_TRUE(v.recorded);
+    EXPECT_EQ(0, v.reportId);
+}
+
+TEST(WriteVerdict, AReportThatBuiltToNothingIsNoWriteAndRecordsNothing) {
+    const usbparsers::WriteVerdict v =
+        usbparsers::writeVerdictOf(usbparsers::OutputRoute::INTERRUPT_OUT, kOutEndpoint, kReport02,
+                                   0, usbparsers::WRITE_OK, kWrittenAtMs);
+    EXPECT_FALSE(v.recorded);
+}
+
+TEST(WriteVerdict, OutputsOtherThanRumbleGoOnlyByTheOutEndpoint) {
+    EXPECT_EQ(usbparsers::OutputRoute::INTERRUPT_OUT, usbparsers::endpointRouteFor(kOutEndpoint));
+    EXPECT_EQ(usbparsers::OutputRoute::NONE, usbparsers::endpointRouteFor(0));
 }

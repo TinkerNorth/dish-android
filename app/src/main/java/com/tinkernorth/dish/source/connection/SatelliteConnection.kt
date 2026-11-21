@@ -132,6 +132,10 @@ class SatelliteConnection(
         val lastAdvertisedCaps: Int? = null,
         val lastAdvertisedTouchpadMode: String? = null,
         val lastApplyResult: String? = null,
+        // The type the satellite says it plugged for this slot; null until an apply left it live.
+        val lastAppliedType: Int? = null,
+        // The driver the satellite says backs that pad; null when it named none.
+        val lastBackend: String? = null,
     )
 
     data class SessionFacts(
@@ -470,10 +474,12 @@ class SatelliteConnection(
                         lastAdvertisedCaps = if (result.ok) descriptor.caps else binding.lastAdvertisedCaps,
                         lastAdvertisedTouchpadMode = if (result.ok) descriptor.touchpadMode else binding.lastAdvertisedTouchpadMode,
                         lastApplyResult = result.result,
+                        lastAppliedType = result.appliedType,
+                        lastBackend = result.backend,
                     )
                 } else {
                     motionBackendStatusStore?.clear(id, slotId)
-                    binding.copy(registered = false, lastApplyResult = result.result)
+                    binding.copy(registered = false, lastApplyResult = result.result, lastAppliedType = null, lastBackend = null)
                 }
             }
         }

@@ -139,6 +139,10 @@ internal fun padFacts(
         frameworkTiming = pads.frameworkTiming[device.id],
         stickHistory = pads.stickHistory[stickHistoryKeyFor(device.vendorId, device.productId, device.name)],
         audio = if (device.transport == Transport.Usb) pads.audio[endpointKey] else null,
+        record = recordFactsFor(device, world.db),
+        expectMismatches = expectMismatchesFor(device, world.db.active, pads.hardware[endpointKey]),
+        lastWrite = pads.lastWrite[device.id],
+        hardware = pads.hardware[endpointKey],
     )
 }
 

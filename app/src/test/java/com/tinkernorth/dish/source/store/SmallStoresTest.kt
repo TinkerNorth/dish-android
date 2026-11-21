@@ -134,6 +134,40 @@ class SmallStoresTest {
     }
 
     @Test
+    fun `each feedback lane keeps its own count, last value and time`() {
+        val store = FeedbackActivityStore()
+
+        store.note("slot-1", FeedbackKind.RUMBLE, feedbackPair(32768, 0), nowMs = 1L)
+        store.note("slot-1", FeedbackKind.RUMBLE, feedbackPair(100, 200), nowMs = 2L)
+        store.note("slot-1", FeedbackKind.LIGHTBAR, feedbackRgb(0, 0, 255), nowMs = 3L)
+
+        val lanes = store.lanes().getValue("slot-1")
+        assertEquals(LaneActivity(count = 2L, value = feedbackPair(100, 200), atMs = 2L), lanes[FeedbackKind.RUMBLE])
+        assertEquals(LaneActivity(count = 1L, value = feedbackRgb(0, 0, 255), atMs = 3L), lanes[FeedbackKind.LIGHTBAR])
+        assertEquals(setOf(FeedbackKind.RUMBLE, FeedbackKind.LIGHTBAR), lanes.keys)
+    }
+
+    @Test
+    fun `a pair and a colour unpack to the values they were packed from`() {
+        val pair = feedbackPair(65535, 1)
+        val rgb = feedbackRgb(1, 128, 255)
+
+        assertEquals(65535, pairFirst(pair))
+        assertEquals(1, pairSecond(pair))
+        assertEquals(listOf(1, 128, 255), listOf(rgbRed(rgb), rgbGreen(rgb), rgbBlue(rgb)))
+    }
+
+    @Test
+    fun `the latest kind is the last one noted even within one millisecond`() {
+        val store = FeedbackActivityStore()
+
+        store.note("slot-1", FeedbackKind.LIGHTBAR, nowMs = 5L)
+        store.note("slot-1", FeedbackKind.RUMBLE, nowMs = 5L)
+
+        assertEquals(FeedbackKind.RUMBLE, store.snapshot()["slot-1"]?.lastKind)
+    }
+
+    @Test
     fun `feedback activity with an empty slot id records nothing`() {
         val store = FeedbackActivityStore()
 

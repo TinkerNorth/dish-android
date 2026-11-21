@@ -14,6 +14,7 @@
 #include "audio_jitter.h"
 #include "heartbeat_thread.h"
 #include "hotpath_latency.h"
+#include "message_tally.h"
 #include "tracked_mutex.h"
 #include "udp_socket.h"
 
@@ -88,6 +89,7 @@ struct Session {
     dish_net::DatagramPort port;
     std::atomic<uint32_t> sentByCtrl[MAX_CONTROLLERS] = {};
     std::atomic<uint32_t> motionByCtrl[MAX_CONTROLLERS] = {};
+    std::atomic<uint32_t> sentByKind[dish_tally::SENT_KINDS] = {};
 
     // Written by the heartbeat and receive threads, read by the JNI getters.
     alignas(64) std::atomic<int> missedAcks{0};
@@ -96,6 +98,8 @@ struct Session {
 
     // Downstream replay guard (server → client direction).
     std::atomic<uint32_t> lastRxCounter{0};
+    // Written by the receive thread alone, once per datagram that opened.
+    std::atomic<uint32_t> receivedByKind[dish_tally::RECEIVED_KINDS] = {};
 
     // Latest enriched heartbeat-ack material (-1 = none seen this session). The
     // Kotlin alive-poll compares epoch/bitmap against its applied state and

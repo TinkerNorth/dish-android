@@ -52,19 +52,23 @@ class UsbOutput final : public dish_usb::OutputDevice {
     }
 
     void lightbar(const uint8_t r, const uint8_t g, const uint8_t b) override {
-        usbparsers::runLightbar(fd, epOut, parser, feedback, r, g, b);
+        record(usbparsers::runLightbar(fd, epOut, parser, feedback, r, g, b,
+                                       dish_usb::outputClockMs()));
     }
 
     void playerLeds(const uint8_t ledMask) override {
-        usbparsers::runPlayerLeds(fd, epOut, parser, feedback, ledMask, outSeq++);
+        record(usbparsers::runPlayerLeds(fd, epOut, parser, feedback, ledMask, outSeq++,
+                                         dish_usb::outputClockMs()));
     }
 
     void triggerEffects(const uint8_t* left, const uint8_t* right) override {
-        usbparsers::runTriggerEffects(fd, epOut, parser, feedback, left, right);
+        record(usbparsers::runTriggerEffects(fd, epOut, parser, feedback, left, right,
+                                             dish_usb::outputClockMs()));
     }
 
     void micLed(const uint8_t state) override {
-        usbparsers::runMicMuteLed(fd, epOut, parser, feedback, state);
+        record(usbparsers::runMicMuteLed(fd, epOut, parser, feedback, state,
+                                         dish_usb::outputClockMs()));
     }
 
     void ack(const uint8_t* bytes, const size_t len) override {
@@ -75,7 +79,9 @@ class UsbOutput final : public dish_usb::OutputDevice {
     // motion while its lizard keyboard leaks into the phone.
     void reconnected() override {
         feedback.controllerAway = false;
-        usbparsers::runInit(fd, interfaceNumber, epOut, init);
+        usbparsers::WriteVerdict verdict;
+        usbparsers::runInit(fd, interfaceNumber, epOut, init, dish_usb::outputClockMs(), verdict);
+        record(verdict);
         feedback.settingsSentMs = dish_usb::outputClockMs();
     }
 
@@ -107,11 +113,18 @@ class UsbOutput final : public dish_usb::OutputDevice {
     // The output report counter for protocols that carry one (Xbox One serial, Switch Pro packet
     // number).
     uint8_t outSeq = 0;
+    // Where each write's verdict goes: the pad's entry, which Diagnostics reads.
+    dish_usb::Mailbox<usbparsers::WriteVerdict>* verdicts = nullptr;
 
   private:
     void writeRumble(const int64_t nowMs) {
-        usbparsers::runMergedRumble(fd, interfaceNumber, epOut, parser, feedback, outSeq++);
+        record(usbparsers::runMergedRumble(fd, interfaceNumber, epOut, parser, feedback, outSeq++,
+                                           nowMs));
         feedback.rumbleSentMs = nowMs;
+    }
+
+    void record(const usbparsers::WriteVerdict& verdict) {
+        if (verdict.recorded && verdicts != nullptr) verdicts->post(verdict);
     }
 };
 
@@ -184,6 +197,8 @@ struct DeviceCtx final : public dish_usb::ReportSink {
     std::string modelName;
     std::string parserName;
     usbparsers::ParserState stickRange;
+    // The DualSense's firmware-info report, as attach read it; invalid for every other family.
+    usbparsers::Ds5FirmwareInfo firmware;
 
     // One slot of a wireless receiver, and whether its controller is connected; the poller's own,
     // mirrored to entry->stats.linked for the JVM.
@@ -470,6 +485,14 @@ void discardPendingUrbs(DeviceCtx& ctx, UrbSlot* (&slots)[kInFlightUrbs]) {
     }
 }
 
+// A capture is a person's command from Diagnostics: while none is armed this costs the poller one
+// relaxed load, as the inspector's mirror does, and the report has already been published.
+void keepIfCapturing(DeviceCtx& ctx, const uint8_t* report, const size_t len) {
+    dish_usb::ReportCapture& capture = ctx.entry->capture;
+    if (!capture.armed()) return;
+    capture.offer(report, len, dish_usb::outputClockMs());
+}
+
 // Reaps everything the kernel has ready and resubmits each slot. Answers false when the loop
 // should stop: the device went away, an ioctl failed, or a resubmit was refused.
 bool reapReadyUrbs(DeviceCtx& ctx, UrbSlot* (&slots)[kInFlightUrbs], gamepad::DeviceState& scratch,
@@ -502,6 +525,7 @@ bool reapReadyUrbs(DeviceCtx& ctx, UrbSlot* (&slots)[kInFlightUrbs], gamepad::De
         if (carriesAReport) {
             publishReport(ctx, completed->buf.data(), (size_t)reaped->actual_length, scratch,
                           lastMicMuted);
+            keepIfCapturing(ctx, completed->buf.data(), (size_t)reaped->actual_length);
         }
         if (!submitUrb(ctx, *completed)) {
             dish_usb::bump(ctx.entry->stats.urbErrorCount);
@@ -739,12 +763,17 @@ void giveBack(const AttachTarget& t, const bool receiverSlot) {
 struct PadReady {
     bool ok = false;
     int64_t initSentMs = usbparsers::NEVER_SENT_MS;
+    usbparsers::WriteVerdict initVerdict;
 };
 
 // A pad of its own: its init, then a probe that its reports decode. Either refusal gives it back.
 PadReady readyPad(const AttachTarget& t) {
     const usbparsers::Parser parser = t.classification.parser;
-    if (!usbparsers::runInit(t.fd, t.interfaceNumber, t.epOut, t.classification.init)) {
+    usbparsers::WriteVerdict initVerdict;
+    const bool initialised =
+        usbparsers::runInit(t.fd, t.interfaceNumber, t.epOut, t.classification.init,
+                            dish_usb::outputClockMs(), initVerdict);
+    if (!initialised) {
         LOGI("attach %04X:%04X (%s): init failed, falling back to routed", t.vid, t.pid,
              t.modelName.c_str());
         giveBackPad(t);
@@ -763,7 +792,7 @@ PadReady readyPad(const AttachTarget& t) {
         LOGI("attach %04X:%04X (%s): silent at rest, claiming verified model", t.vid, t.pid,
              t.modelName.c_str());
     }
-    return PadReady{true, initSentMs};
+    return PadReady{true, initSentMs, initVerdict};
 }
 
 // The 2015 receiver answers with a wireless event; a 2026 one's slot says what it holds with its
@@ -786,7 +815,7 @@ void readModelFeatures(const AttachTarget& t, DeviceCtx& ctx) {
         fetchPsCalibration(t.fd, t.interfaceNumber, 0x02, ctx.stickRange.psImu);
     } else if (parser == usbparsers::Parser::DUALSENSE) {
         fetchPsCalibration(t.fd, t.interfaceNumber, 0x05, ctx.stickRange.psImu);
-        usbparsers::Ds5FirmwareInfo firmware;
+        usbparsers::Ds5FirmwareInfo& firmware = ctx.firmware;
         fetchDs5FirmwareInfo(t.fd, t.interfaceNumber, firmware);
         ctx.output.feedback.ds5VibrationV2 = usbparsers::ds5UsesVibrationV2(t.pid, firmware);
         LOGI("attach %04X:%04X: DualSense feature version %04X (%s), rumble mode %s", t.vid, t.pid,
@@ -803,7 +832,8 @@ void markSlotEmpty(DeviceCtx& ctx) {
 }
 
 AttachResult startDevice(const AttachTarget& t, const bool receiverSlot,
-                         const int64_t settingsSentMs) {
+                         const int64_t settingsSentMs,
+                         const usbparsers::WriteVerdict& initVerdict) {
     AttachResult out;
     const usbparsers::Parser parser = t.classification.parser;
     auto ctx = std::make_shared<DeviceCtx>();
@@ -842,6 +872,8 @@ AttachResult startDevice(const AttachTarget& t, const bool receiverSlot,
     ctx->output.parser = parser;
     ctx->output.init = t.classification.init;
     ctx->output.feedback.settingsSentMs = settingsSentMs;
+    ctx->output.verdicts = &ctx->entry->stats.lastWrite;
+    if (initVerdict.recorded) ctx->entry->stats.lastWrite.post(initVerdict);
     ctx->entry->output.start(ctx->syntheticDeviceId, ctx->output);
     ctx->poller = std::thread(pollLoop, ctx);
 
@@ -857,12 +889,12 @@ AttachResult startDevice(const AttachTarget& t, const bool receiverSlot,
 AttachResult attachPad(const AttachTarget& t) {
     const PadReady ready = readyPad(t);
     if (!ready.ok) return AttachResult{};
-    return startDevice(t, false, ready.initSentMs);
+    return startDevice(t, false, ready.initSentMs, ready.initVerdict);
 }
 
 AttachResult attachReceiverSlot(const AttachTarget& t) {
     askReceiverSlot(t);
-    return startDevice(t, true, usbparsers::NEVER_SENT_MS);
+    return startDevice(t, true, usbparsers::NEVER_SENT_MS, usbparsers::WriteVerdict{});
 }
 
 } // namespace
@@ -1058,12 +1090,51 @@ std::string deviceInfoJson(int32_t deviceId) {
     out += ",\"init\":";
     appendJsonString(out, initKindName(ctx->init));
     char buf[96];
-    snprintf(buf, sizeof(buf), ",\"reportBytes\":%u,\"endpointOut\":%s,\"lastUrbStatus\":%d}",
+    snprintf(buf, sizeof(buf), ",\"reportBytes\":%u,\"endpointOut\":%s,\"lastUrbStatus\":%d",
              (unsigned)ctx->epInMaxPacket, ctx->epOut != 0 ? "true" : "false",
              (int)g_usbDevices.read<int32_t>(deviceId, 0, [](const dish_usb::UsbDeviceStats& s) {
                  return s.lastUrbStatus.load(std::memory_order_relaxed);
              }));
     out += buf;
+    if (ctx->firmware.valid) {
+        // The DualSense's feature version as its firmware names it: 0x0221 is 2.21.
+        snprintf(buf, sizeof(buf), ",\"firmware\":\"%X.%02X\"",
+                 (unsigned)(ctx->firmware.featureVersion >> 8),
+                 (unsigned)(ctx->firmware.featureVersion & 0xFF));
+        out += buf;
+    }
+    out += "}";
+    return out;
+}
+
+LastWrite lastWrite(const int32_t deviceId) {
+    const usbparsers::WriteVerdict v = g_usbDevices.lastWrite(deviceId);
+    LastWrite out;
+    out.verdict = v;
+    out.ageMs = v.recorded ? dish_usb::outputClockMs() - v.atMs : 0;
+    return out;
+}
+
+bool armReportCapture(const int32_t deviceId) { return g_usbDevices.armCapture(deviceId); }
+
+std::string capturedReportsJson(const int32_t deviceId) {
+    dish_usb::CapturedReport reports[dish_usb::CAPTURE_REPORTS];
+    const size_t n = g_usbDevices.capturedReports(deviceId, reports, dish_usb::CAPTURE_REPORTS);
+    const int64_t nowMs = dish_usb::outputClockMs();
+    std::string out = "[";
+    char buf[32];
+    for (size_t i = 0; i < n; i++) {
+        if (i > 0) out += ",";
+        snprintf(buf, sizeof(buf), "{\"ageMs\":%lld,\"hex\":\"",
+                 (long long)(nowMs - reports[i].atMs));
+        out += buf;
+        for (size_t b = 0; b < reports[i].len; b++) {
+            snprintf(buf, sizeof(buf), "%02x", (unsigned)reports[i].bytes[b]);
+            out += buf;
+        }
+        out += "\"}";
+    }
+    out += "]";
     return out;
 }
 

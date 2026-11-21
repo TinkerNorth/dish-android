@@ -140,6 +140,16 @@
             tools:targetApi="p" />
 
         <activity
+            android:name=".ui.diagnostics.SupportReportActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Dish"
+            android:configChanges="keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
+            android:parentActivityName=".ui.diagnostics.DiagnosticsActivity"
+            tools:targetApi="p" />
+
+        <activity
             android:name=".ui.diagnostics.InputInspectorActivity"
             android:exported="false"
             android:resizeableActivity="true"
@@ -256,6 +266,30 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
+        <!-- Serves the diagnostics bundle to the person's mail app, read-only, for the one send. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.diagnostics"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/diagnostics_paths" />
+        </provider>
+
     </application>
+
+    <!-- Whether a mail app is installed, and which apps take the diagnostics file, so "Email
+         diagnostics" can offer the share sheet with everything but mail apps left out. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="application/json" />
+        </intent>
+    </queries>
 
 </manifest>

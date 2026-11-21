@@ -12,7 +12,7 @@ These are the user-facing explanations for the Play Console "Sensitive Permissio
 
 **When it is requested**: at runtime, only when the user turns the per-controller Microphone switch on, on that controller's binding screen. The switch is off by default and is offered only where the whole path can carry a microphone (an audio-capable emulated controller type, on a Satellite host with controller audio enabled). Declining leaves the rest of the app working; the row says it needs permission instead of pretending to capture.
 
-**What happens to the audio**: it is captured in 20 ms windows, Opus-encoded, and sent over the same encrypted UDP session as the controller input to the user's own paired PC on their local network. It is never written to storage, never uploaded to the internet, never included in crash reports, and never sent to TinkerNorth (which operates no server). There is no recording feature.
+**What happens to the audio**: it is captured in 20 ms windows, Opus-encoded, and sent over the same encrypted UDP session as the controller input to the user's own paired PC on their local network. It is never written to storage, never uploaded to the internet, never included in crash reports, and never sent to TinkerNorth (whose only server the app contacts is dish.tinkernorth.com, for the controller database, and it never carries audio). There is no recording feature.
 
 **How the user stops it**: turning the switch off, muting (the mute button on the on-screen controller, or the mute button on a connected DualSense), unbinding the controller, or revoking the permission. Mute is enforced by stopping the capture rather than by sending silence, so a muted controller sends no audio packets at all.
 

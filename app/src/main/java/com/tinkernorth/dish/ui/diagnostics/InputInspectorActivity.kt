@@ -22,9 +22,11 @@ import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.databinding.ActivityInputInspectorBinding
 import com.tinkernorth.dish.databinding.InspectorAudioRowBinding
 import com.tinkernorth.dish.databinding.InspectorTestRowBinding
+import com.tinkernorth.dish.source.store.BenchTest
 import com.tinkernorth.dish.source.store.MIC_LED_OFF
 import com.tinkernorth.dish.source.store.MIC_LED_ON
 import com.tinkernorth.dish.source.store.MIC_LED_PULSE
+import com.tinkernorth.dish.source.store.TestOutcome
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.observeWhileStarted
@@ -79,6 +81,7 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         bindSectionLabels()
         wireStickCaptures()
         wireBench()
+        wireOutcomeRow()
         observeViewModel()
         startLiveInputIfAttached()
     }
@@ -114,6 +117,28 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         observe(viewModel.micTest, ::renderMicTest)
         observe(viewModel.speakerTest, ::renderSpeakerTest)
         observe(viewModel.micPermissionRequests) { requestMicPermission() }
+        observe(viewModel.pendingTest, ::renderPendingTest)
+        observe(viewModel.lastOutcome, ::renderLastOutcome)
+    }
+
+    // ── "Did it work?" ──────────────────────────────────────────────────────
+
+    private fun wireOutcomeRow() {
+        binding.rowOutcome.btnOutcomeYes.setOnClickListener { viewModel.answer(worked = true) }
+        binding.rowOutcome.btnOutcomeNo.setOnClickListener { viewModel.answer(worked = false) }
+    }
+
+    private fun renderPendingTest(test: BenchTest?) {
+        val row = binding.rowOutcome
+        setVisible(row.groupOutcomeQuestion, test != null)
+        test ?: return
+        row.tvOutcomeQuestion.text = getString(R.string.inspector_outcome_question, getString(benchTestLabel(test)))
+    }
+
+    private fun renderLastOutcome(outcome: TestOutcome?) {
+        val text = outcome?.let { lastOutcomeText(it, System.currentTimeMillis()) }
+        binding.rowOutcome.tvLastOutcome.text = text.orEmpty()
+        setVisible(binding.rowOutcome.tvLastOutcome, text != null)
     }
 
     // Nothing to poll for a slot with no live device behind it, so that whole panel goes away
@@ -201,9 +226,11 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         bindTestRow(
             binding.rowRumble,
             R.string.setup_cap_rumble,
-            R.string.inspector_rumble_weak to { viewModel.buzz(strong = 0, weak = TEST_MAGNITUDE) },
-            R.string.inspector_rumble_strong to { viewModel.buzz(strong = TEST_MAGNITUDE, weak = 0) },
-            R.string.inspector_rumble_both to { viewModel.buzz(strong = TEST_MAGNITUDE, weak = TEST_MAGNITUDE) },
+            R.string.inspector_rumble_weak to { viewModel.buzz(strong = 0, weak = TEST_MAGNITUDE, asking = BenchTest.RUMBLE_WEAK) },
+            R.string.inspector_rumble_strong to { viewModel.buzz(strong = TEST_MAGNITUDE, weak = 0, asking = BenchTest.RUMBLE_STRONG) },
+            R.string.inspector_rumble_both to {
+                viewModel.buzz(strong = TEST_MAGNITUDE, weak = TEST_MAGNITUDE, asking = BenchTest.RUMBLE_BOTH)
+            },
         )
         bindTestRow(
             binding.rowTriggerRumble,

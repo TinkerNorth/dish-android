@@ -63,6 +63,7 @@ class DiagnosticsViewModelTest {
             Json { ignoreUnknownKeys = true },
             sources,
             mockk(relaxed = true),
+            mockk(relaxed = true),
         )
 
     private fun worldWithOneSatellite(): DiagnosticsWorld {

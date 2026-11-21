@@ -5,6 +5,7 @@ package com.tinkernorth.dish.ui.diagnostics
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.source.controllerdb.ControllerDbStatus
 import com.tinkernorth.dish.source.store.DiagnosticsLogEntry
 import com.tinkernorth.dish.source.store.DiagnosticsLogStore
 import com.tinkernorth.dish.source.store.LatencyProfilingStore
@@ -14,8 +15,11 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -23,6 +27,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 
@@ -36,6 +41,7 @@ class DiagnosticsViewModel
         private val json: Json,
         private val sources: DiagnosticsSources,
         diagnosticsLog: DiagnosticsLogStore,
+        private val support: DiagnosticsSupport,
     ) : ViewModel() {
         sealed interface LatencyUi {
             data object Off : LatencyUi
@@ -87,17 +93,38 @@ class DiagnosticsViewModel
 
         val overview: StateFlow<Overview> =
             world
-                .map { w ->
-                    val controllers = controllerDiags(w, sources::touchpadMode)
-                    val hosts = hostDiags(w, sources::touchpadMode)
-                    Overview(controllers, hosts, w.radios, latencyRows(controllers, hosts), ignoredInputDiags(w))
-                }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), Overview.EMPTY)
+                .map(::overviewOf)
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), Overview.EMPTY)
 
         val latencyPanel: StateFlow<LatencyPanelUi> =
             combine(latency, overview) { ui, overview -> LatencyPanelUi(ui, overview.latencyRows) }
                 .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), LatencyPanelUi(LatencyUi.Off, Overview.EMPTY.latencyRows))
 
         val events: StateFlow<List<DiagnosticsLogEntry>> = diagnosticsLog.state
+
+        val controllerDb: StateFlow<ControllerDbStatus> get() = support.controllerDb.status
+
+        sealed interface SupportEvent {
+            data class Captured(
+                val name: String,
+                val ok: Boolean,
+            ) : SupportEvent
+        }
+
+        private val _supportEvents = MutableSharedFlow<SupportEvent>(extraBufferCapacity = 1)
+        val supportEvents: SharedFlow<SupportEvent> = _supportEvents.asSharedFlow()
+
+        fun checkControllerDbNow() = support.controllerDb.checkNow()
+
+        fun capture(diag: ControllerDiag) {
+            val deviceId = diag.slotId.toIntOrNull() ?: return
+            viewModelScope.launch {
+                val ok = support.capture(deviceId, diag.slotId)
+                _supportEvents.emit(SupportEvent.Captured(diag.name, ok))
+            }
+        }
+
+        private fun overviewOf(w: DiagnosticsWorld): Overview = diagnosticsOverviewOf(w, sources::touchpadMode)
 
         private fun probeTicks(): Flow<LatencyUi> =
             flow {
@@ -118,3 +145,12 @@ class DiagnosticsViewModel
             const val WIFI_POLL_MS = 2000L
         }
     }
+
+internal fun diagnosticsOverviewOf(
+    world: DiagnosticsWorld,
+    touchpadMode: (String) -> String,
+): DiagnosticsViewModel.Overview {
+    val controllers = controllerDiags(world, touchpadMode)
+    val hosts = hostDiags(world, touchpadMode)
+    return DiagnosticsViewModel.Overview(controllers, hosts, world.radios, latencyRows(controllers, hosts), ignoredInputDiags(world))
+}

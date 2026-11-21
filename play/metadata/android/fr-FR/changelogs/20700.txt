@@ -1,0 +1,6 @@
+Dish 2.7.0 : une liste de manettes qui se met à jour seule, et le signalement de problèmes.
+
+• Dish demande à dish.tinkernorth.com les nouvelles manettes prises en charge. Réglage : Rechercher les mises à jour des manettes automatiquement, activé par défaut.
+• Le diagnostic montre les problèmes connus et la dernière écriture de chaque manette ; Signaler un problème envoie vos mots et un fichier.
+• Après chaque test, l’inspecteur demande si ça a marché.
+• Satellite n’a pas besoin de mise à jour.

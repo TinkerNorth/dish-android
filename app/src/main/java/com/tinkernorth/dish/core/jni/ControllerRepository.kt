@@ -62,6 +62,8 @@ class ControllerRepository
 
         fun sessionStatsJson(handle: Int): String = SessionNative.sessionStatsJson(handle)
 
+        fun sessionMessageCountsJson(handle: Int): String = SessionNative.sessionMessageCountsJson(handle)
+
         fun getSlotSendCount(
             handle: Int,
             controllerIndex: Int,

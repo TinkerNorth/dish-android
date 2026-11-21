@@ -36,6 +36,7 @@ internal fun bindingDiag(
         batterySource = batterySource(isVirtual),
         rumbleTarget = feedbackTarget(slotId),
         feedback = world.links.feedback[slotId],
+        lastWrite = slotId.toIntOrNull()?.let { world.pads.lastWrite[it] },
         micState = micState(slotId, world),
         speakerPlaying =
             world.audio.speakerVoices.values

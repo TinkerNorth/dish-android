@@ -1,0 +1,20 @@
+{
+  "family.dualsense.name": "DualSense protokol",
+  "family.dualshock4.name": "DualShock 4 protokol",
+  "family.hid.name": "Generički HID gamepad",
+  "family.stadia.name": "Stadia protokol",
+  "family.steamController.name": "Steam Controller protokol",
+  "family.steamControllerBle.name": "Steam Controller Bluetooth LE protokol",
+  "family.steamTriton.name": "Steam Controller (2026) protokol",
+  "family.switchN64Usb.name": "Switch N64 protokol",
+  "family.switchProUsb.name": "Switch Pro protokol",
+  "family.xboxOneGip.name": "Xbox One protokol",
+  "family.xinput360.name": "Xbox 360 protokol",
+  "family.xinput360Wireless.name": "Xbox 360 bežični protokol",
+  "issue.thor-ds5-rumble-usb.body": "Unos radi, ali vibracija ne stiže do kontrolera preko USB Directa na ovom uređaju. Isti kontroler vibrira kroz Dish za Mac. Istražuje se.",
+  "issue.thor-ds5-rumble-usb.title": "Nema vibracije preko USB-a na AYN Thoru",
+  "mapping.eightbitdo.name": "8BitDo raspored dugmadi",
+  "mapping.playstationClassic.name": "PlayStation Classic raspored dugmadi",
+  "mapping.switch.name": "Switch raspored dugmadi",
+  "mapping.western.name": "Zapadni raspored dugmadi"
+}

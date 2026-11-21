@@ -6,6 +6,9 @@ import android.view.InputDevice
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.core.controllerdb.ActiveControllerDb
+import com.tinkernorth.dish.core.controllerdb.ENGLISH
+import com.tinkernorth.dish.core.diagnostics.WriteVerdict
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.core.model.SlotCapabilities
@@ -19,6 +22,7 @@ import com.tinkernorth.dish.source.bluetooth.BluetoothLinkType
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightPad
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightSessionState
+import com.tinkernorth.dish.source.controllerdb.ControllerDbStatus
 import com.tinkernorth.dish.source.inputrate.FrameworkTimingSummary
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
@@ -28,10 +32,12 @@ import com.tinkernorth.dish.source.store.LinkHistoryState
 import com.tinkernorth.dish.source.store.MoonlightHostFacts
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
 import com.tinkernorth.dish.source.store.StickTestRecord
+import com.tinkernorth.dish.source.store.TestOutcome
 import com.tinkernorth.dish.source.system.BluetoothAdapterState
 import com.tinkernorth.dish.source.system.BluetoothPermissionState
 import com.tinkernorth.dish.source.system.WifiLink
 import com.tinkernorth.dish.source.usb.UsbEndpointFacts
+import com.tinkernorth.dish.source.usb.UsbHardwareFacts
 import com.tinkernorth.dish.ui.main.BatteryUi
 
 enum class ControllerDiagState { CONNECTED, DISCONNECTING, TRANSITIONING, NEEDS_REPLUG }
@@ -79,6 +85,12 @@ data class SatelliteSessionStats(
     val missed: Int,
 )
 
+// A session's sent and received datagrams per wire message kind, as message_tally.h names them.
+data class SessionMessageCounts(
+    val sent: Map<String, Long>,
+    val received: Map<String, Long>,
+)
+
 data class SatelliteSnapshot(
     val live: Boolean,
     val slots: Map<String, SatelliteConnection.SlotBinding>,
@@ -89,6 +101,7 @@ data class SatelliteSnapshot(
     val closeReason: Int = -1,
     val slotSends: Map<Int, Long> = emptyMap(),
     val slotMotion: Map<Int, Long> = emptyMap(),
+    val messages: SessionMessageCounts? = null,
 )
 
 data class MoonlightSnapshot(
@@ -140,6 +153,8 @@ data class DirectDeviceInfo(
     val reportBytes: Int,
     val endpointOut: Boolean,
     val lastUrbStatus: Int,
+    // The DualSense's firmware version where attach read it ("2.21"); null for every other pad.
+    val firmware: String? = null,
 )
 
 data class PadFacts(
@@ -156,6 +171,25 @@ data class PadFacts(
     val frameworkTiming: FrameworkTimingSummary?,
     val stickHistory: StickTestRecord?,
     val audio: PadAudioFacts? = null,
+    val record: RecordFacts? = null,
+    val expectMismatches: List<String> = emptyList(),
+    val lastWrite: WriteVerdict? = null,
+    val hardware: UsbHardwareFacts? = null,
+)
+
+// A known issue for this pad on this phone, its words from the database's strings.
+data class IssueFacts(
+    val id: String,
+    val title: String?,
+    val body: String?,
+)
+
+// The controller database's record for a pad: its id, its name and its verification state.
+data class RecordFacts(
+    val id: String,
+    val name: String?,
+    val verification: String,
+    val issues: List<IssueFacts>,
 )
 
 data class BoundHostDiag(
@@ -255,6 +289,8 @@ data class BindingDiag(
     val speakerPlaying: Boolean,
     val speakerDropped: Long,
     val latency: LatencyEstimate,
+    // A Direct pad's last output write, beside the last feedback the host sent it.
+    val lastWrite: WriteVerdict? = null,
 )
 
 internal data class PadWorld(
@@ -264,8 +300,22 @@ internal data class PadWorld(
     val reportCounts: Map<Int, Long> = emptyMap(),
     val frameworkTiming: Map<Int, FrameworkTimingSummary> = emptyMap(),
     val btLinkTypes: Map<Int, BluetoothLinkType> = emptyMap(),
+    // A dual-mode pad's cached service UUIDs, which decide the radio it is on.
+    val btServiceUuids: Map<Int, List<String>> = emptyMap(),
     val stickHistory: Map<String, StickTestRecord> = emptyMap(),
     val audio: Map<Int, PadAudioFacts> = emptyMap(),
+    val lastWrite: Map<Int, WriteVerdict> = emptyMap(),
+    val hardware: Map<Int, UsbHardwareFacts> = emptyMap(),
+    val outcomes: Map<String, List<TestOutcome>> = emptyMap(),
+)
+
+// The controller database as the report reads it, and the phone facts its issues match against.
+internal data class DbWorld(
+    val status: ControllerDbStatus = ControllerDbStatus.UNLOADED,
+    val active: ActiveControllerDb? = null,
+    val stringsLocale: String = ENGLISH,
+    val deviceModel: String = "",
+    val androidMajor: Int = 0,
 )
 
 internal data class LinkWorld(
@@ -298,6 +348,7 @@ internal data class DiagnosticsWorld(
     val pads: PadWorld = PadWorld(),
     val links: LinkWorld = LinkWorld(),
     val audio: AudioWorld = AudioWorld(),
+    val db: DbWorld = DbWorld(),
     val nowMs: Long = 0L,
     val ignoredInputs: List<PhysicalGamepadRegistry.IgnoredInputDevice> = emptyList(),
 ) {

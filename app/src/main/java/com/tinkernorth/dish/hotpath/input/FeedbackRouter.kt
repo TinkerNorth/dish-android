@@ -8,8 +8,11 @@ import com.tinkernorth.dish.source.lights.FrameworkLightGateway
 import com.tinkernorth.dish.source.lights.LightSource
 import com.tinkernorth.dish.source.store.FeedbackActivityStore
 import com.tinkernorth.dish.source.store.FeedbackKind
+import com.tinkernorth.dish.source.store.NO_FEEDBACK_VALUE
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.source.store.VirtualPadFeedbackStore
+import com.tinkernorth.dish.source.store.feedbackPair
+import com.tinkernorth.dish.source.store.feedbackRgb
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -56,7 +59,7 @@ class FeedbackRouter
             b: Int,
         ) {
             val route = routes.current().routeFor(sessionHandle, controllerIndex) ?: return
-            noteHost(route, FeedbackKind.LIGHTBAR)
+            noteHost(route, FeedbackKind.LIGHTBAR, feedbackRgb(r, g, b))
             actuateLightbar(route.target, route.lightSource, r, g, b)
         }
 
@@ -66,7 +69,7 @@ class FeedbackRouter
             blocks: ByteArray,
         ) {
             val route = routes.current().routeFor(sessionHandle, controllerIndex) ?: return
-            noteHost(route, FeedbackKind.TRIGGER_EFFECTS)
+            noteHost(route, FeedbackKind.TRIGGER_EFFECTS, NO_FEEDBACK_VALUE)
             actuateTriggerEffects(route.target, blocks)
         }
 
@@ -76,7 +79,7 @@ class FeedbackRouter
             ledMask: Int,
         ) {
             val route = routes.current().routeFor(sessionHandle, controllerIndex) ?: return
-            noteHost(route, FeedbackKind.PLAYER_LEDS)
+            noteHost(route, FeedbackKind.PLAYER_LEDS, ledMask.toLong())
             actuatePlayerLeds(route.target, ledMask)
         }
 
@@ -97,7 +100,7 @@ class FeedbackRouter
             state: Int,
         ) {
             val route = routes.current().routeFor(sessionHandle, controllerIndex) ?: return
-            noteHost(route, FeedbackKind.MIC_LED)
+            noteHost(route, FeedbackKind.MIC_LED, state.toLong())
             actuateMicLed(route.target, state)
         }
 
@@ -166,7 +169,7 @@ class FeedbackRouter
             leftMagnitude: Int,
             rightMagnitude: Int,
         ) {
-            feedbackActivity.note(slotId, FeedbackKind.TRIGGER_RUMBLE)
+            feedbackActivity.note(slotId, FeedbackKind.TRIGGER_RUMBLE, feedbackPair(leftMagnitude, rightMagnitude))
             val rumbleOn = rumbleEnabled.isEnabled(slotId)
             val left = if (rumbleOn) leftMagnitude else TRIGGER_RUMBLE_STOP
             val right = if (rumbleOn) rightMagnitude else TRIGGER_RUMBLE_STOP
@@ -194,9 +197,10 @@ class FeedbackRouter
         private fun noteHost(
             route: FeedbackRoute,
             kind: FeedbackKind,
+            value: Long,
         ) {
             if (route.target == RumbleTarget.None) return
-            feedbackActivity.note(route.slotId, kind)
+            feedbackActivity.note(route.slotId, kind, value)
         }
 
         private fun actuateLightbar(

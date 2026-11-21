@@ -95,6 +95,31 @@ class SatelliteCapabilitiesRepositoryTest {
         }
 
     @Test
+    fun `the last capabilities fetched are kept for a support report`() =
+        runTest {
+            coEvery { gateway.serverCapabilities(any(), any(), any()) } returns
+                HttpReply(200, body(motionAvailable = true, rumbleSupported = true), null)
+            assertNull(repo.lastFetched("sat-1"))
+
+            repo.refresh(server, "sat-1")
+
+            assertEquals("1.6.0", repo.lastFetched("sat-1")?.serverVersion)
+        }
+
+    @Test
+    fun `a failed fetch keeps the capabilities fetched before it`() =
+        runTest {
+            coEvery { gateway.serverCapabilities(any(), any(), any()) } returns
+                HttpReply(200, body(motionAvailable = true, rumbleSupported = true), null)
+            repo.refresh(server, "sat-1")
+            coEvery { gateway.serverCapabilities(any(), any(), any()) } returns HttpReply(404, "", null)
+
+            repo.refresh(server, "sat-1")
+
+            assertEquals("1.6.0", repo.lastFetched("sat-1")?.serverVersion)
+        }
+
+    @Test
     fun `a non-200 reply yields null and writes nothing`() =
         runTest {
             coEvery { gateway.serverCapabilities(any(), any(), any()) } returns HttpReply(404, "", null)

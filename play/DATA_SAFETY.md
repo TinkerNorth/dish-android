@@ -24,7 +24,7 @@ These map to the fields on the Data Safety form in Play Console. Cross-reference
 ### Audio > Voice or sound recordings
 
 - **Collected?** YES, but only when the user switches Microphone on for a controller. Play counts transmission off the device as collection, and this audio is transmitted off the device.
-- **Shared?** NO. It goes to one destination: the PC on the user's own local network that they paired this phone with by entering a PIN shown on that PC. No third party receives it, and no TinkerNorth-operated server exists to receive it.
+- **Shared?** NO. It goes to one destination: the PC on the user's own local network that they paired this phone with by entering a PIN shown on that PC. No third party receives it, and no TinkerNorth-operated server receives it.
 - **Processed ephemerally?** YES. Audio is captured in 20 ms windows, encoded, sent, and discarded. Nothing is written to storage, nothing is buffered beyond the window in flight, and there is no recording feature.
 - **Purpose**: App functionality. A DualShock 4 v2 or DualSense plugged into a PC presents its own microphone endpoint; when Dish emulates one of those pads, the phone microphone stands in for it so voice chat on the PC hears the user through the pad.
 - **Required or optional?** OPTIONAL, and off by default. Every one of these must hold before a single audio packet is sent: the controller is bound and streaming to a Satellite, the per-controller Microphone switch is on, `RECORD_AUDIO` is granted, and the controller is not muted. Muting stops the capture rather than sending silence, so a muted controller transmits nothing at all.
@@ -54,6 +54,8 @@ These map to the fields on the Data Safety form in Play Console. Cross-reference
 - **No location**: the app does not request or use location permissions at any API level.
 - **No contact / SMS / call log / camera permissions**: not requested.
 - **Tips through Google Play (Play build only)**: payment details are collected by Google Play's billing system directly from the user and never reach the app, which the Data safety guidance exempts from declaration. The app receives only the owned-product list and purchase tokens, keeps them in memory to acknowledge or consume the purchase, and never stores, uploads, or logs them, so "Financial info" and "Purchase history" stay NOT collected.
+- **Controller database check (every build, from 2.7.0)**: the app fetches a manifest, and when it names a newer version the controller list, from `dish.tinkernorth.com`. The request carries no identifier, cookie or query and sends nothing about the user or the device; the host sees the IP address and time as any web server does. It downloads data about controllers, never code, and the user can switch it off in Settings. Nothing is collected or shared by it.
+- **Reporting a problem (from 2.7.0)**: user-initiated. The app writes a file and hands it, with the words the user typed, to the user's own mail app; the user sends it, through their own mail provider, so the app transmits nothing itself. The file holds no personal identifiers, addresses or host names; while it is prepared the app asks each connected Satellite, over the paired connection, for its own redacted view of that connection (PRIVACY.md section 2.7).
 - **Microphone is the only sensitive permission requested**, it is requested only from the Microphone switch on a controller's binding screen, and the audio is never recorded or uploaded.
 
 ## Notes for Play reviewers

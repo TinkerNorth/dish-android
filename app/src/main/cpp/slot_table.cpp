@@ -590,6 +590,10 @@ void SlotTable::setQuirk(const int32_t deviceId, const uint8_t quirk) {
 void SlotTable::setInspecting(const bool on) {
     inspect_.store(on, std::memory_order_relaxed);
     if (!on) return;
+    refreshMirrors();
+}
+
+void SlotTable::refreshMirrors() {
     for (size_t i = 0; i < MAX_SLOTS; i++) {
         const std::lock_guard<TrackedMutex> lock(bindingsMtx_);
         if (ids_[i].load(std::memory_order_relaxed) == 0) continue;

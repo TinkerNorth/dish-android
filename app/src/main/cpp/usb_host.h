@@ -6,6 +6,7 @@
 #include <string>
 
 #include "gamepad_input.h"
+#include "usb_parsers.h"
 
 namespace usbhost {
 
@@ -56,8 +57,25 @@ bool isPadLinked(int32_t deviceId);
 // and the wire carries the lower of it and the phone's.
 int32_t getPadBattery(int32_t deviceId);
 
-// {"model","parser","init","reportBytes","endpointOut","lastUrbStatus"} for a claimed device.
+// {"model","parser","init","reportBytes","endpointOut","lastUrbStatus"} for a claimed device, and
+// "firmware" where attach read one.
 std::string deviceInfoJson(int32_t deviceId);
+
+// The pad's last output write and how long ago it was, on the output worker's clock; an
+// unrecorded verdict for a pad that has written nothing or is gone.
+struct LastWrite {
+    usbparsers::WriteVerdict verdict;
+    int64_t ageMs = 0;
+};
+
+LastWrite lastWrite(int32_t deviceId);
+
+// Keeps the pad's next twenty input reports for the diagnostics bundle; false for a pad that is
+// gone or already capturing.
+bool armReportCapture(int32_t deviceId);
+
+// [{"ageMs","hex"}] of the reports the pad's capture kept so far, oldest first.
+std::string capturedReportsJson(int32_t deviceId);
 
 void sendRumble(int32_t syntheticDeviceId, uint16_t strong, uint16_t weak);
 

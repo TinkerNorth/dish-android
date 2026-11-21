@@ -135,6 +135,24 @@ class ModelsTest {
     }
 
     @Test
+    fun `an apply answer in the satellite's exact shape carries its backend`() {
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val named =
+            json.decodeFromString(
+                ControllerApplyDto.serializer(),
+                """{"ctrlIdx":1,"result":"ok","appliedType":2,"backend":"hidmaestro",""" +
+                    """"motion":{"sinkSupportedForType":true,"backendOk":true}}""",
+            )
+        val unnamed =
+            json.decodeFromString(
+                ControllerApplyDto.serializer(),
+                """{"ctrlIdx":1,"result":"ok","appliedType":2,"backend":null,"motion":{"sinkSupportedForType":false,"backendOk":false}}""",
+            )
+        assertEquals("hidmaestro", named.backend)
+        assertEquals(null, unnamed.backend)
+    }
+
+    @Test
     fun `only the ok result reads as ok`() {
         assertEquals(true, ControllerApplyDto(result = ControllerApplyDto.APPLY_OK).ok)
         assertFalse(ControllerApplyDto(result = ControllerApplyDto.APPLY_REPLUG_FAILED).ok)

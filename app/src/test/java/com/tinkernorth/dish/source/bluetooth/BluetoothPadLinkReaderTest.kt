@@ -8,6 +8,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.ParcelUuid
 import android.util.Log
 import io.mockk.every
 import io.mockk.mockk
@@ -107,5 +108,41 @@ class BluetoothPadLinkReaderTest {
 
         assertEquals(BluetoothLinkType.UNKNOWN, BluetoothPadLinkReader(context).linkType("DualSense"))
         verify(exactly = 0) { adapter.bondedDevices }
+    }
+
+    private fun parcel(text: String): ParcelUuid = mockk { every { uuid } returns java.util.UUID.fromString(text) }
+
+    @Test
+    fun `the cached service uuids of the one bonded device of that name are read`() {
+        val pad =
+            bonded("DualSense", BluetoothDevice.DEVICE_TYPE_DUAL).also {
+                every { it.uuids } returns arrayOf(parcel("00001124-0000-1000-8000-00805F9B34FB"))
+            }
+        every { context.getSystemService(Context.BLUETOOTH_SERVICE) } returns manager
+        every { adapter.bondedDevices } returns setOf(pad, bonded("Buds", BluetoothDevice.DEVICE_TYPE_LE))
+
+        assertEquals(listOf("00001124-0000-1000-8000-00805f9b34fb"), BluetoothPadLinkReader(context).serviceUuids("DualSense"))
+    }
+
+    @Test
+    fun `a denied BLUETOOTH_CONNECT reads no uuids and never touches the bonded list`() {
+        mockkStatic(Context::checkBluetoothConnectPermission)
+        every { context.checkBluetoothConnectPermission(any()) } returns PackageManager.PERMISSION_DENIED
+        every { context.getSystemService(Context.BLUETOOTH_SERVICE) } returns manager
+
+        assertEquals(emptyList<String>(), BluetoothPadLinkReader(context).serviceUuids("DualSense"))
+        verify(exactly = 0) { adapter.bondedDevices }
+    }
+
+    @Test
+    fun `two bonded devices of one name give no uuids, and a null uuid list gives none`() {
+        every { context.getSystemService(Context.BLUETOOTH_SERVICE) } returns manager
+        every { adapter.bondedDevices } returns
+            setOf(bonded("Pad", BluetoothDevice.DEVICE_TYPE_DUAL), bonded("Pad", BluetoothDevice.DEVICE_TYPE_DUAL))
+        assertEquals(emptyList<String>(), BluetoothPadLinkReader(context).serviceUuids("Pad"))
+
+        val noUuids = bonded("Solo", BluetoothDevice.DEVICE_TYPE_DUAL).also { every { it.uuids } returns null }
+        every { adapter.bondedDevices } returns setOf(noUuids)
+        assertEquals(emptyList<String>(), BluetoothPadLinkReader(context).serviceUuids("Solo"))
     }
 }

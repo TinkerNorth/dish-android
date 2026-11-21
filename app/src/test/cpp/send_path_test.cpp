@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 #include "send_path.h"
+#include "message_tally.h"
 #include "send_counter.h"
 #include "vector_session.h"
 #include "wire_encoders.h"
@@ -561,6 +562,19 @@ TEST_F(SendPath, AReportOnASessionBeforeProtocol4IsThePinnedThirteenByteFrameWha
         EXPECT_EQ(sentBytes(), std::vector<Bytes>{bytesOf(wire_vectors::kScreenGamepad)})
             << "protocol " << version;
     }
+}
+
+TEST_F(SendPath, EachStreamIsCountedUnderItsKindAndAPingUnderNone) {
+    EXPECT_TRUE(dish_send::sendGamepadReport(session, 0, pinnedScreenReport(), 0));
+    dish_send::sendMotion(session, 1, dish_send::MotionSample{{0, 0, 0}, {0, 0, 0}, 0});
+    dish_send::sendBattery(session, 1, 50, 0);
+    dish_send::sendTouchpadFrame(session, 1, gamepad::TouchpadState{}, false, false, 0, 0);
+    EXPECT_TRUE(dish_send::sendEncrypted(session, dish_wire::MSG_HEARTBEAT_PING, nullptr, 0));
+    EXPECT_EQ(session->sentByKind[dish_tally::SENT_INPUT].load(), 1u);
+    EXPECT_EQ(session->sentByKind[dish_tally::SENT_MOTION].load(), 1u);
+    EXPECT_EQ(session->sentByKind[dish_tally::SENT_BATTERY].load(), 1u);
+    EXPECT_EQ(session->sentByKind[dish_tally::SENT_POINTER].load(), 1u);
+    EXPECT_EQ(session->sentByKind[dish_tally::SENT_MIC].load(), 0u);
 }
 
 TEST_F(SendPath, AReportForASessionTheTableDoesNotKnowGoesNowhere) {

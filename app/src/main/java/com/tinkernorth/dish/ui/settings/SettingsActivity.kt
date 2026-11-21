@@ -8,6 +8,8 @@ import androidx.core.view.isVisible
 import com.tinkernorth.dish.BuildConfig
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivitySettingsBinding
+import com.tinkernorth.dish.source.controllerdb.ControllerDbStatus
+import com.tinkernorth.dish.source.controllerdb.ControllerDbUpdater
 import com.tinkernorth.dish.source.store.CrashReportingStore
 import com.tinkernorth.dish.source.store.ThemeMode
 import com.tinkernorth.dish.source.store.ThemePreferenceStore
@@ -16,6 +18,8 @@ import com.tinkernorth.dish.source.update.UpdateNoticeStatus
 import com.tinkernorth.dish.source.update.UpdateNotices
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.controllerDbCheckNowEnabled
+import com.tinkernorth.dish.ui.common.controllerDbStatusText
 import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.donate.attachDonatePill
@@ -31,6 +35,8 @@ class SettingsActivity : BaseGamepadHostActivity() {
     @Inject lateinit var themePreferenceStore: ThemePreferenceStore
 
     @Inject lateinit var updateNotices: UpdateNotices
+
+    @Inject lateinit var controllerDbUpdater: ControllerDbUpdater
 
     private lateinit var binding: ActivitySettingsBinding
     private val nav by lazy { DishNavigator(this) }
@@ -49,6 +55,7 @@ class SettingsActivity : BaseGamepadHostActivity() {
         bindDonateSettingsCard()
         bindCrashReportingSwitch()
         bindUpdateSection()
+        bindControllerDbSection()
         binding.tvVersion.text = formatVersion()
     }
 
@@ -181,6 +188,29 @@ class SettingsActivity : BaseGamepadHostActivity() {
             return
         }
         updateNotices.checkNow()
+    }
+
+    // Every flavour: the switch mirrors the store the observe-then-bind way, and "Check now" runs
+    // one check while the switch is on.
+    private fun bindControllerDbSection() {
+        binding.sectionControllerDb.labelSection.setText(R.string.settings_section_controller_db)
+        binding.cardRowControllerDbChecks.cardRowIcon.setImageResource(R.drawable.ic_refresh)
+        binding.cardRowControllerDbChecks.cardRowTitle.setText(R.string.settings_controller_db_checks_title)
+        binding.cardRowControllerDbChecks.cardRowSubtitle.setText(R.string.settings_controller_db_checks_body)
+        binding.cardRowControllerDbCheckNow.cardRowIcon.setImageResource(R.drawable.ic_arrow_upward)
+        binding.cardRowControllerDbCheckNow.cardRowTitle.setText(R.string.settings_controller_db_check_now_title)
+        observeWhileStarted(controllerDbUpdater.status) { status -> showControllerDbStatus(status) }
+        binding.switchControllerDbChecks.setOnCheckedChangeListener { _, isChecked ->
+            controllerDbUpdater.setChecksEnabled(isChecked)
+        }
+        binding.cardControllerDbCheckNow.setOnClickListener { controllerDbUpdater.checkNow() }
+    }
+
+    private fun showControllerDbStatus(status: ControllerDbStatus) {
+        val alreadyShowing = binding.switchControllerDbChecks.isChecked == status.checksEnabled
+        if (!alreadyShowing) binding.switchControllerDbChecks.isChecked = status.checksEnabled
+        binding.cardRowControllerDbCheckNow.cardRowSubtitle.text = controllerDbStatusText(status, System.currentTimeMillis())
+        binding.cardControllerDbCheckNow.isEnabled = controllerDbCheckNowEnabled(status)
     }
 
     private fun chooseChip(mode: ThemeMode) {

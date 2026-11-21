@@ -128,8 +128,11 @@ dependency-review, gitleaks, action-pin lint, and CodeQL for
 
 ## Privacy and security
 
-LAN-only. No TinkerNorth-operated server. Firebase Crashlytics is the
-only telemetry, opt-out from the Settings screen. Full policy:
+LAN-only: controller input never reaches a TinkerNorth-operated server.
+Every build checks `dish.tinkernorth.com` for a newer controller database
+(data, never code; a switch in Settings turns it off), and a diagnostics
+file goes to support only when you email it yourself. Firebase Crashlytics
+is the only telemetry, opt-out from the Settings screen. Full policy:
 [`PRIVACY.md`](PRIVACY.md).
 
 Vulnerability disclosure: [`SECURITY.md`](SECURITY.md). Every release

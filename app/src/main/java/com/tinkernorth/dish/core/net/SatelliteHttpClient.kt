@@ -6,6 +6,7 @@ import android.util.Log
 import com.tinkernorth.dish.repository.SatellitePinRepository
 import java.io.IOException
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
 import java.security.SecureRandom
 import javax.inject.Inject
@@ -25,11 +26,40 @@ data class HttpReply(
     val body: String,
     val etag: String?,
     val pinMismatch: Boolean = false,
+    // The connect or the read ran past its timeout: the host may be there but slow.
+    val timedOut: Boolean = false,
 ) {
     val notModified: Boolean get() = status == HttpURLConnection.HTTP_NOT_MODIFIED
 
     val unreachable: Boolean get() = status == 0 || body.isBlank()
 }
+
+// What one request adds to the defaults: extra headers, and a shorter timeout for a request a person
+// is waiting on.
+data class RequestOptions(
+    val headers: Map<String, String> = emptyMap(),
+    val timeoutMs: Int = DEFAULT_TIMEOUT_MS,
+    // True when timeoutMs is the whole exchange's budget, connect and read together, rather than
+    // the allowance each of the two gets on its own.
+    val singleDeadline: Boolean = false,
+)
+
+// One budget the connect and the read draw from. remainingMs never reaches zero, because a zero
+// socket timeout means wait forever.
+internal class RequestDeadline(
+    private val totalMs: Int,
+    private val nowMs: () -> Long = { System.nanoTime() / NANOS_PER_MS },
+) {
+    private val startedMs = nowMs()
+
+    fun expired(): Boolean = nowMs() - startedMs >= totalMs
+
+    fun remainingMs(): Int = (totalMs - (nowMs() - startedMs)).coerceIn(1L, totalMs.toLong()).toInt()
+}
+
+private const val NANOS_PER_MS = 1_000_000L
+
+private const val DEFAULT_TIMEOUT_MS = 5_000
 
 // Satellite presents a self-signed cert on a LAN IP (no CA to validate against), so the
 // handshake is validated by trust-on-first-use cert PINNING ([TofuTrustManager]): the first
@@ -203,7 +233,7 @@ class SatelliteHttpClient
                 hmacProof = null,
                 body = null,
                 satelliteId = satelliteId,
-                extraHeaders = catalogHeaders(acceptLanguage, etag),
+                options = RequestOptions(headers = catalogHeaders(acceptLanguage, etag)),
             )
 
         // GET /api/server/capabilities: live host state. Unauthenticated like the catalog
@@ -222,6 +252,29 @@ class SatelliteHttpClient
                 hmacProof = null,
                 body = null,
                 satelliteId = satelliteId,
+            )
+
+        // GET /api/connections/{id}/diagnostics (Satellite 2.3.0): this connection's snapshot, asked
+        // for while a support report is prepared and given up on after timeoutMs.
+        fun getConnectionDiagnostics(
+            ip: String,
+            port: Int,
+            connectionId: String,
+            deviceId: String,
+            hmacProof: String,
+            satelliteId: String,
+            timeoutMs: Int,
+        ): HttpReply =
+            requestWithMeta(
+                method = "GET",
+                ip = ip,
+                port = port,
+                path = "/api/connections/$connectionId/diagnostics",
+                deviceId = deviceId,
+                hmacProof = hmacProof,
+                body = null,
+                satelliteId = satelliteId,
+                options = RequestOptions(timeoutMs = timeoutMs, singleDeadline = true),
             )
 
         // No X-Device-Id: /api/pair is the only client route that bypasses clientAuthorized.
@@ -286,16 +339,18 @@ class SatelliteHttpClient
             hmacProof: String?,
             body: String?,
             satelliteId: String,
-            extraHeaders: Map<String, String> = emptyMap(),
+            options: RequestOptions = RequestOptions(),
         ): HttpReply {
             val url = URL(SCHEME, ip, port, path)
             Log.i(TAG, "$method $SCHEME://$ip:$port$path")
             var conn: HttpsURLConnection? = null
             var pooled = false
             var pinMismatch = false
+            val deadline = if (options.singleDeadline) RequestDeadline(options.timeoutMs) else null
             return try {
-                conn = openConnection(url, method, satelliteId, onMismatch = { pinMismatch = true })
-                conn.applyHeaders(deviceId, hmacProof, extraHeaders)
+                conn = openConnection(url, method, satelliteId, onMismatch = { pinMismatch = true }, timeoutMs = options.timeoutMs)
+                conn.applyHeaders(deviceId, hmacProof, options.headers)
+                if (deadline != null) conn.holdToDeadline(deadline)
                 if (body != null) conn.writeBody(body)
                 val status = conn.responseCode
                 val succeeded = status in SUCCESS_STATUSES
@@ -305,6 +360,9 @@ class SatelliteHttpClient
                 // Fully drained: leave the socket in the keep-alive pool so the approval poll reuses the TLS session.
                 pooled = true
                 HttpReply(status, text, conn.getHeaderField(HEADER_ETAG))
+            } catch (e: SocketTimeoutException) {
+                Log.e(TAG, "$method $path timed out: ${e.message}")
+                HttpReply(0, requestFailedBody(e.message), null, pinMismatch, timedOut = true)
             } catch (e: IOException) {
                 Log.e(TAG, "$method $path failed: ${e.message}")
                 HttpReply(0, requestFailedBody(e.message), null, pinMismatch)
@@ -318,14 +376,15 @@ class SatelliteHttpClient
             method: String,
             satelliteId: String,
             onMismatch: () -> Unit,
+            timeoutMs: Int = READ_TIMEOUT_MS,
         ): HttpsURLConnection {
             val trust = TofuTrustManager(satelliteId, pins, onMismatch)
             return (url.openConnection() as HttpsURLConnection).apply {
                 sslSocketFactory = socketFactoryOver(trust)
                 hostnameVerifier = sessionVerifierOver(trust)
                 requestMethod = method
-                connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = READ_TIMEOUT_MS
+                connectTimeout = minOf(CONNECT_TIMEOUT_MS, timeoutMs)
+                readTimeout = timeoutMs
                 setRequestProperty(HEADER_CONTENT_TYPE, MIME_JSON)
             }
         }
@@ -340,6 +399,14 @@ class SatelliteHttpClient
             for ((k, v) in extraHeaders) setRequestProperty(k, v)
         }
 
+        // Connects now, with the whole budget for it, then leaves the read only what is left.
+        private fun HttpsURLConnection.holdToDeadline(deadline: RequestDeadline) {
+            connectTimeout = deadline.remainingMs()
+            connect()
+            if (deadline.expired()) throw SocketTimeoutException("deadline spent connecting")
+            readTimeout = deadline.remainingMs()
+        }
+
         private fun HttpsURLConnection.writeBody(body: String) {
             doOutput = true
             outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
@@ -349,8 +416,8 @@ class SatelliteHttpClient
             const val TAG = "SatelliteHttpClient"
             const val SCHEME = "https"
             const val TLS_CONTEXT = "TLS"
-            const val CONNECT_TIMEOUT_MS = 5_000
-            const val READ_TIMEOUT_MS = 5_000
+            const val CONNECT_TIMEOUT_MS = DEFAULT_TIMEOUT_MS
+            const val READ_TIMEOUT_MS = DEFAULT_TIMEOUT_MS
 
             // The 2xx class: a body on the input stream; anything else has an error stream.
             val SUCCESS_STATUSES = HttpURLConnection.HTTP_OK until HttpURLConnection.HTTP_MULT_CHOICE

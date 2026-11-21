@@ -219,6 +219,29 @@ Classification classifyDevice(uint16_t vid, uint16_t pid, uint8_t ifClass, uint8
 
 bool isVerifiedFastLane(uint16_t vid, uint16_t pid);
 
+// A row of the active controller database that the attach path reads after the compiled tables:
+// an identity a served update added. Handed down from the JVM at startup and after every update;
+// the report path never reads it.
+struct ServedDevice {
+    uint16_t vid = 0;
+    uint16_t pid = 0;
+    Parser parser = Parser::NONE;
+    InitKind init = InitKind::NONE;
+    ButtonOrder order = ButtonOrder::WESTERN;
+    bool verified = false;
+};
+
+// Pure: the row the JVM's raw values name; false for an identity out of range or a family, init or
+// button order this build does not compile, which the record's requires makes inert.
+bool servedDeviceOf(int32_t vid, int32_t pid, int32_t parser, int32_t init, int32_t order,
+                    bool verified, ServedDevice& out);
+
+// Replaces the served set as a whole: a later controller database replaces every row, never merges.
+// lookupKnown and isVerifiedFastLane consult it after the compiled tables, which always win.
+void setServedDevices(const ServedDevice* rows, size_t count);
+
+size_t servedDeviceCount();
+
 enum class ProbeOutcome : uint8_t {
     DECODED = 0,
     SILENT = 1,
@@ -320,6 +343,33 @@ enum class OutputRoute : uint8_t {
 
 OutputRoute outputRouteFor(Parser p, uint8_t epOut);
 
+// Pure: the route of every output but rumble (light bar, player LEDs, trigger effects, mic lamp,
+// the init sequences on an OUT endpoint): the interrupt OUT endpoint, or none without one.
+OutputRoute endpointRouteFor(uint8_t epOut);
+
+// What the last output write to a pad came to, for Diagnostics' "Last write" row and the bundle:
+// the route it took, the endpoint, the report's first byte, and ok or the errno the kernel
+// answered. Recorded by the pad's output worker (and its attach, for the init) and read by the JVM.
+struct WriteVerdict {
+    bool recorded = false;
+    OutputRoute route = OutputRoute::NONE;
+    uint8_t endpoint = 0;
+    uint8_t reportId = 0;
+    bool ok = false;
+    int32_t err = 0;
+    int64_t atMs = NEVER_SENT_MS;
+};
+
+// A transfer that moved fewer bytes than the report: no errno, but not a write either.
+inline constexpr int32_t WRITE_ERR_SHORT = -1;
+inline constexpr int32_t WRITE_OK = 0;
+
+// Pure: the verdict of writing report[0..n) by route at atMs, err being WRITE_OK, WRITE_ERR_SHORT
+// or the errno. A route of NONE records that the pad has no way to take the report; a report that
+// built to nothing (a family without that output) is no write and records nothing.
+WriteVerdict writeVerdictOf(OutputRoute route, uint8_t epOut, const uint8_t* report, size_t n,
+                            int32_t err, int64_t atMs);
+
 // Pure report builders over the merged state; each returns bytes written (0 = unsupported family
 // or out too small). Like buildRumbleReport the buffers are the full OUT transfer including the
 // leading report id where the family has one.
@@ -399,8 +449,10 @@ bool buildSteamBleSettingsRefresh(Parser p, BleWrite& out);
 // Pure: the merged rumble as a Bluetooth LE write; false for a family without rumble.
 bool buildSteamBleRumbleWrite(Parser p, FeedbackState& st, BleWrite& out);
 
-// Sends the attach-time init sequence InitKind names over the claimed interface.
-bool runInit(int fd, int interfaceNumber, uint8_t epOut, InitKind init);
+// Sends the attach-time init sequence InitKind names over the claimed interface; verdict is the
+// sequence's last write, or the one it stopped at.
+bool runInit(int fd, int interfaceNumber, uint8_t epOut, InitKind init, int64_t atMs,
+             WriteVerdict& verdict);
 
 // Undoes runInit's device-side changes. No-op for families that never changed the device, and for
 // the Steam Controller (2026), whose own watchdog restores lizard mode once the settings stop.
@@ -414,19 +466,21 @@ bool runReceiverStateRequest(int fd, int interfaceNumber, Parser p);
 // refused write costs the output worker a single transfer. False for every other family.
 bool runSettingsRefresh(int fd, int interfaceNumber, Parser p);
 
-// Android write wrappers over the feedback builders. Each refuses a device it has no route to (no
-// OUT endpoint, and for rumble no control-pipe route either, outputRouteFor) before it builds, so a
-// builder never records in FeedbackState a write that cannot happen.
-bool runMergedRumble(int fd, int interfaceNumber, uint8_t epOut, Parser p, FeedbackState& st,
-                     uint8_t seq);
-bool runLightbar(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t r, uint8_t g,
-                 uint8_t b);
-bool runPlayerLeds(int fd, uint8_t epOut, Parser p, const FeedbackState& st, uint8_t ledMask,
-                   uint8_t seq);
-bool runTriggerEffects(int fd, uint8_t epOut, Parser p, const FeedbackState& st,
-                       const uint8_t left[TRIGGER_EFFECT_BLOCK_LEN],
-                       const uint8_t right[TRIGGER_EFFECT_BLOCK_LEN]);
-bool runMicMuteLed(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t state);
+// Android write wrappers over the feedback builders, each answering its write's verdict. Each
+// refuses a device it has no route to (no OUT endpoint, and for rumble no control-pipe route
+// either, outputRouteFor) before it builds into FeedbackState, so a builder never records there a
+// write that cannot happen; the refusal's verdict names the report from a build into a copy.
+WriteVerdict runMergedRumble(int fd, int interfaceNumber, uint8_t epOut, Parser p,
+                             FeedbackState& st, uint8_t seq, int64_t atMs);
+WriteVerdict runLightbar(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t r, uint8_t g,
+                         uint8_t b, int64_t atMs);
+WriteVerdict runPlayerLeds(int fd, uint8_t epOut, Parser p, const FeedbackState& st,
+                           uint8_t ledMask, uint8_t seq, int64_t atMs);
+WriteVerdict runTriggerEffects(int fd, uint8_t epOut, Parser p, const FeedbackState& st,
+                               const uint8_t left[TRIGGER_EFFECT_BLOCK_LEN],
+                               const uint8_t right[TRIGGER_EFFECT_BLOCK_LEN], int64_t atMs);
+WriteVerdict runMicMuteLed(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t state,
+                           int64_t atMs);
 
 // Pure: writes the device's rumble report into out, returns its length (0 if unsupported or out is
 // too small). Host-tested in usb_parsers_test.cpp; the Android writer goes through

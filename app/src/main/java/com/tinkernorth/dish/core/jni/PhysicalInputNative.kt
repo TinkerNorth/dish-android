@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.core.jni
 
+import com.tinkernorth.dish.core.controllerdb.ServedRows
 import com.tinkernorth.dish.repository.TrackpadPick
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -10,6 +11,11 @@ import javax.inject.Singleton
 class PhysicalInputNative
     @Inject
     constructor() {
+        // The active controller database's usb rows, which the attach path reads after the
+        // compiled tables. Startup and every update only.
+        fun setServedModels(rows: ServedRows) =
+            ModelTableNative.setServedModels(rows.vendorIds, rows.productIds, rows.parsers, rows.inits, rows.orders, rows.verified)
+
         fun isKnownFastLaneModel(
             vendorId: Int,
             productId: Int,
@@ -232,6 +238,12 @@ class PhysicalInputNative
 
         fun deviceInfoJson(deviceId: Int): String = UsbDirectNative.deviceInfoJson(deviceId)
 
+        fun lastWriteVerdict(deviceId: Int): LongArray = UsbDirectNative.lastWriteVerdict(deviceId)
+
+        fun armReportCapture(deviceId: Int): Boolean = UsbDirectNative.armReportCapture(deviceId)
+
+        fun capturedReportsJson(deviceId: Int): String = UsbDirectNative.capturedReportsJson(deviceId)
+
         fun deviceLatencyJson(deviceId: Int): String = UsbDirectNative.deviceLatencyJson(deviceId)
 
         // Opt-in latency benchmark (stage-1 USB-direct hot path + stage-2 heartbeat RTT).
@@ -244,4 +256,6 @@ class PhysicalInputNative
         fun setInputInspection(on: Boolean) = InstrumentationNative.setInputInspection(on)
 
         fun deviceStateJson(deviceId: Int): String = PhysicalSlotNative.deviceStateJson(deviceId)
+
+        fun refreshDeviceStates() = InstrumentationNative.refreshDeviceStates()
     }

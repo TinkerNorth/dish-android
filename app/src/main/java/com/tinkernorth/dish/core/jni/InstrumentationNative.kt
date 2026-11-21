@@ -24,4 +24,7 @@ object InstrumentationNative {
     // Inspector mirror gate: while on, USB-direct reports also copy motion/touch into the
     // snapshot state. Off costs one relaxed atomic load per report, like the bench markers.
     external fun setInputInspection(on: Boolean)
+
+    // Every pad's state into the mirror deviceStateJson reads, once, without opening the inspector.
+    external fun refreshDeviceStates()
 }

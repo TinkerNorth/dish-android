@@ -144,6 +144,9 @@ class SlotTable {
     // Diagnostics-only mirror gate: motion/touch land in the device state, and the state in the
     // inspector's mirror, solely while an inspector screen is open.
     void setInspecting(bool on);
+    // Copies every slot's state into its mirror once, inspector or not: what a support report
+    // reads as each pad's last state.
+    void refreshMirrors();
     // formatDeviceStateJson of the device's state as the inspector last saw it; 0 for an unknown
     // device.
     size_t formatDeviceState(int32_t deviceId, char* buf, size_t cap);

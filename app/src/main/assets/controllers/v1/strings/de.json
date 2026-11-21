@@ -1,0 +1,20 @@
+{
+  "family.dualsense.name": "DualSense-Protokoll",
+  "family.dualshock4.name": "DualShock-4-Protokoll",
+  "family.hid.name": "Generisches HID-Gamepad",
+  "family.stadia.name": "Stadia-Protokoll",
+  "family.steamController.name": "Steam-Controller-Protokoll",
+  "family.steamControllerBle.name": "Steam-Controller-Bluetooth-LE-Protokoll",
+  "family.steamTriton.name": "Steam-Controller-Protokoll (2026)",
+  "family.switchN64Usb.name": "Switch-N64-Protokoll",
+  "family.switchProUsb.name": "Switch-Pro-Protokoll",
+  "family.xboxOneGip.name": "Xbox-One-Protokoll",
+  "family.xinput360.name": "Xbox-360-Protokoll",
+  "family.xinput360Wireless.name": "Xbox-360-Wireless-Protokoll",
+  "issue.thor-ds5-rumble-usb.body": "Die Eingabe funktioniert, aber die Vibration erreicht den Controller über USB Direct auf diesem Gerät nicht. Derselbe Controller vibriert über Dish für Mac. Wird untersucht.",
+  "issue.thor-ds5-rumble-usb.title": "Keine Vibration über USB auf dem AYN Thor",
+  "mapping.eightbitdo.name": "8BitDo-Tastenreihenfolge",
+  "mapping.playstationClassic.name": "PlayStation-Classic-Tastenreihenfolge",
+  "mapping.switch.name": "Switch-Tastenreihenfolge",
+  "mapping.western.name": "Westliche Tastenreihenfolge"
+}

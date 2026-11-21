@@ -452,3 +452,72 @@ What SDL does over Bluetooth LE, and so what is built:
 few seconds of waking, streams sticks, triggers, buttons, trackpads and motion with no lizard
 keyboard or mouse input reaching the phone, rumbles (2026) for as long as the game asks, ends its
 card when it sleeps or Bluetooth goes off, and comes back as a card when it wakes.
+
+---
+
+## 11. Controller database and diagnostics: what 2.7.0 left out
+
+**Context:** 2.7.0 bundles the fleet's controller database (`app/src/main/assets/controllers/v1`),
+generates the compiled identity tables from it (`scripts/gen_controller_tables.py`, run by both
+CMake builds through `app/src/main/cpp/controller_tables.cmake`), checks dish.tinkernorth.com for a
+newer copy (`source/controllerdb/`), hands the active usb rows to native
+(`ModelTableNative.setServedModels`, `usbparsers::setServedDevices`), records each Direct pad's last
+write verdict, asks "Did it work?" after the inspector's tests, and sends a support report with a
+diagnostics bundle that carries both ends of each connection.
+These pieces were deferred or deliberately shaped differently from the contracts:
+
+- **The guided per-button capture is deferred.** "Capture this controller" keeps the USB and HID
+  descriptors and twenty reports at rest only. Walking the person through each button and recording
+  the report each press produces needs its own inspector flow and a bundle format for it.
+- **The report capture reads the poller.** The twenty reports at rest can only come from the pad's
+  own poller, so `keepIfCapturing` in `usb_host.cpp` costs the report path one relaxed atomic load
+  per URB while no capture is armed (the same cost as the inspector's `SlotTable::inspect_`), and a
+  fixed-slot copy for the twenty reports after a person arms it. Nothing else added in 2.7.0 touches
+  the report path. Measure it on the hot-path bench before 2.7.0 ships to a slow phone.
+- **Served rows are usb only and carry no name natively.** The parallel arrays carry the record's
+  `identity.usb` rows; a served Bluetooth identity has no native lookup to reach
+  (`lookupBluetoothModel` is the Steam BLE pads' GATT path and stays compiled-only). A served row's
+  `KnownDevice::name` is null, so native calls it "USB controller" and the controller card falls back
+  to the pad's product string; Diagnostics names it from the database's strings ("Known as").
+  Feeding the database's name into `friendlyUsbName` is the follow-up.
+- **The first attach after launch may precede the served rows.** The bundled copy and any cached
+  download are loaded off the main thread at startup; a pad already plugged in that only a cached
+  download knows is classified by its interface until its next attach.
+- **Expect checks compare endpoints only.** Schema 1's `expect` names `endpoints.in` and
+  `endpoints.out`; the interface count is recorded in the bundle's hardware facts but there is no
+  field to compare it against.
+- **The bundle's `probe` is omitted.** The probe outcome at attach is not kept on the JVM; the
+  bundle carries `rateHz` and the last write instead.
+- **Stick tests are not outcomes yet.** `stick.drift` and `stick.range` keep their own history
+  (`StickTestHistoryStore`); asking "Did it work?" after them, and carrying them as outcomes, is
+  left for the stick test's redesign.
+- **The init verdict is the sequence's last write.** A multi-packet init (GIP, Switch Pro, the
+  Steam Controllers' feature reports) records the verdict of the packet it stopped at, or of its
+  last packet; GIP acks and the Steam Controller (2026)'s settings refreshes record none.
+- **The report's second cut carries what the client holds today, and names nulls for the rest.**
+  `speaker.frames` and `haptics.frames` are null: the receive path counts speaker and haptic
+  datagrams per session (`received.speaker`, `received.haptic`), not per controller. A Moonlight
+  session has no ack and no RTT window, and counts only the reports it sent; a Bluetooth host only
+  its reports.
+- **Two hot-path additions, both one increment.** `send_path.cpp` `countFor` adds one relaxed
+  load and store under the session's gate per datagram (`sentByKind`, `message_tally.h`), the same
+  shape as the existing per-controller tallies; `receive_path.cpp` adds one relaxed `fetch_add` per
+  datagram that opened (`receivedByKind`). On the Kotlin receive path `FeedbackActivityStore.note`
+  now keeps each lane's count, last value and time in per-slot atomic arrays: it no longer allocates
+  a `FeedbackActivity` per packet, but its count is an `incrementAndGet` (no relaxed increment below
+  API 33). Measure both on the hot-path bench with the rest of 2.7.0.
+- **A pad's last state is read by a mirror refresh.** The bundle's `input.last` comes from
+  `SlotTable::refreshMirrors`, the inspector's open-time copy, taken once when the report is
+  prepared; it is the slot's current state, which for a quiet pad is the last one it published.
+- **The capabilities fallback's protocol floor is written, not read.** Capabilities name only the
+  ceiling the host speaks, so `protocol` is `[1, ceiling]`: every Satellite accepts from 1, and its
+  own floor is only ever stated in a 409.
+- **A Moonlight host carries its version only.** The plaintext serverinfo the app parses reports
+  every host free and every caller unpaired, so `state` and `pairStatus` are null; the mutual-TLS
+  serverinfo would know both, and is not asked for a report.
+- **An older Satellite is decided by its version.** `isOlderSatellite` reads the serverVersion from
+  the capabilities the app last fetched (else the catalog's); an older host is never asked, and a
+  404 from 2.3.0 or later is `unknownConnection`. A host whose version the app never read is asked.
+**Where:** `app/src/main/cpp/usb_host.cpp`, `app/src/main/cpp/usb_parsers.cpp`,
+`app/src/main/java/com/tinkernorth/dish/source/usb/ControllerCapturer.kt`,
+`app/src/main/java/com/tinkernorth/dish/core/controllerdb/`.

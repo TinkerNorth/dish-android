@@ -299,6 +299,17 @@ TEST_F(Slots, TheInspectorSeesMotionAndTouchOnlyWhileItIsOpen) {
     EXPECT_EQ(slots->formatDeviceState(99, openView, sizeof(openView)), 0u);
 }
 
+TEST_F(Slots, ARefreshShowsEachPadsStateWithoutOpeningTheInspector) {
+    gamepad::DeviceState nu{};
+    nu.wButtons = 0x1000;
+    char view[gamepad::kDeviceStateJsonCap];
+    slots->prewarmDevice(1);
+    slots->applyUsbReport(1, nu);
+    slots->refreshMirrors();
+    ASSERT_GT(slots->formatDeviceState(1, view, sizeof(view)), 0u);
+    EXPECT_NE(std::string(view).find("\"buttons\":4096,"), std::string::npos) << view;
+}
+
 TEST_F(Slots, TheInspectorSeesTheExtendedButtonsWord) {
     char view[gamepad::kDeviceStateJsonCap];
     slots->prewarmDevice(1);

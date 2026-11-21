@@ -36,6 +36,9 @@ find_package(Threads REQUIRED)
 
 set(SATELLITE_CPP "${CMAKE_SOURCE_DIR}/../../main/cpp")
 
+# The identity tables usb_parsers.cpp compiles, generated from the bundled controller database.
+include("${SATELLITE_CPP}/controller_tables.cmake")
+
 # The pinned libsodium the app seals with (src/main/cpp/CMakeLists.txt), built from the same
 # release tarball, so the send path's bytes and its seal cost are those of the one that ships.
 FetchContent_Declare(
@@ -131,6 +134,15 @@ target_include_directories(wire_encoders_test PRIVATE "${SATELLITE_CPP}")
 target_compile_options(wire_encoders_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(wire_encoders_test PRIVATE GTest::gtest_main)
 
+# What each wire message counts as in a session's sent and received tallies, and their JSON: pure
+# and header-only, so the names the bundle reads are pinned without a socket.
+add_executable(message_tally_test
+    message_tally_test.cpp
+)
+target_include_directories(message_tally_test PRIVATE "${SATELLITE_CPP}")
+target_compile_options(message_tally_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_link_libraries(message_tally_test PRIVATE GTest::gtest_main)
+
 # usb_parsers.cpp fences its USB I/O behind __ANDROID__, so the decoders and rumble
 # builders build and test host-side.
 add_executable(usb_parsers_test
@@ -142,6 +154,7 @@ add_executable(usb_parsers_test
 target_include_directories(usb_parsers_test PRIVATE "${SATELLITE_CPP}")
 target_compile_options(usb_parsers_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(usb_parsers_test PRIVATE GTest::gtest_main)
+dish_use_controller_tables(usb_parsers_test)
 
 # Pure HID report-descriptor parser + layout-driven decode (no Android/USB I/O).
 add_executable(usb_hid_descriptor_test
@@ -340,6 +353,7 @@ gtest_discover_tests(wire_encoders_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(usb_parsers_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(usb_hid_descriptor_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(send_counter_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(message_tally_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(send_path_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(udp_socket_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(session_table_test DISCOVERY_MODE PRE_TEST)

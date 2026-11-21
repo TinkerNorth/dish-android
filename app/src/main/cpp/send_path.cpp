@@ -11,6 +11,7 @@
 #include "audio_codec.h"
 #include "hotpath_latency.h"
 #include "log_port.h"
+#include "message_tally.h"
 #include "send_counter.h"
 #include "tracked_mutex.h"
 
@@ -72,6 +73,8 @@ void countFor(Session& s, const Framed& d) {
     const size_t controller = d.controller & CTRL_INDEX_MASK;
     if (d.tally == Tally::Gamepad) count(s.sentByCtrl[controller]);
     if (d.tally == Tally::Motion) count(s.motionByCtrl[controller]);
+    const int kind = dish_tally::sentKindOf(d.msgType);
+    if (kind != dish_tally::NO_KIND) count(s.sentByKind[kind]);
 }
 
 // Under the gate: the counter's place on the wire is kept from its draw to the return of sendto.

@@ -52,6 +52,8 @@ void restartEntry(Session& s, const int32_t handle, const int sock, const sockad
     s.rtt.acks.store(0);
     for (std::atomic<uint32_t>& sent : s.sentByCtrl) sent.store(0);
     for (std::atomic<uint32_t>& motion : s.motionByCtrl) motion.store(0);
+    for (std::atomic<uint32_t>& sent : s.sentByKind) sent.store(0);
+    for (std::atomic<uint32_t>& received : s.receivedByKind) received.store(0);
     {
         std::lock_guard<TrackedMutex> audioLock(s.audioMtx);
         s.audio.clear();

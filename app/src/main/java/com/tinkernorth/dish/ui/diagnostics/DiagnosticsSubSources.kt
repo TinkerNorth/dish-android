@@ -5,6 +5,8 @@ package com.tinkernorth.dish.ui.diagnostics
 import com.tinkernorth.dish.composer.MicCaptureComposer
 import com.tinkernorth.dish.composer.SpeakerPlayoutComposer
 import com.tinkernorth.dish.composer.WakeStateController
+import com.tinkernorth.dish.core.diagnostics.WriteVerdict
+import com.tinkernorth.dish.core.diagnostics.writeVerdictOf
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
@@ -25,11 +27,13 @@ import com.tinkernorth.dish.source.store.MoonlightHostFactsStore
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import com.tinkernorth.dish.source.store.StickTestHistoryStore
 import com.tinkernorth.dish.source.store.StickTestRecord
+import com.tinkernorth.dish.source.store.TestOutcomeStore
 import com.tinkernorth.dish.source.system.BluetoothAdapterStateObserver
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import com.tinkernorth.dish.source.system.NetworkStateObserver
 import com.tinkernorth.dish.source.system.WifiLinkSource
 import com.tinkernorth.dish.source.usb.UsbDescriptorStore
+import com.tinkernorth.dish.source.usb.UsbHardwareStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -77,27 +81,36 @@ class PadSources
         private val bluetoothLink: BluetoothPadLinkReader,
         private val stickHistory: StickTestHistoryStore,
         private val audioFacts: PadAudioFactsStore,
+        private val hardware: UsbHardwareStore,
+        private val outcomes: TestOutcomeStore,
         private val json: Json,
     ) {
         private val linkTypes = ConcurrentHashMap<Int, BluetoothLinkType>()
+        private val serviceUuids = ConcurrentHashMap<Int, List<String>>()
 
         private data class DirectPadFacts(
             val latency: Map<Int, DeviceLatency>,
             val info: Map<Int, DirectDeviceInfo>,
             val urbErrors: Map<Int, Long>,
             val reportCounts: Map<Int, Long>,
+            val lastWrite: Map<Int, WriteVerdict>,
         )
 
         private data class FrameworkPadFacts(
             val timing: Map<Int, FrameworkTimingSummary>,
             val eventCounts: Map<Int, Long>,
             val linkTypes: Map<Int, BluetoothLinkType>,
+            val serviceUuids: Map<Int, List<String>>,
         )
 
         internal fun flow(ticks: Flow<Unit>): Flow<PadWorld> =
-            combine(ticks, registry.devices, stickHistory.state, audioFacts.state) { _, devices, history, audio ->
-                padWorldFor(devices, history, audio)
-            }
+            combine(
+                combine(ticks, registry.devices, stickHistory.state, audioFacts.state) { _, devices, history, audio ->
+                    padWorldFor(devices, history, audio)
+                },
+                hardware.state,
+                outcomes.state,
+            ) { world, enumerated, answers -> world.copy(hardware = enumerated, outcomes = answers) }
 
         private fun padWorldFor(
             devices: Map<Int, PhysicalGamepadRegistry.Device>,
@@ -107,6 +120,7 @@ class PadSources
             val direct = directPadFacts(devices.filterValues { it.isUsbSynthetic }.keys)
             val framework = frameworkPadFacts(devices.filterValues { !it.isUsbSynthetic })
             linkTypes.keys.retainAll(devices.keys)
+            serviceUuids.keys.retainAll(devices.keys)
             return PadWorld(
                 deviceLatency = direct.latency,
                 deviceInfo = direct.info,
@@ -114,8 +128,10 @@ class PadSources
                 reportCounts = direct.reportCounts + framework.eventCounts,
                 frameworkTiming = framework.timing,
                 btLinkTypes = framework.linkTypes,
+                btServiceUuids = framework.serviceUuids,
                 stickHistory = history,
                 audio = audio,
+                lastWrite = direct.lastWrite,
             )
         }
 
@@ -126,19 +142,26 @@ class PadSources
                 info = ids.mapNotNull { id -> parseDeviceInfo(json, native.deviceInfoJson(id))?.let { id to it } }.toMap(),
                 urbErrors = ids.associateWith { native.getDeviceUrbErrorCount(it) },
                 reportCounts = ids.associateWith { native.getDeviceUrbCount(it) },
+                lastWrite = ids.mapNotNull { id -> writeVerdictOf(native.lastWriteVerdict(id))?.let { id to it } }.toMap(),
             )
 
         // A framework pad is read from the event timing store, and a Bluetooth one also carries
         // its link type, looked up once per device and forgotten with it.
-        private fun frameworkPadFacts(devices: Map<Int, PhysicalGamepadRegistry.Device>): FrameworkPadFacts =
-            FrameworkPadFacts(
+        private fun frameworkPadFacts(devices: Map<Int, PhysicalGamepadRegistry.Device>): FrameworkPadFacts {
+            val bluetooth = devices.filterValues { it.transport == Transport.Bluetooth }
+            return FrameworkPadFacts(
                 timing = devices.keys.mapNotNull { id -> timing.summary(id)?.let { id to it } }.toMap(),
                 eventCounts = devices.keys.associateWith { native.getDeviceInputEventCount(it) },
-                linkTypes =
-                    devices
-                        .filterValues { it.transport == Transport.Bluetooth }
-                        .mapValues { (id, device) -> linkTypes.computeIfAbsent(id) { bluetoothLink.linkType(device.name) } },
+                linkTypes = bluetooth.mapValues { (id, device) -> linkTypes.computeIfAbsent(id) { bluetoothLink.linkType(device.name) } },
+                serviceUuids = dualUuids(bluetooth),
             )
+        }
+
+        // Only a dual-mode bond needs its UUIDs read: the other link types already name the radio.
+        private fun dualUuids(bluetooth: Map<Int, PhysicalGamepadRegistry.Device>): Map<Int, List<String>> =
+            bluetooth
+                .filter { (id, _) -> linkTypes[id] == BluetoothLinkType.DUAL }
+                .mapValues { (id, device) -> serviceUuids.computeIfAbsent(id) { bluetoothLink.serviceUuids(device.name) } }
     }
 
 class LinkSources

@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import android.widget.CompoundButton
+import android.widget.Toast
 import androidx.activity.viewModels
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
@@ -15,12 +16,16 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.databinding.ActivityDiagnosticsBinding
 import com.tinkernorth.dish.databinding.DiagnosticsCardActionsBinding
+import com.tinkernorth.dish.source.controllerdb.ControllerDbStatus
 import com.tinkernorth.dish.source.store.DiagnosticsLogEntry
 import com.tinkernorth.dish.source.store.LatencyProfilingStore
 import com.tinkernorth.dish.source.system.WifiLink
 import com.tinkernorth.dish.source.system.wifiBandForFrequency
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.controllerDbCheckNowEnabled
+import com.tinkernorth.dish.ui.common.controllerDbSourceLabel
+import com.tinkernorth.dish.ui.common.controllerDbStatusResultLabel
 import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.diagnostics.DiagnosticsViewModel.LatencyPanelUi
@@ -47,6 +52,11 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
         binding = setScaffoldContent(ActivityDiagnosticsBinding::inflate)
         setupDishToolbar(binding.toolbar)
 
+        binding.sectionSupport.labelSection.setText(R.string.diagnostics_section_support)
+        binding.sectionControllerDb.labelSection.setText(R.string.settings_section_controller_db)
+        binding.btnReportProblem.setOnClickListener { nav.toSupportReport(question = false) }
+        binding.btnAskQuestion.setOnClickListener { nav.toSupportReport(question = true) }
+        binding.btnControllerDbCheckNow.setOnClickListener { viewModel.checkControllerDbNow() }
         binding.sectionRadios.labelSection.setText(R.string.diagnostics_section_radios)
         binding.sectionControllers.labelSection.setText(R.string.section_controllers)
         binding.sectionConnections.labelSection.setText(R.string.section_connections)
@@ -64,6 +74,8 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
         observe(viewModel.latencyPanel, ::renderLatency)
         observe(viewModel.events, ::renderEvents)
         observe(latencyProfilingStore.state, ::syncLatencySwitch)
+        observe(viewModel.controllerDb, ::renderControllerDb)
+        observe(viewModel.supportEvents, ::onSupportEvent)
         wireLatencySwitch()
     }
 
@@ -126,7 +138,53 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
                 btnSecondary.visibility = if (diag.host == null) View.GONE else View.VISIBLE
                 btnSecondary.setText(R.string.diagnostics_binding_button)
                 btnSecondary.setOnClickListener { nav.toBindingInspector(diag.slotId, diag.name) }
+                btnTertiary.visibility = if (diag.isUsbSynthetic) View.VISIBLE else View.GONE
+                btnTertiary.setText(R.string.diagnostics_capture_button)
+                btnTertiary.setOnClickListener { onCaptureTapped(diag) }
             }.root
+
+    private fun onCaptureTapped(diag: ControllerDiag) {
+        Toast.makeText(this, getString(R.string.diagnostics_capture_started, diag.name), Toast.LENGTH_SHORT).show()
+        viewModel.capture(diag)
+    }
+
+    // ── Controller database ─────────────────────────────────────────────────
+
+    private fun renderControllerDb(status: ControllerDbStatus) {
+        val container = binding.containerControllerDb
+        container.removeAllViews()
+        container.addView(container.card(getString(R.string.diagnostics_controller_db_title), controllerDbLines(status)))
+        binding.btnControllerDbCheckNow.isEnabled = controllerDbCheckNowEnabled(status)
+    }
+
+    private fun controllerDbLines(status: ControllerDbStatus): List<String> {
+        val active = getString(R.string.controller_db_version, status.activeVersion, getString(controllerDbSourceLabel(status.source)))
+        val result = getString(controllerDbStatusResultLabel(status))
+        val lastCheck =
+            if (status.lastCheckAtMs > 0L) {
+                getString(R.string.diagnostics_joined, result, agoLabel(System.currentTimeMillis(), status.lastCheckAtMs))
+            } else {
+                result
+            }
+        return listOf(
+            diagKv(R.string.diagnostics_controller_db_bundled, status.bundledVersion.toString()),
+            diagKv(R.string.diagnostics_controller_db_active, active),
+            diagKv(R.string.diagnostics_controller_db_last_check, lastCheck),
+        )
+    }
+
+    // ── Support ─────────────────────────────────────────────────────────────
+
+    private fun onSupportEvent(event: DiagnosticsViewModel.SupportEvent) {
+        when (event) {
+            is DiagnosticsViewModel.SupportEvent.Captured -> captured(event)
+        }
+    }
+
+    private fun captured(event: DiagnosticsViewModel.SupportEvent.Captured) {
+        val text = if (event.ok) R.string.diagnostics_capture_done else R.string.diagnostics_capture_failed
+        Toast.makeText(this, getString(text, event.name), Toast.LENGTH_LONG).show()
+    }
 
     // ── Hosts ───────────────────────────────────────────────────────────────
 

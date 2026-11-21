@@ -17,6 +17,7 @@ import com.tinkernorth.dish.ui.diagnostics.BindingInspectorViewModel
 import com.tinkernorth.dish.ui.diagnostics.HostInspectorViewModel
 import com.tinkernorth.dish.ui.diagnostics.InputInspectorActivity
 import com.tinkernorth.dish.ui.diagnostics.InputInspectorViewModel
+import com.tinkernorth.dish.ui.diagnostics.SupportReportViewModel
 import com.tinkernorth.dish.ui.main.ConfigureBindingsActivity
 import com.tinkernorth.dish.ui.main.GamepadOverlayActivity
 import com.tinkernorth.dish.ui.main.MainActivity
@@ -139,6 +140,11 @@ class DishNavigator(
 
     fun toDiagnostics() {
         go(R.id.diagnosticsActivity)
+    }
+
+    // "Report a problem", or with question the same screen as "Ask a question".
+    fun toSupportReport(question: Boolean) {
+        go(R.id.supportReportActivity, Bundle().apply { putBoolean(SupportReportViewModel.EXTRA_QUESTION, question) })
     }
 
     fun toLicenses() {

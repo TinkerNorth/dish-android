@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Report a problem / Ask a question: one screen, two starting categories.
+    The person picks a category, writes what happened and may pick the
+    controller it concerns; the screen says in plain words what the file will
+    hold and never hold, can show the file itself, and hands it to the
+    person's own mail app. SupportReportActivity inflates one chip per pad
+    into chipGroupControllers, after the static "None" chip.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        style="@style/Widget.Dish.Toolbar"
+        android:layout_width="match_parent"
+        app:title="@string/report_problem" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingHorizontal="@dimen/spacing_5xl"
+        android:paddingTop="@dimen/spacing_md"
+        android:paddingBottom="@dimen/spacing_6xl">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- ═══ CATEGORY ═══════════════════════════════════════════ -->
+            <include
+                android:id="@+id/sectionCategory"
+                layout="@layout/section_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/chipGroupCategory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:chipSpacingHorizontal="@dimen/chip_margin_end"
+                app:singleSelection="true">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipNotRecognised"
+                    style="@style/Widget.Dish.Chip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/report_category_not_recognised" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipNoFeedback"
+                    style="@style/Widget.Dish.Chip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/report_category_no_feedback" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipConnection"
+                    style="@style/Widget.Dish.Chip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/report_category_connection" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipAudio"
+                    style="@style/Widget.Dish.Chip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/report_category_audio" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipOther"
+                    style="@style/Widget.Dish.Chip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/report_category_other" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipQuestion"
+                    style="@style/Widget.Dish.Chip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/report_category_question" />
+            </com.google.android.material.chip.ChipGroup>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/tilReportText"
+                style="@style/Widget.Dish.TextInputLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_3xl"
+                android:hint="@string/report_text_hint">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etReportText"
+                    style="@style/Widget.Dish.EditText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="top|start"
+                    android:importantForAutofill="no"
+                    android:inputType="textMultiLine|textCapSentences"
+                    android:minLines="4" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- ═══ CONTROLLER ═════════════════════════════════════════ -->
+            <include
+                android:id="@+id/sectionController"
+                layout="@layout/section_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/section_header_gap_above"
+                android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/chipGroupControllers"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:chipSpacingHorizontal="@dimen/chip_margin_end"
+                app:selectionRequired="true"
+                app:singleSelection="true">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipControllerNone"
+                    style="@style/Widget.Dish.Chip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:text="@string/report_controller_none" />
+            </com.google.android.material.chip.ChipGroup>
+
+            <!-- ═══ WHAT THE FILE HOLDS ════════════════════════════════ -->
+            <include
+                android:id="@+id/sectionHolds"
+                layout="@layout/section_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/section_header_gap_above"
+                android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+            <TextView
+                android:id="@+id/tvReportHolds"
+                style="@style/TextAppearance.Dish.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <TextView
+                android:id="@+id/tvReportNeverHolds"
+                style="@style/TextAppearance.Dish.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:text="@string/diagnostics_email_attachment" />
+
+            <TextView
+                android:id="@+id/tvReportPreparing"
+                style="@style/TextAppearance.Dish.Caption"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_3xl"
+                android:text="@string/report_preparing"
+                android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnReportPreview"
+                style="@style/Widget.Dish.Button.Outlined"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:text="@string/report_preview" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnReportContinue"
+                style="@style/Widget.Dish.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/report_continue" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>
