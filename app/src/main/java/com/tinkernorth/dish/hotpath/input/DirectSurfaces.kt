@@ -11,12 +11,15 @@ import java.util.concurrent.atomic.AtomicReference
 
 /** The surfaces a game sets on a pad and the inspector's bench borrows; each one's state goes back. */
 enum class StateSurface(
-    internal val heldBit: Int,
+    internal val index: Int,
 ) {
-    LIGHTBAR(1 shl 0),
-    PLAYER_LEDS(1 shl 1),
-    TRIGGER_EFFECTS(1 shl 2),
-    MIC_LED(1 shl 3),
+    LIGHTBAR(0),
+    PLAYER_LEDS(1),
+    TRIGGER_EFFECTS(2),
+    MIC_LED(3),
+    ;
+
+    internal val heldBit = 1 shl index
 }
 
 // One trigger's DualSense effect block, and the MSG_TRIGGER_EFFECTS payload: the left block, then the right.
@@ -24,6 +27,7 @@ internal const val TRIGGER_EFFECT_BLOCK_BYTES = 11
 internal const val TRIGGER_EFFECTS_BYTES = 2 * TRIGGER_EFFECT_BLOCK_BYTES
 
 private const val NOTHING_HELD = 0
+private val SURFACE_COUNT = StateSurface.entries.size
 private const val LIGHTBAR_OFF = 0L
 private const val PLAYER_LEDS_OFF = 0L
 
@@ -35,7 +39,9 @@ private const val PLAYER_LEDS_OFF = 0L
  *
  * The session receive threads write it per feedback message with no lock and no allocation: each
  * value is one atomic word, and the trigger blocks are the array their message arrived in, which
- * nothing writes again.
+ * nothing writes again. Each game value a surface's check lets through to the pad is [landed] once
+ * its write is posted, so a test that takes the surface can tell when no such write is still on
+ * its way.
  */
 class DirectSurfaces {
     private val lightbar = AtomicLong(LIGHTBAR_OFF)
@@ -43,31 +49,53 @@ class DirectSurfaces {
     private val micLed = AtomicLong(MIC_LED_OFF.toLong())
     private val triggerEffects = AtomicReference(ByteArray(TRIGGER_EFFECTS_BYTES))
     private val held = AtomicInteger(NOTHING_HELD)
+    private val gameLandingsStarted = Array(SURFACE_COUNT) { AtomicInteger() }
+    private val gameLandingsDone = Array(SURFACE_COUNT) { AtomicInteger() }
 
     /** The game's color, packed as feedbackRgb packs it; true when no test holds the bar, so it goes to the pad now. */
     fun gameLightbar(rgb: Long): Boolean {
         lightbar.set(rgb)
-        return isFree(StateSurface.LIGHTBAR)
+        return startLanding(StateSurface.LIGHTBAR)
     }
 
     fun gamePlayerLeds(ledMask: Int): Boolean {
         playerLeds.set(ledMask.toLong())
-        return isFree(StateSurface.PLAYER_LEDS)
+        return startLanding(StateSurface.PLAYER_LEDS)
     }
 
     fun gameTriggerEffects(blocks: ByteArray): Boolean {
         triggerEffects.set(blocks)
-        return isFree(StateSurface.TRIGGER_EFFECTS)
+        return startLanding(StateSurface.TRIGGER_EFFECTS)
     }
 
     fun gameMicLed(state: Int): Boolean {
         micLed.set(state.toLong())
-        return isFree(StateSurface.MIC_LED)
+        return startLanding(StateSurface.MIC_LED)
     }
 
     /** A bench test takes [surface] until it gives it back. */
     fun hold(surface: StateSurface) {
         held.accumulateAndGet(surface.heldBit, Int::or)
+    }
+
+    /**
+     * A bench test takes [surface] and writes its own value, again while a game value that passed the
+     * check before the hold may still land after it, so the test's value is the one the pad shows.
+     */
+    fun take(
+        surface: StateSurface,
+        write: () -> Unit,
+    ) {
+        hold(surface)
+        do {
+            val noGameWriteOnItsWay = noGameLandingInFlight(surface)
+            write()
+        } while (!noGameWriteOnItsWay)
+    }
+
+    /** The game's value that [gameLightbar] and its siblings let through is posted to the pad. */
+    fun landed(surface: StateSurface) {
+        gameLandingsDone[surface.index].incrementAndGet()
     }
 
     // A give-back makes the surface the game's again, then writes the game's last value until that
@@ -92,6 +120,21 @@ class DirectSurfaces {
     fun giveBackMicLed(write: (state: Int) -> Unit) {
         release(StateSurface.MIC_LED)
         writeUntilSettled(micLed) { state -> write(state.toInt()) }
+    }
+
+    // The landing counts itself before it reads the hold, so one that starts after a test's hold sees it.
+    private fun startLanding(surface: StateSurface): Boolean {
+        gameLandingsStarted[surface.index].incrementAndGet()
+        val toThePad = isFree(surface)
+        if (!toThePad) landed(surface)
+        return toThePad
+    }
+
+    // Done is read before started: equal, nothing was in flight at the first read nor began before the second.
+    private fun noGameLandingInFlight(surface: StateSurface): Boolean {
+        val done = gameLandingsDone[surface.index].get()
+        val started = gameLandingsStarted[surface.index].get()
+        return done == started
     }
 
     private fun isFree(surface: StateSurface): Boolean = (held.get() and surface.heldBit) == NOTHING_HELD

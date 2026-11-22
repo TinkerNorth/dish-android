@@ -535,16 +535,17 @@ on-screen pad, whose skin the bench never borrows. These pieces are shaped this 
 
 - **One hot-path addition, on the Kotlin receive path.** Each light bar, player LED, trigger effect
   and mic lamp message for a Direct pad now costs one `ConcurrentHashMap` read by slot id, one atomic
-  store and one atomic read (`DirectSurfaces`), with no lock and no allocation once the pad's slot
-  has been seen (`DirectSurfacesTest` measures it); the trigger blocks kept are the array the
-  message arrived in. A framework pad's light bar adds one scan of the bench-hold list, usually
+  store, one atomic read and two atomic increments (`DirectSurfaces`), with no lock and no
+  allocation once the pad's slot has been seen (`DirectSurfacesTest` measures it); the trigger
+  blocks kept are the array the message arrived in. A framework pad's light bar adds one scan of the bench-hold list, usually
   empty, under the gateway's existing lock. The native receive path is unchanged: every game write
   to a Direct pad already passes through `FeedbackRouter`.
-- **A game value already past the hold check when a test starts can still land first.** The
-  window is the gap between the check and the post to the pad's output worker. The light bar and
-  LED cycles repaint at their next step; the trigger pulse and the mic lamp write once. Closing it
-  would take a lock or a second writer on the receive path. The end of a test has no such window:
-  the give-back writes until the game's last value holds still.
+- **A test's write is the last one, at its start and at its end.** Each game write that a
+  surface's hold check lets through counts itself as started before the check and as done once it
+  is posted to the pad's output worker. A test that takes the surface writes its value again while
+  a game write it could not stop was still on its way, so a value the game sent just before the
+  hold cannot stand over the trigger pulse or the lamp for the whole test. The give-back at the end
+  writes the game's last value until it holds still.
 - **A surface the game never set goes back off.** A Direct pad's light bar goes to 000000, its
   player LEDs to 0, its triggers to mode 0 and its lamp off, which is what the bench did before; the
   pad's own color at claim time is not something the phone can read, so it is not what comes back.

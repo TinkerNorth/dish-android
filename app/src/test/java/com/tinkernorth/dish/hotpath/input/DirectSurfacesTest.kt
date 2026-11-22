@@ -42,10 +42,18 @@ internal class GameFeedbackCycles :
 
     private fun land() {
         val pad = surfaces.of(PROBE_SLOT)
-        if (pad.gameLightbar(GAME_RGB)) toThePad++
-        if (pad.gamePlayerLeds(GAME_LEDS)) toThePad++
-        if (pad.gameTriggerEffects(blocks)) toThePad++
-        if (pad.gameMicLed(MIC_LED_ON)) toThePad++
+        if (pad.gameLightbar(GAME_RGB)) writeToThePad(pad, StateSurface.LIGHTBAR)
+        if (pad.gamePlayerLeds(GAME_LEDS)) writeToThePad(pad, StateSurface.PLAYER_LEDS)
+        if (pad.gameTriggerEffects(blocks)) writeToThePad(pad, StateSurface.TRIGGER_EFFECTS)
+        if (pad.gameMicLed(MIC_LED_ON)) writeToThePad(pad, StateSurface.MIC_LED)
+    }
+
+    private fun writeToThePad(
+        pad: DirectSurfaces,
+        surface: StateSurface,
+    ) {
+        toThePad++
+        pad.landed(surface)
     }
 
     override fun getAsLong(): Long = toThePad
@@ -58,6 +66,12 @@ class DirectSurfacesTest {
     private val lightbarWrites = mutableListOf<Long>()
     private val triggerWrites = mutableListOf<ByteArray>()
     private val newestEffect = ByteArray(TRIGGER_EFFECTS_BYTES).also { it[0] = 0x21 }
+    private val testEffect = ByteArray(TRIGGER_EFFECTS_BYTES).also { it[0] = 0x26 }
+
+    // What the pad shows, and how many times a test wrote it.
+    private var lampShown = MIC_LED_OFF
+    private var effectShown = ByteArray(TRIGGER_EFFECTS_BYTES)
+    private var testWrites = 0
 
     @Test
     fun `the game's values go to the pad while no test holds their surface`() {
@@ -179,6 +193,86 @@ class DirectSurfacesTest {
         assertEquals(listOf(firstEffect, newestEffect), triggerWrites)
     }
 
+    // The game's value passed the hold check just before the test took the surface, and its write
+    // reaches the pad just after the test's own: the test writes again, so its value is what stands.
+
+    @Test
+    fun `a lamp the game was already writing when a test took it is written over while the test runs`() {
+        val gamePassedTheCheck = pad.gameMicLed(MIC_LED_PULSE)
+
+        pad.take(StateSurface.MIC_LED, ::writeTheTestsLampThenLandTheGames)
+
+        assertTrue(gamePassedTheCheck)
+        assertEquals(MIC_LED_ON, lampShown)
+    }
+
+    @Test
+    fun `that lamp is the one given back when the test ends`() {
+        pad.gameMicLed(MIC_LED_PULSE)
+        pad.take(StateSurface.MIC_LED, ::writeTheTestsLampThenLandTheGames)
+
+        pad.giveBackMicLed(::showLamp)
+
+        assertEquals(MIC_LED_PULSE, lampShown)
+    }
+
+    @Test
+    fun `an effect the game was already writing when a test took the triggers is written over while the test runs`() {
+        val gamePassedTheCheck = pad.gameTriggerEffects(newestEffect)
+
+        pad.take(StateSurface.TRIGGER_EFFECTS, ::writeTheTestsEffectThenLandTheGames)
+
+        assertTrue(gamePassedTheCheck)
+        assertSame(testEffect, effectShown)
+    }
+
+    @Test
+    fun `that effect is the one given back when the test ends`() {
+        pad.gameTriggerEffects(newestEffect)
+        pad.take(StateSurface.TRIGGER_EFFECTS, ::writeTheTestsEffectThenLandTheGames)
+
+        pad.giveBackTriggerEffects(::showEffect)
+
+        assertSame(newestEffect, effectShown)
+    }
+
+    @Test
+    fun `a test that takes a surface no game write is landing on writes once`() {
+        pad.gameMicLed(MIC_LED_PULSE)
+        pad.landed(StateSurface.MIC_LED)
+
+        pad.take(StateSurface.MIC_LED, ::writeTheTestsLamp)
+
+        assertEquals(1, testWrites)
+    }
+
+    @Test
+    fun `a game value the hold kept off the pad does not make the test write again`() {
+        pad.hold(StateSurface.MIC_LED)
+        val toThePad = pad.gameMicLed(MIC_LED_PULSE)
+
+        pad.take(StateSurface.MIC_LED, ::writeTheTestsLamp)
+
+        assertFalse(toThePad)
+        assertEquals(1, testWrites)
+    }
+
+    @Test
+    fun `a game write landing on another surface does not make the test write again`() {
+        pad.gameLightbar(GAME_RGB)
+
+        pad.take(StateSurface.MIC_LED, ::writeTheTestsLamp)
+
+        assertEquals(1, testWrites)
+    }
+
+    @Test
+    fun `each surface counts its game writes in a place of its own`() {
+        val indices = StateSurface.entries.map(StateSurface::index)
+
+        assertEquals(StateSurface.entries.indices.toList(), indices.sorted())
+    }
+
     @Test
     fun `a slot keeps one record, and each slot has its own`() {
         val bySlot = DirectSurfacesBySlot()
@@ -209,6 +303,42 @@ class DirectSurfacesTest {
         triggerWrites += blocks
         val isTheFirstWrite = triggerWrites.size == 1
         if (isTheFirstWrite) pad.gameTriggerEffects(newestEffect)
+    }
+
+    private fun writeTheTestsLamp() {
+        testWrites++
+        lampShown = MIC_LED_ON
+    }
+
+    private fun writeTheTestsLampThenLandTheGames() {
+        writeTheTestsLamp()
+        val isTheFirstWrite = testWrites == 1
+        if (isTheFirstWrite) landTheGamesLamp()
+    }
+
+    private fun landTheGamesLamp() {
+        lampShown = MIC_LED_PULSE
+        pad.landed(StateSurface.MIC_LED)
+    }
+
+    private fun showLamp(state: Int) {
+        lampShown = state
+    }
+
+    private fun writeTheTestsEffectThenLandTheGames() {
+        testWrites++
+        effectShown = testEffect
+        val isTheFirstWrite = testWrites == 1
+        if (isTheFirstWrite) landTheGamesEffect()
+    }
+
+    private fun landTheGamesEffect() {
+        effectShown = newestEffect
+        pad.landed(StateSurface.TRIGGER_EFFECTS)
+    }
+
+    private fun showEffect(blocks: ByteArray) {
+        effectShown = blocks
     }
 
     private companion object {

@@ -31,6 +31,7 @@ private val MOONLIGHT_PAD = LightSource("moonlight:pc", 0)
 private const val DIRECT_PAD = -1000
 private const val DIRECT_SLOT = "-1000"
 private const val OTHER_DIRECT_SLOT = "-1001"
+private const val A_WRITE_LOOP_THAT_NEVER_ENDS_MS = 10_000L
 
 // One light bar write that reached a Direct pad.
 private data class LightbarWrite(
@@ -428,6 +429,28 @@ class FeedbackRouterTest {
         assertEquals(listOf(0x03), ledWrites)
         assertEquals(listOf(MIC_LED_PULSE), lampWrites)
         assertEquals(listOf(blocks), triggerWrites)
+    }
+
+    // A landing the router never marked done would keep the test writing forever.
+    @Test(timeout = A_WRITE_LOOP_THAT_NEVER_ENDS_MS)
+    fun `a test after the game's own write to each surface writes its value once`() {
+        val r = router(managerWith(handle = 7, slotId = DIRECT_SLOT))
+        val gameBlocks = ByteArray(22)
+        val testBlocks = ByteArray(22) { it.toByte() }
+        r.dispatchLightbar(7, 0, 1, 2, 3)
+        r.dispatchPlayerLeds(7, 0, 0x04)
+        r.dispatchTriggerEffects(7, 0, gameBlocks)
+        r.dispatchMicLed(7, 0, MIC_LED_PULSE)
+
+        r.testLightbar(DIRECT_SLOT, 0xFF, 0, 0)
+        r.testPlayerLeds(DIRECT_SLOT, 0x01)
+        r.testTriggerEffects(DIRECT_SLOT, testBlocks)
+        r.testMicLed(DIRECT_SLOT, MIC_LED_ON)
+
+        assertEquals(listOf(LightbarWrite(DIRECT_PAD, 1, 2, 3), LightbarWrite(DIRECT_PAD, 0xFF, 0, 0)), lightbarWrites)
+        assertEquals(listOf(0x04, 0x01), ledWrites)
+        assertEquals(listOf(gameBlocks, testBlocks), triggerWrites)
+        assertEquals(listOf(MIC_LED_PULSE, MIC_LED_ON), lampWrites)
     }
 
     @Test
