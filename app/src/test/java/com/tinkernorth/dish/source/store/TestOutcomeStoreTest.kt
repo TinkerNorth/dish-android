@@ -49,9 +49,26 @@ class TestOutcomeStoreTest {
     }
 
     @Test
-    fun `every bench test has its bundle name`() {
+    fun `every bench test has its bundle name, in the contract's order`() {
         assertEquals(
-            listOf("rumble.weak", "rumble.strong", "rumble.both", "trigger.pulse", "lamp.on", "lamp.pulse", "tone.play", "mic.level"),
+            listOf(
+                "rumble.weak",
+                "rumble.strong",
+                "rumble.both",
+                "triggerRumble.left",
+                "triggerRumble.right",
+                "triggerRumble.both",
+                "lightbar.cycle",
+                "playerLeds.cycle",
+                "trigger.pulse",
+                "lamp.on",
+                "lamp.pulse",
+                "tone.play",
+                "haptics.play",
+                "mic.level",
+                "stick.drift",
+                "stick.range",
+            ),
             BenchTest.entries.map { it.wire },
         )
     }

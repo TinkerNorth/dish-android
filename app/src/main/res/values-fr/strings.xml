@@ -905,6 +905,14 @@
     <string name="inspector_outcome_test_lamp_pulse">Voyant du micro clignotant</string>
     <string name="inspector_outcome_test_tone">Son de test</string>
     <string name="inspector_outcome_test_mic">Micro</string>
+    <string name="inspector_outcome_test_trigger_rumble_left">Vibration des gâchettes, gauche</string>
+    <string name="inspector_outcome_test_trigger_rumble_right">Vibration des gâchettes, droite</string>
+    <string name="inspector_outcome_test_trigger_rumble_both">Vibration des gâchettes, les deux gâchettes</string>
+    <string name="inspector_outcome_test_lightbar">Cycle de la barre lumineuse</string>
+    <string name="inspector_outcome_test_player_leds">Cycle des LED joueur</string>
+    <string name="inspector_outcome_test_haptics">Son de test sur l\'haptique</string>
+    <string name="inspector_outcome_test_stick_drift">Test de dérive</string>
+    <string name="inspector_outcome_test_stick_range">Test de course</string>
     <string name="diagnostics_record">Fiche</string>
     <string name="diagnostics_record_name">Connue comme</string>
     <string name="diagnostics_verification">Vérifiée</string>

@@ -11,6 +11,7 @@ import com.tinkernorth.dish.hotpath.input.FeedbackRouter
 import com.tinkernorth.dish.hotpath.input.RumbleRouter
 import com.tinkernorth.dish.source.audio.MicLevelProbe
 import com.tinkernorth.dish.source.audio.MicProbeReading
+import com.tinkernorth.dish.source.audio.PlayoutLane
 import com.tinkernorth.dish.source.audio.SpeakerTestTone
 import com.tinkernorth.dish.source.store.BenchTest
 import com.tinkernorth.dish.source.store.MIC_LED_ON
@@ -53,6 +54,7 @@ data class FeatureBench(
     val triggerEffects: Boolean,
     val micLed: Boolean,
     val speaker: Boolean,
+    val haptics: Boolean,
     val mic: Boolean,
 ) {
     val anyFeedback: Boolean get() = listOf(rumble, triggerRumble, lightbar, playerLeds, triggerEffects, micLed).any { it }
@@ -68,6 +70,7 @@ data class FeatureBench(
                 triggerEffects = false,
                 micLed = false,
                 speaker = false,
+                haptics = false,
                 mic = false,
             )
 
@@ -91,6 +94,7 @@ fun featureBenchFor(
         triggerEffects = caps.inputOk(Feature.TRIGGER_EFFECTS),
         micLed = caps.inputOk(Feature.MIC),
         speaker = caps.inputOk(Feature.SPEAKER),
+        haptics = false,
         mic = caps.inputOk(Feature.MIC),
     )
 }
@@ -139,10 +143,15 @@ sealed interface SpeakerTestUi {
     data object Unavailable : SpeakerTestUi
 }
 
+// A test that ended and waits for "Did it work?", with the time it ended: the answer's time.
+data class BenchQuestion(
+    val test: BenchTest,
+    val endedAtMs: Long,
+)
+
 @HiltViewModel
 class InputInspectorViewModel
-    @Inject
-    constructor(
+    internal constructor(
         savedState: SavedStateHandle,
         private val sources: DiagnosticsSources,
         private val micPermission: MicPermissionGate,
@@ -152,7 +161,21 @@ class InputInspectorViewModel
         private val testTone: SpeakerTestTone,
         private val stickHistory: StickTestHistoryStore,
         private val outcomes: TestOutcomeStore,
+        private val nowMs: () -> Long,
     ) : ViewModel() {
+        @Inject
+        constructor(
+            savedState: SavedStateHandle,
+            sources: DiagnosticsSources,
+            micPermission: MicPermissionGate,
+            rumble: RumbleRouter,
+            feedback: FeedbackRouter,
+            micProbe: MicLevelProbe,
+            testTone: SpeakerTestTone,
+            stickHistory: StickTestHistoryStore,
+            outcomes: TestOutcomeStore,
+        ) : this(savedState, sources, micPermission, rumble, feedback, micProbe, testTone, stickHistory, outcomes, System::currentTimeMillis)
+
         val slotId: String = savedState.get<String>(EXTRA_SLOT_ID) ?: VIRTUAL_SLOT_ID
         val deviceId: Int? = slotId.toIntOrNull()
         private val isVirtual = slotId == VIRTUAL_SLOT_ID
@@ -177,12 +200,15 @@ class InputInspectorViewModel
         private val _speakerTest = MutableStateFlow<SpeakerTestUi>(SpeakerTestUi.Idle)
         val speakerTest: StateFlow<SpeakerTestUi> = _speakerTest.asStateFlow()
 
+        private val _hapticsTest = MutableStateFlow<SpeakerTestUi>(SpeakerTestUi.Idle)
+        val hapticsTest: StateFlow<SpeakerTestUi> = _hapticsTest.asStateFlow()
+
         private val _micPermissionRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
         val micPermissionRequests: SharedFlow<Unit> = _micPermissionRequests.asSharedFlow()
 
         // The test whose "Did it work?" is waiting for an answer, if any.
-        private val _pendingTest = MutableStateFlow<BenchTest?>(null)
-        val pendingTest: StateFlow<BenchTest?> = _pendingTest.asStateFlow()
+        private val _question = MutableStateFlow<BenchQuestion?>(null)
+        val question: StateFlow<BenchQuestion?> = _question.asStateFlow()
 
         val lastOutcome: StateFlow<TestOutcome?> =
             outcomes.state
@@ -198,18 +224,20 @@ class InputInspectorViewModel
             asking: BenchTest,
         ) {
             rumble.testBuzz(slotId, strong, weak, TEST_BUZZ_MS)
-            _pendingTest.value = asking
+            _question.value = BenchQuestion(asking, nowMs())
         }
 
         fun answer(worked: Boolean) {
-            val test = _pendingTest.value ?: return
-            outcomes.note(slotId, test, worked)
-            _pendingTest.value = null
+            val question = _question.value ?: return
+            outcomes.note(slotId, question.test, worked)
+            _question.value = null
         }
 
+        @Suppress("UNUSED_PARAMETER")
         fun triggerRumble(
             left: Int,
             right: Int,
+            asking: BenchTest,
         ) {
             viewModelScope.launch {
                 feedback.testTriggerRumble(slotId, left, right)
@@ -239,7 +267,7 @@ class InputInspectorViewModel
         }
 
         fun pulseTriggerEffects() {
-            _pendingTest.value = BenchTest.TRIGGER_PULSE
+            _question.value = BenchQuestion(BenchTest.TRIGGER_PULSE, nowMs())
             viewModelScope.launch {
                 feedback.dispatchTriggerEffectsToSlot(slotId, rigidTriggerBlocks())
                 delay(TRIGGER_EFFECT_HOLD_MS)
@@ -249,7 +277,7 @@ class InputInspectorViewModel
 
         fun micLed(state: Int) {
             feedback.dispatchMicLedToSlot(slotId, state)
-            lampTestFor(state)?.let { _pendingTest.value = it }
+            lampTestFor(state)?.let { _question.value = BenchQuestion(it, nowMs()) }
         }
 
         fun playTestTone() {
@@ -257,11 +285,13 @@ class InputInspectorViewModel
             toneJob =
                 viewModelScope.launch {
                     _speakerTest.value = SpeakerTestUi.Playing
-                    val played = testTone.play(slotId)
+                    val played = testTone.play(slotId, PlayoutLane.SPEAKER)
                     _speakerTest.value = if (played) SpeakerTestUi.Idle else SpeakerTestUi.Unavailable
-                    if (played) _pendingTest.value = BenchTest.TONE
+                    if (played) _question.value = BenchQuestion(BenchTest.TONE, nowMs())
                 }
         }
+
+        fun playHapticsTone() = Unit
 
         fun toggleMicTest() {
             if (micJob?.isActive == true) stopMicTest() else startMicTest()
@@ -273,7 +303,7 @@ class InputInspectorViewModel
                 return
             }
             micJob?.cancel()
-            _pendingTest.value = BenchTest.MIC
+            _question.value = BenchQuestion(BenchTest.MIC, nowMs())
             micJob =
                 viewModelScope.launch {
                     _micTest.value = MicTestUi.Running(meterPercent = 0, peakPercent = 0)

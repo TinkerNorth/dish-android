@@ -7,18 +7,26 @@ import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// The inspector's feedback and audio tests that ask "Did it work?", by their bundle names.
+// The inspector's tests that ask "Did it work?", by their bundle names, in the contract's order.
 enum class BenchTest(
     val wire: String,
 ) {
     RUMBLE_WEAK("rumble.weak"),
     RUMBLE_STRONG("rumble.strong"),
     RUMBLE_BOTH("rumble.both"),
+    TRIGGER_RUMBLE_LEFT("triggerRumble.left"),
+    TRIGGER_RUMBLE_RIGHT("triggerRumble.right"),
+    TRIGGER_RUMBLE_BOTH("triggerRumble.both"),
+    LIGHTBAR_CYCLE("lightbar.cycle"),
+    PLAYER_LEDS_CYCLE("playerLeds.cycle"),
     TRIGGER_PULSE("trigger.pulse"),
     LAMP_ON("lamp.on"),
     LAMP_PULSE("lamp.pulse"),
     TONE("tone.play"),
+    HAPTICS("haptics.play"),
     MIC("mic.level"),
+    STICK_DRIFT("stick.drift"),
+    STICK_RANGE("stick.range"),
 }
 
 // One answer, { test, result, atMs } as the bundle carries it.

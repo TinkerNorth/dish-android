@@ -905,6 +905,14 @@
     <string name="inspector_outcome_test_lamp_pulse">Lampica mikrofona treperi</string>
     <string name="inspector_outcome_test_tone">Testni ton</string>
     <string name="inspector_outcome_test_mic">Mikrofon</string>
+    <string name="inspector_outcome_test_trigger_rumble_left">Vibracija okidača, lijevi</string>
+    <string name="inspector_outcome_test_trigger_rumble_right">Vibracija okidača, desni</string>
+    <string name="inspector_outcome_test_trigger_rumble_both">Vibracija okidača, oba okidača</string>
+    <string name="inspector_outcome_test_lightbar">Ciklus svjetlosne trake</string>
+    <string name="inspector_outcome_test_player_leds">Ciklus LED igrača</string>
+    <string name="inspector_outcome_test_haptics">Testni ton na haptici</string>
+    <string name="inspector_outcome_test_stick_drift">Test drifta</string>
+    <string name="inspector_outcome_test_stick_range">Test dometa</string>
     <string name="diagnostics_record">Zapis</string>
     <string name="diagnostics_record_name">Poznat kao</string>
     <string name="diagnostics_verification">Provjereno</string>

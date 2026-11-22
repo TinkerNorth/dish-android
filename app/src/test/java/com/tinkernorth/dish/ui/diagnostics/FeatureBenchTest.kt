@@ -24,6 +24,19 @@ class FeatureBenchTest {
         assertFalse(bench.triggerEffects)
         assertFalse(bench.triggerRumble)
         assertFalse(bench.micLed)
+        assertFalse(bench.haptics)
+    }
+
+    @Test
+    fun `haptics is offered where the pad's path composes haptic audio`() {
+        val bench = featureBenchFor(caps(Feature.HAPTIC_AUDIO), virtual = false)
+        assertTrue(bench.haptics)
+        assertTrue(bench.anyAudio)
+    }
+
+    @Test
+    fun `a pad with a speaker but no haptic lane is not offered the haptics test`() {
+        assertFalse(featureBenchFor(caps(Feature.SPEAKER), virtual = false).haptics)
     }
 
     @Test

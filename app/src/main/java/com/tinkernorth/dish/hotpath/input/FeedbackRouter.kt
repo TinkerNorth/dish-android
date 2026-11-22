@@ -140,6 +140,27 @@ class FeedbackRouter
             }
         }
 
+        fun testPlayerLeds(
+            slotId: String,
+            ledMask: Int,
+        ) = dispatchPlayerLedsToSlot(slotId, ledMask)
+
+        fun endPlayerLedsTest(slotId: String) = dispatchPlayerLedsToSlot(slotId, 0)
+
+        fun testTriggerEffects(
+            slotId: String,
+            blocks: ByteArray,
+        ) = dispatchTriggerEffectsToSlot(slotId, blocks)
+
+        fun endTriggerEffectsTest(slotId: String) = dispatchTriggerEffectsToSlot(slotId, ByteArray(TRIGGER_EFFECTS_SKELETON_BYTES))
+
+        fun testMicLed(
+            slotId: String,
+            state: Int,
+        ) = dispatchMicLedToSlot(slotId, state)
+
+        fun endMicLedTest(slotId: String) = Unit
+
         fun dispatchTriggerEffectsToSlot(
             slotId: String,
             blocks: ByteArray,
@@ -267,6 +288,8 @@ class FeedbackRouter
             private const val TRIGGER_RUMBLE_STOP = 0
 
             private const val LIGHTBAR_CHANNEL_OFF = 0
+
+            private const val TRIGGER_EFFECTS_SKELETON_BYTES = 22
         }
     }
 

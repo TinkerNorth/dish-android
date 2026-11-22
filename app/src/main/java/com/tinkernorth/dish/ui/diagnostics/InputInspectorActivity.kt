@@ -117,7 +117,7 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         observe(viewModel.micTest, ::renderMicTest)
         observe(viewModel.speakerTest, ::renderSpeakerTest)
         observe(viewModel.micPermissionRequests) { requestMicPermission() }
-        observe(viewModel.pendingTest, ::renderPendingTest)
+        observe(viewModel.question, ::renderQuestion)
         observe(viewModel.lastOutcome, ::renderLastOutcome)
     }
 
@@ -128,11 +128,11 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         binding.rowOutcome.btnOutcomeNo.setOnClickListener { viewModel.answer(worked = false) }
     }
 
-    private fun renderPendingTest(test: BenchTest?) {
+    private fun renderQuestion(question: BenchQuestion?) {
         val row = binding.rowOutcome
-        setVisible(row.groupOutcomeQuestion, test != null)
-        test ?: return
-        row.tvOutcomeQuestion.text = getString(R.string.inspector_outcome_question, getString(benchTestLabel(test)))
+        setVisible(row.groupOutcomeQuestion, question != null)
+        question ?: return
+        row.tvOutcomeQuestion.text = getString(R.string.inspector_outcome_question, getString(benchTestLabel(question.test)))
     }
 
     private fun renderLastOutcome(outcome: TestOutcome?) {
@@ -235,9 +235,15 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         bindTestRow(
             binding.rowTriggerRumble,
             R.string.setup_cap_trigger_rumble,
-            R.string.inspector_trigger_left to { viewModel.triggerRumble(left = TEST_MAGNITUDE, right = 0) },
-            R.string.inspector_trigger_right to { viewModel.triggerRumble(left = 0, right = TEST_MAGNITUDE) },
-            R.string.inspector_rumble_both to { viewModel.triggerRumble(left = TEST_MAGNITUDE, right = TEST_MAGNITUDE) },
+            R.string.inspector_trigger_left to {
+                viewModel.triggerRumble(left = TEST_MAGNITUDE, right = 0, asking = BenchTest.TRIGGER_RUMBLE_LEFT)
+            },
+            R.string.inspector_trigger_right to {
+                viewModel.triggerRumble(left = 0, right = TEST_MAGNITUDE, asking = BenchTest.TRIGGER_RUMBLE_RIGHT)
+            },
+            R.string.inspector_rumble_both to {
+                viewModel.triggerRumble(left = TEST_MAGNITUDE, right = TEST_MAGNITUDE, asking = BenchTest.TRIGGER_RUMBLE_BOTH)
+            },
         )
     }
 

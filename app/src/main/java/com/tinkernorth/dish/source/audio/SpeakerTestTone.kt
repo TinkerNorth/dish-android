@@ -45,7 +45,11 @@ class SpeakerTestTone internal constructor(
     @Inject
     constructor(sink: AudioTrackSpeakerSink, routing: PadAudioRouting) : this(sink, routing, FRAMES)
 
-    suspend fun play(slotId: String): Boolean {
+    @Suppress("UNUSED_PARAMETER")
+    suspend fun play(
+        slotId: String,
+        lane: PlayoutLane,
+    ): Boolean {
         // The tone is a speaker test: it opens the endpoint at its own width, like the
         // engine does, so a 4-channel pad hears it on its speaker pair and not its actuators.
         val route = routing.forSlot(slotId)
