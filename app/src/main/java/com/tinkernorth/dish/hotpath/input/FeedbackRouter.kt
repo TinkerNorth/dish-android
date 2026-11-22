@@ -315,9 +315,6 @@ class FeedbackRouter
             }
         }
 
-        // A Direct pad's surface takes the game's value only while no bench test holds it; a held
-        // one keeps the value for the test's end.
-
         private fun landDirectLightbar(
             deviceId: Int,
             slotId: String,

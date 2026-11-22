@@ -321,9 +321,6 @@ class InputInspectorViewModel
             ask(asking)
         }
 
-        // A state test gives its surface back however it ends, so leaving the screen mid-test
-        // leaves the pad as the game had it; only a test that ran to its end is asked about.
-
         private suspend fun triggerRumbleThenAsk(
             left: Int,
             right: Int,
@@ -385,7 +382,6 @@ class InputInspectorViewModel
             ask(asking)
         }
 
-        // A lane the device would not open reads unavailable and is not asked about.
         private suspend fun playTone(
             lane: PlayoutLane,
             state: MutableStateFlow<ToneTestUi>,
@@ -397,7 +393,6 @@ class InputInspectorViewModel
             if (played) ask(asking)
         }
 
-        // A microphone that could not be opened is not asked about.
         private suspend fun listenThenAsk() {
             _micTest.value = MicTestUi.Running(meterPercent = 0, peakPercent = 0)
             var meter = 0f
