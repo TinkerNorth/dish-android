@@ -1,6 +1,6 @@
 # Dish for Android: Privacy Policy
 
-**Effective date:** 2026-11-20.
+**Effective date:** 2026-11-22.
 **Hosted copy:** [`https://dish.tinkernorth.com/privacy/dish-android/`](https://dish.tinkernorth.com/privacy/dish-android/).
 The hosted copy at that URL is the canonical version; this file mirrors it
 in-repo so the code and the policy ship together. Google Play points at the
@@ -52,7 +52,9 @@ policy, as do the desktop clients; do not read one as describing another.
   goes only to the PC you paired with, only while that controller is
   streaming. It is never recorded, never stored, and never sent to us. Mute
   stops it at the source: while muted, no audio packet leaves your phone at
-  all.
+  all. The one other time the microphone opens is the controller inspector's
+  microphone test, which you start yourself: it shows a level meter for up to
+  eight seconds, and what it hears is not recorded, kept or sent.
 - You can opt out of crash reporting at any time from the gear icon on
   the main screen → *Share crash reports*. The choice persists across
   launches and is honoured before any crash can be uploaded on the next
@@ -83,6 +85,7 @@ The following data never leaves your phone except to your own
 | Per-slot Steam Controller trackpad pick (Right stick, Touchpad, Mouse or Off) | App-private SharedPreferences (`trackpad_pick_preferences.xml`) | Remembering what each Steam Controller's trackpads do. A slot with no pick takes its model's default. Included in cloud backup and device transfer. |
 | The names and device types of the Bluetooth devices paired with your phone, and the addresses of the Steam Controllers among them | In-memory only | Finding Steam Controllers paired over Bluetooth (below). Each name is checked and dropped; only a Steam Controller's address is kept, until the controller disconnects, Bluetooth goes off or the Bluetooth permission is withdrawn. |
 | Microphone audio, while the controller microphone is on and unmuted | In-memory only, one 20 ms window at a time | Encoded and forwarded over the same encrypted UDP session to the satellite you paired with. Never written to storage, never logged, never sent to TinkerNorth. |
+| Microphone level, during the controller inspector's microphone test | In-memory only, for up to eight seconds | Measured to draw a level meter, then dropped. Never encoded, never written to storage, never sent anywhere. |
 | Controller database preferences (every build): the *Check for controller updates automatically* switch, when the last check ran, how it ended, and the last manifest's `ETag` | App-private SharedPreferences (`user_preferences.xml`) | Deciding whether to check `dish.tinkernorth.com` and sending `If-None-Match` so an unchanged list is not downloaded again (section 2.6). Included in cloud backup, like the crash-reporting choice. |
 | The controller database the app last downloaded | App-private files (`files/controller-db/v1/`) | Recognising controllers this release does not list yet (section 2.6). Checked against its manifest's SHA-256 every time it is read. |
 | Controller test answers ("Did it work?") and a controller capture you asked for | In-memory only, for the run | Shown in the inspector and carried in a support report's file only if you send one (section 2.7). |
@@ -144,6 +147,10 @@ section 2.2, and nowhere else.
   Microphone switch is on, the microphone permission is granted, and the
   controller is not muted. Muting is enforced by stopping the capture, not
   by sending silence, so a muted controller sends no audio packets at all.
+  The controller inspector's microphone test, under Diagnostics, opens the
+  same microphone for up to eight seconds when you start it, to show a level
+  meter. What it hears is measured and dropped: never encoded, stored or
+  sent.
 - **Moonlight hosts.** Dish can also be the controller for a Sunshine,
   Apollo or Wolf host, speaking the Moonlight (GameStream) protocol instead
   of the satellite one. Hosts are found over mDNS (`_nvstream._tcp`) or
@@ -393,7 +400,7 @@ We use what you send only to look into the problem you wrote to us about.
 | `BLUETOOTH_SCAN` (API 31+) | Discovering nearby Bluetooth hosts and controllers so you can pair them. Declared with `neverForLocation`: we do not derive your location from Bluetooth results and collect no scan data. | Runtime, when you scan for a Bluetooth host or controller. |
 | `BLUETOOTH`, `BLUETOOTH_ADMIN` (API ≤ 30 only) | Legacy Bluetooth equivalent for Android ≤ 11. Those versions report nearby devices only to an app holding a location permission, which Dish does not request, so there Dish lists paired devices only and you pair a new one in the system Bluetooth settings. | Install-time. |
 | `POST_NOTIFICATIONS` (API 33+) | Showing the ongoing-session notification while a controller is streaming, plus actionable error banners. | Runtime, on first launch on Android 13+. Declining still lets the app run; the notification just isn't visible. |
-| `RECORD_AUDIO` | Acting as the emulated controller's own microphone, so voice chat on your PC hears you through the pad. | Runtime, only when you switch Microphone on for a controller. Declining leaves everything else working; the row says it needs permission and never pretends to capture. |
+| `RECORD_AUDIO` | Acting as the emulated controller's own microphone, so voice chat on your PC hears you through the pad. | Runtime, only when you switch Microphone on for a controller or start the inspector's microphone test. Declining leaves everything else working; the row says it needs permission and never pretends to capture. |
 | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE` | Keeping the streaming session alive when you background the app. | Install-time. |
 | `FOREGROUND_SERVICE_MICROPHONE` | Letting that same session keep the controller microphone working while the app is backgrounded. The microphone service type is claimed only while a controller with the Microphone switch on is streaming, never by default. | Install-time. |
 | `WAKE_LOCK` | Keeping the CPU awake while a controller is bound, so input latency stays low. | Install-time. |
@@ -402,7 +409,8 @@ We use what you send only to look into the problem you wrote to us about.
 We do **not** request: location, contacts, camera, calendar, SMS, call log,
 photos, files, or device admin. The microphone is the one sensitive
 permission Dish asks for, it is asked for only when you turn the controller
-microphone on, and it is never used for anything but that.
+microphone on or start the inspector's microphone test, and it is never used
+for anything but those two.
 
 ---
 

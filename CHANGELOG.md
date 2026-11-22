@@ -106,6 +106,12 @@ file.
   confirmed on hardware, so Direct mode is theirs only if you pick it. Nobody
   has confirmed either way on a real controller yet; if yours misbehaves,
   Report a problem on the Diagnostics page tells us.
+- **The privacy policy names the inspector's microphone test.** The test,
+  which is older than this release, opens the microphone for up to eight
+  seconds when you start it and asks for the microphone permission if the
+  app does not have it yet. It shows a level meter only: what it hears is
+  not recorded, kept or sent. The policy said the permission is asked for
+  only from a controller's Microphone switch; it now names both places.
 
 ## [2.6.1] - 2026-11-19
 
