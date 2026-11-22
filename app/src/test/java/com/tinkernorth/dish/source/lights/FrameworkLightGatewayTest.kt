@@ -550,6 +550,7 @@ class FrameworkLightGatewayTest {
         lightbars.withBar += FIRST_PAD
         hostSends(FIRST_PAD, RED_ARGB)
         gateway.paint(FIRST_PAD, 0x00, 0xFF, 0x00)
+        gateway.showHostColor(FIRST_PAD)
         gateway.release(FIRST_PAD)
 
         gateway.boundTo(FIRST_PAD, SATELLITE_PAD)

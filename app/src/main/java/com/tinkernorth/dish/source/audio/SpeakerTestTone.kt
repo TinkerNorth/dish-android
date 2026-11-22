@@ -45,18 +45,19 @@ class SpeakerTestTone internal constructor(
     @Inject
     constructor(sink: AudioTrackSpeakerSink, routing: PadAudioRouting) : this(sink, routing, FRAMES)
 
-    @Suppress("UNUSED_PARAMETER")
+    /**
+     * The tone on one of the pad's lanes: the speaker test on [PlayoutLane.SPEAKER], the haptics test
+     * on [PlayoutLane.HAPTICS]. It opens the endpoint at its own width and writes the lane's pair, as
+     * the engine's voices do, so a DualSense hears the speaker test on its speaker and feels the
+     * haptics test in its actuators; false when the device would not open that lane.
+     */
     suspend fun play(
         slotId: String,
         lane: PlayoutLane,
     ): Boolean {
-        // The tone is a speaker test: it opens the endpoint at its own width, like the
-        // engine does, so a 4-channel pad hears it on its speaker pair and not its actuators.
         val route = routing.forSlot(slotId)
-        val channels = if (route.playbackChannels > 0) route.playbackChannels else PlayoutLane.STEREO_CHANNELS
-        val session =
-            sink.open(SpeakerEngine.FRAME_SAMPLES, route.playbackDeviceId, channels, PlayoutLane.SPEAKER)
-                ?: return false
+        val channels = endpointChannelsOf(route.playbackChannels)
+        val session = sink.open(SpeakerEngine.FRAME_SAMPLES, route.playbackDeviceId, channels, lane) ?: return false
         try {
             for (index in 0 until frames) {
                 session.write(frame(index))

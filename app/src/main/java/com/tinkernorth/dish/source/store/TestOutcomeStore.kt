@@ -36,6 +36,12 @@ data class TestOutcome(
     val atMs: Long,
 )
 
+// A test that has ended and waits for "Did it work?": its answer is kept with the time it ended.
+data class EndedTest(
+    val test: BenchTest,
+    val endedAtMs: Long,
+)
+
 const val TEST_OUTCOMES_KEPT = 20
 const val OUTCOME_WORKED = "worked"
 const val OUTCOME_DID_NOT_WORK = "didNotWork"
@@ -45,13 +51,20 @@ fun resultOf(worked: Boolean): String = if (worked) OUTCOME_WORKED else OUTCOME_
 // The answers to "Did it work?" per slot, the last twenty, in memory for the run.
 @Singleton
 class TestOutcomeStore
-    @Inject
-    constructor() : AbstractStateSource<Map<String, List<TestOutcome>>>(emptyMap()) {
+    internal constructor(
+        private val nowMs: () -> Long,
+    ) : AbstractStateSource<Map<String, List<TestOutcome>>>(emptyMap()) {
+        @Inject
+        constructor() : this(System::currentTimeMillis)
+
+        /** [test] ends now: what the page asks about, stamped with the time its answer is kept with. */
+        fun ended(test: BenchTest): EndedTest = EndedTest(test, nowMs())
+
         fun note(
             slotId: String,
             test: BenchTest,
             worked: Boolean,
-            atMs: Long = System.currentTimeMillis(),
+            atMs: Long = nowMs(),
         ) {
             val outcome = TestOutcome(test.wire, resultOf(worked), atMs)
             setState { held -> held + (slotId to (held[slotId].orEmpty() + outcome).takeLast(TEST_OUTCOMES_KEPT)) }

@@ -38,9 +38,21 @@ file.
   which route, and whether the controller took it ("report 02 · bulk OUT 0x03
   · OK, 12 ms ago", or the error it gave). A controller with no way to take
   output says so.
-- **"Did it work?"** After each rumble, trigger, mic lamp, test tone and
-  microphone test in the controller inspector, Dish asks whether it worked
-  and shows the last answer. The answers are kept for the run.
+- **"Did it work?"** When each test in the controller inspector ends (rumble,
+  trigger rumble, light bar, player lights, adaptive triggers, mic lamp, test
+  tone, haptics, microphone, and the stick drift and range tests), Dish asks
+  whether it worked and shows the last answer. Each answer is kept for the
+  run with the time its test ended.
+- **The inspector tests the haptics.** A DualSense whose own audio endpoint
+  the phone reaches at full width has *Haptics* beside its controller sound:
+  the same two-note test tone, played on the haptic actuators instead of the
+  speaker.
+- **A test leaves the controller as the game had it.** When the light bar,
+  player lights, adaptive trigger and mic lamp tests end, they put back what
+  the game last set instead of turning the light or the effect off; one the
+  game never set goes back off. While a test runs, the game's changes to that
+  light or effect wait and are the ones put back, and everything else keeps
+  following the game. Leaving the screen mid-test puts it back too.
 - **Report a problem, or ask a question.** The Diagnostics page has *Report
   a problem* and *Ask a question*, one screen in two starting categories. You
   pick what it is about (controller not recognised, no rumble or feedback,
@@ -82,6 +94,9 @@ file.
 
 ### Changed
 
+- **The mic lamp test lasts two seconds.** *On* and *Pulse* light or pulse
+  the lamp for two seconds and then give it back to the game, so the lamp's
+  row in the inspector no longer has an *Off* button.
 - **The two PowerA FUSION controllers (24C6:551A and 24C6:561A) are read as
   Xbox One controllers, and no longer start in Direct mode on their own.**
   The app's controller list named each of them twice, once as an Xbox 360

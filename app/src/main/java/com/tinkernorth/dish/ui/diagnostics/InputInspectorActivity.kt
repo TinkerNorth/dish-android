@@ -23,7 +23,7 @@ import com.tinkernorth.dish.databinding.ActivityInputInspectorBinding
 import com.tinkernorth.dish.databinding.InspectorAudioRowBinding
 import com.tinkernorth.dish.databinding.InspectorTestRowBinding
 import com.tinkernorth.dish.source.store.BenchTest
-import com.tinkernorth.dish.source.store.MIC_LED_OFF
+import com.tinkernorth.dish.source.store.EndedTest
 import com.tinkernorth.dish.source.store.MIC_LED_ON
 import com.tinkernorth.dish.source.store.MIC_LED_PULSE
 import com.tinkernorth.dish.source.store.TestOutcome
@@ -116,6 +116,7 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         observe(viewModel.ui, ::renderUi)
         observe(viewModel.micTest, ::renderMicTest)
         observe(viewModel.speakerTest, ::renderSpeakerTest)
+        observe(viewModel.hapticsTest, ::renderHapticsTest)
         observe(viewModel.micPermissionRequests) { requestMicPermission() }
         observe(viewModel.question, ::renderQuestion)
         observe(viewModel.lastOutcome, ::renderLastOutcome)
@@ -128,7 +129,7 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         binding.rowOutcome.btnOutcomeNo.setOnClickListener { viewModel.answer(worked = false) }
     }
 
-    private fun renderQuestion(question: BenchQuestion?) {
+    private fun renderQuestion(question: EndedTest?) {
         val row = binding.rowOutcome
         setVisible(row.groupOutcomeQuestion, question != null)
         question ?: return
@@ -193,6 +194,7 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         setVisible(binding.rowMicLed.root, bench.micLed)
         setVisible(binding.tvFeedbackEmpty, !bench.anyFeedback)
         setVisible(binding.rowSpeaker.root, bench.speaker)
+        setVisible(binding.rowHaptics.root, bench.haptics)
         setVisible(binding.rowMic.root, bench.mic)
         setVisible(binding.tvAudioEmpty, !bench.anyAudio)
     }
@@ -260,7 +262,6 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
             R.string.inspector_mic_lamp,
             R.string.inspector_lamp_on to { viewModel.micLed(MIC_LED_ON) },
             R.string.inspector_lamp_pulse to { viewModel.micLed(MIC_LED_PULSE) },
-            R.string.setup_cap_off to { viewModel.micLed(MIC_LED_OFF) },
         )
     }
 
@@ -268,6 +269,9 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         binding.rowSpeaker.tvAudioLabel.setText(R.string.setup_cap_speaker)
         binding.rowSpeaker.btnAudioAction.setText(R.string.inspector_play_tone)
         binding.rowSpeaker.btnAudioAction.setOnClickListener { viewModel.playTestTone() }
+        binding.rowHaptics.tvAudioLabel.setText(R.string.setup_cap_haptics)
+        binding.rowHaptics.btnAudioAction.setText(R.string.inspector_play_tone)
+        binding.rowHaptics.btnAudioAction.setOnClickListener { viewModel.playHapticsTone() }
         binding.rowMic.tvAudioLabel.setText(R.string.setup_cap_mic)
         binding.rowMic.btnAudioAction.setText(R.string.inspector_mic_test)
         binding.rowMic.btnAudioAction.setOnClickListener { viewModel.toggleMicTest() }
@@ -325,14 +329,20 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         row.tvAudioStatus.setText(R.string.inspector_mic_unavailable)
     }
 
-    private fun renderSpeakerTest(ui: SpeakerTestUi) {
-        val row = binding.rowSpeaker
-        row.btnAudioAction.isEnabled = ui != SpeakerTestUi.Playing
+    private fun renderSpeakerTest(ui: ToneTestUi) = renderToneTest(binding.rowSpeaker, ui)
+
+    private fun renderHapticsTest(ui: ToneTestUi) = renderToneTest(binding.rowHaptics, ui)
+
+    private fun renderToneTest(
+        row: InspectorAudioRowBinding,
+        ui: ToneTestUi,
+    ) {
+        row.btnAudioAction.isEnabled = ui != ToneTestUi.Playing
         row.tvAudioStatus.text =
             when (ui) {
-                SpeakerTestUi.Idle -> ""
-                SpeakerTestUi.Playing -> getString(R.string.inspector_tone_playing)
-                SpeakerTestUi.Unavailable -> getString(R.string.inspector_tone_unavailable)
+                ToneTestUi.Idle -> ""
+                ToneTestUi.Playing -> getString(R.string.inspector_tone_playing)
+                ToneTestUi.Unavailable -> getString(R.string.inspector_tone_unavailable)
             }
     }
 

@@ -13,6 +13,7 @@ import com.tinkernorth.dish.source.audio.MicProbeReading
 import com.tinkernorth.dish.source.audio.PlayoutLane
 import com.tinkernorth.dish.source.audio.SpeakerTestTone
 import com.tinkernorth.dish.source.store.BenchTest
+import com.tinkernorth.dish.source.store.EndedTest
 import com.tinkernorth.dish.source.store.MIC_LED_OFF
 import com.tinkernorth.dish.source.store.MIC_LED_ON
 import com.tinkernorth.dish.source.store.MIC_LED_PULSE
@@ -54,9 +55,10 @@ import kotlin.math.roundToInt
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class InputInspectorViewModelTest {
-    private val outcomes = TestOutcomeStore()
-
     private val dispatcher = StandardTestDispatcher()
+
+    // Outcomes stamped on the test's virtual clock, so an answer's time is checkable.
+    private val outcomes = TestOutcomeStore(nowMs = { dispatcher.scheduler.currentTime })
     private val grantedState = MutableStateFlow(true)
     private val sources = mockk<DiagnosticsSources>(relaxed = true)
     private val micPermission =
@@ -109,7 +111,6 @@ class InputInspectorViewModelTest {
             testTone,
             stickHistory,
             outcomes,
-            nowMs = { dispatcher.scheduler.currentTime },
         )
 
     private fun percent(fraction: Float): Int = (fraction * 100).roundToInt().coerceIn(0, 100)
@@ -210,12 +211,12 @@ class InputInspectorViewModelTest {
             val vm = viewModel()
             vm.playTestTone()
             dispatcher.scheduler.runCurrent()
-            assertEquals(SpeakerTestUi.Unavailable, vm.speakerTest.value)
+            assertEquals(ToneTestUi.Unavailable, vm.speakerTest.value)
 
             coEvery { testTone.play(SLOT_ID, PlayoutLane.SPEAKER) } returns true
             vm.playTestTone()
             dispatcher.scheduler.runCurrent()
-            assertEquals(SpeakerTestUi.Idle, vm.speakerTest.value)
+            assertEquals(ToneTestUi.Idle, vm.speakerTest.value)
         }
 
     @Test
@@ -229,14 +230,14 @@ class InputInspectorViewModelTest {
 
             vm.playTestTone()
             dispatcher.scheduler.runCurrent()
-            assertEquals(SpeakerTestUi.Playing, vm.speakerTest.value)
+            assertEquals(ToneTestUi.Playing, vm.speakerTest.value)
             vm.playTestTone()
             dispatcher.scheduler.runCurrent()
 
             advanceTimeBy(TONE_MS + 1)
             dispatcher.scheduler.runCurrent()
             coVerify(exactly = 1) { testTone.play(SLOT_ID, PlayoutLane.SPEAKER) }
-            assertEquals(SpeakerTestUi.Idle, vm.speakerTest.value)
+            assertEquals(ToneTestUi.Idle, vm.speakerTest.value)
         }
 
     @Test
@@ -326,7 +327,7 @@ class InputInspectorViewModelTest {
             advanceTimeBy(TEST_BUZZ_MS + 1)
             dispatcher.scheduler.runCurrent()
 
-            assertEquals(BenchQuestion(BenchTest.RUMBLE_STRONG, TEST_BUZZ_MS), vm.question.value)
+            assertEquals(EndedTest(BenchTest.RUMBLE_STRONG, TEST_BUZZ_MS), vm.question.value)
         }
 
     @Test
@@ -359,7 +360,7 @@ class InputInspectorViewModelTest {
                 feedback.testTriggerRumble(SLOT_ID, 0, 100)
                 feedback.testTriggerRumble(SLOT_ID, 0, 0)
             }
-            assertEquals(BenchQuestion(BenchTest.TRIGGER_RUMBLE_RIGHT, TEST_BUZZ_MS), vm.question.value)
+            assertEquals(EndedTest(BenchTest.TRIGGER_RUMBLE_RIGHT, TEST_BUZZ_MS), vm.question.value)
         }
 
     @Test
@@ -374,7 +375,7 @@ class InputInspectorViewModelTest {
                 feedback.testLightbar(SLOT_ID, 0x00, 0x00, 0xFF)
                 feedback.endLightbarTest(SLOT_ID)
             }
-            assertEquals(BenchQuestion(BenchTest.LIGHTBAR_CYCLE, LIGHTBAR_CYCLE_MS), vm.question.value)
+            assertEquals(EndedTest(BenchTest.LIGHTBAR_CYCLE, LIGHTBAR_CYCLE_MS), vm.question.value)
         }
 
     @Test
@@ -422,7 +423,7 @@ class InputInspectorViewModelTest {
                 feedback.testPlayerLeds(SLOT_ID, 0x10)
                 feedback.endPlayerLedsTest(SLOT_ID)
             }
-            assertEquals(BenchQuestion(BenchTest.PLAYER_LEDS_CYCLE, PLAYER_LED_CYCLE_MS), vm.question.value)
+            assertEquals(EndedTest(BenchTest.PLAYER_LEDS_CYCLE, PLAYER_LED_CYCLE_MS), vm.question.value)
         }
 
     @Test
@@ -440,7 +441,7 @@ class InputInspectorViewModelTest {
             dispatcher.scheduler.runCurrent()
 
             verify(exactly = 1) { feedback.endTriggerEffectsTest(SLOT_ID) }
-            assertEquals(BenchQuestion(BenchTest.TRIGGER_PULSE, HOLD_MS), vm.question.value)
+            assertEquals(EndedTest(BenchTest.TRIGGER_PULSE, HOLD_MS), vm.question.value)
         }
 
     @Test
@@ -458,7 +459,7 @@ class InputInspectorViewModelTest {
             dispatcher.scheduler.runCurrent()
 
             verify(exactly = 1) { feedback.endMicLedTest(SLOT_ID) }
-            assertEquals(BenchQuestion(BenchTest.LAMP_ON, HOLD_MS), vm.question.value)
+            assertEquals(EndedTest(BenchTest.LAMP_ON, HOLD_MS), vm.question.value)
         }
 
     @Test
@@ -470,7 +471,7 @@ class InputInspectorViewModelTest {
             dispatcher.scheduler.runCurrent()
 
             verify(exactly = 1) { feedback.testMicLed(SLOT_ID, MIC_LED_PULSE) }
-            assertEquals(BenchQuestion(BenchTest.LAMP_PULSE, HOLD_MS), vm.question.value)
+            assertEquals(EndedTest(BenchTest.LAMP_PULSE, HOLD_MS), vm.question.value)
         }
 
     @Test
@@ -497,7 +498,7 @@ class InputInspectorViewModelTest {
             advanceTimeBy(TONE_MS + 1)
             dispatcher.scheduler.runCurrent()
 
-            assertEquals(BenchQuestion(BenchTest.TONE, TONE_MS), vm.question.value)
+            assertEquals(EndedTest(BenchTest.TONE, TONE_MS), vm.question.value)
         }
 
     @Test
@@ -510,13 +511,13 @@ class InputInspectorViewModelTest {
             val vm = viewModel()
             vm.playHapticsTone()
             dispatcher.scheduler.runCurrent()
-            assertEquals(SpeakerTestUi.Playing, vm.hapticsTest.value)
+            assertEquals(ToneTestUi.Playing, vm.hapticsTest.value)
 
             advanceTimeBy(TONE_MS + 1)
             dispatcher.scheduler.runCurrent()
 
-            assertEquals(SpeakerTestUi.Idle, vm.hapticsTest.value)
-            assertEquals(BenchQuestion(BenchTest.HAPTICS, TONE_MS), vm.question.value)
+            assertEquals(ToneTestUi.Idle, vm.hapticsTest.value)
+            assertEquals(EndedTest(BenchTest.HAPTICS, TONE_MS), vm.question.value)
             coVerify(exactly = 0) { testTone.play(any(), PlayoutLane.SPEAKER) }
         }
 
@@ -528,7 +529,7 @@ class InputInspectorViewModelTest {
             vm.playHapticsTone()
             dispatcher.scheduler.runCurrent()
 
-            assertEquals(SpeakerTestUi.Unavailable, vm.hapticsTest.value)
+            assertEquals(ToneTestUi.Unavailable, vm.hapticsTest.value)
             assertNull(vm.question.value)
         }
 
@@ -544,7 +545,7 @@ class InputInspectorViewModelTest {
             advanceTimeBy(MIC_TEST_MS + 1)
             dispatcher.scheduler.runCurrent()
 
-            assertEquals(BenchQuestion(BenchTest.MIC, MIC_TEST_MS), vm.question.value)
+            assertEquals(EndedTest(BenchTest.MIC, MIC_TEST_MS), vm.question.value)
         }
 
     @Test
@@ -558,7 +559,7 @@ class InputInspectorViewModelTest {
 
             vm.stopMicTest()
 
-            assertEquals(BenchQuestion(BenchTest.MIC, STOPPED_AFTER_MS), vm.question.value)
+            assertEquals(EndedTest(BenchTest.MIC, STOPPED_AFTER_MS), vm.question.value)
         }
 
     @Test
@@ -581,7 +582,7 @@ class InputInspectorViewModelTest {
 
             vm.noteDrift(0.1f, 0.2f, 0.15f)
 
-            assertEquals(BenchQuestion(BenchTest.STICK_DRIFT, CAPTURE_ENDED_MS), vm.question.value)
+            assertEquals(EndedTest(BenchTest.STICK_DRIFT, CAPTURE_ENDED_MS), vm.question.value)
         }
 
     @Test
@@ -592,7 +593,7 @@ class InputInspectorViewModelTest {
 
             vm.noteRange(0.9f, 0.8f, 0.7f, null)
 
-            assertEquals(BenchQuestion(BenchTest.STICK_RANGE, CAPTURE_ENDED_MS), vm.question.value)
+            assertEquals(EndedTest(BenchTest.STICK_RANGE, CAPTURE_ENDED_MS), vm.question.value)
         }
 
     private companion object {
