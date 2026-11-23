@@ -35,7 +35,10 @@ Detailed in `PRIVACY.md` (https://github.com/TinkerNorth/dish-android/blob/main/
 
 - No advertising.
 - No analytics. Firebase Analytics is deliberately omitted from the build to avoid AD_ID auto-injection.
-- The only data leaving the device is optional Firebase Crashlytics crash reports, with opt-out from Settings.
+- Two things leave the device on their own. Optional Firebase Crashlytics crash reports, with opt-out from Settings (*Share crash reports*). And a check for newer controller definitions: about ten seconds after launch and every six hours, the app fetches a small manifest from `https://dish.tinkernorth.com/controllers/v1/`, and the controller list itself only when the manifest names a newer one. It is data, never code, it carries no identifier, cookie or query, and *Check for controller updates automatically* in Settings turns it off.
+- Controller input and optional controller audio go only to the user's own paired PC on their own network, over the encrypted UDP session.
+- The Play build offers optional tips through Google Play Billing, one-time or monthly (the support card in Settings and the donate bar; product ids and testing in `play/BILLING.md`). A tip unlocks nothing.
+- A support report is built only when the user taps *Report a problem* and then *Continue in mail app*; the app hands the file to the user's own mail app and sends nothing itself.
 - The hosted privacy URL is https://dish.tinkernorth.com/privacy/dish-android/.
 
 ## Recommended test devices
