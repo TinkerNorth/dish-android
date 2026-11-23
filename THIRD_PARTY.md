@@ -11,10 +11,10 @@ The in-app list is generated from the release runtime classpath's POMs, so it ca
 C libraries `app/src/main/cpp/CMakeLists.txt` fetches and links statically into
 `libsatellite.so`. Both are attributed here instead:
 
-- **libopus** (`opus-1.5.2`, https://opus-codec.org): the controller-audio codec. The pad's
+- **libopus** (`opus-1.6.1`, https://opus-codec.org): the controller-audio codec. The pad's
   microphone is encoded to Opus before it leaves the device and the pad's speaker stream is
   decoded on arrival (satellite `docs/contract.md` §Controller audio). Licensed BSD-3-Clause.
-- **libsodium** (`1.0.20`, https://libsodium.org): ChaCha20-Poly1305 for the encrypted UDP
+- **libsodium** (`1.0.22`, https://libsodium.org): ChaCha20-Poly1305 for the encrypted UDP
   wire protocol. Licensed ISC.
 
 ```
@@ -57,13 +57,17 @@ implementation; see the upstream `COPYING` file in the release tarball.
 
 ## SDL (Simple DirectMedia Layer): controller IDs, Switch Pro motion scaling, Steam Controller protocols
 
-The USB controller recognition table in `app/src/main/cpp/usb_parsers.cpp` (the `kImported`
-array) is a curated subset of the vendor/product IDs and controller-type classifications in
-SDL's `src/joystick/controller_list.h`. No SDL code is compiled into this project; only the
-device-identification facts were reused, remapped to this project's USB report parsers, and
-flagged unverified (recognized but never auto-claimed to Direct).
+The controller database (`app/src/main/assets/controllers/v1/controllers.json`, the fleet's
+shared data set, specified in `dish-website/docs/controller-db.md`) is where this app's USB
+recognition facts live. `scripts/gen_controller_tables.py` turns it into the compiled tables in
+`known_devices.generated.h`, which `app/src/main/cpp/usb_parsers.cpp` includes. Some of its USB rows,
+the ones its `sources` field credits to SDL, are a curated subset of the vendor/product IDs and
+controller-type classifications in SDL's `src/joystick/controller_list.h`. No SDL code is compiled
+into this project; only the device-identification facts were reused, remapped to this project's USB
+report parsers, and flagged unverified (recognized but never auto-claimed to Direct). The database
+itself is TinkerNorth's own work, distributed under this project's licence.
 
-The default Switch Pro motion scaling in the same file also follows SDL's
+The default Switch Pro motion scaling in `usb_parsers.cpp` also follows SDL's
 values (gyro raw / 14.2842 deg/s, accel raw / 4096 g) before remapping to
 the wire scale. That is a reuse of constants only, not SDL code.
 

@@ -54,7 +54,7 @@ bool configureEncoder(::OpusEncoder* enc, const int bitrate) {
 // while the far end's own suppression of exact digital silence cannot touch audible content. On
 // the mic it is the only thing that can collapse a quiet room, because a live microphone never
 // goes digitally silent (satellite measured 123 of 250 frames gated at -50 dBFS after speech,
-// 30.0 -> 16.4 kbps, on libopus 1.6.1; this repo pins 1.5.2). Muting is a separate and stricter
+// 30.0 -> 16.4 kbps, on libopus 1.6.1). Muting is a separate and stricter
 // thing: it stops delivery entirely, which DTX cannot do.
 bool wantsDtx(const Stream stream) { return stream == Stream::Mic; }
 

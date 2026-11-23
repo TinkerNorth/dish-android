@@ -1,5 +1,10 @@
 # dish device-side latency benchmark (stages 0–2)
 
+This is the latency bench: how long a report takes to leave the phone. The Diagnostics screen's
+"bench that tests every item" of a controller (rumble, light bar, microphone and the rest, each
+asked about when it ends) is a different thing; it measures nothing about time and is described in
+`docs/usb-direct-mode-followups.md`, item 12.
+
 On-device instrumentation for the half of the chain that lives on the phone. Pairs
 with the PC-side `dish_bench` (satellite `tools/bench/`) which covers stages 3–4 and
 the cakama3a-equivalent poll cadence. Full chain and methodology: see that README.
@@ -7,8 +12,8 @@ the cakama3a-equivalent poll cadence. Full chain and methodology: see that READM
 | # | Stage | Source |
 |---|-------|--------|
 | 0 | Controller + USB poll interval | `UsbDirectNative.getDeviceUrbCount(id)` sampled over time (already wired via `PollRateSampler` / `InputRateStore`) |
-| 1 | Android hot path: URB reap → parse → encrypt → `sendto` | `hotpath_latency` (this change) |
-| 2 | Network one-way ≈ ½ heartbeat RTT | `hotpath_latency` (this change) |
+| 1 | Android hot path: URB reap → parse → encrypt → `sendto` | `hotpath_latency` |
+| 2 | Network one-way ≈ ½ heartbeat RTT | `hotpath_latency` |
 | – | USB poll jitter (`urb_gap_us`: URB inter-arrival percentiles, gaps >100 ms dropped as stream pauses) | `hotpath_latency` |
 
 ## How the instrumentation works
@@ -80,8 +85,9 @@ host, without a phone: the extracted units (`slot_table`, `send_path`, `session_
 `receive_path`) driven the way the JNI layer and the USB poller drive them, sending real
 sealed datagrams over loopback to a fake satellite. Latency is per report, from the moment the
 report is in hand (when the poller would have reaped the URB, or the UI thread received the
-event) to the return of the `sendto` that carried it: the device and slot locks, the session
-lookup, the send turn and counter, framing, the ChaCha20-Poly1305 seal and the system call. The
+event) to the return of the `sendto` that carried it: the slot and session lookup, the counter, framing,
+the send gate, the ChaCha20-Poly1305 seal and the system call. The input path takes no lock; the
+lock-statistics build (`DISH_BENCH_LOCKSTATS`) counts the few locks that remain. The
 session's `DatagramPort` notes the time each `sendto` returns on the calling thread.
 
 Every producer works to absolute deadlines: frame `k` is due `k` periods after a common start,
@@ -137,7 +143,7 @@ build/native-test/bench_send_path_lockstats
 ```
 
 The host build is optimised (opus's CMake makes it a Release build: `-O3 -DNDEBUG`; libsodium
-1.0.20 at `-O3`), and the banner says so. On Windows the socket calls go through
+1.0.22 at `-O3`), and the banner says so. On Windows the socket calls go through
 `app/src/test/cpp/udp_socket_windows.cpp`, where Winsock has no per-call `MSG_DONTWAIT`.
 
 ### Before: the extracted send path, host numbers

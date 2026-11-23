@@ -80,3 +80,7 @@ __pycache__/
 
 # Gradle dependency verification metadata (locally generated)
 gradle/verification-metadata.xml
+
+# fastlane, installed by bundler in CI
+/vendor/bundle/
+/.bundle/

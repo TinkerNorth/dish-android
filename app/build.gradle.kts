@@ -67,6 +67,7 @@ val resolvedVersion = resolveVersion()
 android {
     namespace = "com.tinkernorth.dish"
     compileSdk = 37
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "com.tinkernorth.dish"
@@ -413,6 +414,22 @@ val generateControllerTablesForTests =
 tasks.withType<Test>().configureEach {
     dependsOn(generateControllerTablesForTests)
     systemProperty("dish.controllerTablesHeader", controllerTablesHeader.get().asFile.absolutePath)
+    // The documents and build files DocumentationAgreesWithCodeTest reads back, so a change to
+    // one of them re-runs the test instead of being served from the up-to-date check.
+    inputs
+        .files(
+            rootProject.layout.projectDirectory.files(
+                "THIRD_PARTY.md",
+                "DESIGN.md",
+                "docs/contract.md",
+            ),
+            layout.projectDirectory.files(
+                "src/main/cpp/CMakeLists.txt",
+                "src/test/cpp/CMakeLists.txt",
+                "src/main/res/navigation/nav_graph.xml",
+            ),
+        ).withPropertyName("documentedFacts")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
     maxHeapSize = "1g"
     // An OOM in a test worker must kill the worker loudly, not wedge the
     // JVM mid-instrumentation and hang the build until a CI timeout.
@@ -441,7 +458,7 @@ val knownLicenseOverrides: Map<String, List<Map<String, String?>>> =
 tasks.register("generateLicenseManifest") {
     group = "build"
     description =
-        "Generate src/main/assets/licenses/licenses.json from the release runtime classpath POMs."
+        "Generate src/main/assets/licenses/licenses.json from the release runtime classpath POMs of every flavor."
     // Resolves dependency POM metadata at execution time: degrade gracefully (skip the cache for this
     // build) rather than failing config-cache, leaving the license/resource generation logic untouched.
     notCompatibleWithConfigurationCache("Resolves dependency POM metadata at execution time.")
@@ -450,12 +467,14 @@ tasks.register("generateLicenseManifest") {
 
     doLast {
         val moduleIds =
-            configurations
-                .getByName("releaseRuntimeClasspath")
-                .incoming
-                .resolutionResult
-                .allComponents
-                .mapNotNull { it.id as? org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+            listOf("github", "play", "amazon")
+                .flatMap { flavor ->
+                    configurations
+                        .getByName("${flavor}ReleaseRuntimeClasspath")
+                        .incoming
+                        .resolutionResult
+                        .allComponents
+                }.mapNotNull { it.id as? org.gradle.api.artifacts.component.ModuleComponentIdentifier }
                 .distinctBy { "${it.group}:${it.module}:${it.version}" }
                 .sortedBy { "${it.group}:${it.module}:${it.version}" }
 
@@ -494,10 +513,12 @@ tasks.register("generateLicenseManifest") {
     }
 }
 
-// Release-scoped (matched lazily; AGP registers preReleaseBuild after this script runs): keeps
+// Release-scoped, one pre-build task per flavor (matched lazily; AGP registers them after this script runs): keeps
 // debug/test/lint builds configuration-cache eligible while the shipped APK still gets a freshly
 // generated license manifest. The task itself is not config-cache compatible.
-tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn("generateLicenseManifest") }
+tasks
+    .matching { it.name in setOf("preGithubReleaseBuild", "prePlayReleaseBuild", "preAmazonReleaseBuild") }
+    .configureEach { dependsOn("generateLicenseManifest") }
 
 fun parsePomFile(pomFile: java.io.File): Map<String, Any?>? {
     return try {
