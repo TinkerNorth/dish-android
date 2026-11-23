@@ -316,6 +316,18 @@ jobs:
           [ -n "$symbols" ] && cp "$symbols" "dist/dish-${tag}${suffix}-native-debug-symbols.zip"
           ls -l dist/
 
+      # The components SBOM: every locked library with its version and licence, and libsodium and Opus,
+      # written from app/gradle.lockfile and CMake. It rides in dist/ with the APK and the bundle, so the
+      # hardening folds it into the product SBOM and Grype scans it (Syft sees almost nothing inside an
+      # APK or a bundle).
+      - name: Write the components SBOM
+        env:
+          VERSION_NAME: ${{ steps.ver.outputs.name }}
+        run: |
+          set -euo pipefail
+          python3 scripts/sbom.py write dist/dish-android-components.spdx.json --version "$VERSION_NAME"
+          python3 scripts/sbom.py check dist/dish-android-components.spdx.json
+
       # The Amazon Appstore build goes up through Amazon's App Submission API
       # (publish-amazon) or by hand in the developer console, never through
       # GitHub: it stays out of dist/, is never dish.apk, and never appears in

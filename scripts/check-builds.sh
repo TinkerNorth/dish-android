@@ -11,7 +11,8 @@
 #                                     resolves by name (R8 strips what no Kotlin code calls)
 #   scripts/check-builds.sh stage     after `release`: copies the unsigned GitHub APK, the Play
 #                                     bundle and the Play R8 mapping into dist/, the files the
-#                                     hardening dry run (android-ci.yml) scans and signs
+#                                     hardening dry run (android-ci.yml) scans and signs, with the
+#                                     components SBOM scripts/sbom.py writes beside them
 #
 # GRADLE_FLAGS carries extra Gradle arguments (ci-local.sh passes --no-daemon). What a pull
 # request cannot exercise is in the header of ci-local.sh: signing, Crashlytics upload, the
@@ -48,6 +49,10 @@ case "${1:-}" in
     cp app/build/outputs/apk/github/release/app-github-release-unsigned.apk dist/dish-unsigned.apk
     cp app/build/outputs/bundle/playRelease/app-play-release.aab dist/dish-unsigned.aab
     cp app/build/outputs/mapping/playRelease/mapping.txt dist/dish-unsigned-play-mapping.txt
+    # What the artifacts hold, written from the lockfile and CMake (scripts/sbom.py), so the hardening's
+    # product SBOM names the libraries inside an APK and a bundle that Syft cannot look into.
+    python3 scripts/sbom.py write dist/dish-android-components.spdx.json --version "${DISH_VERSION_NAME:-0.0.0-unreleased}"
+    python3 scripts/sbom.py check dist/dish-android-components.spdx.json
     ls -l dist
     ;;
   *)

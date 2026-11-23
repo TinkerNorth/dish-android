@@ -43,7 +43,9 @@ lockstep, and do not share a version number.
   release has its own `<file>.sigstore.json` instead of a `.sig` and a `.crt`,
   and the signing identity is the shared `_release_harden.yml` at the tag;
   `SECURITY.md` has both forms of the check, the new one and the one for
-  releases up to 2.7.0.
+  releases up to 2.7.0. Each release also carries `dish-android-components.spdx.json`, a bill of
+  materials of every library in the app (its Gradle lockfile) and the two C libraries it builds in,
+  with versions and licences, which the vulnerability scan reads.
 - **A README for people who want to use Dish.** It starts with where to get
   it (Google Play, or the APK from GitHub), how to get a controller working on
   your PC, what the app does, what it needs, and what leaves your device; the

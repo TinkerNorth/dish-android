@@ -137,6 +137,28 @@ jobs:
           "$bin/syft" version
           "$bin/cosign" version
 
+      - name: Generate SBOMs (SPDX, CycloneDX)
+        shell: bash
+        env:
+          PRODUCT: ${{ inputs.product }}
+        run: |
+          set -euo pipefail
+          # The tag names the version; a dry run has none, so the commit stands in.
+          case "$GITHUB_REF" in
+            refs/tags/*) version="$GITHUB_REF_NAME" ;;
+            *) version="$GITHUB_SHA" ;;
+          esac
+          # +sbom-cataloger: a repository whose build writes a bill of materials of what an
+          # archive or installer carries (an SPDX or CycloneDX document among the artifacts)
+          # has its packages folded in; the default selection skips SBOM files, and Syft does
+          # not open the archives itself. Without such a document the result is unchanged.
+          syft scan dir:release \
+            --select-catalogers "+sbom-cataloger" \
+            --source-name "$PRODUCT" \
+            --source-version "$version" \
+            --output "spdx-json=release/${PRODUCT}.sbom.spdx.json" \
+            --output "cyclonedx-json=release/${PRODUCT}.sbom.cdx.json"
+
       # Fails the release on any high or critical finding, fixed upstream or not.
       - name: Vulnerability scan (Grype)
         shell: bash
@@ -144,7 +166,9 @@ jobs:
           PRODUCT: ${{ inputs.product }}
         run: |
           set -euo pipefail
-          grype dir:release \
+          # The SBOM Syft just wrote, so the scan covers every package it names, a shipped
+          # components document's included; Grype itself selects no SBOM cataloger.
+          grype "sbom:release/${PRODUCT}.sbom.spdx.json" \
             --name "$PRODUCT" \
             --add-cpes-if-none \
             --fail-on high \
@@ -165,23 +189,6 @@ jobs:
           name: grype-sarif
           path: grype.sarif
           retention-days: 7
-
-      - name: Generate SBOMs (SPDX, CycloneDX)
-        shell: bash
-        env:
-          PRODUCT: ${{ inputs.product }}
-        run: |
-          set -euo pipefail
-          # The tag names the version; a dry run has none, so the commit stands in.
-          case "$GITHUB_REF" in
-            refs/tags/*) version="$GITHUB_REF_NAME" ;;
-            *) version="$GITHUB_SHA" ;;
-          esac
-          syft scan dir:release \
-            --source-name "$PRODUCT" \
-            --source-version "$version" \
-            --output "spdx-json=release/${PRODUCT}.sbom.spdx.json" \
-            --output "cyclonedx-json=release/${PRODUCT}.sbom.cdx.json"
 
       - name: Generate SHA256SUMS
         shell: bash

@@ -460,6 +460,11 @@ Security gates (also blocking):
   with `dry-run: true`) on the unsigned release files the build job just made: Grype, the SBOMs,
   `SHA256SUMS`, and a Sigstore bundle per file signed with a throwaway key and then checked. It
   cannot exercise the keyless identity, the code-scanning upload or the SLSA generator.
+  The components SBOM (`scripts/sbom.py`, `dish-android-components.spdx.json`) is staged beside the files: Syft
+  sees almost nothing inside an APK or a bundle, so the hardening folds this document, written from
+  `app/gradle.lockfile` and the CMake pins, into the product SBOM and Grype scans it. `sbom.py check`
+  fails a document that misses a locked library, a library `licenses.json` lacks, or a native version
+  that is not CMake's.
 - `codeql.yml`: CodeQL `java-kotlin` and `cpp` analysis (security-extended +
   security-and-quality query packs). Its findings block and upload.
 

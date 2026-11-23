@@ -164,6 +164,9 @@ scripts/check-tidy.sh
 step "Release builds, unsigned: ABIs, and every member native code resolves by name is kept"
 scripts/check-builds.sh release
 
+step "The files the release hardening scans, and the components SBOM beside them"
+scripts/check-builds.sh stage
+
 step "libsodium uses 128-bit arithmetic on 64-bit ABIs only"
 python3 scripts/check_sodium_ti_mode.py app/.cxx
 
