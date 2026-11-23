@@ -33,6 +33,10 @@ file.
   reads "Layout guessed"), any known issue for that controller on your phone,
   and, for a Direct controller, anything its USB description does not match
   in the record, such as a missing output endpoint.
+- **Diagnostics shows the controller database.** A *Controller database*
+  section names the version built into the app, the version in use and
+  whether it is built in or downloaded, and when the last check ran and how
+  it ended.
 - **Last write.** For a controller in Direct mode, Diagnostics and the
   binding inspector show the last output Dish wrote to it: which report, by
   which route, and whether the controller took it ("report 02 · bulk OUT 0x03
@@ -127,6 +131,31 @@ file.
   never took what Dish wrote to it: its settings, its rumble and its trackpad
   setup. All of them work now, and a build missing any of them can no longer
   be published. Rumble and the Bluetooth gamepad mode were never affected.
+- **The mic lamp tests appear only where the lamp can light.** The inspector
+  offered *On* and *Pulse* on any controller with a microphone, including
+  ones whose lamp Dish cannot reach, and hid them on a DualSense in Direct
+  mode with no microphone. They now appear on a controller in Direct mode
+  whose reports carry the lamp, the DualSense, whatever its microphone.
+- **Every test gets its "Did it work?".** Two tests run together on
+  different outputs, such as the light bar and the player lights, each ask
+  in turn, in the order they ended, instead of the second replacing the
+  first. A controller unplugged before you answer takes its questions with
+  it.
+- **A controller plugged in when Dish starts uses a downloaded database.**
+  One that only the downloaded controller list knows was classified before
+  that list loaded, and stayed in standard mode until it was plugged in
+  again; it now takes the mode the list gives it as soon as the list loads.
+- **A downloaded database that no longer reads is downloaded again.** One
+  damaged on the phone made the next check answer *Up to date* while Dish ran
+  on its built-in list; the check now fetches it again. A check that fails
+  in an unexpected way says *The download did not check out* and the next
+  one still runs.
+- **The report never leaves you without a way to send it.** When your mail
+  app cannot take the file, *Continue in mail app* opens the whole share
+  sheet instead of an empty one.
+- **The report's file names no computer.** Dish's own log lines, which ride
+  in the file, no longer carry a computer's name, its unique id or its
+  certificate's fingerprint, even for a computer you no longer use.
 
 ## [2.6.1] - 2026-11-19
 
