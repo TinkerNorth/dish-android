@@ -64,21 +64,19 @@ full rollout; `rollout` takes a fraction for a staged rollout and
 ## Visual assets: status
 
 Screenshots, feature graphics, and the store icon are committed under
-`play/metadata/android/<locale>/images/`. The screenshots need re-capturing
-before submission (see the note below).
+`play/metadata/android/<locale>/images/`. The screenshots are a reviewed
+baseline (see the note below).
 
 | Asset | Spec | Status |
 |---|---|---|
 | Store icon | 512x512 PNG, 32-bit, no alpha, 1 MB max | Present for every locale (same art, no text) |
 | Feature graphic | 1024x500 PNG or JPG | Present for every locale |
-| Phone screenshots | 2 to 8, 16:9 or 9:16, 320 to 3840 px short side | 9 per locale, committed (stale, see note) |
-| 7-inch tablet screenshots | 16:9 or 9:16, recommended for tablet surfacing | 9 per locale, committed (stale, see note) |
-| 10-inch tablet screenshots | 16:9 or 9:16, recommended for foldable/ChromeOS surfacing | 9 per locale, committed (stale, see note) |
+| Phone screenshots | 2 to 8, 16:9 or 9:16, 320 to 3840 px short side | 8 per locale, committed |
+| 7-inch tablet screenshots | 16:9 or 9:16, recommended for tablet surfacing | 8 per locale, committed |
+| 10-inch tablet screenshots | 16:9 or 9:16, recommended for foldable/ChromeOS surfacing | 8 per locale, committed |
 | Promo video | YouTube URL, 30s max landscape, optional | Not set (`video.txt` is empty) |
 
-Note: the committed screenshots were captured before the guided Setup flow
-and the dashboard card rework, so some show screens that no longer exist.
-Re-capture them before submission. See [SCREENSHOT-STRATEGY.md](SCREENSHOT-STRATEGY.md).
+Note: the committed screenshots are the reviewed baseline, last refreshed 2026-07-08, not what the store shows. Every tag captures a fresh set from the build it ships (`release.yml` calls `store-screenshots.yml`) and uploads that instead; refresh the committed set with the Store Screenshots workflow whenever the screens change. See [SCREENSHOT-STRATEGY.md](SCREENSHOT-STRATEGY.md).
 
 Fastlane Supply expects the images under `play/metadata/android/<locale>/images/`:
 

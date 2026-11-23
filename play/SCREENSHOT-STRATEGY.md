@@ -6,7 +6,7 @@ This file describes how every PNG currently sitting in `metadata/android/<locale
 
 ## Output layout
 
-162 screenshot PNGs: 9 screens times 6 locales times 3 form factors. The feature graphics live alongside them (see "Feature graphics" below).
+144 screenshot PNGs: 8 screens times 6 locales times 3 form factors (the five Play listing locales under `play/metadata/android/` and Bosnian under `play/metadata/unsupported/bs/`, which Play has no listing for). The numbering skips 07: the Help screen is no longer captured, so the landscape shots keep their 08 and 09 names. The feature graphics live alongside them (see "Feature graphics" below).
 
 ```
 play/metadata/android/<locale>/images/
@@ -15,7 +15,7 @@ play/metadata/android/<locale>/images/
   tenInchScreenshots/      2560x1440 landscape
 ```
 
-Locales: `en-US`, `bs`, `de-DE`, `es-ES`, `fr-FR`, `pt-BR`. Mirrors the in-app locale set declared in `app/src/main/res/xml/locales_config.xml`.
+Locales: `en-US`, `de-DE`, `es-ES`, `fr-FR`, `pt-BR` under `play/metadata/android/`, and `bs` under `play/metadata/unsupported/`. Mirrors the in-app locale set declared in `app/src/main/res/xml/locales_config.xml`.
 
 Aspect ratios are Play Console compliant: 9:16 for portrait phone shots, 16:9 for everything else.
 
@@ -29,7 +29,6 @@ Aspect ratios are Play Console compliant: 9:16 for portrait phone shots, 16:9 fo
 | 4 | `04_connections.png` | `ConnectionsActivity` | `MixedConnections` | Two satellites and two Bluetooth hosts, mixed live/saved. |
 | 5 | `05_slot_detail.png` | `MainActivity` | `BasicHero` | Dashboard scrolled to expanded Wired Controller picker. |
 | 6 | `06_settings.png` | `SettingsActivity` | `BasicHero` | Settings sections (Setup, Appearance, Diagnostics, About). |
-| 7 | `07_help.png` | `HelpActivity` | `FirstRun` | Help and FAQ with topical sections. |
 | 8 | `08_gamepad.png` | `GamepadOverlayActivity` | `InGame` | On-screen gamepad, landscape, connected to Gaming PC. |
 | 9 | `09_touchpad.png` | `TouchpadOverlayActivity` | `InGame` | Touchpad overlay, landscape, connected to Gaming PC. |
 
