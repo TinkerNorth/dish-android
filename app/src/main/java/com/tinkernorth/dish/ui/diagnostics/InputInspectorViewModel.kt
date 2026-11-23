@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -193,9 +194,11 @@ class InputInspectorViewModel
         private val _micPermissionRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
         val micPermissionRequests: SharedFlow<Unit> = _micPermissionRequests.asSharedFlow()
 
-        // The test whose "Did it work?" is waiting for an answer, if any.
+        // The test whose "Did it work?" is waiting for an answer, if any, and the ones that ended
+        // after it on other lanes, each asked in turn. Main thread only.
         private val _question = MutableStateFlow<EndedTest?>(null)
         val question: StateFlow<EndedTest?> = _question.asStateFlow()
+        private val waiting = ArrayDeque<EndedTest>()
 
         val lastOutcome: StateFlow<TestOutcome?> =
             outcomes.state
@@ -206,10 +209,19 @@ class InputInspectorViewModel
         private val runs = HashMap<BenchLane, Job>()
         private var micJob: Job? = null
 
+        init {
+            viewModelScope.launch {
+                sources.world
+                    .map(::holdsThisPad)
+                    .distinctUntilChanged()
+                    .collect(::onPresence)
+            }
+        }
+
         fun answer(worked: Boolean) {
             val asked = _question.value ?: return
             outcomes.note(slotId, asked.test, worked, asked.endedAtMs)
-            _question.value = null
+            _question.value = waiting.removeFirstOrNull()
         }
 
         fun buzz(
@@ -309,7 +321,22 @@ class InputInspectorViewModel
         }
 
         private fun ask(test: BenchTest) {
-            _question.value = outcomes.ended(test)
+            val ended = outcomes.ended(test)
+            val oneIsWaiting = _question.value != null
+            if (oneIsWaiting) waiting.addLast(ended) else _question.value = ended
+        }
+
+        private fun holdsThisPad(world: DiagnosticsWorld): Boolean {
+            val diags = controllerDiags(world, sources::touchpadMode)
+            return diags.any { it.slotId == slotId }
+        }
+
+        // A pad that detaches takes its unanswered questions with it: an answer would be kept against
+        // a slot no pad holds.
+        private fun onPresence(present: Boolean) {
+            if (present) return
+            waiting.clear()
+            _question.value = null
         }
 
         private suspend fun buzzThenAsk(

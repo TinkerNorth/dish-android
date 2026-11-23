@@ -346,6 +346,45 @@ class InputInspectorViewModelTest {
         }
 
     @Test
+    fun `two tests on different lanes each get their question, the first to end asked first`() =
+        runTest(dispatcher) {
+            val vm = viewModel()
+            vm.cycleLightbar()
+            vm.cyclePlayerLeds()
+            advanceTimeBy(PLAYER_LED_CYCLE_MS + 1)
+            dispatcher.scheduler.runCurrent()
+            val first = vm.question.value
+
+            vm.answer(worked = true)
+            val second = vm.question.value
+            vm.answer(worked = false)
+
+            assertEquals(EndedTest(BenchTest.LIGHTBAR_CYCLE, LIGHTBAR_CYCLE_MS), first)
+            assertEquals(EndedTest(BenchTest.PLAYER_LEDS_CYCLE, PLAYER_LED_CYCLE_MS), second)
+            assertNull(vm.question.value)
+            assertEquals(2, outcomes.state.value[SLOT_ID]?.size)
+        }
+
+    @Test
+    fun `a pad that detaches takes its unanswered questions with it`() =
+        runTest(dispatcher) {
+            val world = MutableStateFlow(world())
+            every { sources.world } returns world
+            val vm = viewModel()
+            vm.cycleLightbar()
+            vm.cyclePlayerLeds()
+            advanceTimeBy(PLAYER_LED_CYCLE_MS + 1)
+            dispatcher.scheduler.runCurrent()
+
+            world.value = world().copy(devices = emptyMap())
+            dispatcher.scheduler.runCurrent()
+            vm.answer(worked = true)
+
+            assertNull(vm.question.value)
+            assertNull(outcomes.lastOutcomeFor(SLOT_ID))
+        }
+
+    @Test
     fun `a trigger rumble test stops its motors, then asks by the trigger it ran`() =
         runTest(dispatcher) {
             val vm = viewModel()
