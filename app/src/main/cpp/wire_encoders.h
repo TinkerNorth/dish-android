@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "bits.h"
+
 namespace dish_wire {
 
 // Datagram ceilings (satellite docs/contract.md §Packet format). One Ethernet
@@ -78,17 +80,9 @@ inline constexpr size_t RUMBLE_PAYLOAD_BYTES = 7;
 // active-controller bitmap u16 BE.
 inline constexpr size_t HEARTBEAT_ACK_ENRICHED_BYTES = 6;
 
-inline void putLE16(uint8_t* dst, const uint16_t v) {
-    dst[0] = static_cast<uint8_t>(v);
-    dst[1] = static_cast<uint8_t>(v >> 8);
-}
+inline void putLE16(uint8_t* dst, const uint16_t v) { dish_bits::storeLe16(dst, v); }
 
-inline void putLE32(uint8_t* dst, const uint32_t v) {
-    dst[0] = static_cast<uint8_t>(v);
-    dst[1] = static_cast<uint8_t>(v >> 8);
-    dst[2] = static_cast<uint8_t>(v >> 16);
-    dst[3] = static_cast<uint8_t>(v >> 24);
-}
+inline void putLE32(uint8_t* dst, const uint32_t v) { dish_bits::storeLe32(dst, v); }
 
 // The extended-buttons word, in SDL's names (satellite docs/contract.md §Extended buttons). The
 // bits above the known ones are reserved: a sender writes them as 0.
@@ -254,15 +248,13 @@ struct AudioFrameHeader {
 // must have AUDIO_WIRE_HEADER_BYTES readable; callers guard on that first.
 inline void encodeAudioFrameHeader(uint8_t* out, const uint8_t ctrlIdx, const uint16_t seq) {
     out[0] = ctrlIdx;
-    out[1] = static_cast<uint8_t>(seq >> 8);
-    out[2] = static_cast<uint8_t>(seq);
+    dish_bits::storeBe16(out + 1, seq);
 }
 
 inline AudioFrameHeader decodeAudioFrameHeader(const uint8_t* in) {
     AudioFrameHeader h;
     h.ctrlIdx = in[0];
-    h.seq =
-        static_cast<uint16_t>((static_cast<uint16_t>(in[1]) << 8) | static_cast<uint16_t>(in[2]));
+    h.seq = dish_bits::loadBe16(in + 1);
     return h;
 }
 
