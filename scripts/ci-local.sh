@@ -28,8 +28,9 @@
 # CI only, because they need a Linux runner with KVM or a store credential:
 #   - the API 35 and API 28 (armeabi-v7a through ARM translation) emulator jobs; --with-instrumented
 #     is the local counterpart of the first
-#   - CodeQL, the security workflow (OSV-Scanner, gitleaks, dependency review, action pins)
-#   - version-consistency.yml (python3 scripts/check_version_consistency.py runs it locally)
+#   - CodeQL, and dependency review (off until the repository's Dependency graph setting is on)
+#   - the release hardening dry run ("Release hardening (dry run)"): Grype, Syft and cosign are
+#     pinned for linux-amd64 in _release_harden.yml, so it runs on the runner only
 # Not exercised before a tag, because they need a secret: signing (the release keystore), the
 # Crashlytics symbol upload (google-services.json), the Play, Amazon and GitHub uploads, and the
 # baseline profile, which needs the KVM emulator release.yml starts.
@@ -74,6 +75,8 @@ if [ -z "${JAVA_HOME:-}" ]; then
   exit 1
 fi
 need python3 "every script gate" || true
+# shellcheck source=scripts/tools.sh
+. scripts/tools.sh
 export GRADLE_FLAGS="--no-daemon --console=plain"
 read -r -a GRADLE <<< "./gradlew $GRADLE_FLAGS"
 
@@ -86,8 +89,22 @@ python3 scripts/check_play_metadata.py
 step "Translations are complete in every locale"
 python3 scripts/check-translations.py
 
+step "The CHANGELOG and the Play release notes agree on the version"
+code="$(python3 scripts/check_version_consistency.py)"
+EXPECTED_VERSION_CODE="$code" python3 scripts/check_play_metadata.py
+
 step "Release script tests"
 python3 -m unittest discover -s scripts -p '*_test.py' -t scripts
+
+step "Action pins (40-character SHAs)"
+sh scripts/check-action-pins.sh
+
+step "Vulnerability allowlist"
+ensure_pyyaml
+PATH="$(dirname "$SECURITY_PYTHON"):$PATH" python3 scripts/security-allowlist.py check
+
+step "Dependency locks are current"
+scripts/check-dependency-locks.sh
 
 step "ktlint"
 "${GRADLE[@]}" ktlintCheck
@@ -101,6 +118,14 @@ if [ "$QUICK" -eq 1 ]; then
   echo ""; echo "Quick gates passed. Run without --quick before pushing a build input."
   exit 0
 fi
+
+step "OSV-Scanner (the committed Gradle lockfiles)"
+ensure_osv_scanner
+PATH="$(dirname "$SECURITY_PYTHON"):$PATH" OSV_SCANNER="$OSV_SCANNER" bash scripts/osv-scan.sh -- .
+
+step "gitleaks (full history)"
+ensure_gitleaks
+"$GITLEAKS" git --config=.gitleaks.toml --redact --exit-code=1 .
 
 step "Android lint"
 "${GRADLE[@]}" lintGithubDebug lintPlayDebug lintAmazonDebug

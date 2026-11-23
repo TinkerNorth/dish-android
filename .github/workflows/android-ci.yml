@@ -60,6 +60,9 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Dependency locks are current (app/gradle.lockfile)
+        run: scripts/check-dependency-locks.sh
+
       - name: ktlint check
         run: ./gradlew ktlintCheck
 
@@ -87,6 +90,18 @@ jobs:
       - name: libsodium uses 128-bit arithmetic on 64-bit ABIs only
         run: python scripts/check_sodium_ti_mode.py app/.cxx
 
+      # The files release.yml uploads as `android`, built unsigned, for the hardening dry run below.
+      - name: Stage the release files for the hardening dry run
+        run: scripts/check-builds.sh stage
+
+      - name: Upload the staged release files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -109,6 +124,20 @@ jobs:
           name: test-results
           path: app/build/reports/tests/
           retention-days: 7
+
+  # The tag's scan, SBOM, checksum and signing path on the files just built: Grype, Syft, SHA256SUMS
+  # and a Sigstore bundle per file, signed with a key made in the run (nothing is published). It
+  # cannot exercise the keyless identity, the code-scanning upload or the SLSA generator.
+  release-dry-run:
+    name: Release hardening (dry run)
+    needs: [build]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/_release_harden.yml
+    with:
+      artifact-pattern: android
+      product: dish-android
+      dry-run: true
 
   instrumented:
     name: Integration tests (emulator)

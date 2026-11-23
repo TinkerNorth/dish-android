@@ -1,20 +1,20 @@
 name: Security
 
-# PR-time security gates for dish-android. Pulls the shared jobs from
-# this repo's local copy of `_security.yml` (action-pin lint, allowlist-
-# expiry, OSV-Scanner, dependency-review, gitleaks). CodeQL lives in
-# codeql.yml because it has its own matrix.
+# Security gates on every pull request, every push to main and weekly. The jobs live in the
+# shared _security.yml (action-pin lint, allowlist expiry, OSV-Scanner, dependency review,
+# gitleaks); CodeQL lives in codeql.yml because it has its own matrix.
 #
-# Known-vulnerable-dependency coverage: OSV-Scanner and dependency-review
-# here (GitHub/OSV advisory data, exact Maven coordinates), Grype against
-# release artifacts in release.yml (NVD + GHSA), and Dependabot updates.
+# Maven dependencies are scanned from the committed Gradle lockfiles (gradle.lockfile and
+# app/gradle.lockfile, CONTRIBUTING.md "Dependency locking"): OSV-Scanner reads them, and the
+# build fails on a lockfile that is stale. Grype scans the release artifacts in release.yml.
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
   schedule:
-    - cron: "0 6 * * 1"
+    - cron: "0 6 * * 1" # weekly, Monday 06:00 UTC
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -22,18 +22,16 @@ concurrency:
 
 permissions:
   contents: read
-  pull-requests: read
-  security-events: write
 
 jobs:
   shared:
+    # Exactly what _security.yml declares; a narrower grant fails the call at startup.
+    permissions:
+      contents: read
+      pull-requests: read
     uses: ./.github/workflows/_security.yml
     with:
-      # OSV recognises Gradle build files; let it scan the worktree.
-      osv_scan_paths: |
-        .
-      gitleaks_enabled: true
-      dependency_review_enabled: true
-      action_pin_lint_enabled: true
-      allowlist_expiry_enabled: true
-
+      osv_scan_paths: .
+      # The repository's Dependency graph setting (Settings, Code security) is off, and
+      # turning it on is the maintainer's to do; then flip this to true.
+      dependency_review_enabled: false

@@ -9,6 +9,9 @@
 #                                     (the GitHub APK, the Play APK and bundle, the Amazon APK);
 #                                     each carries its ABIs and keeps every member native code
 #                                     resolves by name (R8 strips what no Kotlin code calls)
+#   scripts/check-builds.sh stage     after `release`: copies the unsigned GitHub APK, the Play
+#                                     bundle and the Play R8 mapping into dist/, the files the
+#                                     hardening dry run (android-ci.yml) scans and signs
 #
 # GRADLE_FLAGS carries extra Gradle arguments (ci-local.sh passes --no-daemon). What a pull
 # request cannot exercise is in the header of ci-local.sh: signing, Crashlytics upload, the
@@ -39,8 +42,16 @@ case "${1:-}" in
       python3 scripts/check_jni_keeps.py "$artifact"
     done
     ;;
+  stage)
+    rm -rf dist
+    mkdir -p dist
+    cp app/build/outputs/apk/github/release/app-github-release-unsigned.apk dist/dish-unsigned.apk
+    cp app/build/outputs/bundle/playRelease/app-play-release.aab dist/dish-unsigned.aab
+    cp app/build/outputs/mapping/playRelease/mapping.txt dist/dish-unsigned-play-mapping.txt
+    ls -l dist
+    ;;
   *)
-    echo "usage: check-builds.sh debug|release" >&2
+    echo "usage: check-builds.sh debug|release|stage" >&2
     exit 2
     ;;
 esac
