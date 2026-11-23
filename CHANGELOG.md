@@ -39,6 +39,10 @@ lockstep, and do not share a version number.
   and the signing identity is the shared `_release_harden.yml` at the tag;
   `SECURITY.md` has both forms of the check, the new one and the one for
   releases up to 2.7.0.
+- **A README for people who want to use Dish.** It starts with where to get
+  it (Google Play, or the APK from GitHub), how to get a controller working on
+  your PC, what the app does, what it needs, and what leaves your device; the
+  build instructions moved to the end.
 
 ## [2.7.0] - 2026-11-23
 

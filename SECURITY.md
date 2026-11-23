@@ -285,7 +285,6 @@ diff <(jq -S . prev-release/<repo>.sbom.spdx.json) \
   free org plan that does not expose required-status-check enforcement
   for private repositories. Direct pushes to `main` are blocked by
   convention only; the per-repo CI workflows are the de-facto gate.
-  See the matching `README.md` in each repo for the full text.
 - **Vendored-header scanners.** `satellite/lib/` and
   `satellite/vigem/include/` are not understood by ecosystem scanners.
   We feed OSV-Scanner a synthetic `osv-scanner.toml` derived from
