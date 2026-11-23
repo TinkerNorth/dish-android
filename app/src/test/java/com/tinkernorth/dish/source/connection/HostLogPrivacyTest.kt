@@ -70,7 +70,7 @@ private val NAME_CHAIN = Regex("""[A-Za-z_][A-Za-z0-9_]*(?:\??\.[A-Za-z_][A-Za-z
 // host's app and a pad's model are named by other words.
 private val HOST_WORDS = listOf("name", "uniqueid", "machineid", "satelliteid", "fingerprint", "label")
 private val NOT_A_HOST_WORDS = setOf("simpleName", "appName")
-private val A_PADS_MODEL = "model.name"
+private const val A_PADS_MODEL = "model.name"
 
 // Each Log call's text from "Log.x(" to its closing parenthesis.
 private fun logCallsOf(text: String): List<String> = LOG_CALL_START.findAll(text).map { callFrom(text, it.range.first) }.toList()
