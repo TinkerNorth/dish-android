@@ -311,6 +311,18 @@ foreach(unit_test udp_socket_test session_table_test send_path_test slot_table_t
     target_link_libraries(${unit_test} PRIVATE GTest::gtest_main fake_satellite dish_core)
 endforeach()
 
+# The byte-level assembly (shifts, masks, sign extension) at 0x00, 0x7F, 0x80 and 0xFF in every
+# position, across the wire encoders, both paths, the USB decoders and the HID descriptor reader.
+add_executable(byte_boundaries_test
+    byte_boundaries_test.cpp
+    "${SATELLITE_CPP}/usb_parsers.cpp"
+    "${SATELLITE_CPP}/usb_hid_descriptor.cpp"
+)
+target_include_directories(byte_boundaries_test PRIVATE "${SATELLITE_CPP}")
+target_compile_options(byte_boundaries_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_link_libraries(byte_boundaries_test PRIVATE GTest::gtest_main fake_satellite dish_core)
+dish_use_controller_tables(byte_boundaries_test)
+
 # Which locks each thread role takes on the hot path, held to lists that only shrink.
 add_executable(lock_laws_test lock_laws_test.cpp)
 target_compile_options(lock_laws_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -375,3 +387,4 @@ gtest_discover_tests(heartbeat_thread_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(hotpath_latency_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(audio_codec_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(bridge_connection_ids_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(byte_boundaries_test DISCOVERY_MODE PRE_TEST)
