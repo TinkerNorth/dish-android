@@ -30,6 +30,15 @@ lockstep, and do not share a version number.
   (unsigned), including the check that the release build keeps every method the
   native code calls, so a problem that only showed at release time shows
   earlier.
+- **The dependencies the app ships are pinned and scanned.** Their exact versions
+  are committed in `app/gradle.lockfile`, a vulnerability scanner reads that
+  file on every pull request, and a pull request that changes a dependency
+  without updating it fails.
+- **Releases are signed one file at a time with cosign 3.** Each file in a
+  release has its own `<file>.sigstore.json` instead of a `.sig` and a `.crt`,
+  and the signing identity is the shared `_release_harden.yml` at the tag;
+  `SECURITY.md` has both forms of the check, the new one and the one for
+  releases up to 2.7.0.
 
 ## [2.7.0] - 2026-11-23
 

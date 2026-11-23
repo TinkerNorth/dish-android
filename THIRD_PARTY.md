@@ -55,6 +55,25 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 Opus also carries a patent grant covering the Opus Interactive Audio Codec reference
 implementation; see the upstream `COPYING` file in the release tarball.
 
+## Build, scan and release tooling (not shipped)
+
+These run in CI and in `scripts/ci-local.sh`; none is compiled into or distributed with the app.
+Each is pinned by version and by the SHA-256 of its release asset, in `scripts/tools.sh` and the
+shared workflows (`.github/workflows/_security.yml`, `_release_harden.yml`), and
+`scripts/tools_pins_test.py` holds the copies together.
+
+- **cosign** (`3.1.4`, https://github.com/sigstore/cosign): keyless signing of every release file.
+  Apache-2.0.
+- **Syft** (`1.57.2`, https://github.com/anchore/syft): the SPDX and CycloneDX SBOMs. Apache-2.0.
+- **Grype** (`0.122.1`, https://github.com/anchore/grype): the vulnerability scan of the release
+  artifacts. Apache-2.0.
+- **OSV-Scanner** (`2.7.1`, https://github.com/google/osv-scanner): the vulnerability scan of the
+  locked Maven and Ruby dependencies. Apache-2.0.
+- **gitleaks** (`8.30.1`, https://github.com/gitleaks/gitleaks): the secret scan of the full
+  history. MIT.
+- **clang-format** (`23.1.5`, https://pypi.org/project/clang-format/): the JNI's formatter.
+  Apache-2.0 with LLVM exceptions.
+
 ## SDL (Simple DirectMedia Layer): controller IDs, Switch Pro motion scaling, Steam Controller protocols
 
 The controller database (`app/src/main/assets/controllers/v1/controllers.json`, the fleet's

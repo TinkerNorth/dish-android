@@ -96,9 +96,10 @@ Each repo runs the same shape of gates:
 - Action-pin lint: every `uses:` line must reference a 40-char SHA.
 - Allowlist expiry: `.security/allowlist.yaml` entries must be unexpired.
 - Dependency review: GitHub advisory DB (PR-only).
-- OSV-Scanner: vendored components + manifest deps; ecosystem-specific
-  scope (see each repo's `security.yml`).
-- Gitleaks: secret scanning over the worktree.
+- OSV-Scanner: vendored components and the dependencies a repo's lockfiles
+  name. dish-android's `app/gradle.lockfile` pins the three flavors' shipped
+  Maven dependencies, and CI fails when it is stale.
+- Gitleaks: secret scanning over the full git history.
 - CodeQL: `cpp` for `satellite` / `dish-linux`, `swift` for `dish-mac`,
   `java-kotlin` + `cpp` for `dish-android`.
 
@@ -114,8 +115,10 @@ Each repo runs the same shape of gates:
   CRITICAL/HIGH.
 - SBOM generation: Syft, both SPDX-JSON and CycloneDX-JSON.
 - `SHA256SUMS` over every artifact + its signatures + the SBOMs.
-- Cosign keyless signing: every artifact and `SHA256SUMS` get a `.sig`
-  + `.crt`, anchored in the Sigstore transparency log.
+- Cosign keyless signing: every artifact and `SHA256SUMS` get a Sigstore
+  bundle (`<file>.sigstore.json`: signature, certificate and transparency
+  log proof), signed by `_release_harden.yml`. Releases up to dish-android
+  2.7.0 carry a `.sig` and a `.crt` per file instead.
 - SLSA L3 build provenance: `slsa-framework/slsa-github-generator`
   emits `<repo>.intoto.jsonl`.
 
@@ -133,12 +136,12 @@ platform. Only the artifact filenames change.
 ### 0) Pre-requisites
 
 ```bash
-# cosign 2.x
-brew install cosign            # macOS
-go install github.com/sigstore/cosign/v2/cmd/cosign@latest
+# cosign 3.x
+brew install cosign            # macOS, or a release binary from
+                               # https://github.com/sigstore/cosign/releases
 
 # slsa-verifier (for the SLSA provenance step)
-go install github.com/slsa-framework/slsa-verifier/v2/cli/slsa-verifier@latest
+# a release binary from https://github.com/slsa-framework/slsa-verifier/releases
 ```
 
 ### 1) Download every file from the Release
@@ -147,80 +150,98 @@ For tag `X.Y.Z` of `<repo>` (one of `satellite`, `dish-android`,
 `dish-ios`, `dish-mac`, `dish-windows`, `dish-linux`):
 
 ```bash
-gh release download X.Y.Z -R TinkerNorth/<repo> -D ./release
-cd release
+TAG=X.Y.Z
+REPO=<repo>
+gh release download "$TAG" -R "TinkerNorth/$REPO" -D "$REPO-$TAG"
+cd "$REPO-$TAG"
 ls
 ```
 
 You should see (filenames vary per repo):
 
 ```
-satellite-...        # platform binary / installer / .app / .apk / etc.
-satellite-....sig    # cosign signature
-satellite-....crt    # cosign certificate
+dish-...apk                   # platform binary / installer / .app / .apk / etc.
+dish-...apk.sigstore.json     # its cosign bundle
 SHA256SUMS
-SHA256SUMS.sig
-SHA256SUMS.crt
-satellite.sbom.spdx.json
-satellite.sbom.cdx.json
-satellite.intoto.jsonl   # SLSA L3 provenance
+SHA256SUMS.sigstore.json
+<repo>.sbom.spdx.json
+<repo>.sbom.cdx.json
+<repo>.intoto.jsonl           # SLSA L3 provenance
 ```
+
+A release cut before the signing moved to bundles (dish-android 2.7.0 and
+earlier) has `<file>.sig` and `<file>.crt` beside each file instead of the
+`.sigstore.json`; step 3 has its form.
 
 ### 2) Verify the checksum bundle
 
 ```bash
-sha256sum -c SHA256SUMS         # Linux / Windows
-shasum -a 256 -c SHA256SUMS     # macOS
+sha256sum --ignore-missing -c SHA256SUMS   # Linux / Windows
+shasum -a 256 -c SHA256SUMS                # macOS
 ```
 
-Every line must say `OK`. A failure here means the artifact was
-modified after release.
+Every line you downloaded must say `OK`. A failure here means the artifact
+was modified after release.
 
 ### 3) Verify cosign signed `SHA256SUMS` from the right workflow
 
 ```bash
 cosign verify-blob \
-  --certificate SHA256SUMS.crt \
-  --signature   SHA256SUMS.sig \
-  --certificate-identity-regexp '^https://github\.com/TinkerNorth/<repo>/\.github/workflows/release\.yml@refs/tags/[0-9].*$' \
-  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  --bundle SHA256SUMS.sigstore.json \
+  --certificate-identity "https://github.com/TinkerNorth/$REPO/.github/workflows/_release_harden.yml@refs/tags/$TAG" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   SHA256SUMS
 ```
 
-Output ends with `Verified OK`. The `--certificate-identity-regexp`
-binds the signature to a specific workflow path on `TinkerNorth/<repo>`.
-Substitute the actual GitHub organisation. A match means the signature
-came from a tagged-release run of `release.yml` on the public commit
-that produced these artifacts; the Sigstore transparency log
+Output ends with `Verified OK`. The identity is exact, not a pattern: it
+names the shared release-hardening workflow that ran the signing step, at the
+tag. The certificate's own Build Config URI names the calling `release.yml`.
+A match means the signature came from a tagged-release run on the public
+commit that produced these artifacts; the Sigstore transparency log
 (`https://search.sigstore.dev/`) carries the same record.
 
-To verify each artifact individually (not just `SHA256SUMS`):
+To verify one artifact on its own (not just `SHA256SUMS`), use its bundle:
 
 ```bash
-for f in *.exe *.zip *.deb *.AppImage *.apk *.aab; do
-  [ -f "$f" ] || continue
-  cosign verify-blob \
-    --certificate "$f.crt" \
-    --signature   "$f.sig" \
-    --certificate-identity-regexp '^https://github\.com/TinkerNorth/<repo>/\.github/workflows/release\.yml@refs/tags/[0-9].*$' \
-    --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-    "$f"
-done
+cosign verify-blob \
+  --bundle <file>.sigstore.json \
+  --certificate-identity "https://github.com/TinkerNorth/$REPO/.github/workflows/_release_harden.yml@refs/tags/$TAG" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  <file>
 ```
+
+**Releases up to dish-android 2.7.0** were signed by `release.yml` itself and
+carry `.sig` and `.crt` files. cosign 3 still verifies them with its
+deprecated flags (it prints two deprecation lines), against that workflow's
+identity:
+
+```bash
+cosign verify-blob \
+  --certificate SHA256SUMS.crt --signature SHA256SUMS.sig \
+  --certificate-identity "https://github.com/TinkerNorth/dish-android/.github/workflows/release.yml@refs/tags/2.7.0" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  SHA256SUMS
+```
+
+(Run against dish-android 2.7.0: `Verified OK`, and the same form verifies
+`dish-2.7.0.apk` with `dish-2.7.0.apk.crt` and `.sig`.) For the other
+repositories' older releases, the workflow in the identity is the one named in
+the certificate; `satellite`, `dish-windows` and `dish-linux` used
+`_release_harden.yml` already.
 
 ### 4) Verify the SLSA L3 provenance
 
 ```bash
-slsa-verifier verify-artifact \
-  --provenance-path <repo>.intoto.jsonl \
-  --source-uri      github.com/TinkerNorth/<repo> \
-  --source-tag      X.Y.Z \
-  <artifact-filename>
+slsa-verifier verify-artifact <artifact-filename> \
+  --provenance-path "$REPO.intoto.jsonl" \
+  --source-uri "github.com/TinkerNorth/$REPO" \
+  --source-tag "$TAG"
 ```
 
 This proves the artifact was produced by a tagged run of `release.yml`
 on the named source repo. Output ends with
-`PASSED: SLSA verification passed`.
+`PASSED: SLSA verification passed`. (Run against dish-android 2.7.0 and
+`dish-2.7.0.apk`: passed.)
 
 ### 5) (Optional) Inspect the SBOM
 

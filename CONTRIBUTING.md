@@ -15,7 +15,7 @@ to `security@tinkernorth.com`.
 ```bash
 # 1) Install an Android Studio that supports the AGP version pinned in
 #    gradle/libs.versions.toml, plus the NDK (pinned as ndkVersion in
-#    app/build.gradle.kts), CMake 3.22.1 and a JDK to start Gradle
+#    app/build.gradle.kts), CMake 3.22.1 and a JDK 17 or newer to start Gradle
 # 2) Open the project in Android Studio (Gradle sync downloads deps)
 # 3) Point git at the in-tree pre-commit hook
 scripts/setup-hooks.sh
@@ -30,10 +30,17 @@ translation checks, the release script tests, root-level `ktlintCheck` and
 three debug APKs with their ABI check, and the unsigned minified release builds
 (the GitHub APK, the Play APK and bundle, the Amazon APK) with the ABI check and
 `scripts/check_jni_keeps.py`. A green run there is a green "Build, test, lint,
-format" job. It needs `ANDROID_HOME`, a JDK to start Gradle (the build's own JDK
-comes from `gradle/gradle-daemon-jvm.properties`; CI uses Temurin 17) and
-`python3`. A missing tool fails the run; `--allow-missing` turns that into a
+format" job. It needs `ANDROID_HOME`, a JDK to start Gradle and `python3`. A missing tool fails the run; `--allow-missing` turns that into a
 notice, so a green run never hides a skipped gate.
+
+Two JDKs run the build, and they are not the same one. The JDK on `JAVA_HOME` (Temurin
+17 from `actions/setup-java` in CI) only runs `./gradlew`'s launcher. The Gradle daemon,
+which runs the build and compiles the code, is a JDK 21 chosen by
+`gradle/gradle-daemon-jvm.properties` (`toolchainVersion=21`) and downloaded on first use
+through the `foojay-resolver-convention` plugin in `settings.gradle.kts`. The code is
+compiled to Java 17 bytecode (`sourceCompatibility`, `targetCompatibility` and `jvmTarget`
+in `app/build.gradle.kts` and `baselineprofile/build.gradle.kts`; there is no
+`jvmToolchain`), so the shipped app does not depend on either.
 
 | Flag | Effect |
 |---|---|
@@ -132,26 +139,25 @@ This section is about what a formatter cannot check.
 
 ### Zero warnings
 
-Every Kotlin compiler warning and every lint warning fails the build
-(`allWarningsAsErrors`, lint `warningsAsErrors` in `app/build.gradle.kts`),
-and a ktlint or detekt finding fails CI. A warning is fixed at its cause,
-never suppressed: no new `@Suppress`, `@SuppressLint`, `NOLINT`, lint
-baseline or detekt baseline.
+Warnings and lint findings are fixed, never silenced: the maintainer's rule is "we
+don't want warnings, and we don't want to ignore any warnings or lint issues, instead
+we want to do it right". Every Kotlin compiler warning and every lint warning fails the
+build (`allWarningsAsErrors`, lint `warningsAsErrors` in `app/build.gradle.kts`), and a
+ktlint or detekt finding fails CI. A new compiler, formatter, linter, SDK or scanner
+version raises new findings; fix the code each one points at.
 
-The one exception is a warning whose right fix is out of this code's reach:
-a deprecated framework call that is the only one on the older Android
-versions the app still supports (the fix is a minSdk bump), a protocol the
-app does not own (AES-ECB in Moonlight pairing), a trust manager that no
-platform-managed form can replace (`TofuTrustManager`), a parameter list
-that a JNI signature fixes (a native upcall's, or an `external fun` on the
-input hot path whose flat primitive arguments keep each event allocation-free), or a lint layout check whose
-suggested form cannot do what the layout does (`UseCompoundDrawables` where
-a compound drawable could neither top-align nor rotate its glyph). There the
-suppression sits on the one function, class or view that needs it, under a
-comment that says why: a `Marker:` comment naming the right fix in Kotlin, a
-`tools:ignore reason:` line in a layout. The suppressed call is made nowhere
-else. Tests follow the same rule: a test that has to name a deprecated
-overload names it once, in one suppressed helper.
+Do not add a suppression of any kind to get green: no `@Suppress`, `@SuppressLint`,
+`tools:ignore`, `NOLINT`, `-Wno-*`, `noinspection`, lint or detekt baseline, `lint.xml`
+severity change, rule switched off in `app/detekt.yml`, widened exclude, allowlist entry
+for something that has a fix, or `continue-on-error`, and do not lower a
+warnings-as-errors setting. Deprecations count: move to the replacement API, including
+Gradle's "will be removed in Gradle 10" notices from this repo's own build scripts. A
+finding that truly cannot be fixed correctly (a bug in the tool, third-party generated
+code) is reported with its evidence in the pull request, not hidden.
+
+Suppressions that predate this rule are inventoried, with the real fix for each, in
+`app/src/test/PARITY.md`, "Suppressions". Remove one when you touch its file and the fix
+is within reach; do not add to the list.
 
 ### Shape of the code
 
@@ -435,11 +441,16 @@ Build + style:
 
 Security gates (also blocking):
 
-- `security.yml`: action-pin lint, vulnerability allowlist expiry,
-  OSV-Scanner and gitleaks secret scan. On a pull request it also runs GitHub's
-  `dependency-review-action`, best-effort (`continue-on-error`) until GitHub
-  Advanced Security is enabled. Release artifacts additionally get a Grype scan
-  in `release.yml`.
+- `security.yml`, through the shared `_security.yml`: action-pin lint, vulnerability
+  allowlist expiry, OSV-Scanner over `app/gradle.lockfile` and `Gemfile.lock`, and the gitleaks
+  secret scan over the full history. Dependency review is switched off (`dependency_review_enabled:
+  false`) because the repository's Dependency graph setting is off; enabling it is the
+  maintainer's, and then the input becomes `true`. Release artifacts additionally get a Grype scan
+  in the shared `_release_harden.yml`.
+- `android-ci.yml`, "Release hardening (dry run)": the tag's whole hardening path (`_release_harden.yml`
+  with `dry-run: true`) on the unsigned release files the build job just made: Grype, the SBOMs,
+  `SHA256SUMS`, and a Sigstore bundle per file signed with a throwaway key and then checked. It
+  cannot exercise the keyless identity, the code-scanning upload or the SLSA generator.
 - `codeql.yml`: CodeQL `java-kotlin` and `cpp` analysis (security-extended +
   security-and-quality query packs). Its findings block and upload.
 
@@ -460,27 +471,40 @@ the past.
 
 ### Running security checks locally
 
+`scripts/ci-local.sh` runs the same gates `security.yml` runs, through the same shared scripts,
+with OSV-Scanner and gitleaks fetched at the pinned versions by `scripts/tools.sh` (verified by
+SHA-256, into `build/tools`):
+
 ```bash
-# Action-pin lint
-grep -REn '^\s*uses:' .github/workflows/ \
-  | grep -vE '@[0-9a-f]{40}\b' \
-  || echo "all pinned"
-
-# Allowlist expiry
-python3 - <<'PY'
-import datetime, yaml, sys
-data = yaml.safe_load(open('.security/allowlist.yaml').read()) or {}
-for e in data.get('exceptions', []) or []:
-    if datetime.date.fromisoformat(str(e['expires'])) < datetime.date.today():
-        print('EXPIRED:', e); sys.exit(1)
-PY
-
-# OSV-Scanner
-osv-scanner --recursive --skip-git .
-
-# Gitleaks
-gitleaks detect --no-banner --redact --source .
+sh scripts/check-action-pins.sh                      # every uses: is a 40-character SHA
+python3 scripts/security-allowlist.py check          # the allowlist's fields and expiry (needs PyYAML)
+bash scripts/osv-scan.sh -- .                        # OSV-Scanner over the lockfiles (OSV_SCANNER=<binary>)
+gitleaks git --config=.gitleaks.toml --redact --exit-code=1 .
 ```
+
+`.github/workflows/_security.yml`, `_release_harden.yml` and the three scripts above are the
+fleet's shared copies, byte-identical in every repository. Never edit one here: a needed change
+goes to satellite's copy first, then is copied everywhere.
+
+### Dependency locking
+
+The Maven dependencies that ship are the three flavors' release runtime classpaths
+(`githubReleaseRuntimeClasspath`, `playReleaseRuntimeClasspath`, `amazonReleaseRuntimeClasspath`).
+Their resolved versions are committed in `app/gradle.lockfile`, where OSV-Scanner reads them, so a
+known-vulnerable library fails `security.yml`. A build resolves exactly the locked versions. After
+any change that moves a resolved version (a bump in `gradle/libs.versions.toml`, a new dependency,
+a plugin that adds one), regenerate the lock and commit it with the change:
+
+```bash
+./gradlew :app:resolveShippedDependencies --write-locks
+```
+
+`scripts/check-dependency-locks.sh` (run by CI and `ci-local.sh`) regenerates the lock and fails if
+that changed the file, so a stale lockfile cannot merge. A Dependabot pull request that bumps a
+dependency will fail that check until someone runs the command above on its branch and pushes the
+lockfile; this is the step that keeps the lock current. When OSV-Scanner reports a vulnerability,
+upgrade the library and regenerate the lock; an `.security/allowlist.yaml` entry is for a finding
+with no fixed version, with an expiry. Build plugins (the Gradle plugin classpath) are not locked.
 
 ### Gradle dependency verification
 
@@ -496,28 +520,11 @@ the file locally and diff it as a review aid, then delete it:
 
 ### Verifying a release artifact
 
-Each GitHub Release ships the signed `dish-X.Y.Z.apk` + `.aab`,
-`*.sig`/`*.crt` (cosign keyless), `SHA256SUMS` + `SHA256SUMS.sig`/`*.crt`,
-the SPDX + CycloneDX SBOMs, and `dish-android.intoto.jsonl` (SLSA L3).
-
-```bash
-sha256sum -c SHA256SUMS
-
-cosign verify-blob \
-  --certificate SHA256SUMS.crt \
-  --signature   SHA256SUMS.sig \
-  --certificate-identity-regexp '^https://github\.com/TinkerNorth/dish-android/\.github/workflows/release\.yml@refs/tags/[0-9].*$' \
-  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-  SHA256SUMS
-
-slsa-verifier verify-artifact \
-  --provenance-path dish-android.intoto.jsonl \
-  --source-uri      github.com/TinkerNorth/dish-android \
-  --source-tag      X.Y.Z \
-  dish-X.Y.Z.apk
-```
-
-The full cross-repo verification recipe lives in
+Each GitHub Release ships the signed `dish-X.Y.Z.apk` and `.aab`, a cosign bundle
+(`<file>.sigstore.json`) for every file, `SHA256SUMS`, the SPDX and CycloneDX SBOMs, and
+`dish-android.intoto.jsonl` (SLSA L3). The identity to verify against is the shared hardening
+workflow at the tag, `_release_harden.yml@refs/tags/X.Y.Z`; releases up to 2.7.0 were signed by
+`release.yml` and carry `.sig` and `.crt` files. The full recipe, both forms, is in
 [`SECURITY.md`](SECURITY.md).
 
 ## Cutting a release
@@ -527,7 +534,11 @@ and versionCode (`X*10000 + Y*100 + Z`, so `2.7.0` is `20700`) from it, and the
 Gradle build derives the same from `git describe` for local builds. Tags are
 bare `X.Y.Z`, no `v` prefix. `release.yml` runs on a tag push whose name matches
 `[0-9]*.[0-9]*.[0-9]*`, or on a `workflow_dispatch` with a `tag` input for a tag
-that already exists. A tag that is not exactly three numbers fails the release
+that already exists, started on that tag's ref
+(`gh workflow run release.yml --ref X.Y.Z -f tag=X.Y.Z`): the signing certificate
+names the ref the run was on, so a dispatch from `main` would sign as
+`@refs/heads/main` and break every user's verification, and the shared hardening
+workflow refuses to sign off a tag ref. A tag that is not exactly three numbers fails the release
 before anything builds.
 
 **Fleet order.** The website is tagged first. A client is tagged once
@@ -572,7 +583,7 @@ that R8 kept what native code calls. Then:
 - the GitHub Release is uploaded as a draft with the signed APK (`dish-X.Y.Z.apk`
   and the permanent `dish.apk`), the bundle, the R8 mapping files, the native
   debug symbols, `latest.json` (what the GitHub build's update check reads),
-  `SHA256SUMS`, cosign signatures, the SPDX and CycloneDX SBOMs, the SLSA
+  `SHA256SUMS`, a cosign Sigstore bundle per file, the SPDX and CycloneDX SBOMs, the SLSA
   provenance and the bench measurements, and is flipped to published last so
   `releases/latest` never points at a half-published release;
 - with `PLAY_SERVICE_ACCOUNT_JSON` set, fresh store screenshots are captured on CI
