@@ -88,6 +88,52 @@ class ServedRowsTest {
     }
 
     @Test
+    fun `a verified record whose Android rule is optIn is not claimed without asking`() {
+        val rows = servedRowsOf(indexOf(record("a", usb = listOf("0001:0001")).onPlatforms("""{"android":{"direct":{"rule":"optIn"}}}""")))
+        assertEquals(listOf(false), rows.verified.toList())
+    }
+
+    @Test
+    fun `an imported record whose Android rule is auto is claimed after the probe`() {
+        val imported = record("a", usb = listOf("0001:0001"), state = VERIFICATION_IMPORTED)
+        val rows = servedRowsOf(indexOf(imported.onPlatforms("""{"android":{"direct":{"rule":"auto"}}}""")))
+        assertEquals(listOf(true), rows.verified.toList())
+    }
+
+    @Test
+    fun `another platform's rule leaves Android on the record's own`() {
+        val rows = servedRowsOf(indexOf(record("a", usb = listOf("0001:0001")).onPlatforms("""{"mac":{"direct":{"rule":"whenOsCannot"}}}""")))
+        assertEquals(listOf(true), rows.verified.toList())
+    }
+
+    @Test
+    fun `a rule other than auto is not auto`() {
+        val rows =
+            servedRowsOf(
+                indexOf(
+                    record("a", usb = listOf("0001:0001")).onPlatforms("""{"android":{"direct":{"rule":"whenOsCannot"}}}"""),
+                    record("b", usb = listOf("0001:0002")).onPlatforms("""{"android":{"direct":{"rule":"futureRule"}}}"""),
+                ),
+            )
+        assertEquals(listOf(false, false), rows.verified.toList())
+    }
+
+    @Test
+    fun `platforms in a shape this build does not know leave the record's own rule`() {
+        val rows =
+            servedRowsOf(
+                indexOf(
+                    record("a", usb = listOf("0001:0001")).onPlatforms("""["android"]"""),
+                    record("b", usb = listOf("0001:0002")).onPlatforms("""{"android":{"direct":{"rule":1}}}"""),
+                    record("c", usb = listOf("0001:0003")).onPlatforms("""{"android":"auto"}"""),
+                ),
+            )
+        assertEquals(listOf(true, true, true), rows.verified.toList())
+    }
+
+    private fun ControllerRecord.onPlatforms(platforms: String): ControllerRecord = copy(platforms = testJson.parseToJsonElement(platforms))
+
+    @Test
     fun `a malformed identity is skipped and the rest are kept`() {
         val rows = servedRowsOf(indexOf(record("a", usb = listOf("nope", "0001:0002"))))
         assertArrayEquals(intArrayOf(2), rows.productIds)

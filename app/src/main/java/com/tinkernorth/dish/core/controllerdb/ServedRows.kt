@@ -50,7 +50,8 @@ private fun rowsOf(record: ControllerRecord): List<ServedRow> {
     val init = NATIVE_INIT_KINDS.getValue(record.output.init.kind)
     val isHid = record.input.protocol.ref == FAMILY_HID
     val order = if (isHid) NATIVE_BUTTON_ORDERS.getValue(mappingName(record)) else NATIVE_BUTTON_ORDERS.getValue(MAPPING_WESTERN)
-    val verified = record.support.verification.state == VERIFICATION_VERIFIED
+    // Native's flag is the auto rule: Direct by default, and a claim even when the pad is silent at rest.
+    val verified = directRuleOf(record) == DIRECT_RULE_AUTO
     return record.identity.usb
         .mapNotNull(::parseIdentity)
         .map { (vid, pid) -> ServedRow(vid, pid, parser, init, order, verified) }

@@ -2,3 +2,4 @@
 # The bundled controller database is checked byte for byte against its manifest's SHA-256:
 # never normalise its line endings.
 app/src/main/assets/controllers/** -text
+app/src/test/resources/controllerdb/** -text
