@@ -51,6 +51,7 @@ class ToolPinsTest(unittest.TestCase):
             "OSV-Scanner": assigned(SECURITY, "OSV_SCANNER_VERSION"),
             "gitleaks": assigned(SECURITY, "GITLEAKS_VERSION"),
             "clang-format": assigned(TOOLS, "CLANG_FORMAT_VERSION"),
+            "clang-tidy": assigned(TOOLS, "CLANG_TIDY_VERSION"),
         }
         for tool, version in pins.items():
             with self.subTest(tool=tool):

@@ -30,6 +30,11 @@ lockstep, and do not share a version number.
   (unsigned), including the check that the release build keeps every method the
   native code calls, so a problem that only showed at release time shows
   earlier.
+- **The native code is held to clang-tidy.** Every source of the native layer now passes clang-tidy
+  23.1.4 with the fleet's checks, run on every pull request. The byte-level assembly in the wire
+  codecs, the USB report decoders and the HID reader takes no signed operand any more, and the
+  tests pin it at the values a wrong shift or sign extension gets wrong. Nothing a user can see
+  changed.
 - **The dependencies the app ships are pinned and scanned.** Their exact versions
   are committed in `app/gradle.lockfile`, a vulnerability scanner reads that
   file on every pull request, and a pull request that changes a dependency

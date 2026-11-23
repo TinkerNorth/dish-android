@@ -73,6 +73,9 @@ shared workflows (`.github/workflows/_security.yml`, `_release_harden.yml`), and
   locked Maven and Ruby dependencies. Apache-2.0.
 - **gitleaks** (`8.30.1`, https://github.com/gitleaks/gitleaks): the secret scan of the full
   history. MIT.
+- **clang-tidy** (`23.1.4`, https://pypi.org/project/clang-tidy/): the JNI's static analysis, run
+  against the debug build's compile database with the fleet's `.clang-tidy`. Apache-2.0 with LLVM
+  exceptions.
 - **clang-format** (`23.1.5`, https://pypi.org/project/clang-format/): the JNI's formatter.
   Apache-2.0 with LLVM exceptions.
 

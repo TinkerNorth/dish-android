@@ -81,6 +81,13 @@ jobs:
       - name: Build the debug APKs (all three distribution flavors); each carries its flavor's ABIs
         run: scripts/check-builds.sh debug
 
+      # The pinned clang-tidy (scripts/tools.sh) over the JNI layer, against the compile database the debug
+      # build above just wrote, so it checks what the NDK compiles.
+      - name: clang-tidy (JNI)
+        env:
+          JOBS: 4
+        run: scripts/check-tidy.sh
+
       # Debug builds are not minified, so only a release build shows whether R8 kept every member
       # native code resolves by name. This builds what the tag builds, unsigned: the GitHub APK, the
       # Play APK and bundle, and the Amazon APK, each checked for its ABIs and for the kept members.

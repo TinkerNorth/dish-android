@@ -68,6 +68,14 @@ and installed into `build/tools` by `scripts/check-format.sh`, which CI and
 fleet's C++ repos move it together. A bump is a deliberate commit that reformats
 the tree with it.
 
+`scripts/check-tidy.sh` runs the pinned clang-tidy (`CLANG_TIDY_VERSION` in `scripts/tools.sh`, 23.1.4)
+over every source of `app/src/main/cpp` with the fleet's `.clang-tidy`, every finding an error. It reads
+the compile database the debug build leaves under `app/.cxx`, so run `scripts/check-builds.sh debug`
+first; `ci-local.sh` and `android-ci.yml` do. Its `bugprone-signed-bitwise` holds the native code to
+unsigned-only bitwise arithmetic: `app/src/main/cpp/bits.h` has the helpers (`u32`, `lowByte`,
+`loadBe16`, `asInt16` and the rest), `byte_boundaries_test.cpp` pins them at 0x00, 0x7F, 0x80 and
+0xFF, and a finding is fixed in the code, never silenced.
+
 The pre-commit hook runs `clang-format -i` (autofix, re-stages) on staged JNI
 C/C++ files and `scripts/check-translations.py` when a strings file under any
 `app/src/*/res` is staged; it skips Kotlin to keep itself fast. CI re-runs both
@@ -413,7 +421,8 @@ Build + style:
   ABI set, `armeabi-v7a` included), `scripts/check-builds.sh release` (the
   unsigned minified GitHub, Play and Amazon builds, the Play bundle among them,
   each checked for its ABIs and, with `scripts/check_jni_keeps.py`, for every
-  member native code resolves by name) and `scripts/check_sodium_ti_mode.py`
+  member native code resolves by name), `scripts/check-tidy.sh` (clang-tidy over the JNI, run
+  after the debug build) and `scripts/check_sodium_ti_mode.py`
   (libsodium's 128-bit arithmetic on the 64-bit ABIs only).
 - `android-ci.yml`, "Integration tests (emulator)": `connectedGithubDebugAndroidTest`
   over the `integration` package on an API 35 emulator.

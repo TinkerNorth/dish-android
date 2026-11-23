@@ -158,6 +158,9 @@ fi
 step "Debug APKs (github, play, amazon): each carries its flavor's ABIs"
 scripts/check-builds.sh debug
 
+step "clang-tidy (JNI, against the debug build's compile database)"
+scripts/check-tidy.sh
+
 step "Release builds, unsigned: ABIs, and every member native code resolves by name is kept"
 scripts/check-builds.sh release
 
