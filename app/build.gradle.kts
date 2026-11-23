@@ -434,6 +434,10 @@ tasks.withType<Test>().configureEach {
     // An OOM in a test worker must kill the worker loudly, not wedge the
     // JVM mid-instrumentation and hang the build until a CI timeout.
     jvmArgs("-XX:+ExitOnOutOfMemoryError")
+    // mockk's inline agent appends to the bootstrap class path, which the JVM's class data
+    // sharing archive cannot be used with, and the JVM says so on stderr once per worker.
+    // The test JVM starts without the archive instead of starting with a warning.
+    jvmArgs("-Xshare:off")
     // No escape analysis, so compiled code allocates everything the source does: C2 would remove a
     // short-lived object that ART, whose own analysis is weaker, may still make, and an allocation
     // test whose code earlier test classes had warmed would pass on a path the phone allocates on
