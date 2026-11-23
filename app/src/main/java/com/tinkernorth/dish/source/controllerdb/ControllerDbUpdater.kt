@@ -132,7 +132,7 @@ class ControllerDbUpdater internal constructor(
     private fun load() {
         val loaded = bundledOrEmpty()
         bundled = loaded
-        val cached = repository.cached()
+        val cached = cachedOrNone()
         val downloadNoLongerReads = cached == null && repository.holdsADownload()
         if (downloadNoLongerReads) prefs.forgetEtag()
         publish(activeControllerDb(loaded, cached))
@@ -144,6 +144,14 @@ class ControllerDbUpdater internal constructor(
         runCatching(repository::bundled).getOrElse { failure ->
             Log.e(TAG, "controller database: the bundled copy does not load", failure)
             EMPTY_BUNDLED
+        }
+
+    // A stored download the device cannot read at all is one that no longer reads: the bundled copy
+    // stays in force and the next check fetches it again.
+    private fun cachedOrNone(): LoadedControllerDb? =
+        runCatching(repository::cached).getOrElse { failure ->
+            Log.w(TAG, "controller database: the stored download cannot be read", failure)
+            null
         }
 
     private suspend fun runSchedule() {

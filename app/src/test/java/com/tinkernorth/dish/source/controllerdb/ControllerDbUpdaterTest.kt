@@ -27,6 +27,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -253,6 +254,30 @@ class ControllerDbUpdaterTest {
 
             assertEquals(listOf(null, null), gateway.etagsSent)
             assertEquals(ControllerDbSource.CACHE, second.status.value.source)
+        }
+
+    @Test
+    fun `a stored download that cannot be read leaves the bundled copy in force, and the next check fetches it again`() =
+        runTest {
+            val first = updater()
+            first.start()
+            runCurrent()
+            first.checkNow()
+            runCurrent()
+            val locked = File(tmp.root, "current/controllers.json")
+            locked.setReadable(false, false)
+            assumeFalse("this user reads a file whatever its permissions", locked.canRead())
+
+            val second = updater()
+            second.start()
+            runCurrent()
+            assertEquals(ControllerDbSource.BUNDLED, second.status.value.source)
+            assertEquals(1, second.status.value.activeVersion)
+
+            second.checkNow()
+            runCurrent()
+            assertEquals(listOf(null, null), gateway.etagsSent)
+            assertEquals(2, second.status.value.activeVersion)
         }
 
     @Test
