@@ -89,6 +89,7 @@ data class BundleBluetooth(
 )
 
 private const val HEX_WORD_FORMAT = "%04x"
+private const val HEX_EXT_FORMAT = "%08x"
 private const val HEX_BYTE_FORMAT = "%02x"
 
 internal fun feedbackWire(kind: FeedbackKind): String =
@@ -117,7 +118,7 @@ private fun inputStateJson(state: BundleInputState): JsonObject =
         put("ry", state.ry)
         put("lt", state.lt)
         put("rt", state.rt)
-        put("ext", HEX_WORD_FORMAT.format(state.ext))
+        put("ext", HEX_EXT_FORMAT.format(state.ext))
     }
 
 internal fun outputJson(

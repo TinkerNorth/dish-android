@@ -7,6 +7,8 @@ import com.tinkernorth.dish.composer.BundleLane
 import com.tinkernorth.dish.composer.BundleVoice
 import com.tinkernorth.dish.composer.VoiceDevice
 import com.tinkernorth.dish.composer.VoiceState
+import com.tinkernorth.dish.composer.feedbackWire
+import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.audio.NO_AUDIO_DEVICE
 import com.tinkernorth.dish.source.audio.PlayoutLane
 import com.tinkernorth.dish.source.audio.SpeakerTarget
@@ -19,6 +21,22 @@ import com.tinkernorth.dish.source.system.WifiBand
 
 internal fun bundleLanesOf(lanes: Map<FeedbackKind, LaneActivity>): Map<FeedbackKind, BundleLane> =
     lanes.mapValues { (_, lane) -> BundleLane(lane.count, lane.value, lane.atMs) }
+
+private const val TARGET_DIRECT_BLE = "directBle"
+private const val NO_RATE = 0
+
+// Where a controller's output goes, by the contract's names: a Direct pad on Bluetooth is one the
+// app writes over Bluetooth LE itself.
+internal fun bundleOutputTargetOf(diag: ControllerDiag): String {
+    val isTheAppsOwnBle = diag.isUsbSynthetic && diag.transport == Transport.Bluetooth
+    if (isTheAppsOwnBle) return TARGET_DIRECT_BLE
+    return feedbackTargetWire(feedbackTarget(diag.slotId))
+}
+
+// The same names the file's lanes use.
+internal fun lastFeedbackKindOf(kind: FeedbackKind): String = feedbackWire(kind)
+
+internal fun bundleRateOf(diag: ControllerDiag): Int? = diag.pollRateHz.takeIf { it > NO_RATE }
 
 internal fun feedbackTargetWire(target: FeedbackTargetKind): String =
     when (target) {

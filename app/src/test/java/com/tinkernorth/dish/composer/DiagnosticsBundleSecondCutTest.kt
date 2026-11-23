@@ -182,9 +182,22 @@ class DiagnosticsBundleSecondCutTest {
         assertEquals(250, input["rateHz"]?.jsonPrimitive?.int)
         val last = input.obj("last")
         assertEquals("1000", last.text("buttons"))
-        assertEquals("0001", last.text("ext"))
+        assertEquals("00000001", last.text("ext"))
         assertEquals(-2, last["ly"]?.jsonPrimitive?.int)
         assertEquals(6, last["rt"]?.jsonPrimitive?.int)
+    }
+
+    @Test
+    fun `the extended buttons are eight hex digits, a word above the buttons' four`() {
+        val wide = controller.copy(input = controller.input?.copy(last = BundleInputState(0x1000, 1, -2, 3, -4, 5, 6, 0x12345)))
+        val last = padOf(wide).obj("input").obj("last")
+        assertEquals("1000", last.text("buttons"))
+        assertEquals("00012345", last.text("ext"))
+    }
+
+    @Test
+    fun `a pad with no rate has a null rate, never zero`() {
+        assertEquals(JsonNull, padOf(controller.copy(rateHz = null))["rateHz"])
     }
 
     @Test

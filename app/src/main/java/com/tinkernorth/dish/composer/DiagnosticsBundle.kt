@@ -99,7 +99,8 @@ data class BundleController(
     val hardware: UsbHardwareFacts?,
     val firmware: String?,
     val expectMismatch: List<String>,
-    val rateHz: Int,
+    // The pad's report rate; null when the pad has none to read (the on-screen pad, a Bluetooth LE one).
+    val rateHz: Int?,
     val lastFeedback: BundleFeedback?,
     val lastWrite: WriteVerdict?,
     val audio: BundleAudio?,
