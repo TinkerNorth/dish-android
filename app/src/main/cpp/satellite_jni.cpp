@@ -28,6 +28,7 @@
 
 #include "audio_codec.h"
 #include "audio_jitter.h"
+#include "bits.h"
 #include "bridge_connection_ids.h"
 #include "bridge_queue.h"
 #include "dispatch.h"
@@ -445,8 +446,8 @@ static inline float axisCur(const GameActivityMotionEvent* ev, int axis) {
 
 // Returning true consumes the event so it can't trigger incidental View focus navigation.
 static bool isGamepadSource(const int32_t source) {
-    return (source & AINPUT_SOURCE_GAMEPAD) == AINPUT_SOURCE_GAMEPAD ||
-           (source & AINPUT_SOURCE_JOYSTICK) == AINPUT_SOURCE_JOYSTICK;
+    return dish_bits::hasAllBits(source, AINPUT_SOURCE_GAMEPAD) ||
+           dish_bits::hasAllBits(source, AINPUT_SOURCE_JOYSTICK);
 }
 
 static_assert(gamepad::KEY_ACTION_DOWN == AKEY_EVENT_ACTION_DOWN &&
@@ -475,9 +476,9 @@ static gamepad::FrameworkAxes joystickSampleOf(const GameActivityMotionEvent* ev
 }
 
 static bool gamepadMotionFilter(const GameActivityMotionEvent* ev) {
-    const bool isJoystick = (ev->source & AINPUT_SOURCE_JOYSTICK) == AINPUT_SOURCE_JOYSTICK;
+    const bool isJoystick = dish_bits::hasAllBits(ev->source, AINPUT_SOURCE_JOYSTICK);
     if (!isJoystick) return false;
-    const int32_t action = ev->action & AMOTION_EVENT_ACTION_MASK;
+    const int32_t action = dish_bits::maskedBits(ev->action, AMOTION_EVENT_ACTION_MASK);
     const ScopedThreadRole role(ThreadRole::UiInput);
     g_slotTable.applyFrameworkMotion(ev->deviceId, action, joystickSampleOf(ev));
     return true;
@@ -628,9 +629,9 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendR
     const dish_session::SessionRef s = g_sessionTable.find(handle);
     if (!s) return;
     dish_send::XUSB_REPORT report{};
-    report.wButtons = (uint16_t)(wB & 0xFFFF);
-    report.bLeftTrigger = (uint8_t)(bLT & 0xFF);
-    report.bRightTrigger = (uint8_t)(bRT & 0xFF);
+    report.wButtons = dish_bits::low16(wB);
+    report.bLeftTrigger = dish_bits::lowByte(bLT);
+    report.bRightTrigger = dish_bits::lowByte(bRT);
     report.sThumbLX = (int16_t)sLX;
     report.sThumbLY = (int16_t)sLY;
     report.sThumbRX = (int16_t)sRX;
@@ -670,15 +671,16 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendT
     t.f0Active = f0Active == JNI_TRUE;
     t.f1Active = f1Active == JNI_TRUE;
     t.clickDown = buttonPressed == JNI_TRUE;
-    t.f0Id = (uint8_t)(f0TrackingId & 0xFF);
-    t.f1Id = (uint8_t)(f1TrackingId & 0xFF);
+    t.f0Id = dish_bits::lowByte(f0TrackingId);
+    t.f1Id = dish_bits::lowByte(f1TrackingId);
     t.f0X = (int16_t)f0x;
     t.f0Y = (int16_t)f0y;
     t.f1X = (int16_t)f1x;
     t.f1Y = (int16_t)f1y;
-    const uint8_t idx = (uint8_t)(controllerIndex & 0xFF);
+    const uint8_t idx = dish_bits::lowByte(controllerIndex);
     dish_send::sendTouchpadFrame(s, idx, t, rightPressed == JNI_TRUE, middlePressed == JNI_TRUE,
-                                 (uint32_t)(eventTimeMs & 0xFFFFFFFFLL), (int16_t)scrollDelta);
+                                 dish_bits::low32(dish_bits::asUint64(eventTimeMs)),
+                                 (int16_t)scrollDelta);
 }
 
 // One 20 ms mono window straight from AudioRecord: encode it and put it on the
@@ -693,7 +695,7 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_s
     int16_t pcm[dish_audio::AUDIO_FRAME_SAMPLES];
     env->GetShortArrayRegion(pcmMono, 0, dish_audio::AUDIO_FRAME_SAMPLES,
                              reinterpret_cast<jshort*>(pcm));
-    const uint8_t idx = (uint8_t)(controllerIndex & 0xFF);
+    const uint8_t idx = dish_bits::lowByte(controllerIndex);
     return dish_send::sendMicFrame(s, idx, pcm) ? JNI_TRUE : JNI_FALSE;
 }
 
@@ -885,7 +887,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_set
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_setDeviceQuirk(
     JNIEnv*, jobject, jint deviceId, jint quirk) {
-    g_slotTable.setQuirk(deviceId, (uint8_t)(quirk & 0xFF));
+    g_slotTable.setQuirk(deviceId, dish_bits::lowByte(quirk));
 }
 
 // Activity-level dispatch is needed because GameActivity's SurfaceView sits below the
@@ -904,8 +906,8 @@ Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_processGamepadMotionEvent(
     JNIEnv*, jobject, jint deviceId, jint source, jint action, jfloat x, jfloat y, jfloat z,
     jfloat rz, jfloat rx, jfloat ry, jfloat hatX, jfloat hatY, jfloat lTrigger, jfloat rTrigger,
     jfloat brake, jfloat gas) {
-    if ((source & AINPUT_SOURCE_JOYSTICK) != AINPUT_SOURCE_JOYSTICK) return JNI_FALSE;
-    const int32_t maskedAction = action & AMOTION_EVENT_ACTION_MASK;
+    if (!dish_bits::hasAllBits(source, AINPUT_SOURCE_JOYSTICK)) return JNI_FALSE;
+    const int32_t maskedAction = dish_bits::maskedBits(action, AMOTION_EVENT_ACTION_MASK);
     const gamepad::FrameworkAxes sample{x,    y,    z,        rz,       rx,    ry,
                                         hatX, hatY, lTrigger, rTrigger, brake, gas};
     const ScopedThreadRole role(ThreadRole::UiInput);
@@ -1037,10 +1039,10 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_attach
         return 0;
     }
     usbhost::AttachResult r = usbhost::attachDevice(
-        dupFd, (uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF), c.interfaceNumber,
-        (uint8_t)(c.epIn & 0xFF), (uint16_t)(c.epInMaxPacket & 0xFFFF), (uint8_t)(c.epOut & 0xFF),
-        (uint8_t)(c.ifClass & 0xFF), (uint8_t)(c.ifSubclass & 0xFF), (uint8_t)(c.ifProtocol & 0xFF),
-        c.receiverSlot == JNI_TRUE);
+        dupFd, dish_bits::low16(vid), dish_bits::low16(pid), c.interfaceNumber,
+        dish_bits::lowByte(c.epIn), dish_bits::low16(c.epInMaxPacket), dish_bits::lowByte(c.epOut),
+        dish_bits::lowByte(c.ifClass), dish_bits::lowByte(c.ifSubclass),
+        dish_bits::lowByte(c.ifProtocol), c.receiverSlot == JNI_TRUE);
     return r.ok ? (jint)r.syntheticDeviceId : 0;
 }
 
@@ -1052,7 +1054,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_detach
 JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SteamBleNative_attachBlePad(
     JNIEnv*, jobject, jint vid, jint pid, jint inputReportId) {
     const usbhost::AttachResult r = usbhost::attachBlePad(
-        (uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF), (uint8_t)(inputReportId & 0xFF));
+        dish_bits::low16(vid), dish_bits::low16(pid), dish_bits::lowByte(inputReportId));
     return r.ok ? (jint)r.syntheticDeviceId : 0;
 }
 
@@ -1081,8 +1083,8 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SteamBleNative_process
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_sendUsbRumble(
     JNIEnv*, jobject, jint syntheticDeviceId, jint strong, jint weak) {
-    usbhost::sendRumble((int32_t)syntheticDeviceId, (uint16_t)(strong & 0xFFFF),
-                        (uint16_t)(weak & 0xFFFF));
+    usbhost::sendRumble((int32_t)syntheticDeviceId, dish_bits::low16(strong),
+                        dish_bits::low16(weak));
 }
 
 JNIEXPORT void JNICALL
@@ -1153,19 +1155,19 @@ Java_com_tinkernorth_dish_hotpath_audio_SpeakerAudioBridge_nativeInstall(JNIEnv*
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_sendUsbTriggerRumble(
     JNIEnv*, jobject, jint syntheticDeviceId, jint leftMag, jint rightMag) {
-    usbhost::sendTriggerRumble((int32_t)syntheticDeviceId, (uint16_t)(leftMag & 0xFFFF),
-                               (uint16_t)(rightMag & 0xFFFF));
+    usbhost::sendTriggerRumble((int32_t)syntheticDeviceId, dish_bits::low16(leftMag),
+                               dish_bits::low16(rightMag));
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_sendUsbLightbar(
     JNIEnv*, jobject, jint syntheticDeviceId, jint r, jint g, jint b) {
-    usbhost::sendLightbar((int32_t)syntheticDeviceId, (uint8_t)(r & 0xFF), (uint8_t)(g & 0xFF),
-                          (uint8_t)(b & 0xFF));
+    usbhost::sendLightbar((int32_t)syntheticDeviceId, dish_bits::lowByte(r), dish_bits::lowByte(g),
+                          dish_bits::lowByte(b));
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_sendUsbPlayerLeds(
     JNIEnv*, jobject, jint syntheticDeviceId, jint ledMask) {
-    usbhost::sendPlayerLeds((int32_t)syntheticDeviceId, (uint8_t)(ledMask & 0xFF));
+    usbhost::sendPlayerLeds((int32_t)syntheticDeviceId, dish_bits::lowByte(ledMask));
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_sendUsbTriggerEffects(
@@ -1181,13 +1183,13 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_sendUs
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_sendUsbMicMuteLed(
     JNIEnv*, jobject, jint syntheticDeviceId, jint state) {
-    usbhost::sendMicMuteLed((int32_t)syntheticDeviceId, (uint8_t)(state & 0xFF));
+    usbhost::sendMicMuteLed((int32_t)syntheticDeviceId, dish_bits::lowByte(state));
 }
 
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_lookupKnownModelName(
     JNIEnv* env, jobject, jint vid, jint pid) {
     const usbparsers::KnownDevice* k =
-        usbparsers::lookupModel((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
+        usbparsers::lookupModel(dish_bits::low16(vid), dish_bits::low16(pid));
     // A served row carries no name: the JVM names it from the controller database's strings.
     const bool hasAName = k != nullptr && k->name != nullptr;
     return env->NewStringUTF(hasAName ? k->name : "");
@@ -1225,16 +1227,15 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_setSe
 
 JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_isKnownFastLaneModel(
     JNIEnv*, jobject, jint vid, jint pid) {
-    return usbparsers::isVerifiedFastLane((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF))
-               ? JNI_TRUE
-               : JNI_FALSE;
+    return usbparsers::isVerifiedFastLane(dish_bits::low16(vid), dish_bits::low16(pid)) ? JNI_TRUE
+                                                                                        : JNI_FALSE;
 }
 
 // Every model predicate reads the same way: look the pad up; an unknown model has nothing.
 static jboolean modelPredicate(const jint vid, const jint pid,
                                bool (*const predicate)(usbparsers::Parser)) {
     const usbparsers::KnownDevice* k =
-        usbparsers::lookupModel((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
+        usbparsers::lookupModel(dish_bits::low16(vid), dish_bits::low16(pid));
     if (!k) return JNI_FALSE;
     return predicate(k->parser) ? JNI_TRUE : JNI_FALSE;
 }
@@ -1248,8 +1249,7 @@ JNIEXPORT jboolean JNICALL
 Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelExpectsFrameworkGamepad(JNIEnv*, jobject,
                                                                                  jint vid,
                                                                                  jint pid) {
-    return usbparsers::modelExpectsFrameworkGamepad((uint16_t)(vid & 0xFFFF),
-                                                    (uint16_t)(pid & 0xFFFF))
+    return usbparsers::modelExpectsFrameworkGamepad(dish_bits::low16(vid), dish_bits::low16(pid))
                ? JNI_TRUE
                : JNI_FALSE;
 }
@@ -1265,13 +1265,13 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_setTra
 JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelSteamTrackpads(
     JNIEnv*, jobject, jint vid, jint pid) {
     return static_cast<jint>(
-        usbparsers::modelSteamTrackpads((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF)));
+        usbparsers::modelSteamTrackpads(dish_bits::low16(vid), dish_bits::low16(pid)));
 }
 
 JNIEXPORT jboolean JNICALL
 Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasExtendedButtons(JNIEnv*, jobject,
                                                                             jint vid, jint pid) {
-    return usbparsers::modelHasExtendedButtons((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF))
+    return usbparsers::modelHasExtendedButtons(dish_bits::low16(vid), dish_bits::low16(pid))
                ? JNI_TRUE
                : JNI_FALSE;
 }
@@ -1412,7 +1412,7 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_sessi
 JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_getSlotSendCount(
     JNIEnv*, jobject, jint handle, jint controllerIndex) {
     return readOpenSession<jlong>(handle, 0, [controllerIndex](const dish_session::Session& s) {
-        return (jlong)s.sentByCtrl[controllerIndex & CTRL_INDEX_MASK].load(
+        return (jlong)s.sentByCtrl[dish_session::controllerSlot(controllerIndex)].load(
             std::memory_order_relaxed);
     });
 }
@@ -1420,7 +1420,7 @@ JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_getS
 JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_getSlotMotionCount(
     JNIEnv*, jobject, jint handle, jint controllerIndex) {
     return readOpenSession<jlong>(handle, 0, [controllerIndex](const dish_session::Session& s) {
-        return (jlong)s.motionByCtrl[controllerIndex & CTRL_INDEX_MASK].load(
+        return (jlong)s.motionByCtrl[dish_session::controllerSlot(controllerIndex)].load(
             std::memory_order_relaxed);
     });
 }
