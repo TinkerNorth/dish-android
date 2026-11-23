@@ -53,7 +53,9 @@ class FutureReaderTest {
             .filter { it.isFile && it.name != MANIFEST_FILE }
             .associate { it.relativeTo(fixture).path.replace(File.separatorChar, '/') to it.readBytes() }
 
-    private fun record(id: String): ControllerRecord = active.index.db.records.single { it.id == id }
+    private fun record(id: String): ControllerRecord =
+        active.index.db.records
+            .single { it.id == id }
 
     private fun rowFor(identity: String): Int? {
         val (vid, pid) = requireNotNull(parseIdentity(identity))
@@ -68,7 +70,12 @@ class FutureReaderTest {
         assertEquals(ControllerDbCheckResult.UPDATED, outcome.result)
         assertEquals(ControllerDbSource.CACHE, active.source)
         assertEquals(2, active.activeVersion)
-        assertEquals(ALL_IDS, active.index.db.records.map { it.id }.toSet())
+        assertEquals(
+            ALL_IDS,
+            active.index.db.records
+                .map { it.id }
+                .toSet(),
+        )
     }
 
     @Test
@@ -84,7 +91,17 @@ class FutureReaderTest {
     fun `a locale the build does not ship does not spoil the set, and nothing is written outside the manifest's paths`() {
         val expected = (fixtureFiles().keys + MANIFEST_FILE).toSet()
         val current = File(tmp.root, "current")
-        val written = current.walkTopDown().filter { it.isFile }.map { it.relativeTo(current).path.replace(File.separatorChar, '/') }.toSet()
+        val written =
+            current
+                .walkTopDown()
+                .filter { it.isFile }
+                .map {
+                    it
+                        .relativeTo(
+                            current,
+                        ).path
+                        .replace(File.separatorChar, '/')
+                }.toSet()
 
         assertTrue(written.isNotEmpty())
         assertTrue("$written", expected.containsAll(written))

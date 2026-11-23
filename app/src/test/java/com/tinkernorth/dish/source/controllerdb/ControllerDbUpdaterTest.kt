@@ -5,9 +5,9 @@ package com.tinkernorth.dish.source.controllerdb
 
 import com.tinkernorth.dish.core.controllerdb.ControllerDbCheckResult
 import com.tinkernorth.dish.core.controllerdb.ControllerDbGateway
-import com.tinkernorth.dish.core.controllerdb.FileReply
 import com.tinkernorth.dish.core.controllerdb.ControllerDbSource
 import com.tinkernorth.dish.core.controllerdb.FakeControllerDbGateway
+import com.tinkernorth.dish.core.controllerdb.FileReply
 import com.tinkernorth.dish.core.controllerdb.ManifestReply
 import com.tinkernorth.dish.core.controllerdb.ServedRows
 import com.tinkernorth.dish.core.controllerdb.servedFiles

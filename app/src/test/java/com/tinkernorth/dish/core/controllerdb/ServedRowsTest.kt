@@ -102,7 +102,8 @@ class ServedRowsTest {
 
     @Test
     fun `another platform's rule leaves Android on the record's own`() {
-        val rows = servedRowsOf(indexOf(record("a", usb = listOf("0001:0001")).onPlatforms("""{"mac":{"direct":{"rule":"whenOsCannot"}}}""")))
+        val rows =
+            servedRowsOf(indexOf(record("a", usb = listOf("0001:0001")).onPlatforms("""{"mac":{"direct":{"rule":"whenOsCannot"}}}""")))
         assertEquals(listOf(true), rows.verified.toList())
     }
 
