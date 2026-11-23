@@ -5,7 +5,9 @@ name: Version consistency
 # a hand edit can still get wrong is the CHANGELOG heading and the per-locale Play release notes,
 # play/metadata/android/<locale>/changelogs/<code>.txt. A pull request checks the CHANGELOG is well
 # formed and that its newest released version has its notes in every locale; a tag push checks the
-# tag is that version. release.yml runs the same two scripts on the tag before it builds.
+# tag is that version. release.yml runs the same two scripts on the tag before it builds. The
+# `sources` job also checks, weekly and when a CMake pin changes, that every URL the native build
+# fetches from still answers with the bytes its SHA-256 pins.
 
 on:
   push:
@@ -19,7 +21,13 @@ on:
       - scripts/check_version_consistency.py
       - scripts/check_version_consistency_test.py
       - scripts/check_play_metadata.py
+      - scripts/check_source_urls.py
+      - scripts/check_source_urls_test.py
+      - app/src/main/cpp/CMakeLists.txt
+      - app/src/test/cpp/CMakeLists.txt
       - .github/workflows/version-consistency.yml
+  schedule:
+    - cron: "0 7 * * 1" # weekly: the pinned sources still answer
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -50,3 +58,22 @@ jobs:
           code="$(python3 scripts/check_version_consistency.py ${TAG:+"$TAG"})"
           echo "versionCode $code"
           EXPECTED_VERSION_CODE="$code" python3 scripts/check_play_metadata.py
+
+  # Every URL a CMake file fetches a source from still answers with the bytes its pin names. It
+  # downloads about 10 MB, so it runs weekly and on a change to the pins, not on every pull request.
+  sources:
+    name: Pinned source URLs
+    if: ${{ github.event_name != 'push' || github.ref_type != 'tag' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: The script's own tests
+        run: python3 -m unittest discover -s scripts -p 'check_source_urls_test.py' -t scripts
+
+      - name: Download each pinned source and compare its SHA-256
+        run: python3 scripts/check_source_urls.py

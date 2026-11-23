@@ -25,6 +25,7 @@ include(FetchContent)
 FetchContent_Declare(
     googletest
     URL      https://github.com/google/googletest/archive/refs/tags/v1.18.0.tar.gz
+             https://github.com/google/googletest/releases/download/v1.18.0/googletest-1.18.0.tar.gz
     URL_HASH SHA256=6e3191c1455468b3fc35a417fb565c1c5071aee1b7e7f85e30cf48a98d37d8b5
 )
 # Don't install gtest; we just want the test executable.
@@ -44,6 +45,7 @@ include("${SATELLITE_CPP}/controller_tables.cmake")
 FetchContent_Declare(
     libsodium
     URL      https://download.libsodium.org/libsodium/releases/libsodium-1.0.22.tar.gz
+             https://github.com/jedisct1/libsodium/releases/download/1.0.22-RELEASE/libsodium-1.0.22.tar.gz
     URL_HASH SHA256=adbdd8f16149e81ac6078a03aca6fc03b592b89ef7b5ed83841c086191be3349
 )
 FetchContent_MakeAvailable(libsodium)
@@ -219,7 +221,7 @@ target_link_libraries(hotpath_latency_test PRIVATE GTest::gtest_main Threads::Th
 FetchContent_Declare(
     opus
     URL      https://downloads.xiph.org/releases/opus/opus-1.6.1.tar.gz
-             https://github.com/xiph/opus/releases/download/v1.6.1/opus-1.6.1.tar.gz
+             https://ftp.osuosl.org/pub/xiph/releases/opus/opus-1.6.1.tar.gz
     URL_HASH SHA256=6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1
 )
 set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)

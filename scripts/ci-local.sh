@@ -28,6 +28,8 @@
 # CI only, because they need a Linux runner with KVM or a store credential:
 #   - the API 35 and API 28 (armeabi-v7a through ARM translation) emulator jobs; --with-instrumented
 #     is the local counterpart of the first
+#   - the pinned-source check of version-consistency.yml (python3 scripts/check_source_urls.py
+#     downloads every source the native build fetches; weekly and on a change to the pins)
 #   - CodeQL, and dependency review (off until the repository's Dependency graph setting is on)
 #   - the release hardening dry run ("Release hardening (dry run)"): Grype, Syft and cosign are
 #     pinned for linux-amd64 in _release_harden.yml, so it runs on the runner only
