@@ -7,7 +7,7 @@ computer. Those lines say "update Satellite too".
 
 ---
 
-## [2.7.0] - 2026-11-19
+## [2.7.0] - 2026-11-23
 
 A controller list that can update itself, diagnostics at every level, and a
 way to report a problem to support with both ends of the connection in the
