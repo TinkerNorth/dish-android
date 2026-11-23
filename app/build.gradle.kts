@@ -447,11 +447,17 @@ tasks.withType<Test>().configureEach {
 
 // Dependency locking for what ships: the three flavors' release runtime classpaths, whose resolved
 // versions are committed in app/gradle.lockfile, where OSV-Scanner reads them (security.yml). A build
-// resolves exactly the locked versions. The default lock mode is used because STRICT also rejects
-// kotlin-stdlib-common, which kotlin-stdlib 2.4 adds only as a constraint and which Gradle never
-// writes to a lockfile; staleness is instead caught by scripts/check-dependency-locks.sh, which
+// resolves exactly the locked versions, and one that resolves another version or a module the lock
+// lacks fails. kotlin-stdlib-common is ignored: kotlin-stdlib 2.4 lists it only as a constraint (its
+// classes live in kotlin-stdlib now), so no artifact comes from it and Gradle never writes it to a
+// lockfile, yet it rejects the resolution that mentions it. scripts/check-dependency-locks.sh also
 // regenerates the lock and fails on a difference. CONTRIBUTING.md, "Dependency locking", has the
 // --write-locks step.
+dependencyLocking {
+    lockMode = LockMode.STRICT
+    ignoredDependencies.add("org.jetbrains.kotlin:kotlin-stdlib-common")
+}
+
 configurations.configureEach {
     if (Regex("(github|play|amazon)ReleaseRuntimeClasspath").matches(name)) {
         resolutionStrategy.activateDependencyLocking()
@@ -544,12 +550,9 @@ tasks.register("generateLicenseManifest") {
     }
 }
 
-// Release-scoped, one pre-build task per flavor (matched lazily; AGP registers them after this script runs): keeps
-// debug/test/lint builds configuration-cache eligible while the shipped APK still gets a freshly
-// generated license manifest. The task itself is not config-cache compatible.
-tasks
-    .matching { it.name in setOf("preGithubReleaseBuild", "prePlayReleaseBuild", "preAmazonReleaseBuild") }
-    .configureEach { dependsOn("generateLicenseManifest") }
+// Not wired into the release builds: it is not configuration-cache compatible, and a build that
+// rewrote a tracked file would differ from the commit it was built from. scripts/check-dependency-locks.sh
+// regenerates it with the lock and fails on a difference, so the committed list always matches what ships.
 
 fun parsePomFile(pomFile: java.io.File): Map<String, Any?>? {
     return try {

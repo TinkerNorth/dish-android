@@ -496,11 +496,15 @@ any change that moves a resolved version (a bump in `gradle/libs.versions.toml`,
 a plugin that adds one), regenerate the lock and commit it with the change:
 
 ```bash
-./gradlew :app:resolveShippedDependencies --write-locks
+./gradlew :app:resolveShippedDependencies --write-locks :app:generateLicenseManifest
 ```
 
-`scripts/check-dependency-locks.sh` (run by CI and `ci-local.sh`) regenerates the lock and fails if
-that changed the file, so a stale lockfile cannot merge. A Dependabot pull request that bumps a
+The second task rewrites the in-app licence list (`app/src/main/assets/licenses/licenses.json`) from
+the same classpaths; commit both files. A build that resolves a version or a module the lock lacks
+fails (`LockMode.STRICT`; `kotlin-stdlib-common`, which `kotlin-stdlib` lists only as a constraint
+with no artifact, is the one ignored module). `scripts/check-dependency-locks.sh` (run by CI and
+`ci-local.sh`) regenerates both files and fails if that changed either, so a stale lockfile or
+licence list cannot merge. A Dependabot pull request that bumps a
 dependency will fail that check until someone runs the command above on its branch and pushes the
 lockfile; this is the step that keeps the lock current. When OSV-Scanner reports a vulnerability,
 upgrade the library and regenerate the lock; an `.security/allowlist.yaml` entry is for a finding

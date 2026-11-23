@@ -31,7 +31,6 @@
 | The 32-bit ARM qemu lane on a laptop | the pacing-sensitive tests (`LockLaws.TheRunReachedEveryRoleAndEveryPath`, `send_path_bench_smoke`) miss their deadlines under qemu on a Mac; `ci-local.sh --with-armv7` runs it in a container on a machine you can leave alone, CI runs it on a runner |
 | Dependency review | the repository's Dependency graph setting is off; enabling it is the maintainer's, then `dependency_review_enabled` in `security.yml` and `release.yml` becomes `true` |
 | Locking the Gradle plugin classpath | only the shipped runtime classpaths are locked (`app/gradle.lockfile`); build plugins are not scanned for vulnerabilities |
-| STRICT lock mode | Gradle rejects `kotlin-stdlib-common`, which `kotlin-stdlib` 2.4 adds only as a constraint and never writes to a lockfile, so the default lock mode is used and `scripts/check-dependency-locks.sh` catches a stale lock by regenerating it |
 | `play/` documents against the Console | `CONTENT_RATING.md`, `DATA_SAFETY.md`, `PERMISSIONS_JUSTIFICATION.md` and `REVIEWER_NOTES.md` mirror what is declared by hand in the Play Console; each change to them needs the same change there |
 
 ## 3. Suppressions
