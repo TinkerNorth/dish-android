@@ -226,7 +226,7 @@ class UsbDeviceTable {
     static constexpr uint64_t CLAIMING = 1;
 
     static uint64_t tagOf(const int32_t deviceId) {
-        return (uint64_t{1} << 32) | static_cast<uint32_t>(deviceId);
+        return (uint64_t{1} << 32U) | static_cast<uint32_t>(deviceId);
     }
 
     // The sink a delivery may use: the pad's own, while the entry is still the pad's and not

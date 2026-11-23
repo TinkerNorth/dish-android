@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 #include "gamepad_input.h"
+#include "bits.h"
 #include "wire_encoders.h"
 
 #include <algorithm>
@@ -172,7 +173,8 @@ uint16_t lookUpXusbBit(const KeycodeMapping (&mappings)[N], const int32_t androi
 
 void setButtonBit(DeviceState& s, const uint16_t xusbBit, const bool down) {
     const uint16_t withBitSet = static_cast<uint16_t>(s.wButtons | xusbBit);
-    const uint16_t withBitCleared = static_cast<uint16_t>(s.wButtons & ~xusbBit);
+    const uint16_t withBitCleared =
+        dish_bits::low16(dish_bits::u32(s.wButtons) & ~dish_bits::u32(xusbBit));
     s.wButtons = down ? withBitSet : withBitCleared;
 }
 
@@ -275,7 +277,8 @@ uint8_t n64CBit(const N64Input input) {
 
 void setCButton(DeviceState& s, const uint8_t cBit, const bool down) {
     const uint8_t withBitSet = static_cast<uint8_t>(s.cButtons | cBit);
-    const uint8_t withBitCleared = static_cast<uint8_t>(s.cButtons & ~cBit);
+    const uint8_t withBitCleared =
+        dish_bits::lowByte(dish_bits::u32(s.cButtons) & ~dish_bits::u32(cBit));
     s.cButtons = down ? withBitSet : withBitCleared;
     applyCButtonStick(s, s.cButtons);
 }
@@ -396,7 +399,9 @@ bool switchLayoutConsumesKey(const int32_t androidKeycode) {
 }
 
 bool usesN64Layout(const uint8_t quirk) {
-    return (quirk & (QUIRK_N64_HID_LAYOUT | QUIRK_N64_DRIVER_LAYOUT)) != 0;
+    const uint32_t n64Layouts =
+        dish_bits::u32(QUIRK_N64_HID_LAYOUT) | dish_bits::u32(QUIRK_N64_DRIVER_LAYOUT);
+    return (dish_bits::u32(quirk) & n64Layouts) != 0U;
 }
 
 bool consumesKey(const int32_t androidKeycode, const uint8_t quirk) {
@@ -448,7 +453,8 @@ void applyAxes(DeviceState& s, const float x, const float y, const float z, cons
     if (!s.ltFromKey) s.bLT = scaleTrigger(leftTrigger, TRIGGER_MAX);
     if (!s.rtFromKey) s.bRT = scaleTrigger(rightTrigger, TRIGGER_MAX);
 
-    const uint16_t withoutDpad = static_cast<uint16_t>(s.wButtons & ~XUSB_DPAD_MASK);
+    const uint16_t withoutDpad =
+        dish_bits::low16(dish_bits::u32(s.wButtons) & ~dish_bits::u32(XUSB_DPAD_MASK));
     s.wButtons = static_cast<uint16_t>(withoutDpad | hatAxesToDpadBits(hatX, hatY));
 }
 
