@@ -23,6 +23,8 @@ TOOLS = read("scripts/tools.sh")
 SECURITY = read(".github/workflows/_security.yml")
 HARDEN = read(".github/workflows/_release_harden.yml")
 THIRD_PARTY = read("THIRD_PARTY.md")
+RELEASE = read(".github/workflows/release.yml")
+SECURITY_DOC = read("SECURITY.md")
 
 
 class ToolPinsTest(unittest.TestCase):
@@ -54,6 +56,20 @@ class ToolPinsTest(unittest.TestCase):
             with self.subTest(tool=tool):
                 self.assertIsNotNone(version)
                 self.assertRegex(THIRD_PARTY, rf"\*\*{re.escape(tool)}\*\* \(`{re.escape(version)}`")
+
+
+class ProvenanceRecipeTest(unittest.TestCase):
+    def test_the_recipe_names_the_generator_commit_release_yml_pins(self):
+        pinned = re.findall(r"generator_generic_slsa3\.yml@([0-9a-f]{40}) # v", RELEASE)
+
+        self.assertEqual(1, len(pinned))
+        self.assertIn(
+            f"generator_generic_slsa3.yml@{pinned[0]}",
+            SECURITY_DOC,
+        )
+
+    def test_the_recipe_verifies_with_cosign_not_slsa_verifier_for_new_releases(self):
+        self.assertIn("cosign verify-blob-attestation", SECURITY_DOC)
 
 
 if __name__ == "__main__":

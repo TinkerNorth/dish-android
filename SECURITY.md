@@ -231,6 +231,28 @@ the certificate; `satellite`, `dish-windows` and `dish-linux` used
 
 ### 4) Verify the SLSA L3 provenance
 
+`<repo>.intoto.jsonl` is a Sigstore bundle whose statement names every
+released file by SHA-256. For a release cut with the generator pinned by
+commit (every release after dish-android 2.7.0), it is signed by the SLSA
+generator at the exact commit the workflow pins, which `slsa-verifier` refuses
+("invalid ref") because that is not a release tag. Verify it with cosign,
+naming the generator's commit (the one in the provenance's `builder.id`; for
+dish-android it is the generator v2.1.0 commit
+`f7dd8c54c2067bafc12ca7a55595d5ee9b75204a`, the one `release.yml` pins):
+
+```bash
+cosign verify-blob-attestation \
+  --bundle "$REPO.intoto.jsonl" --new-bundle-format --type slsaprovenance \
+  --certificate-identity "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  <artifact-filename>
+```
+
+dish-android 2.7.0 and earlier were built with the generator called by its
+tag, so their certificate names `generator_generic_slsa3.yml@refs/tags/v2.1.0`.
+Either `slsa-verifier` or the same cosign command with that identity verifies
+them; both were run against 2.7.0 and `dish-2.7.0.apk` and passed:
+
 ```bash
 slsa-verifier verify-artifact <artifact-filename> \
   --provenance-path "$REPO.intoto.jsonl" \
@@ -238,10 +260,10 @@ slsa-verifier verify-artifact <artifact-filename> \
   --source-tag "$TAG"
 ```
 
-This proves the artifact was produced by a tagged run of `release.yml`
-on the named source repo. Output ends with
-`PASSED: SLSA verification passed`. (Run against dish-android 2.7.0 and
-`dish-2.7.0.apk`: passed.)
+`slsa-verifier` ends with `PASSED: SLSA verification passed`; cosign ends with
+`Verified OK`. The first release cut after the generator moved to a commit pin
+is the first the cosign form with the commit identity applies to; it is run
+against that release when it exists.
 
 ### 5) (Optional) Inspect the SBOM
 
