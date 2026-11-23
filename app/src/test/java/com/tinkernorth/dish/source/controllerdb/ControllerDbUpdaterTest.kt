@@ -4,6 +4,8 @@
 package com.tinkernorth.dish.source.controllerdb
 
 import com.tinkernorth.dish.core.controllerdb.ControllerDbCheckResult
+import com.tinkernorth.dish.core.controllerdb.ControllerDbGateway
+import com.tinkernorth.dish.core.controllerdb.FileReply
 import com.tinkernorth.dish.core.controllerdb.ControllerDbSource
 import com.tinkernorth.dish.core.controllerdb.FakeControllerDbGateway
 import com.tinkernorth.dish.core.controllerdb.ManifestReply
@@ -14,6 +16,7 @@ import com.tinkernorth.dish.repository.ControllerDbRepository
 import com.tinkernorth.dish.repository.mapBackedPrefs
 import com.tinkernorth.dish.source.store.ControllerDbPreferenceStore
 import com.tinkernorth.dish.source.store.ControllerDbPreferences
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -22,11 +25,27 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.io.IOException
+
+// A served side that fails every manifest request with [failure], counting them.
+private class ThrowingGateway(
+    private val failure: Throwable,
+) : ControllerDbGateway {
+    var manifestRequests = 0
+
+    override suspend fun manifest(etag: String?): ManifestReply {
+        manifestRequests++
+        throw failure
+    }
+
+    override suspend fun file(path: String): FileReply = throw failure
+}
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ControllerDbUpdaterTest {
@@ -37,12 +56,15 @@ class ControllerDbUpdaterTest {
     private val pushed = mutableListOf<ServedRows>()
     private val prefsStore = ControllerDbPreferenceStore(mapBackedPrefs().first)
 
-    private fun TestScope.updater(): ControllerDbUpdater {
+    private fun TestScope.updater(
+        served: ControllerDbGateway = gateway,
+        readBundled: (String) -> ByteArray = { File(assets, it).readBytes() },
+    ): ControllerDbUpdater {
         val dispatcher = StandardTestDispatcher(testScheduler)
         return ControllerDbUpdater(
-            repository = ControllerDbRepository(tmp.root, { File(assets, it).readBytes() }, testJson),
+            repository = ControllerDbRepository(tmp.root, readBundled, testJson),
             prefs = prefsStore,
-            gateway = gateway,
+            gateway = served,
             pushRows = ::recordPush,
             scope = backgroundScope,
             io = dispatcher,
@@ -170,11 +192,57 @@ class ControllerDbUpdaterTest {
         }
 
     @Test
+    fun `a check that fails with something other than an IOException is invalid, and the next tick still checks`() =
+        runTest {
+            val failing = ThrowingGateway(IllegalStateException("not a network failure"))
+            updater(served = failing).start()
+            advanceTimeBy(10_001)
+            val first = prefsStore.state.value.lastCheckResult
+            advanceTimeBy(SIX_HOURS_MS)
+
+            assertEquals(ControllerDbCheckResult.INVALID, first)
+            assertEquals(2, failing.manifestRequests)
+        }
+
+    @Test
+    fun `a failed check keeps the etag it had`() =
+        runTest {
+            prefsStore.recordCheck(NOW_MS, ControllerDbCheckResult.UP_TO_DATE, "\"etag-1\"")
+            updater(served = ThrowingGateway(IllegalStateException("broken"))).start()
+            advanceTimeBy(10_001)
+
+            assertEquals("\"etag-1\"", prefsStore.state.value.etag)
+        }
+
+    @Test
+    fun `a cancelled check is not recorded as a result`() =
+        runTest {
+            updater(served = ThrowingGateway(CancellationException("the process scope ended"))).start()
+            advanceTimeBy(10_001)
+
+            assertNull(prefsStore.state.value.lastCheckResult)
+        }
+
+    @Test
+    fun `a bundled copy that does not load leaves an empty database in force, and the checks still run`() =
+        runTest {
+            val updater = updater(readBundled = ::aBrokenApk)
+            updater.start()
+            advanceTimeBy(10_001)
+
+            assertEquals(0, updater.status.value.bundledVersion)
+            assertEquals(2, updater.status.value.activeVersion)
+            assertEquals(1, gateway.manifestRequests)
+        }
+
+    @Test
     fun `the switch off is the result whatever the last check said`() {
         val prefs = ControllerDbPreferences(checksEnabled = false, lastCheckResult = ControllerDbCheckResult.UPDATED)
         assertEquals(ControllerDbCheckResult.OFF, effectiveCheckResult(prefs))
         assertTrue(effectiveCheckResult(prefs.copy(checksEnabled = true)) == ControllerDbCheckResult.UPDATED)
     }
+
+    private fun aBrokenApk(path: String): ByteArray = throw IOException("$path is missing from the APK")
 
     private companion object {
         const val NOW_MS = 1_763_586_000_000L
