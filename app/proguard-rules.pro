@@ -43,6 +43,31 @@
     native <methods>;
 }
 
+# The other upcall targets: each method native code resolves by name in its bridge's
+# nativeInstall (satellite_jni.cpp, resolveStaticMethod). Nothing in Kotlin calls them, so without
+# these R8 removes them and the bridge goes silent. NativeLookupKeepRulesTest fails on a lookup
+# with no rule here, and scripts/check_jni_keeps.py checks the minified APK's dex.
+-keep class com.tinkernorth.dish.hotpath.input.FeedbackBridge {
+    public static void dispatchLightbar(int, int, int, int, int);
+    public static void dispatchTriggerEffects(int, int, byte[]);
+    public static void dispatchPlayerLeds(int, int, int);
+    public static void dispatchMicLed(int, int, int);
+}
+-keep class com.tinkernorth.dish.hotpath.input.MoonlightGamepadBridge {
+    public static void dispatchReport(java.lang.String, int, int, int, int, int, int, int, int);
+    public static void dispatchMotion(java.lang.String, int, int, int, int, int, int, int, int);
+    public static void dispatchTouch(java.lang.String, int, boolean, int, int, int, boolean, int, int, int, boolean);
+}
+-keep class com.tinkernorth.dish.hotpath.input.SteamBleBridge {
+    public static boolean write(int, int, byte[]);
+}
+-keep class com.tinkernorth.dish.hotpath.input.MicMuteBridge {
+    public static void dispatchPadMicMute(int, boolean);
+}
+-keep class com.tinkernorth.dish.hotpath.audio.SpeakerAudioBridge {
+    public static void dispatchAudioFrame(int, int, int, short[], boolean);
+}
+
 # Catch-all: any class anywhere that declares a native method must keep its
 # class name + that method's signature. Belt-and-braces against future
 # additions outside the explicit list above.

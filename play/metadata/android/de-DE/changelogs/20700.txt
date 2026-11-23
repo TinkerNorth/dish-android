@@ -1,6 +1,6 @@
 Dish 2.7.0: eine Controller-Liste, die sich selbst aktualisiert, und Probleme melden.
 
-• Dish fragt dish.tinkernorth.com nach neuer Controller-Unterstützung. In den Einstellungen: Automatisch nach Controller-Updates suchen, standardmäßig an.
-• Die Diagnose zeigt bekannte Probleme und den letzten Schreibvorgang jedes Controllers; Problem melden schickt deine Worte und eine Datei an den Support.
+• Dish fragt dish.tinkernorth.com nach neuen Controllern.
+• Die Diagnose zeigt bekannte Probleme und den letzten Schreibvorgang; Problem melden schickt eine Datei an den Support.
 • Der Inspektor fragt nach jedem Test, ob es funktioniert hat.
-• Satellite braucht kein Update.
+• Behoben: Leuchtleiste, Spieler-LEDs, Adaptive Trigger, Mikrofonlampe, Controller-Ton, Haptik, Stummtaste, Moonlight und Steam Controller über Bluetooth.

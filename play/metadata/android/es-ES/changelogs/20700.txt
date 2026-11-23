@@ -1,6 +1,6 @@
 Dish 2.7.0: una lista de mandos que se actualiza sola y una forma de informar de problemas.
 
-• Dish consulta dish.tinkernorth.com para obtener soporte de mandos nuevos. En Ajustes está Buscar actualizaciones de mandos automáticamente, activado por defecto.
-• Diagnósticos muestra los problemas conocidos y la última escritura de cada mando; Informar de un problema envía tu texto y un archivo a soporte.
+• Dish consulta dish.tinkernorth.com por mandos nuevos.
+• Diagnósticos muestra los problemas conocidos y la última escritura; Informar de un problema envía un archivo.
 • El inspector pregunta si ha funcionado tras cada prueba.
-• Satellite no necesita actualizarse.
+• Corregido: barra de luz, LED de jugador, gatillos adaptativos, luz del micrófono, sonido del mando, háptica, botón de silencio, Moonlight y Steam Controller por Bluetooth.

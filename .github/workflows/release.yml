@@ -328,6 +328,15 @@ jobs:
           python3 scripts/check_apk_abis.py "$(find dist -maxdepth 1 -name '*.aab' | head -1)" armeabi-v7a arm64-v8a x86_64
           python3 scripts/check_apk_abis.py "$(find dist-amazon -maxdepth 1 -name '*-amazon.apk' | head -1)" armeabi-v7a arm64-v8a x86_64
 
+      # R8 removes what no Kotlin code calls, which is every upcall native code makes; a build
+      # missing one runs with a silent bridge and must not ship.
+      - name: Every release build keeps the members native code resolves by name
+        run: |
+          set -euo pipefail
+          python3 scripts/check_jni_keeps.py dist/dish.apk
+          python3 scripts/check_jni_keeps.py "$(find dist -maxdepth 1 -name '*.aab' | head -1)"
+          python3 scripts/check_jni_keeps.py "$(find dist-amazon -maxdepth 1 -name '*-amazon.apk' | head -1)"
+
       # Auto-update manifest, fetched by the GitHub build of the app from the
       # stable permalink releases/latest/download/latest.json. The client only
       # opens the release page, but the sha256 and size make the file a

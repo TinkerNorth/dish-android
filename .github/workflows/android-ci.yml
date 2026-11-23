@@ -81,6 +81,13 @@ jobs:
           python scripts/check_apk_abis.py app/build/outputs/apk/play/debug/app-play-debug.apk armeabi-v7a arm64-v8a x86_64
           python scripts/check_apk_abis.py app/build/outputs/apk/amazon/debug/app-amazon-debug.apk armeabi-v7a arm64-v8a x86_64
 
+      # Debug builds are not minified, so only a release build shows whether R8 kept every
+      # member native code resolves by name; the release workflow runs the same check.
+      - name: A minified build keeps every member native code resolves by name
+        run: |
+          ./gradlew :app:assembleGithubRelease
+          python scripts/check_jni_keeps.py app/build/outputs/apk/github/release/app-github-release-unsigned.apk
+
       - name: libsodium uses 128-bit arithmetic on 64-bit ABIs only
         run: python scripts/check_sodium_ti_mode.py app/.cxx
 

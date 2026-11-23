@@ -920,7 +920,8 @@ Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_releaseAllPhysicalReports(
 }
 
 // A bridge method that is missing degrades to a silent bridge rather than a pending exception:
-// the miss is logged once here and cleared.
+// the miss is logged once here and cleared, so a person's app never crashes for it. A release
+// build cannot ship with one missing: scripts/check_jni_keeps.py fails it on its dex.
 static jmethodID resolveStaticMethod(JNIEnv* env, const jclass cls, const char* owner,
                                      const char* name, const char* signature) {
     const jmethodID method = env->GetStaticMethodID(cls, name, signature);

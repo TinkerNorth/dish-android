@@ -113,6 +113,21 @@ file.
   not recorded, kept or sent. The policy said the permission is asked for
   only from a controller's Microphone switch; it now names both places.
 
+### Fixed
+
+- **What the computer sends back reaches your controller in the store and
+  GitHub builds.** Since 2.4.0 the builds on Google Play, the Amazon
+  Appstore and GitHub left out parts of the app that the controller code
+  calls, so these never worked there (they did in builds made from the
+  source): the light bar, player LEDs, adaptive triggers and mic lamp a
+  Satellite game sets; a game's controller sound to the controller's speaker
+  and its HD haptics to a DualSense; a DualSense's own mute button; and a controller in Direct mode or
+  on Bluetooth reaching a Moonlight host (Sunshine, Apollo, Wolf), its buttons,
+  motion and touchpad. Since 2.6.0, a Steam Controller paired over Bluetooth
+  never took what Dish wrote to it: its settings, its rumble and its trackpad
+  setup. All of them work now, and a build missing any of them can no longer
+  be published. Rumble and the Bluetooth gamepad mode were never affected.
+
 ## [2.6.1] - 2026-11-19
 
 ### Fixed

@@ -1,6 +1,6 @@
 Dish 2.7.0: uma lista de controles que se atualiza sozinha e um jeito de relatar problemas.
 
-• O Dish consulta o dish.tinkernorth.com para dar suporte a controles novos. Nas Configurações está Verificar atualizações de controles automaticamente, ligado por padrão.
-• O diagnóstico mostra os problemas conhecidos e a última escrita de cada controle; Relatar um problema manda seu texto e um arquivo.
+• O Dish consulta o dish.tinkernorth.com por controles novos.
+• O diagnóstico mostra os problemas conhecidos e a última escrita; Relatar um problema manda um arquivo.
 • O inspetor pergunta se funcionou depois de cada teste.
-• O Satellite não precisa de atualização.
+• Corrigido: barra de luz, LEDs de jogador, gatilhos adaptáveis, luz do microfone, som do controle, háptica, botão de mudo, Moonlight e Steam Controller por Bluetooth.
