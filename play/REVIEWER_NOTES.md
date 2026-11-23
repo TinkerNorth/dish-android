@@ -4,7 +4,7 @@
 
 Dish turns an Android phone into a wireless gamepad. It has two operating modes:
 
-1. **Wi-Fi mode (recommended)**: pairs over the LAN with a free helper called Satellite running on a Windows/macOS/Linux PC, then streams encrypted controller input via UDP.
+1. **Wi-Fi mode (recommended)**: pairs over the LAN with a free helper called Satellite running on a Windows or Linux PC, then streams encrypted controller input via UDP.
 2. **Bluetooth HID mode**: pairs to any device that accepts a Bluetooth gamepad (PC, console, set-top box).
 
 ## Fastest way to test (no extra software)
@@ -19,7 +19,7 @@ Dish turns an Android phone into a wireless gamepad. It has two operating modes:
 
 ## Testing Wi-Fi mode
 
-A demo Satellite is available from https://github.com/TinkerNorth/satellite/releases (installers for Windows, macOS, and Linux). The 4-digit pairing PIN is shown by Satellite when it starts.
+A demo Satellite is available from https://github.com/TinkerNorth/satellite/releases (installers for Windows and Linux). The 4-digit pairing PIN is shown by Satellite when it starts.
 
 ## Foreground service rationale
 

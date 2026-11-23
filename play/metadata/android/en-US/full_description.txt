@@ -20,7 +20,7 @@ DESIGNED FOR GAMING
 
 GET SATELLITE
 
-The free Satellite helper is available for Windows, macOS, and Linux at https://dish.tinkernorth.com/downloads/satellite. Bluetooth-host mode works without Satellite, but the Wi-Fi path is the best experience.
+The free Satellite helper is available for Windows and Linux at https://dish.tinkernorth.com/downloads/satellite. Bluetooth-host mode works without Satellite, but the Wi-Fi path is the best experience.
 
 FOR TINKERERS
 
