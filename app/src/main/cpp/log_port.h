@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include <cstdarg>
 #include <cstdio>
 
 #ifdef __ANDROID__
@@ -15,33 +14,32 @@ namespace dish_log {
 
 inline constexpr const char* kTag = "SatelliteJNI";
 
+// A message with arguments is a printf format and its arguments, forwarded as a parameter pack
+// (cert-dcl50-cpp: no C-style variadic definitions). A message with none goes through "%s", so a
+// literal that happens to hold a percent sign is never read as a format.
 #ifdef __ANDROID__
-inline void write(const int priority, const char* fmt, va_list args) {
-    __android_log_vprint(priority, kTag, fmt, args);
+template <typename... Args> void write(const int priority, const char* fmt, const Args&... args) {
+    __android_log_print(priority, kTag, fmt, args...);
 }
 inline constexpr int kInfo = ANDROID_LOG_INFO;
 inline constexpr int kError = ANDROID_LOG_ERROR;
 #else
-inline void write(const int, const char* fmt, va_list args) {
-    std::vfprintf(stderr, fmt, args);
+template <typename... Args> void write(const int, const char* fmt, const Args&... args) {
+    std::fprintf(stderr, fmt, args...);
     std::fputc('\n', stderr);
 }
 inline constexpr int kInfo = 0;
 inline constexpr int kError = 1;
 #endif
 
-__attribute__((format(printf, 1, 2))) inline void info(const char* fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    write(kInfo, fmt, args);
-    va_end(args);
+inline void info(const char* message) { write(kInfo, "%s", message); }
+template <typename... Args> void info(const char* fmt, const Args&... args) {
+    write(kInfo, fmt, args...);
 }
 
-__attribute__((format(printf, 1, 2))) inline void error(const char* fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    write(kError, fmt, args);
-    va_end(args);
+inline void error(const char* message) { write(kError, "%s", message); }
+template <typename... Args> void error(const char* fmt, const Args&... args) {
+    write(kError, fmt, args...);
 }
 
 } // namespace dish_log

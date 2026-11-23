@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include "text_format.h"
 
 #include "wire_encoders.h"
 
@@ -86,14 +87,12 @@ inline constexpr size_t kCountScratch = 48;
 
 inline void appendCounts(std::string& out, const char* const* names, const uint32_t* counts,
                          const size_t kinds) {
-    out += "{";
-    char entry[kCountScratch];
+    out += '{';
     for (size_t i = 0; i < kinds; i++) {
-        snprintf(entry, sizeof(entry), "%s\"%s\":%u", i == 0 ? "" : ",", names[i],
-                 (unsigned)counts[i]);
-        out += entry;
+        dish_text::appendFormatted<kCountScratch>(out, "%s\"%s\":%u", i == 0 ? "" : ",", names[i],
+                                                  static_cast<unsigned>(counts[i]));
     }
-    out += "}";
+    out += '}';
 }
 
 } // namespace detail
@@ -105,7 +104,7 @@ inline std::string messageCountsJson(const uint32_t (&sent)[SENT_KINDS],
     detail::appendCounts(out, SENT_NAMES, sent, SENT_KINDS);
     out += ",\"received\":";
     detail::appendCounts(out, RECEIVED_NAMES, received, RECEIVED_KINDS);
-    out += "}";
+    out += '}';
     return out;
 }
 
