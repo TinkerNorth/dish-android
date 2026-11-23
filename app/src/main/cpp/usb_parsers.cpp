@@ -365,18 +365,20 @@ namespace {
 #ifdef __ANDROID__
 constexpr const char* kLogTag = "SatelliteUsbParse";
 
-__attribute__((format(printf, 1, 2))) void logInfo(const char* fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    __android_log_vprint(ANDROID_LOG_INFO, kLogTag, fmt, args);
-    va_end(args);
+inline void logInfo(const char* message) {
+    __android_log_print(ANDROID_LOG_INFO, kLogTag, "%s", message);
 }
 
-__attribute__((format(printf, 1, 2))) void logError(const char* fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    __android_log_vprint(ANDROID_LOG_ERROR, kLogTag, fmt, args);
-    va_end(args);
+template <typename... Args> void logInfo(const char* fmt, const Args&... args) {
+    __android_log_print(ANDROID_LOG_INFO, kLogTag, fmt, args...);
+}
+
+inline void logError(const char* message) {
+    __android_log_print(ANDROID_LOG_ERROR, kLogTag, "%s", message);
+}
+
+template <typename... Args> void logError(const char* fmt, const Args&... args) {
+    __android_log_print(ANDROID_LOG_ERROR, kLogTag, fmt, args...);
 }
 
 // WRITE_OK, WRITE_ERR_SHORT, or the errno the transfer failed with.
@@ -819,14 +821,15 @@ void setBatteryUnknown(DeviceState& s) {
 // hid-playstation's status[0]: low nibble the charge in tenths, 0x10 the cable. With the cable in,
 // 10 is still charging, 11 is full, and 12..15 are the firmware's error states.
 void decodeDs4Battery(const uint8_t status, DeviceState& s) {
-    const uint8_t tenths = (uint8_t)(status & kSonyTenthsMask);
+    const auto tenths = static_cast<uint8_t>(status & kSonyTenthsMask);
     const bool cableIn = (status & kDs4CableBit) != 0;
     s.batteryValid = true;
     if (!cableIn) return setBattery(s, sonyTenthsToPercent(tenths), PAD_BATTERY_STATUS_DISCHARGING);
 
     const bool stillCharging = tenths <= kSonyTenthsStillCharging;
-    if (stillCharging)
+    if (stillCharging) {
         return setBattery(s, sonyTenthsToPercent(tenths), PAD_BATTERY_STATUS_CHARGING);
+    }
 
     const bool full = tenths == kSonyTenthsFull;
     if (full) return setBattery(s, (uint8_t)kPercentFull, PAD_BATTERY_STATUS_FULL);
@@ -836,7 +839,7 @@ void decodeDs4Battery(const uint8_t status, DeviceState& s) {
 // hid-playstation's status: low nibble the charge in tenths, high nibble the state. 0xA/0xB are a
 // temperature or voltage fault and 0xF a charging fault; a fault has no charge worth showing.
 void decodeDualSenseBattery(const uint8_t status, DeviceState& s) {
-    const uint8_t tenths = (uint8_t)(status & kSonyTenthsMask);
+    const auto tenths = static_cast<uint8_t>(status & kSonyTenthsMask);
     const uint8_t state = dish_bits::lowByte(dish_bits::u32(status) >> kDs5BatteryStateShift);
     s.batteryValid = true;
     switch (state) {
@@ -915,10 +918,16 @@ constexpr uint8_t kDs5EdgeRightPaddleBit = 0x80;
 
 uint32_t dualSenseEdgeExtendedButtons(const uint8_t misc) {
     uint32_t word = 0;
-    if (misc & kDs5EdgeLeftFnBit) word |= dish_wire::EXT_BUTTON_LEFT_PADDLE2;
-    if (misc & kDs5EdgeRightFnBit) word |= dish_wire::EXT_BUTTON_RIGHT_PADDLE2;
-    if (misc & kDs5EdgeLeftPaddleBit) word |= dish_wire::EXT_BUTTON_LEFT_PADDLE1;
-    if (misc & kDs5EdgeRightPaddleBit) word |= dish_wire::EXT_BUTTON_RIGHT_PADDLE1;
+    if (dish_bits::anyBit(misc, kDs5EdgeLeftFnBit)) { word |= dish_wire::EXT_BUTTON_LEFT_PADDLE2; }
+    if (dish_bits::anyBit(misc, kDs5EdgeRightFnBit)) {
+        word |= dish_wire::EXT_BUTTON_RIGHT_PADDLE2;
+    }
+    if (dish_bits::anyBit(misc, kDs5EdgeLeftPaddleBit)) {
+        word |= dish_wire::EXT_BUTTON_LEFT_PADDLE1;
+    }
+    if (dish_bits::anyBit(misc, kDs5EdgeRightPaddleBit)) {
+        word |= dish_wire::EXT_BUTTON_RIGHT_PADDLE1;
+    }
     return word;
 }
 
@@ -1084,9 +1093,10 @@ bool decodeSwitchProUsb(const uint8_t* buf, const size_t len, DeviceState& s, Pa
     const uint8_t leftByte = buf[kSwitchLeftByte];
 
     s.wButtons = decodeSwitchProButtons(rightByte, sharedByte, leftByte);
-    s.extButtons = (sharedByte & kSwitchCaptureBit) ? dish_wire::EXT_BUTTON_MISC1 : 0;
-    s.bLT = (leftByte & kSwitchZlBit) ? kTriggerMax : 0;
-    s.bRT = (rightByte & kSwitchZrBit) ? kTriggerMax : 0;
+    s.extButtons =
+        dish_bits::anyBit(sharedByte, kSwitchCaptureBit) ? dish_wire::EXT_BUTTON_MISC1 : 0;
+    s.bLT = dish_bits::anyBit(leftByte, kSwitchZlBit) ? kTriggerMax : 0;
+    s.bRT = dish_bits::anyBit(rightByte, kSwitchZrBit) ? kTriggerMax : 0;
 
     decodeSwitchLeftStick(buf, sticks, s);
     decodeSwitchRightStick(buf, sticks, s);
@@ -1117,10 +1127,10 @@ constexpr uint8_t kN64LeftZBit = 0x80;
 
 uint8_t n64CButtons(const uint8_t right, const uint8_t shared) {
     uint8_t c = 0;
-    if (right & kN64RightCUpBit) c |= gamepad::N64_C_UP;
-    if (right & kN64RightCDownBit) c |= gamepad::N64_C_DOWN;
-    if (right & kN64RightCLeftBit) c |= gamepad::N64_C_LEFT;
-    if (shared & kN64SharedCRightBit) c |= gamepad::N64_C_RIGHT;
+    if (dish_bits::anyBit(right, kN64RightCUpBit)) c |= gamepad::N64_C_UP;
+    if (dish_bits::anyBit(right, kN64RightCDownBit)) c |= gamepad::N64_C_DOWN;
+    if (dish_bits::anyBit(right, kN64RightCLeftBit)) c |= gamepad::N64_C_LEFT;
+    if (dish_bits::anyBit(shared, kN64SharedCRightBit)) c |= gamepad::N64_C_RIGHT;
     return c;
 }
 
@@ -1136,8 +1146,8 @@ bool decodeSwitchN64Usb(const uint8_t* buf, const size_t len, DeviceState& s, Pa
     const uint16_t leftSide = buttonsFromByte(leftByte, kN64LeftByteBits);
     s.wButtons = dish_bits::low16(dish_bits::u32(rightSide) | dish_bits::u32(middle) |
                                   dish_bits::u32(leftSide));
-    s.bLT = (leftByte & kN64LeftZBit) ? kTriggerMax : 0;
-    s.bRT = (sharedByte & kN64SharedZrBit) ? kTriggerMax : 0;
+    s.bLT = dish_bits::anyBit(leftByte, kN64LeftZBit) ? kTriggerMax : 0;
+    s.bRT = dish_bits::anyBit(sharedByte, kN64SharedZrBit) ? kTriggerMax : 0;
 
     decodeSwitchLeftStick(buf, sticks, s);
     gamepad::applyCButtonStick(s, n64CButtons(rightByte, sharedByte));
@@ -1275,19 +1285,19 @@ int16_t steamAccelToWire(const int32_t raw) {
 
 uint16_t decodeSteamButtons(const uint32_t btn) {
     uint16_t buttons = 0;
-    if (btn & kSteamSouth) buttons |= XUSB_A;
-    if (btn & kSteamEast) buttons |= XUSB_B;
-    if (btn & kSteamWest) buttons |= XUSB_X;
-    if (btn & kSteamNorth) buttons |= XUSB_Y;
-    if (btn & kSteamLeftBumper) buttons |= XUSB_LB;
-    if (btn & kSteamRightBumper) buttons |= XUSB_RB;
-    if (btn & kSteamMenu) buttons |= XUSB_BACK;
-    if (btn & kSteamEscape) buttons |= XUSB_START;
-    if (btn & kSteamGuide) buttons |= XUSB_GUIDE;
-    if (btn & kSteamDpadUp) buttons |= XUSB_DPAD_UP;
-    if (btn & kSteamDpadDown) buttons |= XUSB_DPAD_DOWN;
-    if (btn & kSteamDpadLeft) buttons |= XUSB_DPAD_LEFT;
-    if (btn & kSteamDpadRight) buttons |= XUSB_DPAD_RIGHT;
+    if (dish_bits::anyBit(btn, kSteamSouth)) buttons |= XUSB_A;
+    if (dish_bits::anyBit(btn, kSteamEast)) buttons |= XUSB_B;
+    if (dish_bits::anyBit(btn, kSteamWest)) buttons |= XUSB_X;
+    if (dish_bits::anyBit(btn, kSteamNorth)) buttons |= XUSB_Y;
+    if (dish_bits::anyBit(btn, kSteamLeftBumper)) buttons |= XUSB_LB;
+    if (dish_bits::anyBit(btn, kSteamRightBumper)) buttons |= XUSB_RB;
+    if (dish_bits::anyBit(btn, kSteamMenu)) buttons |= XUSB_BACK;
+    if (dish_bits::anyBit(btn, kSteamEscape)) buttons |= XUSB_START;
+    if (dish_bits::anyBit(btn, kSteamGuide)) buttons |= XUSB_GUIDE;
+    if (dish_bits::anyBit(btn, kSteamDpadUp)) buttons |= XUSB_DPAD_UP;
+    if (dish_bits::anyBit(btn, kSteamDpadDown)) buttons |= XUSB_DPAD_DOWN;
+    if (dish_bits::anyBit(btn, kSteamDpadLeft)) buttons |= XUSB_DPAD_LEFT;
+    if (dish_bits::anyBit(btn, kSteamDpadRight)) buttons |= XUSB_DPAD_RIGHT;
     return buttons;
 }
 
@@ -1295,10 +1305,14 @@ uint16_t decodeSteamButtons(const uint32_t btn) {
 // trigger clicks. The pad clicks are the trackpad router's.
 uint32_t steamExtendedButtons(const uint32_t btn) {
     uint32_t word = 0;
-    if (btn & kSteamBackLeft) word |= dish_wire::EXT_BUTTON_LEFT_PADDLE1;
-    if (btn & kSteamBackRight) word |= dish_wire::EXT_BUTTON_RIGHT_PADDLE1;
-    if (btn & kSteamLeftTriggerClick) word |= dish_wire::EXT_BUTTON_LEFT_TRIGGER_CLICK;
-    if (btn & kSteamRightTriggerClick) word |= dish_wire::EXT_BUTTON_RIGHT_TRIGGER_CLICK;
+    if (dish_bits::anyBit(btn, kSteamBackLeft)) word |= dish_wire::EXT_BUTTON_LEFT_PADDLE1;
+    if (dish_bits::anyBit(btn, kSteamBackRight)) word |= dish_wire::EXT_BUTTON_RIGHT_PADDLE1;
+    if (dish_bits::anyBit(btn, kSteamLeftTriggerClick)) {
+        word |= dish_wire::EXT_BUTTON_LEFT_TRIGGER_CLICK;
+    }
+    if (dish_bits::anyBit(btn, kSteamRightTriggerClick)) {
+        word |= dish_wire::EXT_BUTTON_RIGHT_TRIGGER_CLICK;
+    }
     return word;
 }
 
@@ -1344,7 +1358,7 @@ void trackSteamLeftStick(const uint8_t* buf, const uint32_t btn, ParserState& st
         st.steamStickX = 0;
         st.steamStickY = 0;
     }
-    if (btn & kSteamStickButton) buttons |= XUSB_THUMB_L;
+    if (dish_bits::anyBit(btn, kSteamStickButton)) buttons |= XUSB_THUMB_L;
 }
 
 void publishSteamMotion(const SteamImu& imu, DeviceState& s) {
@@ -1553,7 +1567,7 @@ bool readSteamBleChunks(const uint8_t* packet, const size_t len, SteamBleHeld& h
 // are chunks of their own, so the stick's click is only ever its own bit.
 void publishSteamBleHeld(const SteamBleHeld& held, DeviceState& s, ParserState& st) {
     uint16_t buttons = decodeSteamButtons(held.buttons);
-    if (held.buttons & kSteamStickButton) buttons |= XUSB_THUMB_L;
+    if (dish_bits::anyBit(held.buttons, kSteamStickButton)) buttons |= XUSB_THUMB_L;
     s.wButtons = buttons;
     s.extButtons = steamExtendedButtons(held.buttons);
     s.bLT = steamTriggerToWire(held.leftTrigger);
@@ -1975,7 +1989,7 @@ bool decodeReport(const Parser p, const uint8_t* buf, const size_t len, DeviceSt
     case Parser::XBOX_ONE_GIP:
         return sticks != nullptr && decodeXboxOneGip(buf, len, s, *sticks);
     case Parser::DUALSHOCK4:
-        return decodeDualShock4(buf, len, s, sticks ? &sticks->psImu : nullptr);
+        return decodeDualShock4(buf, len, s, sticks != nullptr ? &sticks->psImu : nullptr);
     case Parser::DUALSENSE:
         return decodeDualSense(buf, len, s, sticks);
     case Parser::SWITCH_PRO_USB:
@@ -2092,8 +2106,8 @@ bool decodeGenericHidGamepad(const uint8_t* buf, const size_t len, DeviceState& 
     const uint8_t btnLo = buf[kHidButtonsLoByte];
     const uint8_t btnHi = buf[kHidButtonsHiByte];
     s.wButtons = decodeGenericHidButtons(btnLo, btnHi);
-    s.bLT = (btnHi & kHidLeftTriggerBit) ? kTriggerMax : 0;
-    s.bRT = (btnHi & kHidRightTriggerBit) ? kTriggerMax : 0;
+    s.bLT = dish_bits::anyBit(btnHi, kHidLeftTriggerBit) ? kTriggerMax : 0;
+    s.bRT = dish_bits::anyBit(btnHi, kHidRightTriggerBit) ? kTriggerMax : 0;
     return true;
 }
 

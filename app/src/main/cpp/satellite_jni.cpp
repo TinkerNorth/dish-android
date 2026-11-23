@@ -51,7 +51,6 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
 using dish_bridge::BridgeConnectionId;
-using dish_session::CTRL_INDEX_MASK;
 using dish_slots::BridgeReport;
 using dish_slots::SlotKind;
 
@@ -100,7 +99,7 @@ static void callMicMuteUpcall(JNIEnv* env, const int32_t deviceId, const bool mu
     if (g_micMuteBridgeClass == nullptr || g_micMutePadMethod == nullptr) return;
     env->CallStaticVoidMethod(g_micMuteBridgeClass, g_micMutePadMethod, (jint)deviceId,
                               (jboolean)muted);
-    if (env->ExceptionCheck()) env->ExceptionClear();
+    if (env->ExceptionCheck() != JNI_FALSE) env->ExceptionClear();
 }
 
 // Which static method carries this report. Answers false when the class or the method never
@@ -177,11 +176,11 @@ static void dispatchBridgeReport(JNIEnv* env, const BridgeReport& r) {
         r.connection,
         [](const uint32_t connection) { return g_slotTable.bridgeConnectionId(connection); }, refs);
     if (connId == nullptr) {
-        if (env->ExceptionCheck()) env->ExceptionClear();
+        if (env->ExceptionCheck() != JNI_FALSE) env->ExceptionClear();
         return;
     }
     callBridgeUpcall(env, cls, method, connId, r);
-    if (env->ExceptionCheck()) env->ExceptionClear();
+    if (env->ExceptionCheck() != JNI_FALSE) env->ExceptionClear();
 }
 
 // Attaches the calling thread to the JVM for the life of a dispatch loop. Null means the attach
@@ -238,7 +237,7 @@ static void deliverSpeakerPcm(JNIEnv* env, int handle, uint8_t ctrlIdx, int lane
     // either way.
     jshortArray samples = env->NewShortArray(dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES);
     if (samples == nullptr) {
-        if (env->ExceptionCheck()) env->ExceptionClear();
+        if (env->ExceptionCheck() != JNI_FALSE) env->ExceptionClear();
         return;
     }
     env->SetShortArrayRegion(samples, 0, dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES,
@@ -246,7 +245,7 @@ static void deliverSpeakerPcm(JNIEnv* env, int handle, uint8_t ctrlIdx, int lane
     env->CallStaticVoidMethod(g_speakerAudioBridgeClass, g_speakerAudioFrameMethod, (jint)handle,
                               (jint)ctrlIdx, (jint)lane, samples, (jboolean)concealed);
     env->DeleteLocalRef(samples);
-    if (env->ExceptionCheck()) env->ExceptionClear();
+    if (env->ExceptionCheck() != JNI_FALSE) env->ExceptionClear();
 }
 
 // Decoded speaker and haptic audio, made into the Kotlin upcalls on the audio dispatch thread.
@@ -294,21 +293,21 @@ class JniFeedbackSink final : public dish_receive::FeedbackSink {
         if (g_rumbleBridgeClass == nullptr || g_rumbleDispatchMethod == nullptr) return;
         env_->CallStaticVoidMethod(g_rumbleBridgeClass, g_rumbleDispatchMethod, (jint)handle,
                                    (jint)ctrlIdx, (jint)strong, (jint)weak, (jint)durationMs);
-        if (env_->ExceptionCheck()) env_->ExceptionClear();
+        if (env_->ExceptionCheck() != JNI_FALSE) env_->ExceptionClear();
     }
 
     void lightbar(const int handle, const dish_wire::LightbarPayload& lb) override {
         if (g_feedbackBridgeClass == nullptr || g_feedbackLightbarMethod == nullptr) return;
         env_->CallStaticVoidMethod(g_feedbackBridgeClass, g_feedbackLightbarMethod, (jint)handle,
                                    (jint)lb.ctrlIdx, (jint)lb.r, (jint)lb.g, (jint)lb.b);
-        if (env_->ExceptionCheck()) env_->ExceptionClear();
+        if (env_->ExceptionCheck() != JNI_FALSE) env_->ExceptionClear();
     }
 
     void triggerEffects(const int handle, const uint8_t ctrlIdx, const uint8_t* blocks) override {
         if (g_feedbackBridgeClass == nullptr || g_feedbackTriggerEffectsMethod == nullptr) return;
         jbyteArray array = env_->NewByteArray(dish_wire::TRIGGER_EFFECTS_PAYLOAD_BYTES);
         if (array == nullptr) {
-            if (env_->ExceptionCheck()) env_->ExceptionClear();
+            if (env_->ExceptionCheck() != JNI_FALSE) env_->ExceptionClear();
             return;
         }
         env_->SetByteArrayRegion(array, 0, dish_wire::TRIGGER_EFFECTS_PAYLOAD_BYTES,
@@ -316,21 +315,21 @@ class JniFeedbackSink final : public dish_receive::FeedbackSink {
         env_->CallStaticVoidMethod(g_feedbackBridgeClass, g_feedbackTriggerEffectsMethod,
                                    (jint)handle, (jint)ctrlIdx, array);
         env_->DeleteLocalRef(array);
-        if (env_->ExceptionCheck()) env_->ExceptionClear();
+        if (env_->ExceptionCheck() != JNI_FALSE) env_->ExceptionClear();
     }
 
     void playerLeds(const int handle, const dish_wire::PlayerLedsPayload& leds) override {
         if (g_feedbackBridgeClass == nullptr || g_feedbackPlayerLedsMethod == nullptr) return;
         env_->CallStaticVoidMethod(g_feedbackBridgeClass, g_feedbackPlayerLedsMethod, (jint)handle,
                                    (jint)leds.ctrlIdx, (jint)leds.ledMask);
-        if (env_->ExceptionCheck()) env_->ExceptionClear();
+        if (env_->ExceptionCheck() != JNI_FALSE) env_->ExceptionClear();
     }
 
     void micLed(const int handle, const dish_wire::MicLedPayload& led) override {
         if (g_feedbackBridgeClass == nullptr || g_feedbackMicLedMethod == nullptr) return;
         env_->CallStaticVoidMethod(g_feedbackBridgeClass, g_feedbackMicLedMethod, (jint)handle,
                                    (jint)led.ctrlIdx, (jint)led.state);
-        if (env_->ExceptionCheck()) env_->ExceptionClear();
+        if (env_->ExceptionCheck() != JNI_FALSE) env_->ExceptionClear();
     }
 
     // With no playback engine installed there is nothing to decode FOR, so the frame is dropped
@@ -430,7 +429,7 @@ bool writeBlePad(const int32_t padId, const uint8_t target, const uint8_t* bytes
     const jboolean written = env->CallStaticBooleanMethod(
         g_steamBleBridgeClass, g_steamBleWriteMethod, (jint)padId, (jint)target, value);
     env->DeleteLocalRef(value);
-    if (env->ExceptionCheck()) {
+    if (env->ExceptionCheck() != JNI_FALSE) {
         env->ExceptionClear();
         return false;
     }
@@ -542,7 +541,7 @@ static bool pumpLooperOnce(struct android_app* app) {
         return false;
     }
     if (source != nullptr) source->process(source->app, source);
-    return !app->destroyRequested;
+    return app->destroyRequested == 0;
 }
 
 // The filters consume every event inline on the input thread, so the buffers are only drained
@@ -560,7 +559,7 @@ void android_main(struct android_app* app) {
     app->keyEventFilter = gamepadKeyFilter;
     app->motionEventFilter = gamepadMotionFilter;
 
-    while (!app->destroyRequested) {
+    while (app->destroyRequested == 0) {
         if (!pumpLooperOnce(app)) break;
         drainInputBuffers(app);
     }
@@ -802,7 +801,7 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_disco
         int n = (int)recvfrom(sock, buf, sizeof(buf) - 1, 0, (struct sockaddr*)&from, &fl);
         if (n <= 0) continue;
         buf[n] = '\0';
-        if (!strstr(buf, "\"service\":\"satellite\"")) continue;
+        if (strstr(buf, "\"service\":\"satellite\"") == nullptr) continue;
         char ip[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &from.sin_addr, ip, sizeof(ip));
         bool dup = false;
@@ -818,13 +817,13 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_disco
         size_t cp = beacon.rfind('}');
         if (cp == std::string::npos) continue;
         std::string entry = beacon.substr(0, cp) + ",\"ip\":\"" + ip + "\"}";
-        if (!first) result += ",";
+        if (!first) result += ',';
         first = false;
         result += entry;
         LOGI("Discovered: %s", ip);
     }
     close(sock);
-    result += "]";
+    result += ']';
     return env->NewStringUTF(result.c_str());
 }
 
@@ -846,7 +845,7 @@ static void bindPhysicalSlotBridge(JNIEnv* env, jint deviceId, jstring connectio
     const ScopedThreadRole role(ThreadRole::Binding);
     const char* cstr = env->GetStringUTFChars(connectionId, nullptr);
     BridgeConnectionId id = bridgeConnectionIdOf(cstr);
-    if (cstr) env->ReleaseStringUTFChars(connectionId, cstr);
+    if (cstr != nullptr) env->ReleaseStringUTFChars(connectionId, cstr);
     g_slotTable.bindBridge(deviceId, std::move(id), kind, controllerIndex);
 }
 
@@ -1236,7 +1235,7 @@ static jboolean modelPredicate(const jint vid, const jint pid,
                                bool (*const predicate)(usbparsers::Parser)) {
     const usbparsers::KnownDevice* k =
         usbparsers::lookupModel(dish_bits::low16(vid), dish_bits::low16(pid));
-    if (!k) return JNI_FALSE;
+    if (k == nullptr) return JNI_FALSE;
     return predicate(k->parser) ? JNI_TRUE : JNI_FALSE;
 }
 
@@ -1363,7 +1362,7 @@ JNIEXPORT jlongArray JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_
     const jlong fields[] = {v.recorded ? 1 : 0, (jlong)v.route, (jlong)v.endpoint,
                             (jlong)v.reportId,  v.ok ? 1 : 0,   (jlong)v.err,
                             (jlong)last.ageMs};
-    const jsize n = (jsize)(sizeof(fields) / sizeof(fields[0]));
+    const auto n = static_cast<jsize>(sizeof(fields) / sizeof(fields[0]));
     jlongArray out = env->NewLongArray(n);
     if (out != nullptr) env->SetLongArrayRegion(out, 0, n, fields);
     return out;

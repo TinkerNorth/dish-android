@@ -2,6 +2,7 @@
 
 #include "usb_host.h"
 #include "bits.h"
+#include "text_format.h"
 
 #include <android/log.h>
 #include <linux/usbdevice_fs.h>
@@ -294,16 +295,16 @@ int setUpUrbSlots(DeviceCtx& ctx, std::unique_ptr<UrbSlot> (&storage)[kInFlightU
         slots[i] = storage[i].get();
     }
     int submitted = 0;
-    for (int i = 0; i < kInFlightUrbs; i++) {
-        if (!submitUrb(ctx, *slots[i])) break;
+    for (UrbSlot* slot : slots) {
+        if (!submitUrb(ctx, *slot)) break;
         submitted++;
     }
     return submitted;
 }
 
 UrbSlot* findCompletedSlot(UrbSlot* (&slots)[kInFlightUrbs], const usbdevfs_urb* reaped) {
-    for (int i = 0; i < kInFlightUrbs; i++) {
-        if (slots[i]->urb.get() == reaped) return slots[i];
+    for (UrbSlot* slot : slots) {
+        if (slot->urb.get() == reaped) return slot;
     }
     return nullptr;
 }
@@ -442,7 +443,7 @@ void publishReport(DeviceCtx& ctx, const uint8_t* report, const size_t len,
     hotpath::markInputRead(ctx.syntheticDeviceId); // stage-1 start: a fresh input report is in hand
     dish_usb::bump(ctx.entry->stats.urbCount);
     ackGipReport(ctx, report, len);
-    memset(&scratch, 0, sizeof(scratch));
+    scratch = gamepad::DeviceState{};
 
     const usbparsers::WirelessEvent wev = usbparsers::checkWirelessEvent(ctx.parser, report, len);
     if (wev != usbparsers::WirelessEvent::NONE) {
@@ -475,9 +476,9 @@ void DeviceCtx::report(const uint8_t* value, const size_t len) {
 
 void discardPendingUrbs(DeviceCtx& ctx, UrbSlot* (&slots)[kInFlightUrbs]) {
     int pendingCount = 0;
-    for (int i = 0; i < kInFlightUrbs; i++) {
-        if (!slots[i]->pending) continue;
-        ioctl(ctx.fd, USBDEVFS_DISCARDURB, slots[i]->urb.get());
+    for (UrbSlot* slot : slots) {
+        if (!slot->pending) continue;
+        ioctl(ctx.fd, USBDEVFS_DISCARDURB, slot->urb.get());
         pendingCount++;
     }
     while (pendingCount > 0) {
@@ -538,7 +539,7 @@ bool reapReadyUrbs(DeviceCtx& ctx, UrbSlot* (&slots)[kInFlightUrbs], gamepad::De
 
 // What one wait on the URB fd came back with. Idle covers both a timeout and an EINTR: neither
 // is an error and neither has a completion to reap.
-enum class PollOutcome { Ready, Idle, Stop };
+enum class PollOutcome : uint8_t { Ready, Idle, Stop };
 
 PollOutcome waitForUrbCompletion(DeviceCtx& ctx) {
     struct pollfd pfd = {};
@@ -553,7 +554,7 @@ PollOutcome waitForUrbCompletion(DeviceCtx& ctx) {
     return PollOutcome::Stop;
 }
 
-void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
+void pollLoop(const std::shared_ptr<DeviceCtx>& ctx) {
     const ScopedThreadRole role(ThreadRole::UsbPoller);
     dish::elevateCurrentThreadToInputPriority();
     std::unique_ptr<UrbSlot> slotStorage[kInFlightUrbs];
@@ -586,7 +587,7 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
 // Best effort; logs if the kernel refuses CONNECT.
 void releaseAndReattach(int fd, int interfaceNumber) {
     if (interfaceNumber < 0) return;
-    unsigned int iface = (unsigned int)interfaceNumber;
+    auto iface = static_cast<unsigned int>(interfaceNumber);
     ioctl(fd, USBDEVFS_RELEASEINTERFACE, &iface);
     usbdevfs_ioctl reattach{};
     reattach.ifno = interfaceNumber;
@@ -646,7 +647,7 @@ usbparsers::ProbeOutcome probeEndpoint(int fd, uint8_t epIn, uint16_t epInMaxPac
             usbparsers::WirelessEvent::NONE) {
             return usbparsers::ProbeOutcome::DECODED;
         }
-        memset(&scratch, 0, sizeof(scratch));
+        scratch = gamepad::DeviceState{};
         if (usbparsers::decodeReport(parser, buf.data(), (size_t)n, scratch, &probeSticks)) {
             return usbparsers::ProbeOutcome::DECODED;
         }
@@ -730,7 +731,7 @@ struct AttachTarget {
 // holds the interface.
 bool claimInterface(const int fd, const int interfaceNumber) {
     if (interfaceNumber < 0) return true;
-    unsigned int iface = (unsigned int)interfaceNumber;
+    auto iface = static_cast<unsigned int>(interfaceNumber);
     if (ioctl(fd, USBDEVFS_CLAIMINTERFACE, &iface) >= 0 || errno == EBUSY) return true;
     LOGE("CLAIMINTERFACE %d failed: %s", interfaceNumber, strerror(errno));
     releaseAndReattach(fd, interfaceNumber);
@@ -1019,9 +1020,10 @@ void detachBlePad(const int32_t padId, const bool restore) {
     g_usbDevices.retire(padId);
     ctx->entry->output.stop();
     const bool restored = !restore || runBleConfig(*ctx, usbparsers::SteamConfig::RESTORE);
-    if (!restored)
+    if (!restored) {
         LOGI("dev=%d (%s): a Bluetooth LE restore write was refused", padId,
              ctx->modelName.c_str());
+    }
     finishDetach(padId, *ctx);
 }
 
@@ -1091,21 +1093,20 @@ std::string deviceInfoJson(int32_t deviceId) {
     appendJsonString(out, ctx->parserName);
     out += ",\"init\":";
     appendJsonString(out, initKindName(ctx->init));
-    char buf[96];
-    snprintf(buf, sizeof(buf), ",\"reportBytes\":%u,\"endpointOut\":%s,\"lastUrbStatus\":%d",
-             (unsigned)ctx->epInMaxPacket, ctx->epOut != 0 ? "true" : "false",
-             (int)g_usbDevices.read<int32_t>(deviceId, 0, [](const dish_usb::UsbDeviceStats& s) {
-                 return s.lastUrbStatus.load(std::memory_order_relaxed);
-             }));
-    out += buf;
+    dish_text::appendFormatted<96>(
+        out, ",\"reportBytes\":%u,\"endpointOut\":%s,\"lastUrbStatus\":%d",
+        (unsigned)ctx->epInMaxPacket, ctx->epOut != 0 ? "true" : "false",
+        (int)g_usbDevices.read<int32_t>(deviceId, 0, [](const dish_usb::UsbDeviceStats& s) {
+            return s.lastUrbStatus.load(std::memory_order_relaxed);
+        }));
     if (ctx->firmware.valid) {
         // The DualSense's feature version as its firmware names it: 0x0221 is 2.21.
-        snprintf(buf, sizeof(buf), ",\"firmware\":\"%X.%02X\"",
-                 dish_bits::byteOf(dish_bits::u32(ctx->firmware.featureVersion), 1U),
-                 dish_bits::byteOf(dish_bits::u32(ctx->firmware.featureVersion), 0U));
-        out += buf;
+        dish_text::appendFormatted<96>(
+            out, ",\"firmware\":\"%X.%02X\"",
+            dish_bits::byteOf(dish_bits::u32(ctx->firmware.featureVersion), 1U),
+            dish_bits::byteOf(dish_bits::u32(ctx->firmware.featureVersion), 0U));
     }
-    out += "}";
+    out += '}';
     return out;
 }
 
@@ -1124,19 +1125,16 @@ std::string capturedReportsJson(const int32_t deviceId) {
     const size_t n = g_usbDevices.capturedReports(deviceId, reports, dish_usb::CAPTURE_REPORTS);
     const int64_t nowMs = dish_usb::outputClockMs();
     std::string out = "[";
-    char buf[32];
     for (size_t i = 0; i < n; i++) {
-        if (i > 0) out += ",";
-        snprintf(buf, sizeof(buf), "{\"ageMs\":%lld,\"hex\":\"",
-                 (long long)(nowMs - reports[i].atMs));
-        out += buf;
+        if (i > 0) out += ',';
+        dish_text::appendFormatted<32>(out, "{\"ageMs\":%lld,\"hex\":\"",
+                                       (long long)(nowMs - reports[i].atMs));
         for (size_t b = 0; b < reports[i].len; b++) {
-            snprintf(buf, sizeof(buf), "%02x", (unsigned)reports[i].bytes[b]);
-            out += buf;
+            dish_text::appendFormatted<32>(out, "%02x", (unsigned)reports[i].bytes[b]);
         }
         out += "\"}";
     }
-    out += "]";
+    out += ']';
     return out;
 }
 
