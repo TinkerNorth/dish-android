@@ -242,7 +242,7 @@ dish-android it is the generator v2.1.0 commit
 
 ```bash
 cosign verify-blob-attestation \
-  --bundle "$REPO.intoto.jsonl" --new-bundle-format --type slsaprovenance \
+  --bundle "$REPO.intoto.jsonl" --type slsaprovenance \
   --certificate-identity "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   <artifact-filename>
