@@ -41,7 +41,7 @@ void handleHeartbeatAck(Session& s, const uint8_t* decrypted, const uint16_t msg
             dish_bits::asInt32(dish_bits::u32(dish_bits::loadBe16(decrypted + 6)));
         const int32_t bitmap =
             dish_bits::asInt32(dish_bits::u32(dish_bits::loadBe16(decrypted + 8)));
-        s.vigemAvailable.store((int8_t)(backend ? 1 : 0), std::memory_order_release);
+        s.vigemAvailable.store((int8_t)(backend != 0U ? 1 : 0), std::memory_order_release);
         s.activeControllerCount.store((int8_t)count, std::memory_order_release);
         s.serverEpoch.store(epoch, std::memory_order_release);
         s.activeBitmap.store(bitmap, std::memory_order_release);
@@ -138,7 +138,7 @@ int handleWith(const SessionRef& session, const Material& m, const uint8_t* buf,
         handleHeartbeatAck(s, decrypted, msgLen, decLen);
     } else if (msgType == dish_wire::MSG_SESSION_CLOSE && msgLen >= 1 && decLen >= 5) {
         // Authenticated best-effort close notify; terminal for this session.
-        const int32_t reason = (int32_t)decrypted[4];
+        const auto reason = static_cast<int32_t>(decrypted[4]);
         s.closeReason.store(reason, std::memory_order_release);
         s.connectionAlive.store(false, std::memory_order_release);
         dish_log::info("Session %d close notify: reason=%d", handle, reason);
@@ -156,7 +156,7 @@ int handleWith(const SessionRef& session, const Material& m, const uint8_t* buf,
         sink.lightbar(handle, dish_wire::decodeLightbarPayload(decrypted + 4));
     } else if (msgType == dish_wire::MSG_TRIGGER_EFFECTS &&
                msgLen == 1 + dish_wire::TRIGGER_EFFECTS_PAYLOAD_BYTES &&
-               decLen >= (unsigned long long)(4 + 1 + dish_wire::TRIGGER_EFFECTS_PAYLOAD_BYTES)) {
+               decLen >= 4ULL + 1ULL + dish_wire::TRIGGER_EFFECTS_PAYLOAD_BYTES) {
         sink.triggerEffects(handle, decrypted[4], decrypted + 5);
     } else if (msgType == dish_wire::MSG_PLAYER_LEDS &&
                msgLen == dish_wire::PLAYER_LEDS_PAYLOAD_BYTES &&
@@ -219,7 +219,8 @@ int decodeSpeakerAudio(const SessionRef& session, const uint8_t ctrlIdx, const i
     int produced = 0;
     for (int i = 0; i < r.count; i++) {
         const auto& e = r.events[i];
-        int16_t* out = pcm.data() + produced * dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES;
+        int16_t* out =
+            pcm.data() + static_cast<ptrdiff_t>(produced) * dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES;
         size_t frames = 0;
         if (e.kind == dish_audio::AudioJitterWindow::Event::Kind::Packet) {
             frames = decoder->decode(e.data, e.len, out, dish_audio::AUDIO_FRAME_SAMPLES);

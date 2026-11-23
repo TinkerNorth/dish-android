@@ -57,6 +57,13 @@ constexpr int32_t maskedBits(const int32_t flags, const int32_t mask) noexcept {
     return asInt32(asUint32(flags) & asUint32(mask));
 }
 
+// True when any bit of `mask` is set in `v`: both by their bits, so a byte, a constant or a jint
+// alike is tested without a signed operand or an implicit conversion to bool.
+template <typename Value, typename Mask>
+constexpr bool anyBit(const Value v, const Mask mask) noexcept {
+    return (static_cast<uint32_t>(v) & static_cast<uint32_t>(mask)) != 0U;
+}
+
 // Byte `index` of `v`, counting from the least significant.
 constexpr uint8_t byteOf(const uint32_t v, const unsigned index) noexcept {
     return lowByte(v >> (8U * index));

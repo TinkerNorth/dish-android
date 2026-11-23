@@ -9,10 +9,6 @@
 
 namespace dish_receive {
 
-SpeakerQueue::SpeakerQueue()
-    : pcm_(static_cast<size_t>(dish_audio::AUDIO_JITTER_MAX_EVENTS_PER_PUSH) *
-           dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES) {}
-
 void SpeakerQueue::push(const int handle, const int lane, const dish_wire::AudioFrameHeader& header,
                         const uint8_t* opus, const size_t opusLen) {
     if (opusLen > sizeof(SpeakerFrame::opus)) return;
@@ -38,6 +34,12 @@ bool SpeakerQueue::waitForWork() {
 }
 
 size_t SpeakerQueue::drain(dish_session::SessionTable& sessions, SpeakerSink& sink) {
+    // The one consumer sizes its scratch the first time it has something to decode; the queue is a
+    // static, and a constructor that allocated would throw before main.
+    if (pcm_.empty()) {
+        pcm_.resize(static_cast<size_t>(dish_audio::AUDIO_JITTER_MAX_EVENTS_PER_PUSH) *
+                    dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES);
+    }
     size_t taken = 0;
     SpeakerFrame frame;
     while (frames_.tryPop(frame)) {

@@ -57,7 +57,7 @@ bool frame(Framed& out, uint16_t msgType, const uint8_t* payload, uint16_t paylo
 // session's gate once for all of them. Answers how many the socket took: a send refused for lack
 // of buffer space is a soft drop that counts as taken, with its counter spent. Nothing leaves a
 // session that is closed or whose counter is exhausted.
-size_t sendFramed(const dish_session::SessionRef& session, const Framed* datagrams, size_t count);
+size_t sendFramed(const dish_session::SessionRef& ref, const Framed* datagrams, size_t count);
 
 bool sendEncrypted(const dish_session::SessionRef& session, uint16_t msgType,
                    const uint8_t* payload, uint16_t payloadLen);

@@ -156,7 +156,7 @@ Material readMaterial(const Session& s);
 
 // A new (token, key) pair: the counters, the replay guard, the ack state and the audio streams
 // restart with it (contract §Crypto).
-void setConnectionParams(const SessionRef& s, const uint8_t token[4], const uint8_t key[32],
+void setConnectionParams(const SessionRef& ref, const uint8_t token[4], const uint8_t key[32],
                          int32_t protocolVersion);
 
 // MAX_SESSIONS fixed entries and a packed line of their handles that find scans without a lock.

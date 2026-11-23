@@ -256,8 +256,7 @@ bool sendMicFrame(const SessionRef& session, const uint8_t idx, const int16_t* p
         seq = ca.micSeq++; // u16, wraps by design (contract §Controller audio)
     }
     dish_wire::encodeAudioFrameHeader(payload, idx, seq);
-    const uint16_t payloadLen =
-        static_cast<uint16_t>(dish_wire::AUDIO_WIRE_HEADER_BYTES + opusBytes);
+    const auto payloadLen = static_cast<uint16_t>(dish_wire::AUDIO_WIRE_HEADER_BYTES + opusBytes);
     return sendEncrypted(session, dish_wire::MSG_MIC_AUDIO, payload, payloadLen);
 }
 

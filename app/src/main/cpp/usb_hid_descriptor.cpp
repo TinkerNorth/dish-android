@@ -593,10 +593,12 @@ uint16_t decodeLayoutAxes(const uint8_t* d, const size_t dlen, const HidLayout& 
     } else if (L.ly.present) {
         s.sLY = scaleAxis16(extractBits(d, dlen, L.ly.bitOffset, L.ly.bitSize), L.ly, true);
     }
-    if (L.rx.present)
+    if (L.rx.present) {
         s.sRX = scaleAxis16(extractBits(d, dlen, L.rx.bitOffset, L.rx.bitSize), L.rx, false);
-    if (L.ry.present)
+    }
+    if (L.ry.present) {
         s.sRY = scaleAxis16(extractBits(d, dlen, L.ry.bitOffset, L.ry.bitSize), L.ry, true);
+    }
     if (L.lt.present) s.bLT = scaleTrig8(extractBits(d, dlen, L.lt.bitOffset, L.lt.bitSize), L.lt);
     if (L.rt.present) s.bRT = scaleTrig8(extractBits(d, dlen, L.rt.bitOffset, L.rt.bitSize), L.rt);
     return directions;

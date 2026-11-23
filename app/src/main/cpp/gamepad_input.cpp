@@ -172,7 +172,7 @@ uint16_t lookUpXusbBit(const KeycodeMapping (&mappings)[N], const int32_t androi
 }
 
 void setButtonBit(DeviceState& s, const uint16_t xusbBit, const bool down) {
-    const uint16_t withBitSet = static_cast<uint16_t>(s.wButtons | xusbBit);
+    const auto withBitSet = static_cast<uint16_t>(s.wButtons | xusbBit);
     const uint16_t withBitCleared =
         dish_bits::low16(dish_bits::u32(s.wButtons) & ~dish_bits::u32(xusbBit));
     s.wButtons = down ? withBitSet : withBitCleared;
@@ -276,7 +276,7 @@ uint8_t n64CBit(const N64Input input) {
 }
 
 void setCButton(DeviceState& s, const uint8_t cBit, const bool down) {
-    const uint8_t withBitSet = static_cast<uint8_t>(s.cButtons | cBit);
+    const auto withBitSet = static_cast<uint8_t>(s.cButtons | cBit);
     const uint8_t withBitCleared =
         dish_bits::lowByte(dish_bits::u32(s.cButtons) & ~dish_bits::u32(cBit));
     s.cButtons = down ? withBitSet : withBitCleared;

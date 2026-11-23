@@ -204,7 +204,7 @@ class UsbDeviceTable {
     bool deliver(const int32_t deviceId, const uint8_t* bytes, const size_t len) {
         const int index = indexOf(deviceId);
         if (index < 0) return false;
-        const size_t i = static_cast<size_t>(index);
+        const auto i = static_cast<size_t>(index);
         users_[i].fetch_add(1, std::memory_order_seq_cst);
         ReportSink* const sink = openSinkOf(i, deviceId);
         if (sink != nullptr) sink->report(bytes, len);
@@ -216,7 +216,7 @@ class UsbDeviceTable {
     void retire(const int32_t deviceId) {
         const int index = indexOf(deviceId);
         if (index < 0) return;
-        const size_t i = static_cast<size_t>(index);
+        const auto i = static_cast<size_t>(index);
         retired_[i].store(true, std::memory_order_seq_cst);
         while (users_[i].load(std::memory_order_seq_cst) != 0) std::this_thread::yield();
     }

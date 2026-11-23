@@ -146,8 +146,9 @@ void mirrorState(HotSlot& slot) {
     const uint32_t gen = slot.mirrorGen.load(std::memory_order_relaxed);
     slot.mirrorGen.store(gen + 1, std::memory_order_relaxed);
     std::atomic_thread_fence(std::memory_order_release);
-    for (size_t i = 0; i < STATE_WORDS; i++)
+    for (size_t i = 0; i < STATE_WORDS; i++) {
         slot.mirror[i].store(raw[i], std::memory_order_relaxed);
+    }
     slot.mirrorGen.store(gen + 2, std::memory_order_release);
 }
 
