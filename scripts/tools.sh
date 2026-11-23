@@ -7,6 +7,7 @@
 # C++ repos of the fleet (satellite, dish-linux, dish-windows, dish-android) move together.
 
 CLANG_FORMAT_VERSION="23.1.5"
+CLANG_TIDY_VERSION="23.1.4"
 
 # The security gates' tools. _security.yml pins the same versions with the linux-amd64 SHA-256s,
 # and scripts/tools_pins_test.py holds the two together; the rows below add the darwin-arm64
@@ -104,4 +105,19 @@ ensure_pyyaml() {
     tools_log "installing PyYAML $PYYAML_VERSION"
     python3 -m venv "$venv"
     "$venv/bin/python" -m pip install --quiet --disable-pip-version-check --only-binary :all: "pyyaml==$PYYAML_VERSION"
+}
+
+# ensure_clang_tidy: leaves the pinned clang-tidy on CLANG_TIDY, installed from the pip wheel into its own
+# virtual environment under $TOOLS, so a different clang-tidy on PATH (a different set of checks) is
+# never the one that judges the tree.
+ensure_clang_tidy() {
+    local venv="$TOOLS/clang-tidy-venv"
+    CLANG_TIDY="$venv/bin/clang-tidy"
+    if [ -x "$CLANG_TIDY" ] && [ "$("$CLANG_TIDY" --version | sed -n 's/.*version \([0-9.]*\).*/\1/p')" = "$CLANG_TIDY_VERSION" ]; then
+        return
+    fi
+    command -v python3 >/dev/null 2>&1 || { echo "python3 is required to install clang-tidy $CLANG_TIDY_VERSION" >&2; return 1; }
+    tools_log "installing clang-tidy $CLANG_TIDY_VERSION"
+    python3 -m venv "$venv"
+    "$venv/bin/python" -m pip install --quiet --disable-pip-version-check "clang-tidy==$CLANG_TIDY_VERSION"
 }
