@@ -2,7 +2,7 @@
 
 package com.tinkernorth.dish.source.bluetooth
 
-import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
@@ -22,40 +22,45 @@ class BluetoothPadLinkReader
     constructor(
         @ApplicationContext private val context: Context,
     ) {
-        // The permission is checked, and a revocation caught, by withBondedMatches around the read.
-        @SuppressLint("MissingPermission")
-        fun linkType(deviceName: String): BluetoothLinkType =
-            withBondedMatches(deviceName, BluetoothLinkType.UNKNOWN) { matches ->
-                linkTypeOf(matches.map { it.type })
+        // Each read below makes its own permission-gated platform calls inside its own try, so the
+        // revocation between the permission check and the read is caught where the calls are.
+        fun linkType(deviceName: String): BluetoothLinkType {
+            val adapter = adapterWithPermission() ?: return BluetoothLinkType.UNKNOWN
+            return try {
+                val types = adapter.bondedDevices.orEmpty().filter { it.name == deviceName }.map { it.type }
+                linkTypeOf(types)
+            } catch (e: SecurityException) {
+                revoked(e)
+                BluetoothLinkType.UNKNOWN
             }
+        }
 
         // The service UUIDs the platform cached when the pad bonded (no discovery), for the one
         // bonded device of that name. Empty when there is no answer: no permission, no adapter,
         // none or several matches.
-        @SuppressLint("MissingPermission")
-        fun serviceUuids(deviceName: String): List<String> =
-            withBondedMatches(deviceName, emptyList()) { matches ->
-                matches
+        fun serviceUuids(deviceName: String): List<String> {
+            val adapter = adapterWithPermission() ?: return emptyList()
+            return try {
+                adapter.bondedDevices
+                    .orEmpty()
+                    .filter { it.name == deviceName }
                     .singleOrNull()
                     ?.uuids
                     .orEmpty()
                     .map { it.uuid.toString().lowercase() }
-            }
-
-        private fun <T> withBondedMatches(
-            deviceName: String,
-            none: T,
-            read: (List<BluetoothDevice>) -> T,
-        ): T {
-            if (context.checkBluetoothConnectPermission() != PackageManager.PERMISSION_GRANTED) return none
-            val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter ?: return none
-            return try {
-                read(adapter.bondedDevices.orEmpty().filter { it.name == deviceName })
             } catch (e: SecurityException) {
-                // Revoked between the check above and the reads: the answer stays empty.
-                Log.w(TAG, "BLUETOOTH_CONNECT revoked while reading bonded devices: ${e.message}")
-                none
+                revoked(e)
+                emptyList()
             }
+        }
+
+        private fun adapterWithPermission(): BluetoothAdapter? {
+            if (context.checkBluetoothConnectPermission() != PackageManager.PERMISSION_GRANTED) return null
+            return (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+        }
+
+        private fun revoked(e: SecurityException) {
+            Log.w(TAG, "BLUETOOTH_CONNECT revoked while reading bonded devices: ${e.message}")
         }
 
         private companion object {
