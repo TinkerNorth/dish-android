@@ -27,7 +27,11 @@ class BluetoothPadLinkReader
         fun linkType(deviceName: String): BluetoothLinkType {
             val adapter = adapterWithPermission() ?: return BluetoothLinkType.UNKNOWN
             return try {
-                val types = adapter.bondedDevices.orEmpty().filter { it.name == deviceName }.map { it.type }
+                val types =
+                    adapter.bondedDevices
+                        .orEmpty()
+                        .filter { it.name == deviceName }
+                        .map { it.type }
                 linkTypeOf(types)
             } catch (e: SecurityException) {
                 revoked(e)
