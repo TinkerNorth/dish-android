@@ -62,6 +62,14 @@ class DocumentationAgreesWithCodeTest {
     }
 
     @Test
+    fun `THIRD_PARTY names the googletest version the host CMake fetches`() {
+        val named = Regex("""googletest\*\* \(`([0-9.]+)`""").find(text("THIRD_PARTY.md"))?.groupValues?.get(1)
+        val fetched = Regex("""refs/tags/v([0-9.]+)\.tar\.gz""").find(testCmake)?.groupValues?.get(1)
+
+        assertEquals(named, fetched)
+    }
+
+    @Test
     fun `the two CMake files fetch libsodium and libopus by the same hash`() {
         assertEquals(hashOf(mainCmake, "libsodium-"), hashOf(testCmake, "libsodium-"))
         assertEquals(hashOf(mainCmake, "opus-"), hashOf(testCmake, "opus-"))

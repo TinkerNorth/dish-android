@@ -1,0 +1,15 @@
+# CodeQL analyses this repository's own code. The native build fetches three third-party source
+# trees at configure time (libsodium, Opus, and googletest for the host tests; THIRD_PARTY.md
+# attributes them), and CodeQL's C++ extractor sees them because the build compiles them inside the
+# workspace, under app/.cxx. Their findings are not ours to fix.
+#
+# What watches them instead: their versions and SHA-256s are pinned in the two CMake files and held
+# equal to THIRD_PARTY.md by DocumentationAgreesWithCodeTest, and scripts/check_source_urls.py checks
+# weekly that each pinned URL still serves the pinned bytes. No vulnerability scanner reads them:
+# OSV-Scanner finds no manifest for a CMake fetch (app/src/test/PARITY.md records it).
+#
+# scripts/codeql_config_test.py holds this list equal to the FetchContent names in the CMake files.
+paths-ignore:
+  - app/.cxx/**/_deps/libsodium-src/**
+  - app/.cxx/**/_deps/opus-src/**
+  - app/.cxx/**/_deps/googletest-src/**

@@ -109,9 +109,7 @@ jobs:
     uses: ./.github/workflows/_security.yml
     with:
       osv_scan_paths: .
-      # The repository's Dependency graph setting is off, and enabling it is the
-      # maintainer's to do; then flip this to true.
-      dependency_review_enabled: false
+      dependency_review_enabled: true
 
   version:
     name: Tag matches the CHANGELOG and the Play release notes

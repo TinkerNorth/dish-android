@@ -29,7 +29,7 @@
 |---|---|
 | Baseline-profile generation on pull requests | `release.yml` generates it on a KVM emulator at tag time; a PR-time lane needs a second emulator job of about fifteen minutes. Nothing about it is checked before a tag |
 | The 32-bit ARM qemu lane on a laptop | the pacing-sensitive tests (`LockLaws.TheRunReachedEveryRoleAndEveryPath`, `send_path_bench_smoke`) miss their deadlines under qemu on a Mac; `ci-local.sh --with-armv7` runs it in a container on a machine you can leave alone, CI runs it on a runner |
-| Dependency review | the repository's Dependency graph setting is off; enabling it is the maintainer's, then `dependency_review_enabled` in `security.yml` and `release.yml` becomes `true` |
+| Vulnerability scanning of the fetched C sources | libsodium and Opus are fetched by CMake at configure time and pinned by version and SHA-256; OSV-Scanner reads no manifest for them, so nothing scans them for vulnerabilities, and CodeQL skips them (`.github/codeql/codeql-config.yml`). Watching their upstream advisories is manual until a lockfile script like satellite's exists |
 | Locking the Gradle plugin classpath | only the shipped runtime classpaths are locked (`app/gradle.lockfile`); build plugins are not scanned for vulnerabilities |
 | `play/` documents against the Console | `CONTENT_RATING.md`, `DATA_SAFETY.md`, `PERMISSIONS_JUSTIFICATION.md` and `REVIEWER_NOTES.md` mirror what is declared by hand in the Play Console; each change to them needs the same change there |
 

@@ -443,9 +443,9 @@ Security gates (also blocking):
 
 - `security.yml`, through the shared `_security.yml`: action-pin lint, vulnerability
   allowlist expiry, OSV-Scanner over `app/gradle.lockfile` and `Gemfile.lock`, and the gitleaks
-  secret scan over the full history. Dependency review is switched off (`dependency_review_enabled:
-  false`) because the repository's Dependency graph setting is off; enabling it is the
-  maintainer's, and then the input becomes `true`. Release artifacts additionally get a Grype scan
+  secret scan over the full history. On a pull request, dependency review fails on a new
+  high-severity advisory (it needs the repository's Dependency graph setting, which is on).
+  Release artifacts additionally get a Grype scan
   in the shared `_release_harden.yml`.
 - `android-ci.yml`, "Release hardening (dry run)": the tag's whole hardening path (`_release_harden.yml`
   with `dry-run: true`) on the unsigned release files the build job just made: Grype, the SBOMs,

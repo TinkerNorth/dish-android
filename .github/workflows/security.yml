@@ -32,6 +32,4 @@ jobs:
     uses: ./.github/workflows/_security.yml
     with:
       osv_scan_paths: .
-      # The repository's Dependency graph setting (Settings, Code security) is off, and
-      # turning it on is the maintainer's to do; then flip this to true.
-      dependency_review_enabled: false
+      dependency_review_enabled: true

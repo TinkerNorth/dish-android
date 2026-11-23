@@ -62,6 +62,8 @@ Each is pinned by version and by the SHA-256 of its release asset, in `scripts/t
 shared workflows (`.github/workflows/_security.yml`, `_release_harden.yml`), and
 `scripts/tools_pins_test.py` holds the copies together.
 
+- **googletest** (`1.18.0`, https://github.com/google/googletest): the C++ host tests' framework,
+  fetched by `app/src/test/cpp/CMakeLists.txt` and never part of the app. BSD-3-Clause.
 - **cosign** (`3.1.4`, https://github.com/sigstore/cosign): keyless signing of every release file.
   Apache-2.0.
 - **Syft** (`1.57.2`, https://github.com/anchore/syft): the SPDX and CycloneDX SBOMs. Apache-2.0.
