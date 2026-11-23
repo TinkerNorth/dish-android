@@ -1,0 +1,52 @@
+name: Version consistency
+
+# A text gate, not a build. The version is the tag: app/build.gradle.kts and release.yml both derive
+# versionName and versionCode (X*10000 + Y*100 + Z) from it, so no file holds a copy to drift. What
+# a hand edit can still get wrong is the CHANGELOG heading and the per-locale Play release notes,
+# play/metadata/android/<locale>/changelogs/<code>.txt. A pull request checks the CHANGELOG is well
+# formed and that its newest released version has its notes in every locale; a tag push checks the
+# tag is that version. release.yml runs the same two scripts on the tag before it builds.
+
+on:
+  push:
+    tags:
+      - '[0-9]*.[0-9]*.[0-9]*'
+  pull_request:
+    branches: [main]
+    paths:
+      - CHANGELOG.md
+      - play/metadata/**
+      - scripts/check_version_consistency.py
+      - scripts/check_version_consistency_test.py
+      - scripts/check_play_metadata.py
+      - .github/workflows/version-consistency.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: CHANGELOG / Play release notes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: The script's own tests
+        run: python3 -m unittest discover -s scripts -p 'check_version_consistency_test.py' -t scripts
+
+      - name: Compare the version mirrors
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          set -euo pipefail
+          code="$(python3 scripts/check_version_consistency.py ${TAG:+"$TAG"})"
+          echo "versionCode $code"
+          EXPECTED_VERSION_CODE="$code" python3 scripts/check_play_metadata.py
