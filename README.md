@@ -48,7 +48,7 @@ Kotlin UI
 The protocol contract (REST surface, UDP streams, crypto, liveness,
 identity) lives in `satellite/docs/contract.md`; the Android-side mapping
 is [`docs/contract.md`](docs/contract.md). Internal patterns and
-the hot-path rules are in [`docs/architecture.md`](docs/architecture.md).
+the hot-path rules are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Requirements
 
@@ -67,7 +67,7 @@ the hot-path rules are in [`docs/architecture.md`](docs/architecture.md).
 | `amazon` | APK uploaded to the Amazon Appstore | None | The Amazon Appstore |
 
 What each flavor's own code is and which directories two flavors share is in
-[`docs/design-system.md`](docs/design-system.md), "Distribution flavors".
+[`DESIGN.md`](DESIGN.md), "Distribution flavors".
 
 ## Build and run
 
@@ -103,9 +103,9 @@ app/
   src/test/                      JVM unit tests (incl. host-build C++ tests)
   src/androidTest/               Instrumented smoke tests
 docs/
-  architecture.md                Module map, hot-path rules, patterns
+  ARCHITECTURE.md                Module map, hot-path rules, patterns
   contract.md                    Protocol-contract pointer + Android mapping
-  design-system.md               Tokens, styles, layout composites
+  ../DESIGN.md (repo root)        Tokens, styles, layout composites
 gradle/libs.versions.toml        Version catalog
 .github/workflows/               CI, security, release pipelines
 ```
