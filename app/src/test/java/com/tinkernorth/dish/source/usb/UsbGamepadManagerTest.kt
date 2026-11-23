@@ -545,6 +545,66 @@ class UsbGamepadManagerTest {
         scheduler.runCurrent()
     }
 
+    // A pad attached when the app starts is classified before the controller database's served rows
+    // reach native; one that only those rows make an auto model is claimed when they arrive.
+
+    private fun servedRowsPad(): UsbGamepadManager {
+        val m = claimTo(-1000)
+        every { registry.directFailureFor(vid, pid) } returns null
+        return m
+    }
+
+    @Test
+    fun `a pad attached before the served rows arrive is claimed once they make its model auto`() {
+        val m = servedRowsPad()
+        every { native.isKnownFastLaneModel(vid, pid) } returns false
+        m.install()
+        val before = m.controllers.value[key]?.phase
+        every { native.isKnownFastLaneModel(vid, pid) } returns true
+
+        m.reconsiderUnclaimed()
+
+        assertEquals(UsbPhase.Routed, before)
+        assertEquals(UsbPhase.Direct, m.controllers.value[key]?.phase)
+    }
+
+    @Test
+    fun `served rows that leave a pad's model opt-in leave the pad where it is`() {
+        val m = servedRowsPad()
+        every { native.isKnownFastLaneModel(vid, pid) } returns false
+        m.install()
+
+        m.reconsiderUnclaimed()
+
+        assertEquals(UsbPhase.Routed, m.controllers.value[key]?.phase)
+        verify(exactly = 0) { usbManager.openDevice(any()) }
+    }
+
+    @Test
+    fun `a pad the person put on Standard stays there when the served rows arrive`() {
+        val m = servedRowsPad()
+        every { native.isKnownFastLaneModel(vid, pid) } returns false
+        m.install()
+        every { pathPrefs.choiceFor(vid, pid) } returns PathChoice.Standard
+        every { native.isKnownFastLaneModel(vid, pid) } returns true
+
+        m.reconsiderUnclaimed()
+
+        assertEquals(UsbPhase.Routed, m.controllers.value[key]?.phase)
+    }
+
+    @Test
+    fun `a pad already in Direct is not claimed again when the served rows arrive`() {
+        val m = servedRowsPad()
+        every { native.isKnownFastLaneModel(vid, pid) } returns true
+        m.install()
+
+        m.reconsiderUnclaimed()
+
+        assertEquals(UsbPhase.Direct, m.controllers.value[key]?.phase)
+        verify(exactly = 1) { native.attachUsbDevice(any(), any(), any(), any()) }
+    }
+
     @Test
     fun `a framework pad re-enumerating sends FrameworkUp to its controller`() {
         val m = buildManager()

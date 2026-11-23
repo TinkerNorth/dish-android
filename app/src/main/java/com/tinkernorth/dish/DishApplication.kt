@@ -53,6 +53,9 @@ import com.tinkernorth.dish.source.usb.PollRateSampler
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -172,6 +175,10 @@ class DishApplication : Application() {
             linkHistoryRecorder.install()
             // The controller database's active rows reach native, and its update checks start.
             controllerDbUpdater.start()
+            // A pad attached at launch was classified before those rows reached native.
+            processScope.launch(Dispatchers.Main) {
+                controllerDbUpdater.active.filterNotNull().collect { usbGamepadManager.reconsiderUnclaimed() }
+            }
             // Re-arm latency profiling only if the user previously left it on (they accepted the
             // warning then). Default is false, so a fresh install keeps the hot path
             // measurement-free.

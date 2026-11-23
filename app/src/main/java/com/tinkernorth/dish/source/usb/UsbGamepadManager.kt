@@ -125,13 +125,21 @@ class UsbGamepadManager
             registry.devices
                 .onEach { devices -> withContext(Dispatchers.Main) { syncFromRegistry(devices) } }
                 .launchIn(scope)
-            scanExistingUsb()
+            reconcileForeground()
         }
 
-        // Re-scan on foreground; idempotent (onUsbPresent only creates absent entries).
-        fun reconcileForeground() = scanExistingUsb()
+        // The served rows reached native: a pad classified before them, left on Standard by default,
+        // takes the path they give its model. Main thread only.
+        fun reconsiderUnclaimed() {
+            for ((key, c) in _controllersByUnit.value) {
+                val isLeftOnStandard = c.phase == UsbPhase.Routed && c.desired == PathChoice.Standard
+                val nowDirect = resolvePath(c.vendorId, c.productId) == PathChoice.Direct
+                if (isLeftOnStandard && nowDirect) applyEvent(key, UsbEvent.Choose(PathChoice.Direct, userInitiated = false))
+            }
+        }
 
-        private fun scanExistingUsb() {
+        // Scan at install and again on foreground; idempotent (onUsbPresent only creates absent entries).
+        fun reconcileForeground() {
             for (device in usbManager?.deviceList?.values.orEmpty()) onUsbPresent(device)
         }
 

@@ -6,12 +6,12 @@ package com.tinkernorth.dish.source.controllerdb
 import android.util.Log
 import com.tinkernorth.dish.core.controllerdb.ActiveControllerDb
 import com.tinkernorth.dish.core.controllerdb.CONTROLLER_DB_SCHEMA
-import com.tinkernorth.dish.core.controllerdb.ControllerDbFile
-import com.tinkernorth.dish.core.controllerdb.ENGLISH
 import com.tinkernorth.dish.core.controllerdb.ControllerDbCheckResult
+import com.tinkernorth.dish.core.controllerdb.ControllerDbFile
 import com.tinkernorth.dish.core.controllerdb.ControllerDbGateway
 import com.tinkernorth.dish.core.controllerdb.ControllerDbSource
 import com.tinkernorth.dish.core.controllerdb.DownloadedControllerDb
+import com.tinkernorth.dish.core.controllerdb.ENGLISH
 import com.tinkernorth.dish.core.controllerdb.LoadedControllerDb
 import com.tinkernorth.dish.core.controllerdb.ServedRows
 import com.tinkernorth.dish.core.controllerdb.activeControllerDb
@@ -198,9 +198,10 @@ class ControllerDbUpdater internal constructor(
             }
         }
 
+    // The rows reach native before the database is announced, so a reader of active sees them there.
     private fun publish(active: ActiveControllerDb) {
-        _active.value = active
         pushRows(servedRowsOf(active.index))
+        _active.value = active
     }
 
     private companion object {
