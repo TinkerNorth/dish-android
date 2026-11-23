@@ -236,6 +236,36 @@ class ControllerDbUpdaterTest {
         }
 
     @Test
+    fun `a stored download that no longer reads forgets its etag, so the next check fetches it again`() =
+        runTest {
+            val first = updater()
+            first.start()
+            runCurrent()
+            first.checkNow()
+            runCurrent()
+            File(tmp.root, "current/strings/en.json").writeText("{}")
+
+            val second = updater()
+            second.start()
+            runCurrent()
+            second.checkNow()
+            runCurrent()
+
+            assertEquals(listOf(null, null), gateway.etagsSent)
+            assertEquals(ControllerDbSource.CACHE, second.status.value.source)
+        }
+
+    @Test
+    fun `with nothing stored the etag of an equal manifest is kept`() =
+        runTest {
+            prefsStore.recordCheck(NOW_MS, ControllerDbCheckResult.UP_TO_DATE, "\"etag-1\"")
+            updater().start()
+            runCurrent()
+
+            assertEquals("\"etag-1\"", prefsStore.state.value.etag)
+        }
+
+    @Test
     fun `the switch off is the result whatever the last check said`() {
         val prefs = ControllerDbPreferences(checksEnabled = false, lastCheckResult = ControllerDbCheckResult.UPDATED)
         assertEquals(ControllerDbCheckResult.OFF, effectiveCheckResult(prefs))

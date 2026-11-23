@@ -132,7 +132,10 @@ class ControllerDbUpdater internal constructor(
     private fun load() {
         val loaded = bundledOrEmpty()
         bundled = loaded
-        publish(activeControllerDb(loaded, repository.cached()))
+        val cached = repository.cached()
+        val downloadNoLongerReads = cached == null && repository.holdsADownload()
+        if (downloadNoLongerReads) prefs.forgetEtag()
+        publish(activeControllerDb(loaded, cached))
     }
 
     // A bundled copy that does not load is a broken APK; the app then runs on an empty database of
