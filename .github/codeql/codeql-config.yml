@@ -5,8 +5,9 @@
 #
 # What watches them instead: their versions and SHA-256s are pinned in the two CMake files and held
 # equal to THIRD_PARTY.md by DocumentationAgreesWithCodeTest, and scripts/check_source_urls.py checks
-# weekly that each pinned URL still serves the pinned bytes. No vulnerability scanner reads them:
-# OSV-Scanner finds no manifest for a CMake fetch (app/src/test/PARITY.md records it).
+# weekly that each pinned URL still serves the pinned bytes. OSV-Scanner finds no manifest for a
+# CMake fetch, so the release's Grype scans them instead, by CPE, through the components SBOM
+# (scripts/sbom.py; app/src/test/PARITY.md records the gap between releases).
 #
 # scripts/codeql_config_test.py holds this list equal to the FetchContent names in the CMake files.
 paths-ignore:
