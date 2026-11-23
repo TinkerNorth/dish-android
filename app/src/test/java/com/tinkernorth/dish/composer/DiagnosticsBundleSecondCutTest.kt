@@ -352,6 +352,26 @@ class DiagnosticsBundleSecondCutTest {
         assertFalse(json.toString().contains("Gaming Rig"))
     }
 
+    @Test
+    fun `a snapshot's keys get the same scrub as its values, another host's label and any address included`() {
+        val snapshot =
+            buildJsonObject {
+                put("format", "satellite-connection-diagnostics.v1")
+                put(hostLabel, "another host's entry")
+                put("192.168.4.20", "a peer")
+            }
+        val withKeys = inputs.copy(hosts = listOf(inputs.hosts[0].copy(snapshot = HostSnapshot(snapshot, error = null))))
+        val json =
+            diagnosticsBundle(withKeys)
+                .getValue("hosts")
+                .jsonArray[0]
+                .jsonObject
+                .obj("snapshot")
+        assertFalse(json.keys.any { it.contains(hostLabel) })
+        assertFalse(json.keys.any { it.contains("192.168.4.20") })
+        assertEquals("a peer", json.text("[address]"))
+    }
+
     private fun pad(): JsonObject =
         bundle
             .getValue("controllers")

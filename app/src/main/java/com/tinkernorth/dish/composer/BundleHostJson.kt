@@ -92,7 +92,7 @@ internal fun scrubbedJson(
     scrub: Scrubber,
 ): JsonElement =
     when (element) {
-        is JsonObject -> JsonObject(element.mapValues { (key, value) -> scrubbedField(key, value, scrub) })
+        is JsonObject -> JsonObject(element.entries.associate { (key, value) -> scrub(key) to scrubbedField(key, value, scrub) })
         is JsonArray -> JsonArray(element.map { scrubbedJson(it, scrub) })
         is JsonPrimitive -> scrubbedPrimitive(element, scrub::invoke)
     }

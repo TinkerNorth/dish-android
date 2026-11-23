@@ -618,9 +618,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_setConne
                                       (int32_t)protocolVersion);
     env->ReleaseByteArrayElements(tokenArr, tokenBytes, JNI_ABORT);
     env->ReleaseByteArrayElements(keyArr, keyBytes, JNI_ABORT);
-    const dish_session::Material m = dish_session::readMaterial(*s);
-    LOGI("Session %d params set (token=%02x%02x%02x%02x, protocol=%d)", handle, m.token[0],
-         m.token[1], m.token[2], m.token[3], (int)protocolVersion);
+    LOGI("Session %d params set (protocol=%d)", handle, (int)protocolVersion);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendReport(

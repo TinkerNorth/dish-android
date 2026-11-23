@@ -64,7 +64,7 @@ class SatelliteSharedKeyRepository
             }
             val plain = sealer.open(hexToBytes(stored.removePrefix(SEALED_PREFIX)))
             if (plain == null) {
-                Log.w(TAG, "dropping a sealed key that no longer opens: $pref")
+                Log.w(TAG, "dropping a sealed key that no longer opens")
                 prefs.edit { remove(pref) }
                 return null
             }
