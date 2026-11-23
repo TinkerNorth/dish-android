@@ -7,6 +7,7 @@
 
 #include <sodium.h>
 
+#include "bits.h"
 #include "hotpath_latency.h"
 #include "log_port.h"
 #include "message_tally.h"
@@ -19,13 +20,6 @@ using dish_session::Session;
 using dish_session::SessionRef;
 
 namespace {
-
-void putBE32(uint8_t* dst, uint32_t v) {
-    dst[0] = (uint8_t)(v >> 24);
-    dst[1] = (uint8_t)(v >> 16);
-    dst[2] = (uint8_t)(v >> 8);
-    dst[3] = (uint8_t)(v);
-}
 
 void handleHeartbeatAck(Session& s, const uint8_t* decrypted, const uint16_t msgLen,
                         const unsigned long long decLen) {
@@ -43,8 +37,10 @@ void handleHeartbeatAck(Session& s, const uint8_t* decrypted, const uint16_t msg
         decLen >= 4 + dish_wire::HEARTBEAT_ACK_ENRICHED_BYTES) {
         uint8_t backend = decrypted[4];
         uint8_t count = decrypted[5];
-        int32_t epoch = ((int32_t)decrypted[6] << 8) | (int32_t)decrypted[7];
-        int32_t bitmap = ((int32_t)decrypted[8] << 8) | (int32_t)decrypted[9];
+        const int32_t epoch =
+            dish_bits::asInt32(dish_bits::u32(dish_bits::loadBe16(decrypted + 6)));
+        const int32_t bitmap =
+            dish_bits::asInt32(dish_bits::u32(dish_bits::loadBe16(decrypted + 8)));
         s.vigemAvailable.store((int8_t)(backend ? 1 : 0), std::memory_order_release);
         s.activeControllerCount.store((int8_t)count, std::memory_order_release);
         s.serverEpoch.store(epoch, std::memory_order_release);
@@ -112,8 +108,7 @@ int handleWith(const SessionRef& session, const Material& m, const uint8_t* buf,
 
     if (memcmp(buf, m.token, 4) != 0) return 0;
 
-    uint32_t ctr = ((uint32_t)buf[4] << 24) | ((uint32_t)buf[5] << 16) | ((uint32_t)buf[6] << 8) |
-                   (uint32_t)buf[7];
+    const uint32_t ctr = dish_bits::loadBe32(buf + 4);
 
     // Downstream replay guard, mirroring the server's (first packet exempt
     // while lastRxCounter == 0).
@@ -122,7 +117,7 @@ int handleWith(const SessionRef& session, const Material& m, const uint8_t* buf,
 
     uint8_t nonce[12] = {};
     nonce[0] = dish_wire::CRYPTO_DIR_SERVER_TO_CLIENT;
-    putBE32(nonce + 8, ctr);
+    dish_bits::storeBe32(nonce + 8, ctr);
 
     // Must size with the datagram ceiling not the message-set max: bound holds structurally.
     uint8_t decrypted[dish_wire::MAX_DATAGRAM_BYTES];
@@ -135,8 +130,8 @@ int handleWith(const SessionRef& session, const Material& m, const uint8_t* buf,
     s.lastRxCounter.store(ctr, std::memory_order_relaxed);
 
     if (decLen < 4) return 0;
-    uint16_t msgType = ((uint16_t)decrypted[0] << 8) | decrypted[1];
-    uint16_t msgLen = ((uint16_t)decrypted[2] << 8) | decrypted[3];
+    const uint16_t msgType = dish_bits::loadBe16(decrypted);
+    const uint16_t msgLen = dish_bits::loadBe16(decrypted + 2);
     countReceived(s, msgType);
 
     if (msgType == dish_wire::MSG_HEARTBEAT_ACK) {
@@ -150,9 +145,9 @@ int handleWith(const SessionRef& session, const Material& m, const uint8_t* buf,
     } else if (msgType == dish_wire::MSG_RUMBLE && msgLen == dish_wire::RUMBLE_PAYLOAD_BYTES &&
                decLen >= 4 + dish_wire::RUMBLE_PAYLOAD_BYTES) {
         // 7B fixed payload: ctrlIdx, strong BE16, weak BE16, durMs BE16.
-        const uint16_t strong = (uint16_t)((decrypted[5] << 8) | decrypted[6]);
-        const uint16_t weakMag = (uint16_t)((decrypted[7] << 8) | decrypted[8]);
-        const uint16_t durMs = (uint16_t)((decrypted[9] << 8) | decrypted[10]);
+        const uint16_t strong = dish_bits::loadBe16(decrypted + 5);
+        const uint16_t weakMag = dish_bits::loadBe16(decrypted + 7);
+        const uint16_t durMs = dish_bits::loadBe16(decrypted + 9);
         sink.rumble(handle, decrypted[4], strong, weakMag, durMs);
     } else if (msgType == dish_wire::MSG_LIGHTBAR && msgLen == dish_wire::LIGHTBAR_PAYLOAD_BYTES &&
                decLen >= 4 + dish_wire::LIGHTBAR_PAYLOAD_BYTES) {
