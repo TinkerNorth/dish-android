@@ -50,6 +50,12 @@ class ControllerDbPreferenceStore
             setState { it.copy(lastCheckAtMs = atMs, lastCheckResult = result, etag = etag) }
         }
 
+        // The manifest's etag says which download the cache holds; one that no longer reads has none.
+        fun forgetEtag() {
+            prefs.edit { remove(KEY_ETAG) }
+            setState { it.copy(etag = null) }
+        }
+
         companion object {
             const val PREFS_NAME = "user_preferences"
             const val KEY_CHECKS_ENABLED = "controller_db_checks_enabled"

@@ -99,7 +99,8 @@ data class BundleController(
     val hardware: UsbHardwareFacts?,
     val firmware: String?,
     val expectMismatch: List<String>,
-    val rateHz: Int,
+    // The pad's report rate; null when the pad has none to read (the on-screen pad, a Bluetooth LE one).
+    val rateHz: Int?,
     val lastFeedback: BundleFeedback?,
     val lastWrite: WriteVerdict?,
     val audio: BundleAudio?,
@@ -140,7 +141,8 @@ data class BundleInputs(
     val hosts: List<BundleHost>,
     val log: List<DiagnosticsLogEntry>,
     val logcat: String,
-    // Every value the app knows must not leave: host labels, connection ids, Wi-Fi names, keys.
+    // Every value the app knows must not leave: each host's id, label and detail, each connection's,
+    // and the phone's own IPv4 address. Anything shaped like an address goes besides.
     val forbidden: Set<String>,
     // The person's own report when they started from "Report a problem"; null otherwise.
     val report: BundleReport? = null,

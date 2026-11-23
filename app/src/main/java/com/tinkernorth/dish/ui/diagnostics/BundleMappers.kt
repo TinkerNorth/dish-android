@@ -70,8 +70,8 @@ private fun bundleControllerOf(
         hardware = facts?.hardware,
         firmware = facts?.direct?.firmware,
         expectMismatch = facts?.expectMismatches.orEmpty(),
-        rateHz = diag.pollRateHz,
-        lastFeedback = world.links.feedback[diag.slotId]?.let { BundleFeedback(it.lastKind.name.lowercase(), it.atMs, it.count) },
+        rateHz = bundleRateOf(diag),
+        lastFeedback = world.links.feedback[diag.slotId]?.let { BundleFeedback(lastFeedbackKindOf(it.lastKind), it.atMs, it.count) },
         lastWrite = facts?.lastWrite,
         audio =
             facts?.audio?.let {
@@ -83,25 +83,27 @@ private fun bundleControllerOf(
         outcomes = world.pads.outcomes[diag.slotId].orEmpty(),
         capture = captures[diag.slotId],
         input = bundleInputOf(diag, frames, state),
-        output = bundleOutputOf(diag.slotId, facts, world, extras),
+        output = bundleOutputOf(diag, facts, world, extras),
         standard = bundleStandardOf(diag, sources, device),
         bluetooth = bundleBluetoothOf(diag, linkType, serviceUuids),
     )
 }
 
 private fun bundleOutputOf(
-    slotId: String,
+    diag: ControllerDiag,
     facts: PadFacts?,
     world: DiagnosticsWorld,
     extras: BundleExtras,
-): BundleOutput =
-    BundleOutput(
-        target = feedbackTargetWire(feedbackTarget(slotId)),
+): BundleOutput {
+    val slotId = diag.slotId
+    return BundleOutput(
+        target = bundleOutputTargetOf(diag),
         lanes = bundleLanesOf(extras.lanes[slotId].orEmpty()),
         lastWrite = facts?.lastWrite,
         speaker = bundleVoiceOf(slotId, PlayoutLane.SPEAKER, world.audio.speakerVoices, extras.refusals),
         haptics = bundleVoiceOf(slotId, PlayoutLane.HAPTICS, world.audio.speakerVoices, extras.refusals),
     )
+}
 
 private fun bundleHostOf(
     host: HostDiag,

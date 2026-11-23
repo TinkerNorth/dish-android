@@ -43,15 +43,45 @@ class TestOutcomeStoreTest {
     }
 
     @Test
+    fun `a test that ends is stamped with the time it ended`() {
+        val stamped = TestOutcomeStore(nowMs = { 42L })
+        assertEquals(EndedTest(BenchTest.HAPTICS, 42L), stamped.ended(BenchTest.HAPTICS))
+    }
+
+    @Test
+    fun `an answer given no time is kept at the store's now`() {
+        val stamped = TestOutcomeStore(nowMs = { 42L })
+        stamped.note("3", BenchTest.TONE, worked = true)
+        assertEquals(42L, stamped.lastOutcomeFor("3")?.atMs)
+    }
+
+    @Test
     fun `a yes is worked and a no is didNotWork`() {
         assertEquals("worked", resultOf(worked = true))
         assertEquals("didNotWork", resultOf(worked = false))
     }
 
     @Test
-    fun `every bench test has its bundle name`() {
+    fun `every bench test has its bundle name, in the contract's order`() {
         assertEquals(
-            listOf("rumble.weak", "rumble.strong", "rumble.both", "trigger.pulse", "lamp.on", "lamp.pulse", "tone.play", "mic.level"),
+            listOf(
+                "rumble.weak",
+                "rumble.strong",
+                "rumble.both",
+                "triggerRumble.left",
+                "triggerRumble.right",
+                "triggerRumble.both",
+                "lightbar.cycle",
+                "playerLeds.cycle",
+                "trigger.pulse",
+                "lamp.on",
+                "lamp.pulse",
+                "tone.play",
+                "haptics.play",
+                "mic.level",
+                "stick.drift",
+                "stick.range",
+            ),
             BenchTest.entries.map { it.wire },
         )
     }

@@ -42,7 +42,7 @@ internal class TofuTrustManager(
     override fun checkClientTrusted(
         chain: Array<out X509Certificate>?,
         authType: String?,
-    ): Unit = throw CertificateException("client certificates are not accepted for $hostId")
+    ): Unit = throw CertificateException("client certificates are not accepted")
 
     // The fingerprint of the certificate this handshake accepted, pinned or matched: null before
     // the handshake, and after one that was refused.
@@ -52,18 +52,18 @@ internal class TofuTrustManager(
         chain: Array<out X509Certificate>?,
         authType: String?,
     ) {
-        val leaf = chain?.firstOrNull() ?: throw CertificateException("$hostId presented no certificate")
+        val leaf = chain?.firstOrNull() ?: throw CertificateException("the host presented no certificate")
         val presented = sha256FingerprintHex(leaf.encoded)
         when (tofuVerdict(pins.pinnedFingerprint(hostId), presented)) {
             TofuVerdict.TRUST_FIRST_USE -> {
                 pins.pin(hostId, presented)
-                Log.i(TAG, "pinned cert for $hostId on first use")
+                Log.i(TAG, "pinned a certificate on first use")
             }
             TofuVerdict.MATCH -> Unit
             TofuVerdict.MISMATCH -> {
-                Log.e(TAG, "cert pin MISMATCH for $hostId, aborting (possible MITM)")
+                Log.e(TAG, "cert pin MISMATCH, aborting (possible MITM)")
                 onMismatch()
-                throw CertificateException("cert pin mismatch for $hostId")
+                throw CertificateException("cert pin mismatch")
             }
         }
         accepted = presented

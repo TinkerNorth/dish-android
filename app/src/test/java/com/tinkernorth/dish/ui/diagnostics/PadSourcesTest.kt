@@ -47,6 +47,8 @@ class PadSourcesTest {
             every { getDeviceUrbCount(any()) } returns URB_COUNT
             every { getDeviceInputEventCount(any()) } returns EVENT_COUNT
             every { lastWriteVerdict(any()) } returns longArrayOf(1, 1, 3, 2, 0, 32, 12)
+            every { modelHasMicMuteLed(any(), any()) } returns false
+            every { modelHasMicMuteLed(DUALSENSE_VID, DUALSENSE_PID) } returns true
         }
     private val timing = mockk<FrameworkInputTimingStore> { every { summary(any()) } returns null }
     private val bluetoothLink = mockk<BluetoothPadLinkReader> { every { linkType(any()) } returns BluetoothLinkType.CLASSIC }
@@ -65,6 +67,10 @@ class PadSourcesTest {
         )
 
     private fun direct(id: Int) = PhysicalGamepadRegistry.Device(id = id, name = "DualSense", isUsbSynthetic = true)
+
+    private fun directDualSense(id: Int) = direct(id).copy(vendorId = DUALSENSE_VID, productId = DUALSENSE_PID)
+
+    private fun frameworkDualSense(id: Int) = framework(id, Transport.Usb).copy(vendorId = DUALSENSE_VID, productId = DUALSENSE_PID)
 
     private fun framework(
         id: Int,
@@ -97,6 +103,14 @@ class PadSourcesTest {
             val world = collectWorlds().last()
             assertEquals(WriteVerdict(WriteRoute.INTERRUPT_OUT, 3, 2, ok = false, err = 32, ageMs = 12), world.lastWrite[-5])
             assertEquals(null, world.lastWrite[4])
+        }
+
+    @Test
+    fun `a Direct pad whose model carries the mic lamp is the lamp's, another Direct pad and a framework DualSense are not`() =
+        runTest(dispatcher) {
+            devices.value = mapOf(-5 to directDualSense(-5), -6 to direct(-6), 4 to frameworkDualSense(4))
+            val world = collectWorlds().last()
+            assertEquals(setOf(-5), world.micLamps)
         }
 
     @Test
@@ -151,5 +165,7 @@ class PadSourcesTest {
         const val URB_ERRORS = 3L
         const val URB_COUNT = 100L
         const val EVENT_COUNT = 7L
+        const val DUALSENSE_VID = 0x054C
+        const val DUALSENSE_PID = 0x0CE6
     }
 }

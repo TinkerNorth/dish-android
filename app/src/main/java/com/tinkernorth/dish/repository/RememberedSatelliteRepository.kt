@@ -47,7 +47,7 @@ class RememberedSatelliteRepository
                     TAG,
                     "Failed to decode satellite list; treating as empty. " +
                         "User-facing impact: every remembered satellite is forgotten. " +
-                        "Cause: ${err.javaClass.simpleName}: ${err.message}",
+                        "Cause: ${err.javaClass.simpleName}",
                 )
                 emptyList()
             }

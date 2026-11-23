@@ -368,7 +368,7 @@ class MoonlightConnectionManager
                     return@launch
                 }
                 val host = manualHostFrom(address, info)
-                Log.i(TAG, "manual add: ${host.name} at $address as ${host.id}")
+                Log.i(TAG, "manual add: a host at $address as ${host.id}")
                 _discovered.mergeHost(host)
                 // Typing an address is durable interest, so the host outlives the discovery list
                 // it would otherwise be the only copy of.
@@ -432,7 +432,7 @@ class MoonlightConnectionManager
                     )
                 }
                 if (storedId.isNotEmpty() && plain.uniqueId.isNotEmpty() && plain.uniqueId != storedId) {
-                    Log.i(TAG, "${host.address} answers as ${plain.uniqueId}, remembered as $storedId: host replaced")
+                    Log.i(TAG, "${host.address} answers as another machine than the one remembered there: host replaced")
                     return@withContext MoonlightProbe(trust = MoonlightTrustState.REPLACED)
                 }
                 probeOverMutualTls(host, holdsAPairing = record != null, epoch)
@@ -662,7 +662,7 @@ class MoonlightConnectionManager
          */
         suspend fun pairHost(host: MoonlightHost): Boolean =
             withContext(ioDispatcher) {
-                Log.i(TAG, "pair requested for ${host.name} at ${host.address} (${host.id})")
+                Log.i(TAG, "pair requested for ${host.address} (${host.id})")
                 val epoch = epochOf(host.id)
                 // A host that does not answer holds these questions to their whole budget. A Cancel hangs
                 // them up and ends the pairing before it records or shows anything.
@@ -765,7 +765,7 @@ class MoonlightConnectionManager
             if (forgottenSince(host.id, epoch)) return false
             return phases.fold(
                 onSuccess = { proven ->
-                    Log.i(TAG, "paired with ${host.name} at ${host.address}")
+                    Log.i(TAG, "paired with ${host.address}")
                     gateway.pinProven(host.id, proven)
                     rememberPaired(host, paired = true, answeredUniqueId = host.uniqueId)
                     _events.emit(MoonlightConnectionEvent.Paired(host))
@@ -1119,7 +1119,7 @@ class MoonlightConnectionManager
          */
         fun rememberInterest(host: MoonlightHost) {
             if (store.get(host.id) != null) return
-            Log.i(TAG, "remembering ${host.name} at ${host.address} as ${host.id} (not paired)")
+            Log.i(TAG, "remembering ${host.address} as ${host.id} (not paired)")
             rememberPaired(host, paired = false)
         }
 

@@ -99,10 +99,17 @@ class FrameworkLightGateway
             }
         }
 
+        // A pad whose bar a bench test holds: a host color that arrives meanwhile is kept for the
+        // test's end rather than shown, and an unbind or a rebind leaves the bar to the test.
+        private class BenchHold(
+            override val deviceId: Int,
+        ) : PadRecord
+
         // A few pads each. Touched from the feedback receive threads and the lifecycle hooks, always
         // under [lock], so a pad's open / write / close can never interleave with itself.
         private val bars = ArrayList<Bar>()
         private val hostColors = ArrayList<HostColor>()
+        private val benchHolds = ArrayList<BenchHold>()
         private val lock = Any()
 
         /**
@@ -122,11 +129,11 @@ class FrameworkLightGateway
             val argb = opaqueArgb(r, g, b)
             synchronized(lock) {
                 rememberHostColor(deviceId, argb, source)
-                showColor(deviceId, argb)
+                if (!isHeldByBench(deviceId)) showColor(deviceId, argb)
             }
         }
 
-        /** Show a color on [deviceId]'s light bar without taking it for the host's: the bench. */
+        /** The bench holds [deviceId]'s light bar and shows a color on it, never taken for the host's. */
         fun paint(
             deviceId: Int,
             r: Int,
@@ -134,12 +141,16 @@ class FrameworkLightGateway
             b: Int,
         ) {
             val argb = opaqueArgb(r, g, b)
-            synchronized(lock) { showColor(deviceId, argb) }
+            synchronized(lock) {
+                if (!isHeldByBench(deviceId)) benchHolds += BenchHold(deviceId)
+                showColor(deviceId, argb)
+            }
         }
 
         /** After the bench: show [deviceId]'s host color again, or turn the bar off when no host has it. */
         fun showHostColor(deviceId: Int) {
             synchronized(lock) {
+                benchHolds.recordOf(deviceId)?.let(benchHolds::remove)
                 val hostColor = hostColors.recordOf(deviceId)
                 val hostHasTheBar = hostColor != null && hostColor.showing
                 if (hostHasTheBar) showColor(deviceId, hostColor.argb) else bars.recordOf(deviceId)?.let(::releaseBar)
@@ -166,6 +177,7 @@ class FrameworkLightGateway
         fun forget(deviceId: Int) {
             synchronized(lock) {
                 hostColors.recordOf(deviceId)?.let(hostColors::remove)
+                benchHolds.recordOf(deviceId)?.let(benchHolds::remove)
                 // Only a pad the registry no longer has is forgotten, so the close's repaint of
                 // another session's request finds no light of this pad to land on.
                 bars.recordOf(deviceId)?.let(::drop)
@@ -174,11 +186,13 @@ class FrameworkLightGateway
 
         /**
          * Turn [deviceId]'s light bar off. It is given back now when no other bar is lit, and
-         * otherwise kept for its next color until [releaseAll] or [forget]. Idempotent.
+         * otherwise kept for its next color until [releaseAll] or [forget]; a bar the bench holds is
+         * left to the bench, whose end turns it off. Idempotent.
          */
         fun release(deviceId: Int) {
             synchronized(lock) {
                 hostColors.recordOf(deviceId)?.showing = false
+                if (isHeldByBench(deviceId)) return
                 bars.recordOf(deviceId)?.let(::releaseBar)
             }
         }
@@ -216,13 +230,17 @@ class FrameworkLightGateway
 
         private fun showAgain(hostColor: HostColor) {
             hostColor.showing = true
+            if (isHeldByBench(hostColor.deviceId)) return
             showColor(hostColor.deviceId, hostColor.argb)
         }
 
         private fun displace(hostColor: HostColor) {
             hostColors.remove(hostColor)
+            if (isHeldByBench(hostColor.deviceId)) return
             bars.recordOf(hostColor.deviceId)?.let(::releaseBar)
         }
+
+        private fun isHeldByBench(deviceId: Int): Boolean = benchHolds.recordOf(deviceId) != null
 
         private fun showColor(
             deviceId: Int,

@@ -93,13 +93,13 @@ private suspend fun resolveViaCallback(
     info: NsdServiceInfo,
 ): NsdServiceInfo? =
     suspendCancellableCoroutine { cont ->
-        val callback = ResumeOnServiceInfo(nsd, info.serviceName.orEmpty(), cont)
+        val callback = ResumeOnServiceInfo(nsd, cont)
         try {
             nsd.registerServiceInfoCallback(info, INLINE_EXECUTOR, callback)
         } catch (e: IllegalArgumentException) {
             // The OS already holds a registration for this service (a resolve racing past
             // the caller's serialisation); this one yields rather than doubling it.
-            Log.w(TAG, "resolve of ${info.serviceName} rejected: ${e.message}")
+            Log.w(TAG, "resolve of a ${info.serviceType} service rejected: ${e.message}")
             if (cont.isActive) cont.resume(null)
         }
         cont.invokeOnCancellation { unregister(nsd, callback) }
@@ -110,11 +110,10 @@ private suspend fun resolveViaCallback(
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 private class ResumeOnServiceInfo(
     private val nsd: NsdManager,
-    private val serviceName: String,
     private val cont: CancellableContinuation<NsdServiceInfo?>,
 ) : NsdManager.ServiceInfoCallback {
     override fun onServiceInfoCallbackRegistrationFailed(errorCode: Int) {
-        Log.w(TAG, "resolve of $serviceName could not be registered: $errorCode")
+        Log.w(TAG, "a resolve could not be registered: $errorCode")
         if (cont.isActive) cont.resume(null)
     }
 
@@ -179,7 +178,7 @@ private suspend fun resolveViaListener(
             nsd.resolveService(info, listener)
         } catch (e: IllegalArgumentException) {
             // Some OEMs race past the caller's serialisation and reject as in-flight.
-            Log.w(TAG, "resolve of ${info.serviceName} rejected: ${e.message}")
+            Log.w(TAG, "resolve of a ${info.serviceType} service rejected: ${e.message}")
             if (cont.isActive) cont.resume(null)
         }
     }

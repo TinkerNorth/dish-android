@@ -906,6 +906,14 @@
     <string name="inspector_outcome_test_lamp_pulse">Luz do microfone pulsando</string>
     <string name="inspector_outcome_test_tone">Tom de teste</string>
     <string name="inspector_outcome_test_mic">Microfone</string>
+    <string name="inspector_outcome_test_trigger_rumble_left">Vibração dos gatilhos, esquerdo</string>
+    <string name="inspector_outcome_test_trigger_rumble_right">Vibração dos gatilhos, direito</string>
+    <string name="inspector_outcome_test_trigger_rumble_both">Vibração dos gatilhos, os dois gatilhos</string>
+    <string name="inspector_outcome_test_lightbar">Ciclo da barra de luz</string>
+    <string name="inspector_outcome_test_player_leds">Ciclo dos LEDs de jogador</string>
+    <string name="inspector_outcome_test_haptics">Tom de teste na háptica</string>
+    <string name="inspector_outcome_test_stick_drift">Teste de deriva</string>
+    <string name="inspector_outcome_test_stick_range">Teste de alcance</string>
     <string name="diagnostics_record">Registro</string>
     <string name="diagnostics_record_name">Conhecido como</string>
     <string name="diagnostics_verification">Verificado</string>

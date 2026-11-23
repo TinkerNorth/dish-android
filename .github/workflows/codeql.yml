@@ -59,6 +59,15 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
 
+      - name: Stop the build's daemons
+        # Their heaps would otherwise sit beside an analysis told it may take 14 GB of the runner's 16.
+        run: |
+          ./gradlew --stop
+          for _ in $(seq 1 30); do
+            pgrep -f KotlinCompileDaemon > /dev/null || break
+            sleep 1
+          done
+
       - name: Perform CodeQL analysis
         # SARIF upload requires GitHub Advanced Security on private repos.
         # `continue-on-error` keeps the analysis running and surfacing

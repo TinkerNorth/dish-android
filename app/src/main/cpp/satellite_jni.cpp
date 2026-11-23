@@ -618,9 +618,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_setConne
                                       (int32_t)protocolVersion);
     env->ReleaseByteArrayElements(tokenArr, tokenBytes, JNI_ABORT);
     env->ReleaseByteArrayElements(keyArr, keyBytes, JNI_ABORT);
-    const dish_session::Material m = dish_session::readMaterial(*s);
-    LOGI("Session %d params set (token=%02x%02x%02x%02x, protocol=%d)", handle, m.token[0],
-         m.token[1], m.token[2], m.token[3], (int)protocolVersion);
+    LOGI("Session %d params set (protocol=%d)", handle, (int)protocolVersion);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendReport(
@@ -922,7 +920,8 @@ Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_releaseAllPhysicalReports(
 }
 
 // A bridge method that is missing degrades to a silent bridge rather than a pending exception:
-// the miss is logged once here and cleared.
+// the miss is logged once here and cleared, so a person's app never crashes for it. A release
+// build cannot ship with one missing: scripts/check_jni_keeps.py fails it on its dex.
 static jmethodID resolveStaticMethod(JNIEnv* env, const jclass cls, const char* owner,
                                      const char* name, const char* signature) {
     const jmethodID method = env->GetStaticMethodID(cls, name, signature);
@@ -1296,6 +1295,11 @@ JNIEXPORT jboolean JNICALL
 Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasTriggerEffects(JNIEnv*, jobject,
                                                                            jint vid, jint pid) {
     return modelPredicate(vid, pid, usbparsers::parserHasTriggerEffects);
+}
+
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasMicMuteLed(
+    JNIEnv*, jobject, jint vid, jint pid) {
+    return modelPredicate(vid, pid, usbparsers::parserHasMicMuteLed);
 }
 
 JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasHapticLanes(

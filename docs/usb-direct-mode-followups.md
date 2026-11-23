@@ -488,9 +488,6 @@ These pieces were deferred or deliberately shaped differently from the contracts
   field to compare it against.
 - **The bundle's `probe` is omitted.** The probe outcome at attach is not kept on the JVM; the
   bundle carries `rateHz` and the last write instead.
-- **Stick tests are not outcomes yet.** `stick.drift` and `stick.range` keep their own history
-  (`StickTestHistoryStore`); asking "Did it work?" after them, and carrying them as outcomes, is
-  left for the stick test's redesign.
 - **The init verdict is the sequence's last write.** A multi-packet init (GIP, Switch Pro, the
   Steam Controllers' feature reports) records the verdict of the packet it stopped at, or of its
   last packet; GIP acks and the Steam Controller (2026)'s settings refreshes record none.
@@ -521,3 +518,46 @@ These pieces were deferred or deliberately shaped differently from the contracts
 **Where:** `app/src/main/cpp/usb_host.cpp`, `app/src/main/cpp/usb_parsers.cpp`,
 `app/src/main/java/com/tinkernorth/dish/source/usb/ControllerCapturer.kt`,
 `app/src/main/java/com/tinkernorth/dish/core/controllerdb/`.
+
+---
+
+## 12. The inspector's bench: how it keeps the game's state
+
+**Context:** The bench tests every item its path carries, as the fleet's diagnostics contract
+("The bench") defines them: rumble, trigger rumble, light bar, player LEDs, adaptive triggers, mic
+lamp, the test tone on the speaker and on the haptic lane, microphone level, and the stick drift and
+range tests, each asked about when it ends, with the time it ended. A light bar, player LED,
+adaptive trigger or mic lamp test holds its surface while it runs, and its end puts back what the
+game last set. Each target keeps the game's last value in one place: `DirectSurfaces` for a Direct
+pad (the phone cannot read back what a claimed pad shows), `FrameworkLightGateway` for a framework
+pad's light bar (which already kept the host's color), and `VirtualPadFeedbackStore` for the
+on-screen pad, whose skin the bench never borrows. These pieces are shaped this way on purpose:
+
+- **One hot-path addition, on the Kotlin receive path.** Each light bar, player LED, trigger effect
+  and mic lamp message for a Direct pad now costs one `ConcurrentHashMap` read by slot id, one atomic
+  store, one atomic read and two atomic increments (`DirectSurfaces`), with no lock and no
+  allocation once the pad's slot has been seen (`DirectSurfacesTest` measures it); the trigger
+  blocks kept are the array the message arrived in. A framework pad's light bar adds one scan of the bench-hold list, usually
+  empty, under the gateway's existing lock. The native receive path is unchanged: every game write
+  to a Direct pad already passes through `FeedbackRouter`.
+- **A test's write is the last one, at its start and at its end.** Each game write that a
+  surface's hold check lets through counts itself as started before the check and as done once it
+  is posted to the pad's output worker. A test that takes the surface writes its value again while
+  a game write it could not stop was still on its way, so a value the game sent just before the
+  hold cannot stand over the trigger pulse or the lamp for the whole test. The give-back at the end
+  writes the game's last value until it holds still.
+- **A surface the game never set goes back off.** A Direct pad's light bar goes to 000000, its
+  player LEDs to 0, its triggers to mode 0 and its lamp off, which is what the bench did before; the
+  pad's own color at claim time is not something the phone can read, so it is not what comes back.
+- **The haptics test plays on its own track.** Like the speaker's test tone, it opens the pad's
+  4-channel endpoint itself and writes the haptic pair; while a session's haptics voice is open on
+  the same endpoint the platform mixes the two.
+
+**Where:** `app/src/main/java/com/tinkernorth/dish/hotpath/input/DirectSurfaces.kt`,
+`hotpath/input/FeedbackRouter.kt`, `source/lights/FrameworkLightGateway.kt`,
+`source/audio/SpeakerTestTone.kt`, `ui/diagnostics/InputInspectorViewModel.kt`.
+
+**Acceptance:** On a Direct DualSense in a game that sets the light bar, player LEDs, adaptive
+triggers and mic lamp, each test shows its pattern and then the pad shows the game's state again;
+the haptics test buzzes the grips with the two notes; a framework DualSense on Bluetooth gets its
+game color back after the light bar test.

@@ -299,6 +299,13 @@
                 android:visibility="gone" />
 
             <include
+                android:id="@+id/rowHaptics"
+                layout="@layout/inspector_audio_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="gone" />
+
+            <include
                 android:id="@+id/rowMic"
                 layout="@layout/inspector_audio_row"
                 android:layout_width="match_parent"

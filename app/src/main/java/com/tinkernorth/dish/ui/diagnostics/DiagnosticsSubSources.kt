@@ -117,7 +117,8 @@ class PadSources
             history: Map<String, StickTestRecord>,
             audio: Map<Int, PadAudioFacts>,
         ): PadWorld {
-            val direct = directPadFacts(devices.filterValues { it.isUsbSynthetic }.keys)
+            val directDevices = devices.filterValues { it.isUsbSynthetic }
+            val direct = directPadFacts(directDevices.keys)
             val framework = frameworkPadFacts(devices.filterValues { !it.isUsbSynthetic })
             linkTypes.keys.retainAll(devices.keys)
             serviceUuids.keys.retainAll(devices.keys)
@@ -132,8 +133,12 @@ class PadSources
                 stickHistory = history,
                 audio = audio,
                 lastWrite = direct.lastWrite,
+                micLamps = directDevices.filterValues(::carriesTheMicLamp).keys,
             )
         }
+
+        private fun carriesTheMicLamp(device: PhysicalGamepadRegistry.Device): Boolean =
+            native.modelHasMicMuteLed(device.vendorId, device.productId)
 
         // A Direct pad is read straight from the native poller: its latency and URB counters.
         private fun directPadFacts(ids: Set<Int>): DirectPadFacts =

@@ -26,6 +26,7 @@ internal fun record(
             RecordInput(
                 protocol = RecordProtocol(ref = family),
                 mapping = mapping?.let { kotlinx.serialization.json.JsonPrimitive(it) },
+                direct = RecordDirect(if (state == VERIFICATION_VERIFIED) DIRECT_RULE_AUTO else DIRECT_RULE_OPT_IN),
             ),
         output = RecordOutput(route = "interruptOut", init = RecordInit(init)),
         expect = RecordExpect(ExpectedEndpoints(hasIn = true, hasOut = true)),

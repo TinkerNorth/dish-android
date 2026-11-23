@@ -53,7 +53,7 @@ class MoonlightBindingRepository
                     TAG,
                     "Failed to decode the Moonlight binding list; treating as empty. " +
                         "User-facing impact: no pad is put back on its host until it is bound again. " +
-                        "Cause: ${err.javaClass.simpleName}: ${err.message}",
+                        "Cause: ${err.javaClass.simpleName}",
                 )
                 emptyList()
             }

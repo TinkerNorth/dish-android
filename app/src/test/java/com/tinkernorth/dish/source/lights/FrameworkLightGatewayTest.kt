@@ -550,6 +550,7 @@ class FrameworkLightGatewayTest {
         lightbars.withBar += FIRST_PAD
         hostSends(FIRST_PAD, RED_ARGB)
         gateway.paint(FIRST_PAD, 0x00, 0xFF, 0x00)
+        gateway.showHostColor(FIRST_PAD)
         gateway.release(FIRST_PAD)
 
         gateway.boundTo(FIRST_PAD, SATELLITE_PAD)
@@ -577,6 +578,78 @@ class FrameworkLightGatewayTest {
 
         assertEquals(OFF_ARGB, lightbars.barColorOf(FIRST_PAD))
         assertEquals(1, lightbars.handles.getValue(FIRST_PAD).closes)
+    }
+
+    // ---- the bench holds the bar while its test runs ----
+
+    @Test
+    fun `a host color that arrives while the bench holds the bar is kept, not shown`() {
+        lightbars.withBar += FIRST_PAD
+        gateway.paint(FIRST_PAD, 0x00, 0xFF, 0x00)
+
+        hostSends(FIRST_PAD, RED_ARGB)
+
+        assertEquals(GREEN_ARGB, lightbars.barColorOf(FIRST_PAD))
+    }
+
+    @Test
+    fun `ending a bench test shows the host color that arrived during it`() {
+        lightbars.withBar += FIRST_PAD
+        hostSends(FIRST_PAD, BLUE_ARGB)
+        gateway.paint(FIRST_PAD, 0x00, 0xFF, 0x00)
+        hostSends(FIRST_PAD, RED_ARGB)
+
+        gateway.showHostColor(FIRST_PAD)
+
+        assertEquals(RED_ARGB, lightbars.barColorOf(FIRST_PAD))
+    }
+
+    @Test
+    fun `binding the pad again while the bench holds its bar leaves the bench's color`() {
+        lightbars.withBar += FIRST_PAD
+        hostSends(FIRST_PAD, RED_ARGB, SATELLITE_PAD)
+        gateway.paint(FIRST_PAD, 0x00, 0xFF, 0x00)
+
+        gateway.boundTo(FIRST_PAD, SATELLITE_PAD)
+
+        assertEquals(GREEN_ARGB, lightbars.barColorOf(FIRST_PAD))
+    }
+
+    @Test
+    fun `unbinding the pad while the bench holds its bar leaves it to the bench, whose end turns it dark`() {
+        lightbars.withBar += FIRST_PAD
+        hostSends(FIRST_PAD, RED_ARGB)
+        gateway.paint(FIRST_PAD, 0x00, 0xFF, 0x00)
+
+        gateway.release(FIRST_PAD)
+        assertEquals(GREEN_ARGB, lightbars.barColorOf(FIRST_PAD))
+
+        gateway.showHostColor(FIRST_PAD)
+        assertEquals(OFF_ARGB, lightbars.barColorOf(FIRST_PAD))
+    }
+
+    @Test
+    fun `a bind to another host while the bench holds the bar forgets the old color and leaves the bench's`() {
+        lightbars.withBar += FIRST_PAD
+        hostSends(FIRST_PAD, RED_ARGB, SATELLITE_PAD)
+        gateway.paint(FIRST_PAD, 0x00, 0xFF, 0x00)
+
+        gateway.boundTo(FIRST_PAD, BLUETOOTH_PAD)
+        assertEquals(GREEN_ARGB, lightbars.barColorOf(FIRST_PAD))
+
+        gateway.showHostColor(FIRST_PAD)
+        assertEquals(OFF_ARGB, lightbars.barColorOf(FIRST_PAD))
+    }
+
+    @Test
+    fun `a pad that went away holds nothing for the bench any more`() {
+        lightbars.withBar += FIRST_PAD
+        gateway.paint(FIRST_PAD, 0x00, 0xFF, 0x00)
+        gateway.forget(FIRST_PAD)
+
+        hostSends(FIRST_PAD, RED_ARGB)
+
+        assertEquals(RED_ARGB, lightbars.barColorOf(FIRST_PAD))
     }
 
     @Test

@@ -1022,6 +1022,14 @@
     <string name="inspector_outcome_test_lamp_pulse">Mic lamp pulsing</string>
     <string name="inspector_outcome_test_tone">Test tone</string>
     <string name="inspector_outcome_test_mic">Microphone</string>
+    <string name="inspector_outcome_test_trigger_rumble_left">Trigger rumble, left</string>
+    <string name="inspector_outcome_test_trigger_rumble_right">Trigger rumble, right</string>
+    <string name="inspector_outcome_test_trigger_rumble_both">Trigger rumble, both triggers</string>
+    <string name="inspector_outcome_test_lightbar">Light bar cycle</string>
+    <string name="inspector_outcome_test_player_leds">Player LED cycle</string>
+    <string name="inspector_outcome_test_haptics">Test tone on the haptics</string>
+    <string name="inspector_outcome_test_stick_drift">Drift test</string>
+    <string name="inspector_outcome_test_stick_range">Range test</string>
     <string name="diagnostics_record">Record</string>
     <string name="diagnostics_record_name">Known as</string>
     <string name="diagnostics_verification">Checked</string>

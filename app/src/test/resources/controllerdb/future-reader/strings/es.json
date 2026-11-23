@@ -1,0 +1,20 @@
+{
+  "family.dualsense.name": "Protocolo DualSense",
+  "family.dualshock4.name": "Protocolo DualShock 4",
+  "family.hid.name": "Mando HID genérico",
+  "family.stadia.name": "Protocolo Stadia",
+  "family.steamController.name": "Protocolo del Steam Controller",
+  "family.steamControllerBle.name": "Protocolo Bluetooth LE del Steam Controller",
+  "family.steamTriton.name": "Protocolo del Steam Controller (2026)",
+  "family.switchN64Usb.name": "Protocolo Switch N64",
+  "family.switchProUsb.name": "Protocolo Switch Pro",
+  "family.xboxOneGip.name": "Protocolo Xbox One",
+  "family.xinput360.name": "Protocolo Xbox 360",
+  "family.xinput360Wireless.name": "Protocolo inalámbrico Xbox 360",
+  "issue.thor-ds5-rumble-usb.body": "La entrada funciona, pero la vibración no llega al mando por USB Direct en este dispositivo. El mismo mando vibra con Dish para Mac. En investigación.",
+  "issue.thor-ds5-rumble-usb.title": "Sin vibración por USB en el AYN Thor",
+  "mapping.eightbitdo.name": "Orden de botones de 8BitDo",
+  "mapping.playstationClassic.name": "Orden de botones de PlayStation Classic",
+  "mapping.switch.name": "Orden de botones de Switch",
+  "mapping.western.name": "Orden de botones occidental"
+}

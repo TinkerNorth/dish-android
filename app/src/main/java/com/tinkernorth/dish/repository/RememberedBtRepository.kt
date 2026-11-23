@@ -46,7 +46,7 @@ class RememberedBtRepository
                     TAG,
                     "Failed to decode remembered-Bluetooth list; treating as empty. " +
                         "User-facing impact: every paired controller is forgotten. " +
-                        "Cause: ${err.javaClass.simpleName}: ${err.message}",
+                        "Cause: ${err.javaClass.simpleName}",
                 )
                 emptyList()
             }

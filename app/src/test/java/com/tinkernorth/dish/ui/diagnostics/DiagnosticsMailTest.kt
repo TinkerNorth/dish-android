@@ -37,9 +37,15 @@ class DiagnosticsMailTest {
     }
 
     @Test
-    fun `a mail app the send query did not list excludes nothing it cannot see`() {
+    fun `a mail app the send query did not list leaves the whole share sheet`() {
         val launch = mailLaunchFor(sendHandlers = emptyList(), mailPackages = setOf("com.google.android.gm"))
-        assertEquals(MailLaunch.MailApps(excluded = emptyList()), launch)
+        assertEquals(MailLaunch.ShareSheet, launch)
+    }
+
+    @Test
+    fun `a mail app that takes no file leaves the whole share sheet, never an empty one`() {
+        val launch = mailLaunchFor(sendHandlers = listOf(drive, messages), mailPackages = setOf("com.google.android.gm"))
+        assertEquals(MailLaunch.ShareSheet, launch)
     }
 
     @Test

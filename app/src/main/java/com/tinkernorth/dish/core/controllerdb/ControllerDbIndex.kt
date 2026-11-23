@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.core.controllerdb
 
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.intOrNull
 
@@ -48,6 +49,8 @@ val NATIVE_BUTTON_ORDERS: Map<String, Int> =
 val COMPILED_OPS: Set<String> = emptySet()
 
 private const val OS_ANDROID = "android"
+private const val DIRECT_KEY = "direct"
+private const val RULE_KEY = "rule"
 private const val ISSUE_OPEN = "open"
 private const val HEX_RADIX = 16
 private const val USB_ID_DIGITS = 4
@@ -108,6 +111,16 @@ fun parseIdentity(identity: String): Pair<Int, Int>? {
 fun mappingName(record: ControllerRecord): String {
     val mapping = record.input.mapping as? JsonPrimitive ?: return MAPPING_WESTERN
     return if (mapping.isString) mapping.content else MAPPING_WESTERN
+}
+
+// Section 4.1: Android reads platforms.android.direct.rule first, then input.direct.rule.
+fun directRuleOf(record: ControllerRecord): String {
+    val platforms = record.platforms as? JsonObject
+    val android = platforms?.get(OS_ANDROID) as? JsonObject
+    val direct = android?.get(DIRECT_KEY) as? JsonObject
+    val rule = direct?.get(RULE_KEY) as? JsonPrimitive
+    val platformRule = rule?.takeIf { it.isString }?.content
+    return platformRule ?: record.input.direct.rule
 }
 
 // Section 6.6: a record that needs a family, op, init kind or button order this build does not

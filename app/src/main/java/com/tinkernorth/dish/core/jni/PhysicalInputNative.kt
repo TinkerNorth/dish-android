@@ -46,6 +46,11 @@ class PhysicalInputNative
             productId: Int,
         ): Boolean = ModelTableNative.modelHasTriggerEffects(vendorId, productId)
 
+        fun modelHasMicMuteLed(
+            vendorId: Int,
+            productId: Int,
+        ): Boolean = ModelTableNative.modelHasMicMuteLed(vendorId, productId)
+
         fun modelHasHapticLanes(
             vendorId: Int,
             productId: Int,

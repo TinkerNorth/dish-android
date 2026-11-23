@@ -212,6 +212,28 @@ class BundleMappersTest {
     }
 
     @Test
+    fun `a pad the app writes over Bluetooth LE itself is directBle, a Direct USB pad directUsb`() {
+        assertEquals("directBle", bundleOutputTargetOf(diag(slotId = "-9", transport = Transport.Bluetooth, direct = true)))
+        assertEquals("directUsb", bundleOutputTargetOf(diag(slotId = "-5", direct = true)))
+        assertEquals("framework", bundleOutputTargetOf(diag(transport = Transport.Bluetooth)))
+        assertEquals("phone", bundleOutputTargetOf(diag(slotId = "virtual", virtual = true, transport = null)))
+    }
+
+    @Test
+    fun `the last feedback's kind is the lane's own name`() {
+        assertEquals(
+            listOf("rumble", "triggerRumble", "lightbar", "playerLeds", "triggerEffects", "micLed"),
+            FeedbackKind.entries.map(::lastFeedbackKindOf),
+        )
+    }
+
+    @Test
+    fun `a controller with no rate reports none`() {
+        assertNull(bundleRateOf(diag().copy(pollRateHz = 0)))
+        assertEquals(250, bundleRateOf(diag()))
+    }
+
+    @Test
     fun `a lane the platform refused is refused`() {
         val refusals = mapOf(("-5" to PlayoutLane.HAPTICS) to PadAudioRefusal("-5", PlayoutLane.HAPTICS, 12, 4))
         val voice = bundleVoiceOf("-5", PlayoutLane.HAPTICS, emptyMap(), refusals)

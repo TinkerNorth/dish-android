@@ -7,18 +7,26 @@ import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// The inspector's feedback and audio tests that ask "Did it work?", by their bundle names.
+// The inspector's tests that ask "Did it work?", by their bundle names, in the contract's order.
 enum class BenchTest(
     val wire: String,
 ) {
     RUMBLE_WEAK("rumble.weak"),
     RUMBLE_STRONG("rumble.strong"),
     RUMBLE_BOTH("rumble.both"),
+    TRIGGER_RUMBLE_LEFT("triggerRumble.left"),
+    TRIGGER_RUMBLE_RIGHT("triggerRumble.right"),
+    TRIGGER_RUMBLE_BOTH("triggerRumble.both"),
+    LIGHTBAR_CYCLE("lightbar.cycle"),
+    PLAYER_LEDS_CYCLE("playerLeds.cycle"),
     TRIGGER_PULSE("trigger.pulse"),
     LAMP_ON("lamp.on"),
     LAMP_PULSE("lamp.pulse"),
     TONE("tone.play"),
+    HAPTICS("haptics.play"),
     MIC("mic.level"),
+    STICK_DRIFT("stick.drift"),
+    STICK_RANGE("stick.range"),
 }
 
 // One answer, { test, result, atMs } as the bundle carries it.
@@ -26,6 +34,12 @@ data class TestOutcome(
     val test: String,
     val result: String,
     val atMs: Long,
+)
+
+// A test that has ended and waits for "Did it work?": its answer is kept with the time it ended.
+data class EndedTest(
+    val test: BenchTest,
+    val endedAtMs: Long,
 )
 
 const val TEST_OUTCOMES_KEPT = 20
@@ -37,13 +51,20 @@ fun resultOf(worked: Boolean): String = if (worked) OUTCOME_WORKED else OUTCOME_
 // The answers to "Did it work?" per slot, the last twenty, in memory for the run.
 @Singleton
 class TestOutcomeStore
-    @Inject
-    constructor() : AbstractStateSource<Map<String, List<TestOutcome>>>(emptyMap()) {
+    internal constructor(
+        private val nowMs: () -> Long,
+    ) : AbstractStateSource<Map<String, List<TestOutcome>>>(emptyMap()) {
+        @Inject
+        constructor() : this(System::currentTimeMillis)
+
+        /** [test] ends now: what the page asks about, stamped with the time its answer is kept with. */
+        fun ended(test: BenchTest): EndedTest = EndedTest(test, nowMs())
+
         fun note(
             slotId: String,
             test: BenchTest,
             worked: Boolean,
-            atMs: Long = System.currentTimeMillis(),
+            atMs: Long = nowMs(),
         ) {
             val outcome = TestOutcome(test.wire, resultOf(worked), atMs)
             setState { held -> held + (slotId to (held[slotId].orEmpty() + outcome).takeLast(TEST_OUTCOMES_KEPT)) }

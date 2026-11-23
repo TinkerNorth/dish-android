@@ -7,7 +7,7 @@ computer. Those lines say "update Satellite too".
 
 ---
 
-## [2.7.0] - 2026-11-19
+## [2.7.0] - 2026-11-23
 
 A controller list that can update itself, diagnostics at every level, and a
 way to report a problem to support with both ends of the connection in the
@@ -33,14 +33,30 @@ file.
   reads "Layout guessed"), any known issue for that controller on your phone,
   and, for a Direct controller, anything its USB description does not match
   in the record, such as a missing output endpoint.
+- **Diagnostics shows the controller database.** A *Controller database*
+  section names the version built into the app, the version in use and
+  whether it is built in or downloaded, and when the last check ran and how
+  it ended.
 - **Last write.** For a controller in Direct mode, Diagnostics and the
   binding inspector show the last output Dish wrote to it: which report, by
   which route, and whether the controller took it ("report 02 · bulk OUT 0x03
   · OK, 12 ms ago", or the error it gave). A controller with no way to take
   output says so.
-- **"Did it work?"** After each rumble, trigger, mic lamp, test tone and
-  microphone test in the controller inspector, Dish asks whether it worked
-  and shows the last answer. The answers are kept for the run.
+- **"Did it work?"** When each test in the controller inspector ends (rumble,
+  trigger rumble, light bar, player lights, adaptive triggers, mic lamp, test
+  tone, haptics, microphone, and the stick drift and range tests), Dish asks
+  whether it worked and shows the last answer. Each answer is kept for the
+  run with the time its test ended.
+- **The inspector tests the haptics.** A DualSense whose own audio endpoint
+  the phone reaches at full width has *Haptics* beside its controller sound:
+  the same two-note test tone, played on the haptic actuators instead of the
+  speaker.
+- **A test leaves the controller as the game had it.** When the light bar,
+  player lights, adaptive trigger and mic lamp tests end, they put back what
+  the game last set instead of turning the light or the effect off; one the
+  game never set goes back off. While a test runs, the game's changes to that
+  light or effect wait and are the ones put back, and everything else keeps
+  following the game. Leaving the screen mid-test puts it back too.
 - **Report a problem, or ask a question.** The Diagnostics page has *Report
   a problem* and *Ask a question*, one screen in two starting categories. You
   pick what it is about (controller not recognised, no rumble or feedback,
@@ -82,6 +98,9 @@ file.
 
 ### Changed
 
+- **The mic lamp test lasts two seconds.** *On* and *Pulse* light or pulse
+  the lamp for two seconds and then give it back to the game, so the lamp's
+  row in the inspector no longer has an *Off* button.
 - **The two PowerA FUSION controllers (24C6:551A and 24C6:561A) are read as
   Xbox One controllers, and no longer start in Direct mode on their own.**
   The app's controller list named each of them twice, once as an Xbox 360
@@ -91,6 +110,52 @@ file.
   confirmed on hardware, so Direct mode is theirs only if you pick it. Nobody
   has confirmed either way on a real controller yet; if yours misbehaves,
   Report a problem on the Diagnostics page tells us.
+- **The privacy policy names the inspector's microphone test.** The test,
+  which is older than this release, opens the microphone for up to eight
+  seconds when you start it and asks for the microphone permission if the
+  app does not have it yet. It shows a level meter only: what it hears is
+  not recorded, kept or sent. The policy said the permission is asked for
+  only from a controller's Microphone switch; it now names both places.
+
+### Fixed
+
+- **What the computer sends back reaches your controller in the store and
+  GitHub builds.** Since 2.4.0 the builds on Google Play, the Amazon
+  Appstore and GitHub left out parts of the app that the controller code
+  calls, so these never worked there (they did in builds made from the
+  source): the light bar, player LEDs, adaptive triggers and mic lamp a
+  Satellite game sets; a game's controller sound to the controller's speaker
+  and its HD haptics to a DualSense; a DualSense's own mute button; and a controller in Direct mode or
+  on Bluetooth reaching a Moonlight host (Sunshine, Apollo, Wolf), its buttons,
+  motion and touchpad. Since 2.6.0, a Steam Controller paired over Bluetooth
+  never took what Dish wrote to it: its settings, its rumble and its trackpad
+  setup. All of them work now, and a build missing any of them can no longer
+  be published. Rumble and the Bluetooth gamepad mode were never affected.
+- **The mic lamp tests appear only where the lamp can light.** The inspector
+  offered *On* and *Pulse* on any controller with a microphone, including
+  ones whose lamp Dish cannot reach, and hid them on a DualSense in Direct
+  mode with no microphone. They now appear on a controller in Direct mode
+  whose reports carry the lamp, the DualSense, whatever its microphone.
+- **Every test gets its "Did it work?".** Two tests run together on
+  different outputs, such as the light bar and the player lights, each ask
+  in turn, in the order they ended, instead of the second replacing the
+  first. A controller unplugged before you answer takes its questions with
+  it.
+- **A controller plugged in when Dish starts uses a downloaded database.**
+  One that only the downloaded controller list knows was classified before
+  that list loaded, and stayed in standard mode until it was plugged in
+  again; it now takes the mode the list gives it as soon as the list loads.
+- **A downloaded database that no longer reads is downloaded again.** One
+  damaged on the phone made the next check answer *Up to date* while Dish ran
+  on its built-in list; the check now fetches it again. A check that fails
+  in an unexpected way says *The download did not check out* and the next
+  one still runs.
+- **The report never leaves you without a way to send it.** When your mail
+  app cannot take the file, *Continue in mail app* opens the whole share
+  sheet instead of an empty one.
+- **The report's file names no computer.** Dish's own log lines, which ride
+  in the file, no longer carry a computer's name, its unique id or its
+  certificate's fingerprint, even for a computer you no longer use.
 
 ## [2.6.1] - 2026-11-19
 

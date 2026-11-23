@@ -56,11 +56,48 @@ class SpeakerTestToneTest {
             mapOf("-5" to PadAudioRoute(microphone = false, speaker = true, playbackDeviceId = 42)),
         )
 
+    // A DualSense's own endpoint: four channels, the speaker pair then the actuator pair.
+    private val dualSenseRouting =
+        MapSlotAudioRoutes(
+            MutableStateFlow(emptyMap()),
+            mapOf(
+                "-5" to
+                    PadAudioRoute(
+                        microphone = false,
+                        speaker = true,
+                        playbackDeviceId = 42,
+                        haptics = true,
+                        playbackChannels = PlayoutLane.QUAD_CHANNELS,
+                    ),
+            ),
+        )
+
+    @Test
+    fun `the haptics test plays every frame on a DualSense's actuator pair at its endpoint's width`() =
+        runTest {
+            val sink = FakeSink()
+            assertTrue(SpeakerTestTone(sink, dualSenseRouting, FRAMES).play("-5", PlayoutLane.HAPTICS))
+            assertEquals(PlayoutLane.HAPTICS, sink.openedLane)
+            assertEquals(PlayoutLane.QUAD_CHANNELS, sink.openedChannels)
+            assertEquals(42, sink.openedEndpoint)
+            assertEquals(FRAMES, sink.written.size)
+            assertTrue(sink.closed)
+        }
+
+    @Test
+    fun `the speaker test on a DualSense keeps the tone on its speaker pair`() =
+        runTest {
+            val sink = FakeSink()
+            assertTrue(SpeakerTestTone(sink, dualSenseRouting, FRAMES).play("-5", PlayoutLane.SPEAKER))
+            assertEquals(PlayoutLane.SPEAKER, sink.openedLane)
+            assertEquals(PlayoutLane.QUAD_CHANNELS, sink.openedChannels)
+        }
+
     @Test
     fun `plays every frame on the pad's own endpoint and closes the track`() =
         runTest {
             val sink = FakeSink()
-            assertTrue(SpeakerTestTone(sink, routing, FRAMES).play("-5"))
+            assertTrue(SpeakerTestTone(sink, routing, FRAMES).play("-5", PlayoutLane.SPEAKER))
             assertEquals(42, sink.openedEndpoint)
             assertEquals(FRAMES, sink.written.size)
             assertTrue(sink.written.all { it.size == SpeakerEngine.FRAME_SAMPLES })
@@ -71,7 +108,7 @@ class SpeakerTestToneTest {
     fun `the phone route plays out the default output`() =
         runTest {
             val sink = FakeSink()
-            assertTrue(SpeakerTestTone(sink, routing, FRAMES).play("virtual"))
+            assertTrue(SpeakerTestTone(sink, routing, FRAMES).play("virtual", PlayoutLane.SPEAKER))
             assertEquals(NO_AUDIO_DEVICE, sink.openedEndpoint)
         }
 
@@ -79,7 +116,7 @@ class SpeakerTestToneTest {
     fun `a refused output reports false and writes nothing`() =
         runTest {
             val sink = FakeSink(refuse = true)
-            assertFalse(SpeakerTestTone(sink, routing, FRAMES).play("-5"))
+            assertFalse(SpeakerTestTone(sink, routing, FRAMES).play("-5", PlayoutLane.SPEAKER))
             assertTrue(sink.written.isEmpty())
         }
 

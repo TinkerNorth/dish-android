@@ -26,9 +26,10 @@ data class SendHandler(
 
 fun sendHandlerOf(info: ResolveInfo): SendHandler = SendHandler(info.activityInfo.packageName, info.activityInfo.name)
 
-// Where the mail goes: the share sheet with every app that takes no mail left out when the phone
-// has a mail app, the whole share sheet otherwise. The sheet is narrowed by exclusion because the
-// system chooser ignores an intent's selector and shows "No apps can perform this action" instead.
+// Where the mail goes: the share sheet with every app that takes no mail left out when a mail app
+// takes the file, the whole share sheet otherwise, so the sheet is never left empty. The sheet is
+// narrowed by exclusion because the system chooser ignores an intent's selector and shows "No apps
+// can perform this action" instead.
 sealed interface MailLaunch {
     data class MailApps(
         val excluded: List<SendHandler>,
@@ -41,9 +42,9 @@ fun mailLaunchFor(
     sendHandlers: List<SendHandler>,
     mailPackages: Set<String>,
 ): MailLaunch {
-    val noMailApp = mailPackages.isEmpty()
-    if (noMailApp) return MailLaunch.ShareSheet
-    val takesNoMail = sendHandlers.filter { handler -> handler.packageName !in mailPackages }
+    val (takesMail, takesNoMail) = sendHandlers.partition { handler -> handler.packageName in mailPackages }
+    val noMailAppTakesTheFile = takesMail.isEmpty()
+    if (noMailAppTakesTheFile) return MailLaunch.ShareSheet
     return MailLaunch.MailApps(excluded = takesNoMail)
 }
 

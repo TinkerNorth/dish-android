@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "dbVersion": 2,
+  "publishedAt": "2027-01-01T00:00:00Z",
+  "signature": {
+    "alg": "ed25519",
+    "keyId": "future",
+    "value": "00"
+  },
+  "files": {
+    "controllers.json": {
+      "sha256": "ba36b03134fa8c2da4c7a28e88a58d676b037f0fac171d3982d5359bcab21bf9",
+      "bytes": 15069
+    },
+    "strings/en.json": {
+      "sha256": "926c373ec5eb1bd986b55414fecb3aab9a62f01954cebbdf761932b03407189e",
+      "bytes": 2234
+    },
+    "strings/bs.json": {
+      "sha256": "5c495c50a91c23e7378b754ea05a1cab833238eafe5df721001490514eb7427c",
+      "bytes": 1167
+    },
+    "strings/de.json": {
+      "sha256": "d22ed529feda47990938b6d3341bb2e284ef83402b8e4cdc0920f848650df00b",
+      "bytes": 1224
+    },
+    "strings/es.json": {
+      "sha256": "c2ee69437c944522f6db3e370bb226d11d164214048d0225938a9f9d8024c851",
+      "bytes": 1212
+    },
+    "strings/fr.json": {
+      "sha256": "29a2eff7eb041cb4b9a53c660a04195c604f35fddede565132daa3ed1cb0e662",
+      "bytes": 1218
+    },
+    "strings/pt-BR.json": {
+      "sha256": "01f5385e5c78b95c58f063da5e9984d09be4358af867bebabf4b988544d0f204",
+      "bytes": 1201
+    },
+    "strings/it.json": {
+      "sha256": "e5ea383215a6ef4f5ad56dbc52eab7125cde5e274fc9c223b559b30e6562a7c7",
+      "bytes": 54
+    }
+  }
+}

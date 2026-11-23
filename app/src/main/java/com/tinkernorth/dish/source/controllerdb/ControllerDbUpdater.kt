@@ -5,10 +5,13 @@ package com.tinkernorth.dish.source.controllerdb
 
 import android.util.Log
 import com.tinkernorth.dish.core.controllerdb.ActiveControllerDb
+import com.tinkernorth.dish.core.controllerdb.CONTROLLER_DB_SCHEMA
 import com.tinkernorth.dish.core.controllerdb.ControllerDbCheckResult
+import com.tinkernorth.dish.core.controllerdb.ControllerDbFile
 import com.tinkernorth.dish.core.controllerdb.ControllerDbGateway
 import com.tinkernorth.dish.core.controllerdb.ControllerDbSource
 import com.tinkernorth.dish.core.controllerdb.DownloadedControllerDb
+import com.tinkernorth.dish.core.controllerdb.ENGLISH
 import com.tinkernorth.dish.core.controllerdb.LoadedControllerDb
 import com.tinkernorth.dish.core.controllerdb.ServedRows
 import com.tinkernorth.dish.core.controllerdb.activeControllerDb
@@ -19,6 +22,7 @@ import com.tinkernorth.dish.di.IoDispatcher
 import com.tinkernorth.dish.repository.ControllerDbRepository
 import com.tinkernorth.dish.source.store.ControllerDbPreferenceStore
 import com.tinkernorth.dish.source.store.ControllerDbPreferences
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -126,10 +130,29 @@ class ControllerDbUpdater internal constructor(
     }
 
     private fun load() {
-        val loaded = repository.bundled()
+        val loaded = bundledOrEmpty()
         bundled = loaded
-        publish(activeControllerDb(loaded, repository.cached()))
+        val cached = cachedOrNone()
+        val downloadNoLongerReads = cached == null && repository.holdsADownload()
+        if (downloadNoLongerReads) prefs.forgetEtag()
+        publish(activeControllerDb(loaded, cached))
     }
+
+    // A bundled copy that does not load is a broken APK; the app then runs on an empty database of
+    // version 0, so a cached or downloaded one still comes into force.
+    private fun bundledOrEmpty(): LoadedControllerDb =
+        runCatching(repository::bundled).getOrElse { failure ->
+            Log.e(TAG, "controller database: the bundled copy does not load", failure)
+            EMPTY_BUNDLED
+        }
+
+    // A stored download the device cannot read at all is one that no longer reads: the bundled copy
+    // stays in force and the next check fetches it again.
+    private fun cachedOrNone(): LoadedControllerDb? =
+        runCatching(repository::cached).getOrElse { failure ->
+            Log.w(TAG, "controller database: the stored download cannot be read", failure)
+            null
+        }
 
     private suspend fun runSchedule() {
         delay(STARTUP_DELAY_MS)
@@ -151,13 +174,25 @@ class ControllerDbUpdater internal constructor(
             }
         }
 
+    // A check that fails for any reason is an invalid one that keeps its etag; the schedule goes on.
+    // A cancellation stays one.
     private suspend fun check(active: ActiveControllerDb) {
+        val keptEtag = prefs.state.value.etag
+        val attempt = runCatching { attemptCheck(active) }
+        val failure = attempt.exceptionOrNull()
+        if (failure is CancellationException) throw failure
+        failure?.let { Log.w(TAG, "controller database: the check failed", it) }
+        val (result, etag) = attempt.getOrDefault(ControllerDbCheckResult.INVALID to keptEtag)
+        prefs.recordCheck(nowMs(), result, etag)
+    }
+
+    private suspend fun attemptCheck(active: ActiveControllerDb): Pair<ControllerDbCheckResult, String?> {
         val outcome = runControllerDbCheck(gateway, active.activeVersion, prefs.state.value.etag, json)
         val download = outcome.download
         val result = if (download == null) outcome.result else install(download)
         val installFailed = download != null && result != ControllerDbCheckResult.UPDATED
         val etag = if (installFailed) prefs.state.value.etag else outcome.etag
-        prefs.recordCheck(nowMs(), result, etag)
+        return result to etag
     }
 
     // A download that cannot be written leaves the previous copy in force and counts as a failed
@@ -174,12 +209,18 @@ class ControllerDbUpdater internal constructor(
             }
         }
 
+    // The rows reach native before the database is announced, so a reader of active sees them there.
     private fun publish(active: ActiveControllerDb) {
-        _active.value = active
         pushRows(servedRowsOf(active.index))
+        _active.value = active
     }
 
     private companion object {
+        val EMPTY_BUNDLED =
+            LoadedControllerDb(
+                ControllerDbFile(schema = CONTROLLER_DB_SCHEMA, dbVersion = 0),
+                mapOf(ENGLISH to emptyMap()),
+            )
         const val TAG = "ControllerDb"
         const val STARTUP_DELAY_MS = 10_000L
         const val PERIODIC_INTERVAL_MS = 6L * 60 * 60 * 1000

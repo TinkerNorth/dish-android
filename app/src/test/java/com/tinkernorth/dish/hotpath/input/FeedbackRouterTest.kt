@@ -28,6 +28,19 @@ import org.junit.Test
 private const val CONNECTION_ID = "c"
 private val MOONLIGHT_PAD = LightSource("moonlight:pc", 0)
 
+private const val DIRECT_PAD = -1000
+private const val DIRECT_SLOT = "-1000"
+private const val OTHER_DIRECT_SLOT = "-1001"
+private const val A_WRITE_LOOP_THAT_NEVER_ENDS_MS = 10_000L
+
+// One light bar write that reached a Direct pad.
+private data class LightbarWrite(
+    val deviceId: Int,
+    val r: Int,
+    val g: Int,
+    val b: Int,
+)
+
 /**
  * The router's one job: land feedback on what the slot can actuate — a
  * Direct-claimed pad's OUT endpoint, the virtual pad's skin/vibrator, or a
@@ -46,6 +59,21 @@ class FeedbackRouterTest {
     private val rumbleOff = mutableSetOf<String>()
     private val rumbleEnabled: RumbleEnabledStore =
         mockk { every { isEnabled(any()) } answers { firstArg<String>() !in rumbleOff } }
+
+    // Every write a Direct pad received per surface, oldest first: the last one is what it shows.
+    private val lightbarWrites = mutableListOf<LightbarWrite>()
+    private val ledWrites = mutableListOf<Int>()
+    private val triggerWrites = mutableListOf<ByteArray>()
+    private val lampWrites = mutableListOf<Int>()
+
+    init {
+        every { native.sendUsbLightbar(any(), any(), any(), any()) } answers {
+            lightbarWrites += LightbarWrite(arg(0), arg(1), arg(2), arg(3))
+        }
+        every { native.sendUsbPlayerLeds(DIRECT_PAD, any()) } answers { ledWrites += secondArg<Int>() }
+        every { native.sendUsbTriggerEffects(DIRECT_PAD, any()) } answers { triggerWrites += secondArg<ByteArray>() }
+        every { native.sendUsbMicMuteLed(DIRECT_PAD, any()) } answers { lampWrites += secondArg<Int>() }
+    }
 
     private fun managerWith(
         handle: Int,
@@ -296,35 +324,262 @@ class FeedbackRouterTest {
     }
 
     @Test
-    fun `ending the bench turns a Direct pad's light bar off, since the phone keeps no host color for it`() {
-        router().endLightbarTest("-1000")
+    fun `ending the bench turns a Direct pad's light bar off when the game never sent it one`() {
+        router().endLightbarTest(DIRECT_SLOT)
 
-        verify(exactly = 1) { native.sendUsbLightbar(-1000, 0, 0, 0) }
+        assertEquals(listOf(LightbarWrite(DIRECT_PAD, 0, 0, 0)), lightbarWrites)
     }
 
     @Test
-    fun `slot-addressed feedback reaches a Direct-claimed pad without a session`() {
+    fun `ending the bench gives a Direct pad's light bar back the game's last color`() {
+        val r = router(managerWith(handle = 7, slotId = DIRECT_SLOT))
+        r.dispatchLightbar(7, 0, 1, 2, 3)
+        r.testLightbar(DIRECT_SLOT, 0xFF, 0, 0)
+
+        r.endLightbarTest(DIRECT_SLOT)
+
+        assertEquals(LightbarWrite(DIRECT_PAD, 1, 2, 3), lightbarWrites.last())
+    }
+
+    @Test
+    fun `a color the game sends while the bench holds a Direct pad's bar is kept, not written`() {
+        val r = router(managerWith(handle = 7, slotId = DIRECT_SLOT))
+        r.testLightbar(DIRECT_SLOT, 0xFF, 0, 0)
+
+        r.dispatchLightbar(7, 0, 4, 5, 6)
+
+        assertEquals(listOf(LightbarWrite(DIRECT_PAD, 0xFF, 0, 0)), lightbarWrites)
+    }
+
+    @Test
+    fun `the color the game sent during the test is the one given back`() {
+        val r = router(managerWith(handle = 7, slotId = DIRECT_SLOT))
+        r.dispatchLightbar(7, 0, 1, 2, 3)
+        r.testLightbar(DIRECT_SLOT, 0xFF, 0, 0)
+        r.dispatchLightbar(7, 0, 4, 5, 6)
+
+        r.endLightbarTest(DIRECT_SLOT)
+
+        assertEquals(LightbarWrite(DIRECT_PAD, 4, 5, 6), lightbarWrites.last())
+    }
+
+    @Test
+    fun `a Moonlight host's color is given back like a satellite's`() {
+        val r = router()
+        r.dispatchLightbarToSlot(DIRECT_SLOT, MOONLIGHT_PAD, 1, 2, 3)
+        r.testLightbar(DIRECT_SLOT, 0xFF, 0, 0)
+
+        r.endLightbarTest(DIRECT_SLOT)
+
+        assertEquals(LightbarWrite(DIRECT_PAD, 1, 2, 3), lightbarWrites.last())
+    }
+
+    @Test
+    fun `once the bench gives the bar back the game's colors reach the pad again`() {
+        val r = router(managerWith(handle = 7, slotId = DIRECT_SLOT))
+        r.testLightbar(DIRECT_SLOT, 0xFF, 0, 0)
+        r.endLightbarTest(DIRECT_SLOT)
+
+        r.dispatchLightbar(7, 0, 7, 8, 9)
+
+        assertEquals(LightbarWrite(DIRECT_PAD, 7, 8, 9), lightbarWrites.last())
+    }
+
+    @Test
+    fun `the bench's light bar test leaves the pad's other surfaces to the game`() {
+        val r = router(managerWith(handle = 7, slotId = DIRECT_SLOT))
+        r.testLightbar(DIRECT_SLOT, 0xFF, 0, 0)
+
+        r.dispatchPlayerLeds(7, 0, 0x1F)
+
+        verify(exactly = 1) { native.sendUsbPlayerLeds(DIRECT_PAD, 0x1F) }
+    }
+
+    @Test
+    fun `the bench holding one Direct pad's bar leaves another pad's bar to the game`() {
+        val r = router(managerWith(handle = 7, slotId = DIRECT_SLOT))
+        r.testLightbar(OTHER_DIRECT_SLOT, 0xFF, 0, 0)
+
+        r.dispatchLightbar(7, 0, 4, 5, 6)
+
+        assertEquals(LightbarWrite(DIRECT_PAD, 4, 5, 6), lightbarWrites.last())
+    }
+
+    @Test
+    fun `a framework pad's color still reaches the gateway while the bench paints it, which keeps it for the test's end`() {
+        val r = router(managerWith(handle = 7, slotId = "9"))
+        r.testLightbar("9", 0xFF, 0, 0)
+
+        r.dispatchLightbar(7, 0, 4, 5, 6)
+
+        verify(exactly = 1) { frameworkLights.setColor(9, LightSource(CONNECTION_ID, 0), 4, 5, 6) }
+    }
+
+    // ---- the bench's player LEDs, trigger effects and mic lamp on a Direct pad ----
+
+    @Test
+    fun `the bench reaches a Direct-claimed pad's LEDs, triggers and lamp without a session`() {
         val r = router()
         val blocks = ByteArray(22) { it.toByte() }
-        r.dispatchPlayerLedsToSlot("-1000", 0x03)
-        r.dispatchMicLedToSlot("-1000", MIC_LED_PULSE)
-        r.dispatchTriggerEffectsToSlot("-1000", blocks)
-        verify(exactly = 1) { native.sendUsbPlayerLeds(-1000, 0x03) }
-        verify(exactly = 1) { native.sendUsbMicMuteLed(-1000, MIC_LED_PULSE) }
-        verify(exactly = 1) { native.sendUsbTriggerEffects(-1000, blocks) }
+
+        r.testPlayerLeds(DIRECT_SLOT, 0x03)
+        r.testMicLed(DIRECT_SLOT, MIC_LED_PULSE)
+        r.testTriggerEffects(DIRECT_SLOT, blocks)
+
+        assertEquals(listOf(0x03), ledWrites)
+        assertEquals(listOf(MIC_LED_PULSE), lampWrites)
+        assertEquals(listOf(blocks), triggerWrites)
+    }
+
+    // A landing the router never marked done would keep the test writing forever.
+    @Test(timeout = A_WRITE_LOOP_THAT_NEVER_ENDS_MS)
+    fun `a test after the game's own write to each surface writes its value once`() {
+        val r = router(managerWith(handle = 7, slotId = DIRECT_SLOT))
+        val gameBlocks = ByteArray(22)
+        val testBlocks = ByteArray(22) { it.toByte() }
+        r.dispatchLightbar(7, 0, 1, 2, 3)
+        r.dispatchPlayerLeds(7, 0, 0x04)
+        r.dispatchTriggerEffects(7, 0, gameBlocks)
+        r.dispatchMicLed(7, 0, MIC_LED_PULSE)
+
+        r.testLightbar(DIRECT_SLOT, 0xFF, 0, 0)
+        r.testPlayerLeds(DIRECT_SLOT, 0x01)
+        r.testTriggerEffects(DIRECT_SLOT, testBlocks)
+        r.testMicLed(DIRECT_SLOT, MIC_LED_ON)
+
+        assertEquals(listOf(LightbarWrite(DIRECT_PAD, 1, 2, 3), LightbarWrite(DIRECT_PAD, 0xFF, 0, 0)), lightbarWrites)
+        assertEquals(listOf(0x04, 0x01), ledWrites)
+        assertEquals(listOf(gameBlocks, testBlocks), triggerWrites)
+        assertEquals(listOf(MIC_LED_PULSE, MIC_LED_ON), lampWrites)
+    }
+
+    @Test(timeout = A_WRITE_LOOP_THAT_NEVER_ENDS_MS)
+    fun `a game write that throws still counts as landed, so a test after it writes its value once`() {
+        val r = router(managerWith(handle = 7, slotId = DIRECT_SLOT))
+        every { native.sendUsbMicMuteLed(DIRECT_PAD, MIC_LED_PULSE) } throws IllegalStateException("a send that failed")
+        val gameWrite = runCatching { r.dispatchMicLed(7, 0, MIC_LED_PULSE) }
+
+        r.testMicLed(DIRECT_SLOT, MIC_LED_ON)
+
+        assertTrue(gameWrite.isFailure)
+        assertEquals(listOf(MIC_LED_ON), lampWrites)
     }
 
     @Test
-    fun `slot-addressed feedback paints the virtual pad and skips framework pads`() {
-        val r = router()
-        r.dispatchPlayerLedsToSlot(VIRTUAL_SLOT_ID, 0x02)
-        r.dispatchMicLedToSlot(VIRTUAL_SLOT_ID, MIC_LED_ON)
-        assertEquals(0x02, store.state.value.playerLedMask)
-        assertEquals(MIC_LED_ON, store.state.value.micLedState)
+    fun `ending the LED test gives a Direct pad back the game's mask`() {
+        val r = router(managerWith(handle = 7, slotId = DIRECT_SLOT))
+        r.dispatchPlayerLeds(7, 0, 0x04)
+        r.testPlayerLeds(DIRECT_SLOT, 0x01)
 
-        r.dispatchPlayerLedsToSlot("9", 0x1F)
-        r.dispatchTriggerEffectsToSlot("9", ByteArray(22))
-        r.dispatchMicLedToSlot("9", MIC_LED_ON)
+        r.endPlayerLedsTest(DIRECT_SLOT)
+
+        assertEquals(0x04, ledWrites.last())
+    }
+
+    @Test
+    fun `ending the LED test turns a Direct pad's LEDs off when the game never set them`() {
+        val r = router()
+        r.testPlayerLeds(DIRECT_SLOT, 0x01)
+
+        r.endPlayerLedsTest(DIRECT_SLOT)
+
+        assertEquals(listOf(0x01, 0x00), ledWrites)
+    }
+
+    @Test
+    fun `a mask the game sends during the LED test is kept, not written, and given back`() {
+        val r = router(managerWith(handle = 7, slotId = DIRECT_SLOT))
+        r.testPlayerLeds(DIRECT_SLOT, 0x01)
+
+        r.dispatchPlayerLeds(7, 0, 0x08)
+        assertEquals(listOf(0x01), ledWrites)
+
+        r.endPlayerLedsTest(DIRECT_SLOT)
+        assertEquals(0x08, ledWrites.last())
+    }
+
+    @Test
+    fun `ending the trigger test gives a Direct pad back the game's effect`() {
+        val r = router(managerWith(handle = 7, slotId = DIRECT_SLOT))
+        val gameEffect = ByteArray(22).also { it[0] = 0x21 }
+        r.dispatchTriggerEffects(7, 0, gameEffect)
+        r.testTriggerEffects(DIRECT_SLOT, ByteArray(22) { 0x01 })
+
+        r.endTriggerEffectsTest(DIRECT_SLOT)
+
+        assertTrue(gameEffect.contentEquals(triggerWrites.last()))
+    }
+
+    @Test
+    fun `ending the trigger test releases both triggers when the game never set an effect`() {
+        val r = router()
+        r.testTriggerEffects(DIRECT_SLOT, ByteArray(22) { 0x01 })
+
+        r.endTriggerEffectsTest(DIRECT_SLOT)
+
+        assertTrue(ByteArray(22).contentEquals(triggerWrites.last()))
+    }
+
+    @Test
+    fun `an effect the game sends during the trigger test is kept, not written, and given back`() {
+        val r = router(managerWith(handle = 7, slotId = DIRECT_SLOT))
+        val benchEffect = ByteArray(22) { 0x01 }
+        val gameEffect = ByteArray(22).also { it[11] = 0x26 }
+        r.testTriggerEffects(DIRECT_SLOT, benchEffect)
+
+        r.dispatchTriggerEffects(7, 0, gameEffect)
+        assertEquals(listOf(benchEffect), triggerWrites)
+
+        r.endTriggerEffectsTest(DIRECT_SLOT)
+        assertTrue(gameEffect.contentEquals(triggerWrites.last()))
+    }
+
+    @Test
+    fun `ending the lamp test gives a Direct pad back the game's lamp`() {
+        val r = router(managerWith(handle = 7, slotId = DIRECT_SLOT))
+        r.dispatchMicLed(7, 0, MIC_LED_PULSE)
+        r.testMicLed(DIRECT_SLOT, MIC_LED_ON)
+
+        r.endMicLedTest(DIRECT_SLOT)
+
+        assertEquals(MIC_LED_PULSE, lampWrites.last())
+    }
+
+    @Test
+    fun `ending the lamp test turns a Direct pad's lamp off when the game never set it`() {
+        val r = router()
+        r.testMicLed(DIRECT_SLOT, MIC_LED_ON)
+
+        r.endMicLedTest(DIRECT_SLOT)
+
+        assertEquals(listOf(MIC_LED_ON, MIC_LED_OFF), lampWrites)
+    }
+
+    @Test
+    fun `a lamp state the game sends during the lamp test is kept, not written, and given back`() {
+        val r = router(managerWith(handle = 7, slotId = DIRECT_SLOT))
+        r.testMicLed(DIRECT_SLOT, MIC_LED_PULSE)
+
+        r.dispatchMicLed(7, 0, MIC_LED_ON)
+        assertEquals(listOf(MIC_LED_PULSE), lampWrites)
+
+        r.endMicLedTest(DIRECT_SLOT)
+        assertEquals(MIC_LED_ON, lampWrites.last())
+    }
+
+    @Test
+    fun `the bench leaves the on-screen pad's skin and a framework pad's unreachable surfaces alone`() {
+        val r = router()
+        for (slot in listOf(VIRTUAL_SLOT_ID, "9")) {
+            r.testPlayerLeds(slot, 0x1F)
+            r.testTriggerEffects(slot, ByteArray(22) { 0x01 })
+            r.testMicLed(slot, MIC_LED_ON)
+            r.endPlayerLedsTest(slot)
+            r.endTriggerEffectsTest(slot)
+            r.endMicLedTest(slot)
+        }
+
+        assertEquals(VirtualPadFeedbackStore().state.value, store.state.value)
         verify(exactly = 0) { native.sendUsbPlayerLeds(any(), any()) }
         verify(exactly = 0) { native.sendUsbTriggerEffects(any(), any()) }
         verify(exactly = 0) { native.sendUsbMicMuteLed(any(), any()) }
@@ -374,12 +629,17 @@ class FeedbackRouterTest {
     }
 
     @Test
-    fun `slot-addressed feedback is not counted as host activity`() {
+    fun `a Moonlight light bar and the bench's writes are not counted as host activity`() {
         val r = router()
-        r.dispatchLightbarToSlot("-1000", MOONLIGHT_PAD, 1, 2, 3)
-        r.dispatchTriggerEffectsToSlot("-1000", ByteArray(22))
-        r.dispatchPlayerLedsToSlot("-1000", 0x1F)
-        r.dispatchMicLedToSlot("-1000", MIC_LED_ON)
+        r.dispatchLightbarToSlot(DIRECT_SLOT, MOONLIGHT_PAD, 1, 2, 3)
+        r.testLightbar(DIRECT_SLOT, 1, 2, 3)
+        r.testTriggerEffects(DIRECT_SLOT, ByteArray(22))
+        r.testPlayerLeds(DIRECT_SLOT, 0x1F)
+        r.testMicLed(DIRECT_SLOT, MIC_LED_ON)
+        r.endLightbarTest(DIRECT_SLOT)
+        r.endTriggerEffectsTest(DIRECT_SLOT)
+        r.endPlayerLedsTest(DIRECT_SLOT)
+        r.endMicLedTest(DIRECT_SLOT)
         assertTrue(activity.snapshot().isEmpty())
     }
 

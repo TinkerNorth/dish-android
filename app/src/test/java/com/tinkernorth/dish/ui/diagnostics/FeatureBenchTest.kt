@@ -15,7 +15,7 @@ class FeatureBenchTest {
 
     @Test
     fun `the virtual pad benches rumble, sound and microphone only`() {
-        val bench = featureBenchFor(caps(Feature.LIGHTBAR, Feature.PLAYER_LEDS), virtual = true)
+        val bench = featureBenchFor(caps(Feature.LIGHTBAR, Feature.PLAYER_LEDS), virtual = true, lampReachable = false)
         assertTrue(bench.rumble)
         assertTrue(bench.speaker)
         assertTrue(bench.mic)
@@ -24,11 +24,24 @@ class FeatureBenchTest {
         assertFalse(bench.triggerEffects)
         assertFalse(bench.triggerRumble)
         assertFalse(bench.micLed)
+        assertFalse(bench.haptics)
+    }
+
+    @Test
+    fun `haptics is offered where the pad's path composes haptic audio`() {
+        val bench = featureBenchFor(caps(Feature.HAPTIC_AUDIO), virtual = false, lampReachable = false)
+        assertTrue(bench.haptics)
+        assertTrue(bench.anyAudio)
+    }
+
+    @Test
+    fun `a pad with a speaker but no haptic lane is not offered the haptics test`() {
+        assertFalse(featureBenchFor(caps(Feature.SPEAKER), virtual = false, lampReachable = false).haptics)
     }
 
     @Test
     fun `a physical pad benches exactly what its own input can actuate`() {
-        val bench = featureBenchFor(caps(Feature.RUMBLE, Feature.LIGHTBAR, Feature.MIC), virtual = false)
+        val bench = featureBenchFor(caps(Feature.RUMBLE, Feature.LIGHTBAR, Feature.MIC), virtual = false, lampReachable = true)
         assertTrue(bench.rumble)
         assertTrue(bench.lightbar)
         assertTrue(bench.mic)
@@ -41,8 +54,27 @@ class FeatureBenchTest {
     }
 
     @Test
+    fun `a pad with a microphone route whose reports carry no lamp is not offered the lamp tests`() {
+        val bench = featureBenchFor(caps(Feature.MIC), virtual = false, lampReachable = false)
+        assertTrue(bench.mic)
+        assertFalse(bench.micLed)
+    }
+
+    @Test
+    fun `a pad whose reports carry the lamp is offered the lamp tests with no microphone route`() {
+        val bench = featureBenchFor(caps(), virtual = false, lampReachable = true)
+        assertFalse(bench.mic)
+        assertTrue(bench.micLed)
+    }
+
+    @Test
+    fun `the on-screen pad is never offered the lamp tests`() {
+        assertFalse(featureBenchFor(caps(Feature.MIC), virtual = true, lampReachable = true).micLed)
+    }
+
+    @Test
     fun `no capabilities means an empty bench`() {
-        val bench = featureBenchFor(null, virtual = false)
+        val bench = featureBenchFor(null, virtual = false, lampReachable = false)
         assertEquals(FeatureBench.NONE, bench)
         assertFalse(bench.anyFeedback)
         assertFalse(bench.anyAudio)

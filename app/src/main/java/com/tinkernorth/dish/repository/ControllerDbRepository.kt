@@ -58,6 +58,9 @@ class ControllerDbRepository internal constructor(
         return loadFrom { path -> readIfThere(File(dir, path)) }
     }
 
+    // Whether a download was ever stored here, whether or not it still checks out.
+    fun holdsADownload(): Boolean = File(cacheRoot, CURRENT).isDirectory || File(cacheRoot, PREVIOUS).isDirectory
+
     // Writes beside, then renames over: the previous copy is kept until the new one is in place.
     fun store(download: DownloadedControllerDb) =
         synchronized(writeLock) {

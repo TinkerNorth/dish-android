@@ -1,6 +1,6 @@
-Dish 2.7.0: lista kontrolera koja se sama ažurira i prijava problema.
+Dish 2.7.0: verzija iz trgovine sada kontroleru isporučuje sve što igra šalje, a problem se može prijaviti.
 
-• Dish pita dish.tinkernorth.com za podršku novim kontrolerima. U Postavkama je Automatski provjeravaj ažuriranja kontrolera, uključeno po zadanom.
-• Dijagnostika prikazuje zapis, poznate probleme i zadnji upis svakog kontrolera, a Prijavi problem šalje vaše riječi i datoteku podršci iz aplikacije za e-poštu.
+• Popravljeno: svjetlosna traka, LED igrača, adaptivni okidači, lampica mikrofona, zvuk kontrolera, haptika, tipka za utišavanje, Moonlight i Steam Controller preko Bluetootha.
+• Dish pita dish.tinkernorth.com za nove kontrolere.
+• Dijagnostika prikazuje poznate probleme i zadnji upis; Prijavi problem šalje datoteku podršci.
 • Inspektor nakon svakog testa pita je li radilo.
-• Satellite ne treba ažuriranje.

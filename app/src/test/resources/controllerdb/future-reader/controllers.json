@@ -1,0 +1,722 @@
+{
+  "schema": 1,
+  "dbVersion": 2,
+  "generatedBy": "future-reader fixture",
+  "records": [
+    {
+      "schema": 1,
+      "id": "sony-dualsense",
+      "requires": {
+        "families": [
+          "dualsense"
+        ],
+        "ops": []
+      },
+      "identity": {
+        "usb": [
+          "054c:0ce6"
+        ],
+        "bluetooth": [],
+        "siblings": [
+          "sony-dualsense-edge"
+        ],
+        "siblingInterfaces": [
+          3
+        ]
+      },
+      "input": {
+        "protocol": {
+          "ref": "dualsense",
+          "streamsUnprompted": true,
+          "fields": {
+            "lx": {
+              "byte": 1,
+              "bits": 8
+            }
+          },
+          "usb": {
+            "reportId": 1
+          },
+          "bluetooth": {
+            "reportId": 49
+          }
+        },
+        "direct": {
+          "rule": "auto"
+        },
+        "capabilities": {
+          "motion": true,
+          "touchpad": true,
+          "trackpads": 0,
+          "battery": true,
+          "extendedButtons": false
+        },
+        "events": [
+          {
+            "when": "attach",
+            "do": "nothing"
+          }
+        ]
+      },
+      "output": {
+        "route": "interruptOut",
+        "init": {
+          "kind": "none"
+        },
+        "capabilities": {
+          "rumble": true,
+          "triggerRumble": false,
+          "lightbar": true,
+          "playerLeds": true,
+          "micLed": true,
+          "triggerEffects": true
+        },
+        "templates": {
+          "rumble": "02ff"
+        },
+        "reports": [
+          {
+            "id": 2,
+            "length": 48
+          }
+        ],
+        "refresh": {
+          "everyMs": 0
+        }
+      },
+      "expect": {
+        "endpoints": {
+          "in": true,
+          "out": true
+        },
+        "descriptorSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "rest": "01808080",
+        "rateHz": 250,
+        "quietAfterAttach": false
+      },
+      "support": {
+        "verification": {
+          "state": "verified",
+          "transport": "usb"
+        },
+        "issues": [
+          {
+            "id": "thor-ds5-rumble-usb",
+            "device": "AYN Thor",
+            "os": {
+              "android": 15
+            },
+            "transport": "usb",
+            "lane": "output.rumble",
+            "status": "open",
+            "since": "2026-11-11",
+            "reports": 1
+          },
+          {
+            "id": "future-os-as-text",
+            "device": "Future Handheld",
+            "os": {
+              "android": "15",
+              "ios": "26.2",
+              "macos": "26.1",
+              "windows": "11",
+              "linux": "6.8",
+              "futureos": "1.0"
+            },
+            "transport": "usb",
+            "lane": "output.lightbar",
+            "status": "open",
+            "since": "2027-01-01",
+            "reports": 3
+          }
+        ],
+        "sources": [
+          "dish-android usb_parsers.cpp kKnown"
+        ]
+      },
+      "audio": {
+        "function": "uac",
+        "match": {
+          "by": "productString"
+        },
+        "playback": {
+          "channels": 4,
+          "speaker": [
+            1,
+            2
+          ],
+          "haptics": [
+            3,
+            4
+          ]
+        },
+        "capture": {
+          "mic": true
+        }
+      },
+      "lifecycle": {
+        "attach": [],
+        "detach": []
+      }
+    },
+    {
+      "schema": 1,
+      "id": "xbox-360-controller",
+      "requires": {
+        "families": [
+          "futureFamily"
+        ],
+        "ops": []
+      },
+      "identity": {
+        "usb": [
+          "045e:028e"
+        ],
+        "bluetooth": []
+      },
+      "input": {
+        "protocol": {
+          "ref": "futureFamily",
+          "streamsUnprompted": false
+        },
+        "direct": {
+          "rule": "auto"
+        },
+        "capabilities": {
+          "motion": false,
+          "touchpad": false,
+          "trackpads": 0,
+          "battery": false,
+          "extendedButtons": false
+        }
+      },
+      "output": {
+        "route": "interruptOut",
+        "init": {
+          "kind": "none"
+        },
+        "capabilities": {
+          "rumble": true,
+          "triggerRumble": false,
+          "lightbar": false,
+          "playerLeds": false,
+          "micLed": false,
+          "triggerEffects": false
+        }
+      },
+      "expect": {
+        "endpoints": {
+          "in": true,
+          "out": true
+        }
+      },
+      "support": {
+        "verification": {
+          "state": "verified",
+          "transport": "usb"
+        },
+        "issues": [],
+        "sources": [
+          "dish-android usb_parsers.cpp kKnown"
+        ]
+      }
+    },
+    {
+      "schema": 1,
+      "id": "future-pad-served",
+      "requires": {
+        "families": [
+          "xinput360"
+        ],
+        "ops": []
+      },
+      "identity": {
+        "usb": [
+          "1209:0f02"
+        ],
+        "bluetooth": []
+      },
+      "input": {
+        "protocol": {
+          "ref": "xinput360",
+          "streamsUnprompted": false
+        },
+        "direct": {
+          "rule": "auto"
+        },
+        "capabilities": {
+          "motion": false,
+          "touchpad": false,
+          "trackpads": 0,
+          "battery": false,
+          "extendedButtons": false
+        }
+      },
+      "output": {
+        "route": "interruptOut",
+        "init": {
+          "kind": "none"
+        },
+        "capabilities": {
+          "rumble": true,
+          "triggerRumble": false,
+          "lightbar": false,
+          "playerLeds": false,
+          "micLed": false,
+          "triggerEffects": false
+        }
+      },
+      "expect": {
+        "endpoints": {
+          "in": true,
+          "out": true
+        }
+      },
+      "support": {
+        "verification": {
+          "state": "verified",
+          "transport": "usb"
+        },
+        "issues": [],
+        "sources": [
+          "future-reader fixture"
+        ]
+      },
+      "platforms": {
+        "android": {
+          "direct": {
+            "rule": "optIn"
+          }
+        },
+        "mac": {
+          "direct": {
+            "rule": "whenOsCannot"
+          }
+        },
+        "futureos": {
+          "direct": {
+            "rule": "auto"
+          }
+        }
+      }
+    },
+    {
+      "schema": 1,
+      "id": "future-pad-served-ds4",
+      "requires": {
+        "families": [
+          "dualshock4"
+        ],
+        "ops": []
+      },
+      "identity": {
+        "usb": [
+          "1209:0f05"
+        ],
+        "bluetooth": []
+      },
+      "input": {
+        "protocol": {
+          "ref": "dualshock4",
+          "streamsUnprompted": true
+        },
+        "direct": {
+          "rule": "auto"
+        },
+        "capabilities": {
+          "motion": true,
+          "touchpad": true,
+          "trackpads": 0,
+          "battery": true,
+          "extendedButtons": false
+        }
+      },
+      "output": {
+        "route": "interruptOut",
+        "init": {
+          "kind": "none"
+        },
+        "capabilities": {
+          "rumble": true,
+          "triggerRumble": false,
+          "lightbar": true,
+          "playerLeds": false,
+          "micLed": false,
+          "triggerEffects": false
+        }
+      },
+      "expect": {
+        "endpoints": {
+          "in": true,
+          "out": true
+        }
+      },
+      "support": {
+        "verification": {
+          "state": "verified",
+          "transport": "usb"
+        },
+        "issues": [],
+        "sources": [
+          "future-reader fixture"
+        ]
+      },
+      "platforms": {
+        "android": {
+          "direct": {
+            "rule": "optIn"
+          }
+        },
+        "mac": {
+          "direct": {
+            "rule": "whenOsCannot"
+          }
+        },
+        "futureos": {
+          "direct": {
+            "rule": "auto"
+          }
+        }
+      }
+    },
+    {
+      "schema": 1,
+      "id": "future-pad-new-family",
+      "requires": {
+        "families": [
+          "futureFamily"
+        ],
+        "ops": []
+      },
+      "identity": {
+        "usb": [
+          "1209:0f01"
+        ],
+        "bluetooth": []
+      },
+      "input": {
+        "protocol": {
+          "ref": "futureFamily",
+          "streamsUnprompted": false
+        },
+        "direct": {
+          "rule": "auto"
+        },
+        "capabilities": {
+          "motion": false,
+          "touchpad": false,
+          "trackpads": 0,
+          "battery": false,
+          "extendedButtons": false
+        }
+      },
+      "output": {
+        "route": "interruptOut",
+        "init": {
+          "kind": "none"
+        },
+        "capabilities": {
+          "rumble": true,
+          "triggerRumble": false,
+          "lightbar": false,
+          "playerLeds": false,
+          "micLed": false,
+          "triggerEffects": false
+        }
+      },
+      "expect": {
+        "endpoints": {
+          "in": true,
+          "out": true
+        }
+      },
+      "support": {
+        "verification": {
+          "state": "verified",
+          "transport": "usb"
+        },
+        "issues": [],
+        "sources": [
+          "future-reader fixture"
+        ]
+      }
+    },
+    {
+      "schema": 1,
+      "id": "future-pad-new-op",
+      "requires": {
+        "families": [
+          "xinput360"
+        ],
+        "ops": [
+          "futureOp"
+        ]
+      },
+      "identity": {
+        "usb": [
+          "1209:0f03"
+        ],
+        "bluetooth": []
+      },
+      "input": {
+        "protocol": {
+          "ref": "xinput360",
+          "streamsUnprompted": false
+        },
+        "direct": {
+          "rule": "auto"
+        },
+        "capabilities": {
+          "motion": false,
+          "touchpad": false,
+          "trackpads": 0,
+          "battery": false,
+          "extendedButtons": false
+        }
+      },
+      "output": {
+        "route": "interruptOut",
+        "init": {
+          "kind": "none"
+        },
+        "capabilities": {
+          "rumble": true,
+          "triggerRumble": false,
+          "lightbar": false,
+          "playerLeds": false,
+          "micLed": false,
+          "triggerEffects": false
+        }
+      },
+      "expect": {
+        "endpoints": {
+          "in": true,
+          "out": true
+        }
+      },
+      "support": {
+        "verification": {
+          "state": "verified",
+          "transport": "usb"
+        },
+        "issues": [],
+        "sources": [
+          "future-reader fixture"
+        ]
+      }
+    },
+    {
+      "schema": 1,
+      "id": "8bitdo-m30-d-input",
+      "requires": {
+        "families": [
+          "hid"
+        ],
+        "ops": [
+          "mappingObject"
+        ]
+      },
+      "identity": {
+        "usb": [
+          "2dc8:5006"
+        ],
+        "bluetooth": []
+      },
+      "input": {
+        "protocol": {
+          "ref": "hid",
+          "streamsUnprompted": false
+        },
+        "direct": {
+          "rule": "optIn"
+        },
+        "capabilities": {
+          "motion": false,
+          "touchpad": false,
+          "trackpads": 0,
+          "battery": false,
+          "extendedButtons": false
+        },
+        "mapping": {
+          "buttons": {
+            "a": 1,
+            "b": 0
+          },
+          "axes": {
+            "lx": 0
+          }
+        }
+      },
+      "output": {
+        "route": null,
+        "init": {
+          "kind": "none"
+        },
+        "capabilities": {
+          "rumble": false,
+          "triggerRumble": false,
+          "lightbar": false,
+          "playerLeds": false,
+          "micLed": false,
+          "triggerEffects": false
+        }
+      },
+      "expect": {
+        "endpoints": {
+          "in": true,
+          "out": null
+        }
+      },
+      "support": {
+        "verification": {
+          "state": "imported",
+          "transport": "usb"
+        },
+        "issues": [],
+        "sources": [
+          "SDL hidapi controller_list.h via dish-android kImported"
+        ]
+      }
+    },
+    {
+      "schema": 1,
+      "id": "future-pad-misauthored",
+      "requires": {
+        "families": [
+          "hid"
+        ],
+        "ops": []
+      },
+      "identity": {
+        "usb": [
+          "1209:0f04"
+        ],
+        "bluetooth": []
+      },
+      "input": {
+        "protocol": {
+          "ref": "hid",
+          "streamsUnprompted": false
+        },
+        "direct": {
+          "rule": "futureRule"
+        },
+        "capabilities": {
+          "motion": false,
+          "touchpad": false,
+          "trackpads": 0,
+          "battery": false,
+          "extendedButtons": false
+        },
+        "mapping": "futureMapping"
+      },
+      "output": {
+        "route": "futureRoute",
+        "init": {
+          "kind": "futureInit"
+        },
+        "capabilities": {
+          "rumble": true,
+          "triggerRumble": false,
+          "lightbar": false,
+          "playerLeds": false,
+          "micLed": false,
+          "triggerEffects": false
+        }
+      },
+      "expect": {
+        "endpoints": {
+          "in": true,
+          "out": true
+        }
+      },
+      "support": {
+        "verification": {
+          "state": "futureState",
+          "transport": "futureTransport"
+        },
+        "issues": [
+          {
+            "id": "future-lane",
+            "transport": "futureTransport",
+            "lane": "output.futureLane",
+            "status": "futureStatus",
+            "since": "2027-01-01",
+            "reports": 0
+          }
+        ],
+        "sources": [
+          "future-reader fixture"
+        ]
+      },
+      "notes": {
+        "anything": [
+          "at",
+          "all"
+        ]
+      }
+    },
+    {
+      "schema": 1,
+      "id": "valve-steam-controller-bluetooth",
+      "requires": {
+        "families": [
+          "steamControllerBle"
+        ],
+        "ops": []
+      },
+      "identity": {
+        "usb": [],
+        "bluetooth": [
+          "28de:1106"
+        ]
+      },
+      "input": {
+        "protocol": {
+          "ref": "steamControllerBle",
+          "streamsUnprompted": false
+        },
+        "direct": {
+          "rule": "auto"
+        },
+        "capabilities": {
+          "motion": true,
+          "touchpad": false,
+          "trackpads": 2,
+          "battery": false,
+          "extendedButtons": true
+        }
+      },
+      "output": {
+        "route": null,
+        "init": {
+          "kind": "steamQuiet"
+        },
+        "capabilities": {
+          "rumble": false,
+          "triggerRumble": false,
+          "lightbar": false,
+          "playerLeds": false,
+          "micLed": false,
+          "triggerEffects": false
+        }
+      },
+      "expect": {
+        "endpoints": {
+          "in": true,
+          "out": null
+        }
+      },
+      "support": {
+        "verification": {
+          "state": "verified",
+          "transport": "bluetooth"
+        },
+        "issues": [],
+        "sources": [
+          "dish-android usb_parsers.cpp kKnown"
+        ]
+      }
+    }
+  ]
+}

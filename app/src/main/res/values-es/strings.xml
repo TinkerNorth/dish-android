@@ -906,6 +906,14 @@
     <string name="inspector_outcome_test_lamp_pulse">Luz del micrófono parpadeando</string>
     <string name="inspector_outcome_test_tone">Tono de prueba</string>
     <string name="inspector_outcome_test_mic">Micrófono</string>
+    <string name="inspector_outcome_test_trigger_rumble_left">Vibración de gatillos, izquierdo</string>
+    <string name="inspector_outcome_test_trigger_rumble_right">Vibración de gatillos, derecho</string>
+    <string name="inspector_outcome_test_trigger_rumble_both">Vibración de gatillos, ambos gatillos</string>
+    <string name="inspector_outcome_test_lightbar">Ciclo de la barra de luz</string>
+    <string name="inspector_outcome_test_player_leds">Ciclo de los LED de jugador</string>
+    <string name="inspector_outcome_test_haptics">Tono de prueba en la háptica</string>
+    <string name="inspector_outcome_test_stick_drift">Prueba de deriva</string>
+    <string name="inspector_outcome_test_stick_range">Prueba de recorrido</string>
     <string name="diagnostics_record">Registro</string>
     <string name="diagnostics_record_name">Conocido como</string>
     <string name="diagnostics_verification">Comprobado</string>

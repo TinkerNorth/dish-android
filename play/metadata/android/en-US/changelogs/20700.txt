@@ -1,6 +1,6 @@
-Dish 2.7.0: a controller list that updates itself, and a way to report a problem.
+Dish 2.7.0: the store build now delivers everything a game sends to your controller, and can report a problem.
 
-• Dish checks dish.tinkernorth.com for newer controller support. Settings has Check for controller updates automatically, on by default.
-• Diagnostics shows each controller's record, known issues and last write; Report a problem sends your words and a file to support from your mail app.
-• The controller inspector asks Did it work? after each test.
-• Satellite needs no update.
+• Fixed: light bar, player LEDs, adaptive triggers, mic lamp, controller sound, haptics, mute button, Moonlight and Bluetooth Steam Controller.
+• Dish checks dish.tinkernorth.com for newer controller support.
+• Diagnostics shows each controller's known issues and last write; Report a problem sends your words and a file to support.
+• The inspector asks Did it work? after each test.

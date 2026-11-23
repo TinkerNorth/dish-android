@@ -177,7 +177,8 @@ class MoonlightHttpGateway
             val staying = pins.pinnedFingerprint(toHostId)
             val agree = moving == null || staying == null || moving == staying
             val kept = pins.pinnedFingerprint(trustedHostId)?.takeIf { agree }
-            Log.i(TAG, "pins of $fromHostId and $toHostId ${if (agree) "agree" else "disagree"}; keeping ${kept ?: "none"}")
+            val keeping = if (kept != null) "one" else "none"
+            Log.i(TAG, "pins of $fromHostId and $toHostId ${if (agree) "agree" else "disagree"}; keeping $keeping")
             forgetPin(fromHostId)
             if (kept != staying) {
                 forgetPin(toHostId)

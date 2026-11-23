@@ -40,6 +40,9 @@ data class ControllerRecord(
     val input: RecordInput = RecordInput(),
     val output: RecordOutput = RecordOutput(),
     val expect: RecordExpect = RecordExpect(),
+    // Per-platform overrides, read as whatever JSON they are: a platform no build knows, or a shape
+    // a later schema gives one, must not cost the record (directRuleOf reads Android's).
+    val platforms: JsonElement? = null,
     val support: RecordSupport = RecordSupport(),
 )
 
@@ -128,6 +131,7 @@ data class FoundEndpoints(
 
 const val CONTROLLER_DB_SCHEMA = 1
 const val DIRECT_RULE_OPT_IN = "optIn"
+const val DIRECT_RULE_AUTO = "auto"
 const val INIT_NONE = "none"
 const val TRANSPORT_USB = "usb"
 const val TRANSPORT_BLUETOOTH = "bluetooth"
