@@ -597,6 +597,17 @@ that R8 kept what native code calls. Then:
 - with the Amazon secrets set, `scripts/amazon_appstore_publish.py` replaces the
   live APK in the Appstore.
 
+**The channels today.** The GitHub APK and the Google Play bundle are signed with the same release
+keystore (the 2.7.0 APK and bundle show one certificate, SHA-256
+`20348e63be387f3ab1ba280b2031b08c4558f5c421c87dbae9cceb36577585d1`), but Google Play delivers
+APKs signed with its own app-signing key, which this repository cannot read; it is under App
+integrity in the Play Console. The Amazon Appstore channel is built and not published: the
+`AMAZON_APPSTORE_CLIENT_ID` and `AMAZON_APPSTORE_CLIENT_SECRET` secrets and the
+`AMAZON_APPSTORE_APP_ID` variable are not set, so for 2.7.0 `publish-amazon` ran and skipped its
+upload, and the amazon APK exists only as the 90-day `amazon-appstore` workflow artifact. Nothing in
+this repository says whether a version is live in the Amazon console, which the API cannot create
+the first version of in any case.
+
 The asset names `dish.apk` and `latest.json` are a permanent API: the website and
 the app's update check read them by name. After the run, download `dish.apk`,
 check it against `SHA256SUMS`, install it and pair once.
