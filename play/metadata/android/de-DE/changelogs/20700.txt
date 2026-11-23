@@ -1,6 +1,6 @@
-Dish 2.7.0: eine Controller-Liste, die sich selbst aktualisiert, und Probleme melden.
+Dish 2.7.0: Die Store-Version liefert alles, was ein Spiel an den Controller schickt, und kann Probleme melden.
 
-• Dish fragt dish.tinkernorth.com nach neuen Controllern.
-• Die Diagnose zeigt bekannte Probleme und den letzten Schreibvorgang; Problem melden schickt eine Datei an den Support.
-• Der Inspektor fragt nach jedem Test, ob es funktioniert hat.
 • Behoben: Leuchtleiste, Spieler-LEDs, Adaptive Trigger, Mikrofonlampe, Controller-Ton, Haptik, Stummtaste, Moonlight und Steam Controller über Bluetooth.
+• Dish fragt dish.tinkernorth.com nach neuen Controllern.
+• Die Diagnose zeigt bekannte Probleme und den letzten Schreibvorgang; Problem melden schickt eine Datei.
+• Der Inspektor fragt nach jedem Test, ob es funktioniert hat.

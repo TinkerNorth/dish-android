@@ -1,6 +1,6 @@
-Dish 2.7.0: uma lista de controles que se atualiza sozinha e um jeito de relatar problemas.
+Dish 2.7.0: a versão da loja entrega ao controle tudo o que o jogo envia, e permite relatar problemas.
 
+• Corrigido: barra de luz, LEDs de jogador, gatilhos adaptáveis, luz do microfone, som do controle, háptica, botão de mudo, Moonlight e Steam Controller por Bluetooth.
 • O Dish consulta o dish.tinkernorth.com por controles novos.
 • O diagnóstico mostra os problemas conhecidos e a última escrita; Relatar um problema manda um arquivo.
 • O inspetor pergunta se funcionou depois de cada teste.
-• Corrigido: barra de luz, LEDs de jogador, gatilhos adaptáveis, luz do microfone, som do controle, háptica, botão de mudo, Moonlight e Steam Controller por Bluetooth.
