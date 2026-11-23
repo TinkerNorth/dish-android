@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 #include "usb_parsers.h"
+#include "bits.h"
 #include "known_devices.generated.h"
 #include "wire_encoders.h"
 
@@ -418,7 +419,7 @@ int32_t sendFeatureReport(const int fd, const int interfaceNumber, const uint8_t
         struct usbdevfs_ctrltransfer ct = {};
         ct.bRequestType = USB_REQUEST_TYPE_OUT_CLASS_INTERFACE;
         ct.bRequest = USB_REQUEST_SET_REPORT;
-        ct.wValue = (uint16_t)((HID_REPORT_TYPE_FEATURE << 8) | reportId);
+        ct.wValue = hidControlValue(HID_REPORT_TYPE_FEATURE, reportId);
         ct.wIndex = (uint16_t)interfaceNumber;
         ct.wLength = (uint16_t)sizeof(buf);
         ct.timeout = USB_CONTROL_TIMEOUT_MS;
@@ -454,30 +455,29 @@ constexpr int32_t kU8AxisCenter = 128;
 // 255 * 257 = 65535: an 8-bit axis stretched over the whole 16-bit range.
 constexpr int32_t kU8ToI16 = 257;
 constexpr int32_t kWireAxisSpan = 65535;
-constexpr int kHighByteShift = 8;
-constexpr int kNibbleShift = 4;
-constexpr uint8_t kLowNibbleMask = 0x0F;
+constexpr uint32_t kHighByteShift = 8;
+constexpr uint32_t kNibbleShift = 4;
+constexpr uint32_t kLowNibbleMask = 0x0F;
 
 int16_t clampI16(const int64_t v) { return (int16_t)std::clamp(v, kAxisMin, kAxisMax); }
 
-uint8_t highByte(const uint16_t v) { return (uint8_t)(v >> kHighByteShift); }
+uint8_t highByte(const uint16_t v) { return dish_bits::byteOf(dish_bits::u32(v), 1U); }
 
 int16_t rdLe16(const uint8_t* b, const int off) {
-    return (int16_t)((uint16_t)b[off] | ((uint16_t)b[off + 1] << kHighByteShift));
+    return dish_bits::asInt16(dish_bits::loadLe16(b + off));
 }
 
-uint32_t rdLe24(const uint8_t* b) {
-    return (uint32_t)b[0] | ((uint32_t)b[1] << kHighByteShift) |
-           ((uint32_t)b[2] << (2 * kHighByteShift));
-}
+uint32_t rdLe24(const uint8_t* b) { return dish_bits::loadLe24(b); }
 
-uint32_t rdLe32(const uint8_t* b) { return rdLe24(b) | ((uint32_t)b[3] << (3 * kHighByteShift)); }
+uint32_t rdLe32(const uint8_t* b) { return dish_bits::loadLe32(b); }
 
 // Two 12-bit values packed little-endian into three bytes: the first is [0] plus the low nibble of
 // [1], the second the high nibble of [1] plus [2].
 void unpackTwo12Bit(const uint8_t* p, uint16_t& first, uint16_t& second) {
-    first = (uint16_t)((uint16_t)p[0] | (((uint16_t)p[1] & kLowNibbleMask) << kHighByteShift));
-    second = (uint16_t)(((uint16_t)p[1] >> kNibbleShift) | ((uint16_t)p[2] << kNibbleShift));
+    first = dish_bits::low16(dish_bits::u32(p[0]) |
+                             ((dish_bits::u32(p[1]) & kLowNibbleMask) << kHighByteShift));
+    second = dish_bits::low16((dish_bits::u32(p[1]) >> kNibbleShift) |
+                              (dish_bits::u32(p[2]) << kNibbleShift));
 }
 
 int16_t scaleU8Centered(const uint8_t v, const bool invert) {
@@ -591,8 +591,9 @@ int16_t ds4AccelAxisToWire(const int32_t raw, const PsImuCalib& c, const int axi
 }
 
 uint16_t setDpadFromHat(const uint16_t buttons, const uint8_t hat) {
-    const uint16_t withoutDpad = (uint16_t)(buttons & ~XUSB_DPAD_MASK);
-    const int direction = (int)(hat & kLowNibbleMask);
+    const uint16_t withoutDpad =
+        dish_bits::low16(dish_bits::u32(buttons) & ~dish_bits::u32(XUSB_DPAD_MASK));
+    const int direction = static_cast<int>(dish_bits::u32(hat) & kLowNibbleMask);
     return (uint16_t)(withoutDpad | hatDirectionBits(direction));
 }
 
@@ -675,7 +676,8 @@ constexpr ButtonBit kGipDpadByteBits[] = {
 };
 
 uint8_t gipTriggerToXusb(const uint8_t lo, const uint8_t hi) {
-    const uint16_t raw = (uint16_t)((uint16_t)lo | ((uint16_t)hi << kHighByteShift));
+    const uint16_t raw =
+        dish_bits::low16(dish_bits::u32(lo) | (dish_bits::u32(hi) << kHighByteShift));
     const uint16_t clamped = std::min(raw, kGipTriggerMax);
     return (uint8_t)((clamped * kTriggerMax) / kGipTriggerMax);
 }
@@ -688,7 +690,7 @@ bool applyXboxVirtualKey(const uint8_t* buf, DeviceState& s, ParserState& st) {
     if (st.xboxGuideHeld) {
         s.wButtons |= XUSB_GUIDE;
     } else {
-        s.wButtons = (uint16_t)(s.wButtons & ~XUSB_GUIDE);
+        s.wButtons = dish_bits::low16(dish_bits::u32(s.wButtons) & ~dish_bits::u32(XUSB_GUIDE));
     }
     return true;
 }
@@ -777,7 +779,7 @@ constexpr uint8_t kSonyTenthsMask = 0x0F;
 constexpr uint8_t kDs4CableBit = 0x10;
 constexpr uint8_t kSonyTenthsStillCharging = 10;
 constexpr uint8_t kSonyTenthsFull = 11;
-constexpr int kDs5BatteryStateShift = 4;
+constexpr uint32_t kDs5BatteryStateShift = 4;
 constexpr uint8_t kDs5BatteryDischarging = 0x0;
 constexpr uint8_t kDs5BatteryCharging = 0x1;
 constexpr uint8_t kDs5BatteryFull = 0x2;
@@ -835,7 +837,7 @@ void decodeDs4Battery(const uint8_t status, DeviceState& s) {
 // temperature or voltage fault and 0xF a charging fault; a fault has no charge worth showing.
 void decodeDualSenseBattery(const uint8_t status, DeviceState& s) {
     const uint8_t tenths = (uint8_t)(status & kSonyTenthsMask);
-    const uint8_t state = (uint8_t)(status >> kDs5BatteryStateShift);
+    const uint8_t state = dish_bits::lowByte(dish_bits::u32(status) >> kDs5BatteryStateShift);
     s.batteryValid = true;
     switch (state) {
     case kDs5BatteryDischarging:
@@ -981,7 +983,8 @@ uint16_t decodeSwitchProButtons(const uint8_t right, const uint8_t shared, const
     const uint16_t rightSide = buttonsFromByte(right, kSwitchRightByteBits);
     const uint16_t middle = buttonsFromByte(shared, kSwitchSharedByteBits);
     const uint16_t leftSide = buttonsFromByte(left, kSwitchLeftByteBits);
-    return (uint16_t)(rightSide | middle | leftSide);
+    return dish_bits::low16(dish_bits::u32(rightSide) | dish_bits::u32(middle) |
+                            dish_bits::u32(leftSide));
 }
 
 bool isSwitchInputReport(const uint8_t* buf, const size_t len) {
@@ -1007,14 +1010,14 @@ void decodeSwitchRightStick(const uint8_t* buf, ParserState& sticks, DeviceState
 // hid-nintendo's bat_con: bits 7..5 the charge in five steps (empty, critical, low, medium,
 // full), bit 4 charging, bit 0 host-powered. The percent is the step's midpoint, the same coarse
 // number the framework shows for this pad.
-constexpr int kSwitchBatteryStepShift = 5;
+constexpr uint32_t kSwitchBatteryStepShift = 5;
 constexpr uint8_t kSwitchChargingBit = 0x10;
 constexpr uint8_t kSwitchHostPoweredBit = 0x01;
 constexpr uint8_t kSwitchBatteryStepPercent[] = {5, 25, 50, 75, 100};
 constexpr uint8_t kSwitchBatteryFullStep = 4;
 
 void decodeSwitchProBattery(const uint8_t batCon, DeviceState& s) {
-    const uint8_t step = (uint8_t)(batCon >> kSwitchBatteryStepShift);
+    const uint8_t step = dish_bits::lowByte(dish_bits::u32(batCon) >> kSwitchBatteryStepShift);
     const bool charging = (batCon & kSwitchChargingBit) != 0;
     const bool hostPowered = (batCon & kSwitchHostPoweredBit) != 0;
     const bool stepIsKnown = step <= kSwitchBatteryFullStep;
@@ -1131,7 +1134,8 @@ bool decodeSwitchN64Usb(const uint8_t* buf, const size_t len, DeviceState& s, Pa
     const uint16_t rightSide = buttonsFromByte(rightByte, kN64RightByteBits);
     const uint16_t middle = buttonsFromByte(sharedByte, kN64SharedByteBits);
     const uint16_t leftSide = buttonsFromByte(leftByte, kN64LeftByteBits);
-    s.wButtons = (uint16_t)(rightSide | middle | leftSide);
+    s.wButtons = dish_bits::low16(dish_bits::u32(rightSide) | dish_bits::u32(middle) |
+                                  dish_bits::u32(leftSide));
     s.bLT = (leftByte & kN64LeftZBit) ? kTriggerMax : 0;
     s.bRT = (sharedByte & kN64SharedZrBit) ? kTriggerMax : 0;
 
@@ -1226,7 +1230,7 @@ constexpr int kSteamAccelOffset = 28;
 constexpr int kSteamGyroOffset = 34;
 constexpr int32_t kSteamTriggerMaxAnalog = 26000;
 // The 8-bit trigger byte replicated into the 15-bit scale SDL reads the pad at.
-constexpr int kSteamTriggerWidenShift = 7;
+constexpr uint32_t kSteamTriggerWidenShift = 7;
 constexpr int64_t kQ16One = 65536;
 // 15 degrees in Q16; the pads sit rotated on the shell and SDL applies the same correction.
 constexpr int64_t kSteamPadCos = 63303;
@@ -1242,7 +1246,8 @@ bool isSteamPacket(const uint8_t* buf, const uint8_t type) {
 }
 
 uint8_t steamTriggerToWire(const uint8_t raw) {
-    const int32_t widened = ((int32_t)raw << kSteamTriggerWidenShift) | raw;
+    const int32_t widened =
+        dish_bits::asInt32((dish_bits::u32(raw) << kSteamTriggerWidenShift) | dish_bits::u32(raw));
     const int32_t clamped = std::min(widened, kSteamTriggerMaxAnalog);
     return (uint8_t)((clamped * kTriggerMax) / kSteamTriggerMaxAnalog);
 }
@@ -1349,7 +1354,11 @@ void publishSteamMotion(const SteamImu& imu, DeviceState& s) {
     const int16_t gx = imu.gyro[0];
     const int16_t gy = imu.gyro[1];
     const int16_t gz = imu.gyro[2];
-    const bool imuIsAlive = (ax | ay | az | gx | gy | gz) != 0;
+    const uint32_t imuBits =
+        dish_bits::u32(dish_bits::asUint16(ax)) | dish_bits::u32(dish_bits::asUint16(ay)) |
+        dish_bits::u32(dish_bits::asUint16(az)) | dish_bits::u32(dish_bits::asUint16(gx)) |
+        dish_bits::u32(dish_bits::asUint16(gy)) | dish_bits::u32(dish_bits::asUint16(gz));
+    const bool imuIsAlive = imuBits != 0U;
     if (!imuIsAlive) return;
 
     s.gyroX = steamGyroToWire(gx);
@@ -1522,7 +1531,8 @@ void stepOverSteamBleChunk(SteamBleChunks& c, const uint32_t chunk, const size_t
 // What a packet's chunks say over the held state, kept only when the packet holds every chunk it
 // names.
 bool readSteamBleChunks(const uint8_t* packet, const size_t len, SteamBleHeld& held) {
-    const uint32_t mask = (packet[0] & kSteamBleMaskLowNibble) | ((uint32_t)packet[1] << 8);
+    const uint32_t mask =
+        (dish_bits::u32(packet[0]) & kSteamBleMaskLowNibble) | (dish_bits::u32(packet[1]) << 8U);
     SteamBleChunks c{packet, len, mask};
     SteamBleHeld next = held;
     readSteamBleButtons(c, next);
@@ -2531,7 +2541,9 @@ bool rumbleIsRunning(const FeedbackState& st) { return st.strong != 0 || st.weak
 // pad, and pulse counts as lit.
 void reassertDs5MicMuteLed(const FeedbackState& st, uint8_t* out) {
     if (!st.ds5MicMuteLedSet) return;
-    out[kDs5ValidFlag1Byte] |= kDs5ValidFlag1MicMuteLed | kDs5ValidFlag1PowerSave;
+    out[kDs5ValidFlag1Byte] = dish_bits::lowByte(dish_bits::u32(out[kDs5ValidFlag1Byte]) |
+                                                 dish_bits::u32(kDs5ValidFlag1MicMuteLed) |
+                                                 dish_bits::u32(kDs5ValidFlag1PowerSave));
     out[kDs5MicMuteLedByte] = st.ds5MicMuteLed;
     const bool lampIsLit = st.ds5MicMuteLed != MIC_MUTE_LED_OFF;
     out[kDs5PowerSaveByte] = lampIsLit ? kDs5PowerSaveMicMute : 0x00;
@@ -2917,7 +2929,7 @@ int32_t writeHidOutputReport(const int fd, const int interfaceNumber, const uint
     struct usbdevfs_ctrltransfer ct = {};
     ct.bRequestType = USB_REQUEST_TYPE_OUT_CLASS_INTERFACE;
     ct.bRequest = USB_REQUEST_SET_REPORT;
-    ct.wValue = (uint16_t)((HID_REPORT_TYPE_OUTPUT << 8) | buf[0]);
+    ct.wValue = hidControlValue(HID_REPORT_TYPE_OUTPUT, buf[0]);
     ct.wIndex = (uint16_t)interfaceNumber;
     ct.wLength = (uint16_t)n;
     ct.timeout = USB_CONTROL_TIMEOUT_MS;

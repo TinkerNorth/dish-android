@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <string>
 
+#include "bits.h"
 #include "gamepad_input.h"
 #include "usb_hid_descriptor.h"
 
@@ -549,5 +550,11 @@ inline constexpr uint8_t HID_REPORT_TYPE_OUTPUT = 0x02;
 inline constexpr uint8_t HID_REPORT_TYPE_FEATURE = 0x03;
 inline constexpr uint8_t HID_DESCRIPTOR_TYPE_REPORT = 0x22;
 inline constexpr unsigned USB_CONTROL_TIMEOUT_MS = 250;
+
+// A control transfer's wValue: a HID report type in the high byte and a report id (or 0) in the
+// low.
+inline constexpr uint16_t hidControlValue(const uint8_t reportType, const uint8_t reportId) {
+    return dish_bits::low16((dish_bits::u32(reportType) << 8U) | dish_bits::u32(reportId));
+}
 
 } // namespace usbparsers

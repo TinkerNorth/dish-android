@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 #include "usb_host.h"
+#include "bits.h"
 
 #include <android/log.h>
 #include <linux/usbdevice_fs.h>
@@ -310,8 +311,9 @@ UrbSlot* findCompletedSlot(UrbSlot* (&slots)[kInFlightUrbs], const usbdevfs_urb*
 // A level in tenths moves minutes apart and Kotlin polls it, so a store is all the mirror costs.
 void publishBattery(DeviceCtx& ctx, const gamepad::DeviceState& scratch) {
     if (!scratch.batteryValid) return;
-    const uint32_t packed = ((uint32_t)scratch.batteryLevel << 8) | scratch.batteryStatus;
-    ctx.entry->stats.lastBattery.store((int32_t)packed, std::memory_order_relaxed);
+    const uint32_t packed =
+        (dish_bits::u32(scratch.batteryLevel) << 8U) | dish_bits::u32(scratch.batteryStatus);
+    ctx.entry->stats.lastBattery.store(dish_bits::asInt32(packed), std::memory_order_relaxed);
 }
 
 // The decoder owns the mute latch (the wire bit has to be folded in here, on this thread, with no
@@ -660,7 +662,7 @@ void fetchHidLayout(int fd, int interfaceNumber, usbhid::HidLayout& out) {
     struct usbdevfs_ctrltransfer ct = {};
     ct.bRequestType = usbparsers::USB_REQUEST_TYPE_IN_STANDARD_INTERFACE;
     ct.bRequest = usbparsers::USB_REQUEST_GET_DESCRIPTOR;
-    ct.wValue = (uint16_t)(usbparsers::HID_DESCRIPTOR_TYPE_REPORT << 8); // index 0
+    ct.wValue = usbparsers::hidControlValue(usbparsers::HID_DESCRIPTOR_TYPE_REPORT, 0); // index 0
     ct.wIndex = (uint16_t)interfaceNumber;
     ct.wLength = sizeof(desc);
     ct.timeout = usbparsers::USB_CONTROL_TIMEOUT_MS;
@@ -675,7 +677,7 @@ int readFeatureReport(int fd, int interfaceNumber, uint8_t reportId, uint8_t* bu
     struct usbdevfs_ctrltransfer ct = {};
     ct.bRequestType = usbparsers::USB_REQUEST_TYPE_IN_CLASS_INTERFACE;
     ct.bRequest = usbparsers::USB_REQUEST_GET_REPORT;
-    ct.wValue = (uint16_t)((usbparsers::HID_REPORT_TYPE_FEATURE << 8) | reportId);
+    ct.wValue = usbparsers::hidControlValue(usbparsers::HID_REPORT_TYPE_FEATURE, reportId);
     ct.wIndex = (uint16_t)interfaceNumber;
     ct.wLength = (uint16_t)cap;
     ct.timeout = usbparsers::USB_CONTROL_TIMEOUT_MS;
@@ -1099,8 +1101,8 @@ std::string deviceInfoJson(int32_t deviceId) {
     if (ctx->firmware.valid) {
         // The DualSense's feature version as its firmware names it: 0x0221 is 2.21.
         snprintf(buf, sizeof(buf), ",\"firmware\":\"%X.%02X\"",
-                 (unsigned)(ctx->firmware.featureVersion >> 8),
-                 (unsigned)(ctx->firmware.featureVersion & 0xFF));
+                 dish_bits::byteOf(dish_bits::u32(ctx->firmware.featureVersion), 1U),
+                 dish_bits::byteOf(dish_bits::u32(ctx->firmware.featureVersion), 0U));
         out += buf;
     }
     out += "}";
