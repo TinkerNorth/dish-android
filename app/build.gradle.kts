@@ -422,6 +422,8 @@ tasks.withType<Test>().configureEach {
                 "THIRD_PARTY.md",
                 "DESIGN.md",
                 "docs/contract.md",
+                "README.md",
+                "CHANGELOG.md",
             ),
             layout.projectDirectory.files(
                 "src/main/cpp/CMakeLists.txt",
