@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/TinkerNorth/dish-android/security/advisories/new
+    about: Do not file a public issue. Report privately here, or email security@tinkernorth.com. See SECURITY.md.
+  - name: Problem with the Satellite server
+    url: https://github.com/TinkerNorth/satellite/issues
+    about: Dish needs a Satellite server on your LAN. If the server is what is misbehaving, report it there.
+  - name: Problem with another Dish client
+    url: https://github.com/TinkerNorth
+    about: The iOS, macOS, Windows and Linux clients have their own repositories and their own issue trackers.

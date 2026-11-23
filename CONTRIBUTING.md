@@ -14,19 +14,102 @@ to `security@tinkernorth.com`.
 
 ```bash
 # 1) Install an Android Studio that supports the AGP version pinned in
-#    gradle/libs.versions.toml, plus the NDK, CMake 3.22.1 and JDK 17+
+#    gradle/libs.versions.toml, plus the NDK (pinned as ndkVersion in
+#    app/build.gradle.kts), CMake 3.22.1 and a JDK to start Gradle
 # 2) Open the project in Android Studio (Gradle sync downloads deps)
 # 3) Point git at the in-tree pre-commit hook
 scripts/setup-hooks.sh
+# 4) Run every CI gate against your worktree, in CI's order
+scripts/ci-local.sh
 ```
 
-The pre-commit hook runs `clang-format -i` (autofix, re-stages) on staged
-JNI C/C++ files and `scripts/check-translations.py`, which compares every
-source set's `values/` strings with that source set's own locales, when a
-strings file under any `app/src/*/res` is staged; it skips Kotlin to keep
-itself fast. CI runs `clang-format
---dry-run --Werror` on the JNI plus `ktlintCheck`, `detekt`, and lint on
-the Kotlin tree, so anything that slips locally fails the PR.
+`scripts/ci-local.sh` runs what the build job of `android-ci.yml` runs, through
+the same scripts: the pinned clang-format over the JNI, the Play metadata and
+translation checks, the release script tests, root-level `ktlintCheck` and
+`detekt`, the three flavours' lint and unit tests, the C++ host tests, the
+three debug APKs with their ABI check, and the unsigned minified release builds
+(the GitHub APK, the Play APK and bundle, the Amazon APK) with the ABI check and
+`scripts/check_jni_keeps.py`. A green run there is a green "Build, test, lint,
+format" job. It needs `ANDROID_HOME`, a JDK to start Gradle (the build's own JDK
+comes from `gradle/gradle-daemon-jvm.properties`; CI uses Temurin 17) and
+`python3`. A missing tool fails the run; `--allow-missing` turns that into a
+notice, so a green run never hides a skipped gate.
+
+| Flag | Effect |
+|---|---|
+| `--quick` | the fast gates only: format, metadata, translations, script tests, ktlint, detekt, JVM unit tests |
+| `--with-instrumented` | also run the `integration` package on the attached device or emulator. Start an emulator with `-read-only -dns-server 8.8.8.8,1.1.1.1` so it reaches the network |
+| `--with-gmd` | also run it on the `pixel6Api34` managed device |
+| `--with-armv7` | off Linux, also run the 32-bit ARM host tests under qemu in the container; qemu is too slow on a laptop for the bench's 1 ms pacing, so this is for a machine you can leave alone |
+| `--allow-missing` | a missing tool is a notice, not a failure |
+
+The C++ host tests (`:app:nativeTest`, `scripts/native-tests.sh`) build on Linux
+only, because they use `sem_timedwait` and `SO_BUSY_POLL`. On any other host
+`scripts/ci-local.sh` runs the same CMake targets in an `ubuntu:24.04` container
+through `scripts/native-tests-docker.sh`, so Docker is needed there; the 32-bit ARM
+run under `qemu-arm` stays in CI unless you pass `--with-armv7`.
+
+What `ci-local.sh` cannot run is listed in its header: the API 35 and API 28
+emulator jobs of `android-ci.yml` (`--with-instrumented` is the local
+counterpart of the first), CodeQL, `security.yml`, and, because they need a
+secret, signing, the Crashlytics symbol upload, the baseline profile and the
+store uploads.
+
+The formatter is pinned once, as `CLANG_FORMAT_VERSION` in `scripts/tools.sh`,
+and installed into `build/tools` by `scripts/check-format.sh`, which CI and
+`ci-local.sh` both call (`scripts/check-format.sh --fix` rewrites the files). The
+fleet's C++ repos move it together. A bump is a deliberate commit that reformats
+the tree with it.
+
+The pre-commit hook runs `clang-format -i` (autofix, re-stages) on staged JNI
+C/C++ files and `scripts/check-translations.py` when a strings file under any
+`app/src/*/res` is staged; it skips Kotlin to keep itself fast. CI re-runs both
+and `ktlintCheck`, `detekt` and lint on the Kotlin tree, so anything that slips
+locally fails the PR.
+
+## Where code goes
+
+The packages under `app/src/main/java/com/tinkernorth/dish` are laid out so the
+kind of thing you are writing says where it goes; `docs/ARCHITECTURE.md` has the
+rules and the reasons.
+
+| You have... | It goes in |
+|---|---|
+| a pure decision, mapping or derivation with no Android view types | a reducer or mapper under `composer/` or beside the screen (`ui/<screen>/`), tested on the JVM |
+| state owned from a socket, sensor, Bluetooth link or store | `source/` |
+| SharedPreferences-backed keyed storage | `repository/` |
+| the satellite boundary: JNI bindings, HTTPS, wire types | `core/` (`core/jni`, `core/net`, `core/model`) |
+| the controller database's reading and its pure decisions | `core/controllerdb/`; fetching and storing it is `source/controllerdb/` |
+| per-event code that must not allocate or block | `hotpath/`, and the C++ under `app/src/main/cpp` |
+| a screen | an Activity in `ui/`, inflating a layout XML, navigated to through `DishNavigator` |
+| anything testable in the JNI | one of the host-buildable files under `app/src/main/cpp`, with its googletest target in `app/src/test/cpp`; `satellite_jni.cpp` is Android-only glue |
+
+Flavour code lives in `app/src/github`, `play` and `amazon`, with the code two
+flavours share in `app/src/donate` and `app/src/storeUpdates` (wired in
+`app/build.gradle.kts`). `docs/contract.md` maps the satellite protocol onto
+these files.
+
+## Touching the UI
+
+Every size is a `@dimen`, every colour a `@color`, every word a `@string`, and
+`DESIGN.md` is the reference for the tokens, the styles, the layout composites,
+the navigation destinations and the distribution flavours. A layout that carries
+a raw size or an undeclared dimen fails `LayoutResourceRulesTest`. Views are
+defined in layout XML and inflated, never built in code; standard screens go
+through `BaseGamepadHostActivity.setScaffoldContent`, and all navigation goes
+through `DishNavigator`. A value that is missing from `DESIGN.md` is either
+deliberately one-off (the file says where) or new drift: name it there and route
+the call site through it. `nav_graph.xml` and the destination table in
+`DESIGN.md` are held equal by a test.
+
+## Translations
+
+Six locales ship: English, Bosnian, German, Spanish, French and Brazilian
+Portuguese, each source set's `values/` and its own `values-<locale>/`. A new
+string needs its entry in every locale of the source set it lives in, in the
+same commit. Lint fails the build on a missing one (`MissingTranslation` is an
+error), and `scripts/check-translations.py` runs the same check without Gradle:
+the pre-commit hook, `ci-local.sh` and CI all call it.
 
 ## License headers
 
@@ -184,8 +267,8 @@ app, JNI and test code alike.
   and never narrates what the next line does. Before writing a comment, ask
   whether a test could pin the behaviour instead; then write the test.
 
-  Exempt, because the constraint is untestable by construction: the pin-map
-  headers in `.github/workflows/`, the usage headers in `scripts/`, and
+  Exempt, because the constraint is untestable by construction: the usage
+  headers in `scripts/` and `.github/workflows/`, and
   `app/proguard-rules.pro`, where a keep rule's comment explains what would
   otherwise be shrunk away.
 
@@ -205,7 +288,7 @@ app, JNI and test code alike.
   construction. Standard screens go through
   `BaseGamepadHostActivity.setScaffoldContent`.
 - Pure decision and mapping logic belongs in a reducer or a mapper, not in a
-  coordinator. [`docs/architecture.md`](docs/architecture.md) defines both
+  coordinator. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) defines both
   and says where the line is.
 
 ### JNI / C++
@@ -232,9 +315,7 @@ app, JNI and test code alike.
 - Resource invariants that matter are checked, not commented:
   `LayoutResourceRulesTest` fails on a layout that carries a raw size or
   references an undeclared dimen, and lint fails the build on a string
-  missing from any shipped locale (`MissingTranslation` is an error; the
-  pre-commit hook runs the same check through
-  `scripts/check-translations.py`).
+  missing from any shipped locale (see Translations).
 - The controller-glyph vectors in `res/drawable/` that `tools/svg2vd.ps1`
   lists are generated from Kenney's input-prompt SVGs. Don't hand-edit them
   and don't apply style rules to them: change the SVG and regenerate.
@@ -250,12 +331,15 @@ app, JNI and test code alike.
   code two flavours share, wired through `sourceSets` in
   `app/build.gradle.kts`, all under the same rules.
 - `app/src/test/cpp`: googletest over the host-buildable JNI split, one
-  target per layer (`gamepad_input`, `wire_encoders`, `usb_parsers`,
-  `usb_hid_descriptor`, `send_counter`, `message_tally`, `audio_jitter`, `heartbeat_thread`,
-  `hotpath_latency`, `audio_codec`, `bridge_connection_ids`), run by
-  `./gradlew :app:nativeTest`. CI also cross-compiles them for 32-bit ARM
-  and runs them under `qemu-arm`, so a `size_t`, `long` or pointer-width
-  assumption fails the way it would on `armeabi-v7a`.
+  target per layer; `app/src/test/cpp/CMakeLists.txt` is the list. `./gradlew
+  :app:nativeTest` runs them on Linux, and `scripts/native-tests.sh` (or
+  `scripts/native-tests-docker.sh` from another OS) runs them with the
+  lock-statistics bench. CI also cross-compiles them for 32-bit ARM and runs
+  them under `qemu-arm`, so a `size_t`, `long` or pointer-width assumption fails
+  the way it would on `armeabi-v7a`.
+- `NativeLookupKeepRulesTest` ties every member the JNI looks up by name to a
+  rule in `app/proguard-rules.pro` (see "Adding a JNI lookup", under Touching
+  the hot path).
 - `app/src/androidTest`: instrumented tests for what genuinely needs a
   device; `app/src/androidTestGithub` and `app/src/androidTestAmazon` hold
   the ones about a single flavour.
@@ -295,53 +379,75 @@ app, JNI and test code alike.
 
 - All changes land on `main` via pull request: no direct pushes.
 - Commits and PR descriptions name no tool. No `Co-Authored-By` trailer for an
-  assistant, no "Generated with …" footer: the author of record is the person
+  assistant, no "Generated with ..." footer: the author of record is the person
   who opened the PR, whatever helped write it.
-- Use the PR template (`.github/pull_request_template.md`) to describe
-  the change, the manual test matrix you ran (real device + emulator),
-  and call out anything that touches the wire protocol.
+- Use the PR template (`.github/pull_request_template.md`) to describe the
+  change, the tests that failed before it, the manual check you ran (device or
+  emulator, Android version, controller, host), and to call out anything that
+  touches the wire protocol. Anything user-facing adds a line under
+  `## [Unreleased]` in `CHANGELOG.md`.
+- A change to the wire protocol or the pairing flow is marked
+  `[wire-coordinated]` in the CHANGELOG and lands with the matching change in
+  `satellite` and the sibling clients (see Touching the wire protocol).
 - Keep commits focused; squash noisy fixup commits before review.
 
 ## What CI runs
 
 Build + style:
 
-- `android-ci.yml`, build job: `clang-format` over `app/src/main/cpp/`,
-  `scripts/check_play_metadata.py`, `./gradlew ktlintCheck`,
-  `./gradlew detekt`, `./gradlew lintGithubDebug lintPlayDebug
-  lintAmazonDebug`, `./gradlew testGithubDebugUnitTest
-  testPlayDebugUnitTest testAmazonDebugUnitTest`, `./gradlew
-  :app:nativeTest`, `./gradlew assembleGithubDebug assemblePlayDebug
-  assembleAmazonDebug` (uploads the APKs as a CI artifact), then
-  `scripts/check_apk_abis.py` on each APK (its flavour's exact ABI set,
-  `armeabi-v7a` included) and `scripts/check_sodium_ti_mode.py` (libsodium's
-  128-bit arithmetic on the 64-bit ABIs only).
-- `android-ci.yml`, integration job: `connectedGithubDebugAndroidTest` over
-  the `integration` package on an API 35 emulator.
-- `android-ci.yml`, native-armv7 job: the `app/src/test/cpp` targets built
-  with `g++-arm-linux-gnueabihf` and run by `ctest` under `qemu-arm`.
-- `android-ci.yml`, ARM translation job: `connectedAmazonDebugAndroidTest`
-  over the `integration` package on an API 28 x86 emulator, which runs the
-  amazon APK's `armeabi-v7a` library through ARM translation. First,
-  `scripts/ci_arm_translation_proof.sh` fails unless the device ABI list
-  names `armeabi-v7a` and no 64-bit ABI, a native bridge is set, the install
-  has `primaryCpuAbi=armeabi-v7a`, the running app maps a translator and the
-  ARM guest `liblog.so` and `libandroid.so`, and its log has no native-load
-  failure.
+- `android-ci.yml`, job "Build, test, lint, format": `scripts/check-format.sh`
+  (the pinned clang-format over `app/src/main/cpp/`), `scripts/check_play_metadata.py`,
+  `scripts/check-translations.py`, the release script tests (`python3 -m
+  unittest discover -s scripts -p '*_test.py' -t scripts`), `./gradlew
+  ktlintCheck`, `./gradlew detekt`, `./gradlew lintGithubDebug lintPlayDebug
+  lintAmazonDebug`, `./gradlew testGithubDebugUnitTest testPlayDebugUnitTest
+  testAmazonDebugUnitTest`, `./gradlew :app:nativeTest`, then
+  `scripts/check-builds.sh debug` (the three debug APKs, uploaded as a CI
+  artifact, each checked with `scripts/check_apk_abis.py` for its flavour's exact
+  ABI set, `armeabi-v7a` included), `scripts/check-builds.sh release` (the
+  unsigned minified GitHub, Play and Amazon builds, the Play bundle among them,
+  each checked for its ABIs and, with `scripts/check_jni_keeps.py`, for every
+  member native code resolves by name) and `scripts/check_sodium_ti_mode.py`
+  (libsodium's 128-bit arithmetic on the 64-bit ABIs only).
+- `android-ci.yml`, "Integration tests (emulator)": `connectedGithubDebugAndroidTest`
+  over the `integration` package on an API 35 emulator.
+- `android-ci.yml`, "C++ host tests (32-bit ARM, qemu)": the `app/src/test/cpp`
+  targets built with `g++-arm-linux-gnueabihf` and run by `ctest` under
+  `qemu-arm` (`scripts/native-tests.sh armv7`).
+- `android-ci.yml`, "C++ host tests and bench smoke (x86_64)": the same targets
+  with the runner's own g++, the lock-statistics bench and its smoke runs, and
+  the measurements report tests over the JSON they wrote (`scripts/native-tests.sh
+  host`).
+- `android-ci.yml`, "Integration tests (API 28, armeabi-v7a through ARM
+  translation)": `connectedAmazonDebugAndroidTest` over the `integration` package
+  on an API 28 x86 emulator, which runs the amazon APK's `armeabi-v7a` library
+  through ARM translation. First, `scripts/ci_arm_translation_proof.sh` fails
+  unless the device ABI list names `armeabi-v7a` and no 64-bit ABI, a native
+  bridge is set, the install has `primaryCpuAbi=armeabi-v7a`, the running app
+  maps a translator and the ARM guest `liblog.so` and `libandroid.so`, and its
+  log has no native-load failure.
+- `version-consistency.yml`: the CHANGELOG's headings are well formed, and its
+  newest released version has `play/metadata/android/<locale>/changelogs/<code>.txt`
+  in every locale (`scripts/check_version_consistency.py`, then
+  `scripts/check_play_metadata.py`). On a tag push the tag must be that version.
+- `measurements.yml`: the host bench, by hand and from `release.yml` before
+  publish; see [`tools/bench/README.md`](tools/bench/README.md).
 
-Security gates:
+Security gates (also blocking):
 
-- `security.yml` (blocking): action-pin lint, vulnerability allowlist
-  expiry, OSV-Scanner and gitleaks secret scan. On a pull request it also
-  runs GitHub's `dependency-review-action`, best-effort
-  (`continue-on-error`) until GitHub Advanced Security is enabled. Release
-  artifacts additionally get a Grype scan in `release.yml`.
-- `codeql.yml`: CodeQL `java-kotlin` and `cpp` analysis
-  (security-extended + security-and-quality query packs). Its analysis step
-  is `continue-on-error` for the same reason, so findings surface in the
-  run's log rather than blocking.
+- `security.yml`: action-pin lint, vulnerability allowlist expiry,
+  OSV-Scanner and gitleaks secret scan. On a pull request it also runs GitHub's
+  `dependency-review-action`, best-effort (`continue-on-error`) until GitHub
+  Advanced Security is enabled. Release artifacts additionally get a Grype scan
+  in `release.yml`.
+- `codeql.yml`: CodeQL `java-kotlin` and `cpp` analysis (security-extended +
+  security-and-quality query packs). Its findings block and upload.
 
-If any blocking step fails, the PR is blocked.
+The Play workflows run only when started by hand or on a schedule, never on a pull
+request: see "The Play workflows" under Cutting a release.
+
+If any blocking step fails, the PR is blocked. `scripts/ci-local.sh` runs the
+build and style gates locally in the same order.
 
 ## Security
 
@@ -355,10 +461,6 @@ the past.
 ### Running security checks locally
 
 ```bash
-# Gradle dependency verification: recompute checksums into
-# gradle/verification-metadata.xml after a deliberate dep bump
-./gradlew --write-verification-metadata sha256 help
-
 # Action-pin lint
 grep -REn '^\s*uses:' .github/workflows/ \
   | grep -vE '@[0-9a-f]{40}\b' \
@@ -380,25 +482,17 @@ osv-scanner --recursive --skip-git .
 gitleaks detect --no-banner --redact --source .
 ```
 
-### Gradle dependency verification (`gradle/verification-metadata.xml`)
+### Gradle dependency verification
 
-The file is not committed yet. The section below describes the
-intended flow once a first generation pass lands; until then,
-running these commands on a clean checkout still produces a useful
-file you can diff as a review aid.
-
-When you intentionally add or upgrade a dependency, regenerate the
-verification metadata so transitive jar tampering fails resolution:
+`gradle/verification-metadata.xml` is not committed: `.gitignore` lists it, and
+neither CI nor `scripts/ci-local.sh` runs with one. Dependencies are pinned by
+exact version in `gradle/libs.versions.toml` and scanned by OSV-Scanner, and the
+release artifacts are signed. To look at what a dependency bump pulls in, generate
+the file locally and diff it as a review aid, then delete it:
 
 ```bash
-./gradlew --write-verification-metadata sha256 \
-  assembleDebug bundleRelease testDebugUnitTest
+./gradlew --write-verification-metadata sha256 assembleDebug testGithubDebugUnitTest
 ```
-
-Commit the regenerated `gradle/verification-metadata.xml` in the same
-PR as the dep bump. Reviewers should sanity-check the diff: a single
-new dep should add ~1 line per transitive jar; a change to many
-unrelated jars suggests something is off.
 
 ### Verifying a release artifact
 
@@ -412,7 +506,7 @@ sha256sum -c SHA256SUMS
 cosign verify-blob \
   --certificate SHA256SUMS.crt \
   --signature   SHA256SUMS.sig \
-  --certificate-identity-regexp '^https://github\.com/TinkerNorth/dish-android/\.github/workflows/release\.yml@refs/tags/v?[0-9].*$' \
+  --certificate-identity-regexp '^https://github\.com/TinkerNorth/dish-android/\.github/workflows/release\.yml@refs/tags/[0-9].*$' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
   SHA256SUMS
 
@@ -426,51 +520,162 @@ slsa-verifier verify-artifact \
 The full cross-repo verification recipe lives in
 [`SECURITY.md`](SECURITY.md).
 
+## Cutting a release
+
+The version is the git tag and nothing else: `release.yml` derives versionName
+and versionCode (`X*10000 + Y*100 + Z`, so `2.7.0` is `20700`) from it, and the
+Gradle build derives the same from `git describe` for local builds. Tags are
+bare `X.Y.Z`, no `v` prefix. `release.yml` runs on a tag push whose name matches
+`[0-9]*.[0-9]*.[0-9]*`, or on a `workflow_dispatch` with a `tag` input for a tag
+that already exists. A tag that is not exactly three numbers fails the release
+before anything builds.
+
+**Fleet order.** The website is tagged first. A client is tagged once
+`https://dish.tinkernorth.com/controllers/v1/manifest.json` serves the new
+controller database, so the database a release ships with is one the website
+already publishes. Satellite and the sibling clients are tagged in the order a
+wire change needs them.
+
+**The bump pull request.** Before tagging, one pull request of its own ("Bump the
+version to X.Y.Z and date the changelog") that holds:
+
+- the CHANGELOG: `## [Unreleased]` becomes `## [X.Y.Z] - YYYY-MM-DD`, and a fresh
+  empty `## [Unreleased]` goes above it;
+- the Play release notes, one file per listing locale:
+  `play/metadata/android/<locale>/changelogs/<versionCode>.txt` for en-US, de-DE,
+  es-ES, fr-FR and pt-BR. Each is plain text of at most **500 characters**, which
+  is Play's limit; `scripts/check_play_metadata.py` fails over it, and fails a
+  locale that has no file for the version when `EXPECTED_VERSION_CODE` is set (the
+  release workflow and `version-consistency.yml` set it);
+- `PRIVACY.md`, `play/DATA_SAFETY.md` and `play/PERMISSIONS_JUSTIFICATION.md`
+  first, if anything about data, permissions or network use changed (they mirror
+  what is declared in the Play Console, so a change there is also made by hand in
+  the console);
+- `packaging/update-policy.json` only for a security fix or a protocol break
+  (`minimumSupportedVersion`, in its own reviewed commit, never above the version
+  being released).
+
+`version-consistency.yml` fails a pull request whose newest CHANGELOG heading
+lacks its Play notes. Merge it, then tag the squash commit on `main`:
+
+```bash
+git tag X.Y.Z <squash commit> && git push origin X.Y.Z
+```
+
+**What the tag publishes.** `release.yml` re-runs the security gates against the
+tagged commit and the version checks against the tag, builds and signs the
+GitHub APK, the Play bundle and the Amazon APK (the signing keystore, and
+`google-services.json` for Crashlytics, come from repository secrets; the
+keystore secrets are mandatory for a tag), and checks each artifact's ABIs and
+that R8 kept what native code calls. Then:
+
+- the GitHub Release is uploaded as a draft with the signed APK (`dish-X.Y.Z.apk`
+  and the permanent `dish.apk`), the bundle, the R8 mapping files, the native
+  debug symbols, `latest.json` (what the GitHub build's update check reads),
+  `SHA256SUMS`, cosign signatures, the SPDX and CycloneDX SBOMs, the SLSA
+  provenance and the bench measurements, and is flipped to published last so
+  `releases/latest` never points at a half-published release;
+- with `PLAY_SERVICE_ACCOUNT_JSON` set, fresh store screenshots are captured on CI
+  emulators and the bundle is uploaded to the track the `PLAY_TRACK` repository
+  variable names (production when unset) with the listing, the screenshots and
+  the per-locale notes;
+- with the Amazon secrets set, `scripts/amazon_appstore_publish.py` replaces the
+  live APK in the Appstore.
+
+The asset names `dish.apk` and `latest.json` are a permanent API: the website and
+the app's update check read them by name. After the run, download `dish.apk`,
+check it against `SHA256SUMS`, install it and pair once.
+
+**The Play workflows.** Each is started by hand (or on a schedule) and none runs
+on a pull request or from CI:
+
+- `play-promote.yml` moves the release already on one track to another
+  (internal to production by default) without rebuilding, since Play refuses a
+  second upload of the same versionCode. Tag pushes land on `PLAY_TRACK`, so this
+  is the way from internal testing to production.
+- `play-listing.yml` syncs the text and graphics under `play/metadata` to the
+  listing, as a dry run unless told otherwise.
+- `play-products.yml` creates or updates the tip products from `play/products.json`
+  (`play/BILLING.md`).
+- `play-reviews.yml` writes a weekly digest of reviews and vitals to the job
+  summary.
+- `store-screenshots.yml` re-captures the screenshot set (by hand to refresh the
+  committed baseline, and from `release.yml` on every tag).
+
+They need `PLAY_SERVICE_ACCOUNT_JSON`, and the app record and its first build must
+exist in the Play Console. The listing's content rating, data safety, permission
+declarations and reviewer notes are declared in the Console by hand; the files
+under `play/` mirror them and are updated in the same pull request as the change
+they describe.
+
 ## Touching the hot path
 
-The Kotlin → JNI → `sendto()` chain runs at gamepad polling rate and
+The Kotlin -> JNI -> `sendto()` chain runs at gamepad polling rate and
 must never block. If you're modifying `GamepadActivityHost`'s
 `dispatchGenericMotionEvent` or `dispatchKeyEvent` (which `MainActivity` and
 every `BaseGamepadHostActivity` forward to), the `core.jni` objects
 (`PhysicalSlotNative`, `SlotReportNative`), or the native input path
-(`gamepad_input.cpp`, and `publishIfChanged` down to `sendEncrypted` in
-`satellite_jni.cpp`):
+(`gamepad_input.cpp`, `slot_table.cpp` and `send_path.cpp`, from `publishIfChanged`
+down to `sendEncrypted`):
 
 - No `withContext`, no `runBlocking`, no `Dispatchers.IO` on the send path.
 - No heap allocation per event: the `XUSB_REPORT`, the payload and the
   packet are stack buffers.
-- Take no lock the path does not already take, keep the order written at
-  `publishIfChanged` (devices, then slots, then sessions, the bridge queue
-  or a session's send turn), hold each briefly, and never make a JVM upcall
-  under one. A datagram is staged under the device and slot locks and
-  sealed and sent after they are let go, holding only its session's turn
-  from its counter to `sendto()`: the satellite drops a counter that is not
-  above the last one it accepted, so the wire must carry them in order.
+- The send path takes no lock, and a change must not add one
+  (`docs/ARCHITECTURE.md`, "The hot path"). A pad's slot and its session live in
+  fixed tables the reporting thread reads through an epoch; the datagram is
+  framed on the stack, then sealed and sent holding only its session's send gate,
+  which keeps the counters in order on the wire, because the satellite drops a
+  counter that is not above the last one it accepted. Never make a JVM upcall
+  from the send path. The few mutexes that remain (`input.bindings`,
+  `session.table`, `session.audio`) are `TrackedMutex`es, and `lock_laws_test`
+  holds the list of locks each thread role may take to one that only shrinks.
 - Preserve `IP_TOS = 0xB8` (DSCP EF) on the socket and `MSG_DONTWAIT` on
   every send.
+- Measure it. `tools/bench/README.md` says how; `measurements.yml` records the
+  host bench for every release.
+
+### Adding a JNI lookup
+
+Native code resolves some Kotlin members by name (`resolveStaticMethod` upcalls,
+the `UsbInterfaceClaim` fields). R8 removes what no Kotlin code calls, and these
+calls are made from C++, so a release build strips them and the bridge runs
+silently dead: this shipped once, in every release build. Every such lookup needs
+a keep rule in `app/proguard-rules.pro`. `NativeLookupKeepRulesTest` fails the
+unit tests when one is missing, and `scripts/check_jni_keeps.py <apk|aab>` reads
+the lookups out of `app/src/main/cpp` and checks, with the SDK's `dexdump`, that
+each is in a minified build under its own class, name and descriptor. CI runs it
+on the unsigned release builds of every pull request (`scripts/check-builds.sh
+release`), and `release.yml` runs it on every artifact it ships. A failure there
+means a missing rule; add the rule rather than loosening the check.
 
 ## Touching the wire protocol
 
-The Android, Windows, macOS, and Linux clients all talk to the same
+The Android, iOS, macOS, Windows, and Linux clients all talk to the same
 `satellite` server and must produce byte-identical traffic:
 
 - AEAD: ChaCha20-Poly1305 IETF with a 12-byte nonce: one direction byte,
   seven zero bytes, then the monotonic send counter as 4 big-endian bytes.
 - Packet layout: `token(4) | counter(4) | ciphertext+tag`, with the
   4-byte token as AAD.
-- XUSB report: 12 bytes, little-endian.
+- XUSB report: 12 bytes, little-endian, followed on a session settled at
+  protocol 4 by the 4-byte extended-buttons word.
 - Ports: discovery UDP 9879 (broadcast) + mDNS, pairing + REST over
   HTTPS 9443, streaming UDP 9876.
 
 The full opcode catalog and message layouts live in the protocol
 contract, `satellite/docs/contract.md`, in the TinkerNorth/satellite
-repo. The Android-side mapping is [`docs/contract.md`](docs/contract.md).
+repo. The Android-side mapping is [`docs/contract.md`](docs/contract.md), which
+names the protocol version this client implements; a test holds it equal to
+`DISH_PROTOCOL_CURRENT`.
 
-Any change here must be coordinated with `dish-windows`, `dish-linux`,
-`dish-mac`, and `satellite` in the same PR / release cycle.
+Any change here must be coordinated with `satellite` and every sibling client in
+the same release cycle, and is marked `[wire-coordinated]` in the CHANGELOG.
 
 ## Reporting bugs
 
-Use the issue templates under `.github/ISSUE_TEMPLATE/`. Include the
-device model, Android version, and `adb logcat -s SatelliteJNI:*` output
+Use the issue templates under `.github/ISSUE_TEMPLATE/`. The quickest way to
+give us everything is the app's own *Report a problem*: it writes one file with the app, device, controller and
+host facts, which you attach. PRIVACY.md section 2.7 says exactly what it holds.
+For a crash or a native problem, add `adb logcat -s SatelliteJNI:*` output
 covering the misbehavior.

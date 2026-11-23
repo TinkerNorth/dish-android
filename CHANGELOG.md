@@ -5,7 +5,31 @@ What's new in each version of Dish, in plain language. Newest first.
 Some updates need the matching version of the free Satellite app on your
 computer. Those lines say "update Satellite too".
 
+The version number comes from the git tag, `X.Y.Z` with no prefix, and nothing
+else: `release.yml` derives versionName and versionCode (`X*10000 + Y*100 + Z`)
+from it. `version-consistency.yml` fails a pull request whose newest heading
+below lacks its Play release notes in every locale, and `release.yml` fails the
+tag build when the tag and the newest heading disagree.
+
+Cross-repo coordination: a change to the wire protocol or the pairing flow that
+needs a matching update in `satellite` or in another Dish client (`dish-ios`,
+`dish-mac`, `dish-windows`, `dish-linux`) is marked `[wire-coordinated]`. The
+clients are tagged in the order the fleet's release procedure lists, not in
+lockstep, and do not share a version number.
+
 ---
+
+## [Unreleased]
+
+### Changed
+
+- **Newer building blocks.** The audio codec (Opus 1.6.1) and the encryption
+  library (libsodium 1.0.22) are updated, along with Android Gradle Plugin
+  9.5.2 and the Android lifecycle libraries 2.11.1.
+- **The Play and Amazon builds are now built and checked on every pull request**
+  (unsigned), including the check that the release build keeps every method the
+  native code calls, so a problem that only showed at release time shows
+  earlier.
 
 ## [2.7.0] - 2026-11-23
 

@@ -5,7 +5,7 @@ Play Payments policy requires it of any Play-distributed app and forbids
 linking Play users to another payment method. The GitHub build keeps its
 external links. This file is the operator side: what exists in Play
 Console, how it gets there, and how to test it. The code side is described
-in `docs/design-system.md` under "Distribution flavors".
+in `DESIGN.md` under "Distribution flavors".
 
 ## Catalog
 

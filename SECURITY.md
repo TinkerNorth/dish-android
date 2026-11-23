@@ -1,12 +1,17 @@
 # Security policy: TinkerNorth
 
-This file covers all four TinkerNorth repositories that ship the
-wireless-gamepad product end-to-end:
+This file covers the TinkerNorth repositories that ship the wireless-gamepad
+product end-to-end, the server and the five clients:
 
-- [`satellite`](https://github.com/TinkerNorth/satellite): server (Windows / Linux / macOS)
-- [`dish-android`](https://github.com/TinkerNorth/dish-android): Android client
-- [`dish-linux`](https://github.com/TinkerNorth/dish-linux): Linux client (Qt6 / SDL2)
-- [`dish-mac`](https://github.com/TinkerNorth/dish-mac): macOS client (SwiftUI)
+- [`satellite`](https://github.com/TinkerNorth/satellite): Satellite, the server (Windows / Linux / macOS)
+- [`dish-android`](https://github.com/TinkerNorth/dish-android): Dish for Android
+- [`dish-ios`](https://github.com/TinkerNorth/dish-ios): Dish for iOS
+- [`dish-mac`](https://github.com/TinkerNorth/dish-mac): Dish for macOS (SwiftUI)
+- [`dish-windows`](https://github.com/TinkerNorth/dish-windows): Dish for Windows (Qt6 / SDL2)
+- [`dish-linux`](https://github.com/TinkerNorth/dish-linux): Dish for Linux (Qt6 / SDL2)
+
+The website, `https://dish.tinkernorth.com`, serves the controller database and
+the privacy policies; report a problem with it the same way.
 
 Each repo has its own `CONTRIBUTING.md#security` section with
 ecosystem-specific local commands; this file is the single source of
@@ -70,10 +75,12 @@ Out of scope:
 
 | Repo | Supported | Notes |
 |---|---|---|
-| `satellite` | latest minor on `main`; previous minor for 90 days | Windows is the canonical target; Linux is supported; macOS ships as a stub (no virtual gamepad) |
-| `dish-android` | latest minor on `main`; previous minor for 90 days | minSdk 24 |
-| `dish-linux` | latest minor on `main`; previous minor for 90 days | tracks the oldest LTS the release CI builds against |
-| `dish-mac` | latest minor on `main`; previous minor for 90 days | macOS 13+ |
+| `satellite` | latest minor on `main` (2.3.x); previous minor for 90 days | Windows is the canonical target; Linux is supported; macOS ships as a stub (no virtual gamepad) |
+| `dish-android` | latest minor on `main` (2.7.x); previous minor for 90 days | minSdk 24 |
+| `dish-ios` | `main` until the first release | not yet released |
+| `dish-mac` | latest minor on `main` (1.4.x); previous minor for 90 days | macOS 13+ |
+| `dish-windows` | latest minor on `main` (2.8.x); previous minor for 90 days | Windows 10 (1809) or 11 |
+| `dish-linux` | latest minor on `main` (2.8.x); previous minor for 90 days | tracks the oldest LTS the release CI builds against |
 
 Patch releases (`X.Y.Z+1`) are issued on demand for the latest minor;
 the previous minor only receives backports for high/critical fixes.
@@ -137,7 +144,7 @@ go install github.com/slsa-framework/slsa-verifier/v2/cli/slsa-verifier@latest
 ### 1) Download every file from the Release
 
 For tag `X.Y.Z` of `<repo>` (one of `satellite`, `dish-android`,
-`dish-linux`, `dish-mac`):
+`dish-ios`, `dish-mac`, `dish-windows`, `dish-linux`):
 
 ```bash
 gh release download X.Y.Z -R TinkerNorth/<repo> -D ./release
@@ -175,7 +182,7 @@ modified after release.
 cosign verify-blob \
   --certificate SHA256SUMS.crt \
   --signature   SHA256SUMS.sig \
-  --certificate-identity-regexp '^https://github\.com/TinkerNorth/<repo>/\.github/workflows/release\.yml@refs/tags/v?[0-9].*$' \
+  --certificate-identity-regexp '^https://github\.com/TinkerNorth/<repo>/\.github/workflows/release\.yml@refs/tags/[0-9].*$' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
   SHA256SUMS
 ```
@@ -195,7 +202,7 @@ for f in *.exe *.zip *.deb *.AppImage *.apk *.aab; do
   cosign verify-blob \
     --certificate "$f.crt" \
     --signature   "$f.sig" \
-    --certificate-identity-regexp '^https://github\.com/TinkerNorth/<repo>/\.github/workflows/release\.yml@refs/tags/v?[0-9].*$' \
+    --certificate-identity-regexp '^https://github\.com/TinkerNorth/<repo>/\.github/workflows/release\.yml@refs/tags/[0-9].*$' \
     --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
     "$f"
 done

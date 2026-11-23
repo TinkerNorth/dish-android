@@ -4,7 +4,7 @@ How rumble (force feedback) reaches the right device on dish-android,
 what the platform can and cannot drive, and the satellite-side feature
 requests needed to round out support. The wire layout is in the satellite
 contract (`satellite/docs/contract.md`, `MSG_RUMBLE` 0x0009); the runtime
-path is in [`architecture.md`](architecture.md) ("Rumble path").
+path is in [`ARCHITECTURE.md`](ARCHITECTURE.md) ("Rumble path").
 
 ## Routing model
 
