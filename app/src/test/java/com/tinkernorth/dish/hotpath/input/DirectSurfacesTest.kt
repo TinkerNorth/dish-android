@@ -20,6 +20,7 @@ import java.util.function.LongSupplier
 private const val PROBE_SLOT = "-1000"
 private const val MESSAGES_PER_CYCLE = 1000
 private const val GAME_LEDS = 0x04
+private const val A_WRITE_LOOP_THAT_NEVER_ENDS_MS = 10_000L
 private val GAME_RGB = feedbackRgb(1, 2, 3)
 
 // A session's receive thread landing the game's light bar, LEDs, trigger effects and lamp on a Direct
@@ -244,6 +245,16 @@ class DirectSurfacesTest {
         pad.take(StateSurface.MIC_LED, ::writeTheTestsLamp)
 
         assertEquals(1, testWrites)
+    }
+
+    @Test(timeout = A_WRITE_LOOP_THAT_NEVER_ENDS_MS)
+    fun `a game write that never lands makes the test write a bounded number of times, then the surface is the test's`() {
+        pad.gameMicLed(MIC_LED_PULSE)
+
+        pad.take(StateSurface.MIC_LED, ::writeTheTestsLamp)
+
+        assertEquals(MOST_WRITES_A_TAKE_MAKES, testWrites)
+        assertEquals(MIC_LED_ON, lampShown)
     }
 
     @Test

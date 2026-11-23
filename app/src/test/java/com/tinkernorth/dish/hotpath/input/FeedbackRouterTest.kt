@@ -453,6 +453,18 @@ class FeedbackRouterTest {
         assertEquals(listOf(MIC_LED_PULSE, MIC_LED_ON), lampWrites)
     }
 
+    @Test(timeout = A_WRITE_LOOP_THAT_NEVER_ENDS_MS)
+    fun `a game write that throws still counts as landed, so a test after it writes its value once`() {
+        val r = router(managerWith(handle = 7, slotId = DIRECT_SLOT))
+        every { native.sendUsbMicMuteLed(DIRECT_PAD, MIC_LED_PULSE) } throws IllegalStateException("a send that failed")
+        val gameWrite = runCatching { r.dispatchMicLed(7, 0, MIC_LED_PULSE) }
+
+        r.testMicLed(DIRECT_SLOT, MIC_LED_ON)
+
+        assertTrue(gameWrite.isFailure)
+        assertEquals(listOf(MIC_LED_ON), lampWrites)
+    }
+
     @Test
     fun `ending the LED test gives a Direct pad back the game's mask`() {
         val r = router(managerWith(handle = 7, slotId = DIRECT_SLOT))

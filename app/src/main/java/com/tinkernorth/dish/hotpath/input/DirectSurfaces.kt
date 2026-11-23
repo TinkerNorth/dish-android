@@ -26,6 +26,10 @@ enum class StateSurface(
 internal const val TRIGGER_EFFECT_BLOCK_BYTES = 11
 internal const val TRIGGER_EFFECTS_BYTES = 2 * TRIGGER_EFFECT_BLOCK_BYTES
 
+// A test writes its value this many times at most while a game write that passed the check before
+// its hold is still on its way; one that never lands (a send that ended abnormally) then loses.
+internal const val MOST_WRITES_A_TAKE_MAKES = 8
+
 private const val NOTHING_HELD = 0
 private val SURFACE_COUNT = StateSurface.entries.size
 private const val LIGHTBAR_OFF = 0L
@@ -87,10 +91,13 @@ class DirectSurfaces {
         write: () -> Unit,
     ) {
         hold(surface)
+        var writes = 0
         do {
             val noGameWriteOnItsWay = noGameLandingInFlight(surface)
             write()
-        } while (!noGameWriteOnItsWay)
+            writes++
+            val outOfWrites = writes == MOST_WRITES_A_TAKE_MAKES
+        } while (!noGameWriteOnItsWay && !outOfWrites)
     }
 
     /** The game's value that [gameLightbar] and its siblings let through is posted to the pad. */

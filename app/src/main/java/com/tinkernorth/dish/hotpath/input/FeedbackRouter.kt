@@ -317,8 +317,11 @@ class FeedbackRouter
             val surfaces = direct.of(slotId)
             val toThePad = surfaces.gameLightbar(feedbackRgb(r, g, b))
             if (!toThePad) return
-            native.sendUsbLightbar(deviceId, r, g, b)
-            surfaces.landed(StateSurface.LIGHTBAR)
+            try {
+                native.sendUsbLightbar(deviceId, r, g, b)
+            } finally {
+                surfaces.landed(StateSurface.LIGHTBAR)
+            }
         }
 
         private fun landDirectTriggerEffects(
@@ -329,8 +332,11 @@ class FeedbackRouter
             val surfaces = direct.of(slotId)
             val toThePad = surfaces.gameTriggerEffects(blocks)
             if (!toThePad) return
-            native.sendUsbTriggerEffects(deviceId, blocks)
-            surfaces.landed(StateSurface.TRIGGER_EFFECTS)
+            try {
+                native.sendUsbTriggerEffects(deviceId, blocks)
+            } finally {
+                surfaces.landed(StateSurface.TRIGGER_EFFECTS)
+            }
         }
 
         private fun landDirectPlayerLeds(
@@ -341,8 +347,11 @@ class FeedbackRouter
             val surfaces = direct.of(slotId)
             val toThePad = surfaces.gamePlayerLeds(ledMask)
             if (!toThePad) return
-            native.sendUsbPlayerLeds(deviceId, ledMask)
-            surfaces.landed(StateSurface.PLAYER_LEDS)
+            try {
+                native.sendUsbPlayerLeds(deviceId, ledMask)
+            } finally {
+                surfaces.landed(StateSurface.PLAYER_LEDS)
+            }
         }
 
         private fun landDirectMicLed(
@@ -353,8 +362,11 @@ class FeedbackRouter
             val surfaces = direct.of(slotId)
             val toThePad = surfaces.gameMicLed(state)
             if (!toThePad) return
-            native.sendUsbMicMuteLed(deviceId, state)
-            surfaces.landed(StateSurface.MIC_LED)
+            try {
+                native.sendUsbMicMuteLed(deviceId, state)
+            } finally {
+                surfaces.landed(StateSurface.MIC_LED)
+            }
         }
 
         private fun writeDirectLightbar(
