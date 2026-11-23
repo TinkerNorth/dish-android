@@ -1,136 +1,159 @@
 #!/usr/bin/env bash
-# Runs every gate Android CI runs, in the same order, against the local
-# tree. Mirrors .github/workflows/android-ci.yml so a green run here means
-# a green run there. Instrumented tests need a device: they run when one is
-# attached (or a GMD is requested with --gmd), and are skipped with a notice
-# otherwise so the fast gates stay usable offline. The 32-bit ARM host tests
-# need g++-arm-linux-gnueabihf and qemu-user, and the armeabi-v7a emulator
-# lane (an API 28 x86 image's ARM translation) runs in CI only.
+# SPDX-License-Identifier: LGPL-3.0-or-later
+# Copyright (C) 2026 Dish contributors.
+# Runs the gates android-ci.yml runs, against this worktree, in CI's order: a green run here is a
+# green "Build, test, lint, format" job there. Each gate is one command or one script under
+# scripts/ that the workflow calls too. A missing tool fails the run, so a green run never hides
+# a skipped gate; --allow-missing turns the failure into a notice.
 #
-#   scripts/ci_local.sh              fast gates + instrumented tests if a device is attached
-#   scripts/ci_local.sh --gmd        also boot the pixel6Api34 managed device for instrumented tests
-#   scripts/ci_local.sh --no-instrumented   fast gates only
+#   scripts/ci-local.sh                      every gate that needs no device
+#   scripts/ci-local.sh --quick              the fast gates: format, metadata, translations, script
+#                                            tests, ktlint, detekt, JVM unit tests
+#   scripts/ci-local.sh --with-instrumented  also run the integration tests on the attached
+#                                            device or emulator (start one with
+#                                            `-read-only -dns-server 8.8.8.8,1.1.1.1`)
+#   scripts/ci-local.sh --with-gmd           also run them on the pixel6Api34 managed device
+#   scripts/ci-local.sh --with-armv7         on a host that is not Linux, also run the 32-bit ARM
+#                                            host tests under qemu in the container (slow: qemu's
+#                                            pacing misses the bench's 1 ms deadlines on a laptop,
+#                                            so run it on a machine you can leave alone)
+#   scripts/ci-local.sh --allow-missing      a missing tool is a notice, not a failure
+#
+# Environment: a JDK to start Gradle (JAVA_HOME, or found with /usr/libexec/java_home), ANDROID_HOME,
+# python3.
+# The C++ host tests run through Gradle's :app:nativeTest on Linux; on any other host they run
+# in an ubuntu:24.04 container (scripts/native-tests-docker.sh), so Docker is needed there. The
+# 32-bit ARM lane runs by default on Linux and with --with-armv7 elsewhere.
+#
+# CI only, because they need a Linux runner with KVM or a store credential:
+#   - the API 35 and API 28 (armeabi-v7a through ARM translation) emulator jobs; --with-instrumented
+#     is the local counterpart of the first
+#   - CodeQL, the security workflow (OSV-Scanner, gitleaks, dependency review, action pins)
+#   - version-consistency.yml (python3 scripts/check_version_consistency.py runs it locally)
+# Not exercised before a tag, because they need a secret: signing (the release keystore), the
+# Crashlytics symbol upload (google-services.json), the Play, Amazon and GitHub uploads, and the
+# baseline profile, which needs the KVM emulator release.yml starts.
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
+QUICK=0
+INSTRUMENTED=0
 GMD=0
-INSTRUMENTED=1
+ARMV7=0
+ALLOW_MISSING=0
 for arg in "$@"; do
   case "$arg" in
-    --gmd) GMD=1 ;;
-    --no-instrumented) INSTRUMENTED=0 ;;
+    --quick) QUICK=1 ;;
+    --with-instrumented) INSTRUMENTED=1 ;;
+    --with-gmd) GMD=1 ;;
+    --with-armv7) ARMV7=1 ;;
+    --allow-missing) ALLOW_MISSING=1 ;;
     *) echo "unknown flag: $arg" >&2; exit 2 ;;
   esac
 done
 
+step() { printf '\n=== %s ===\n' "$1"; }
+
+# need <command> <what runs without it>: fails, or with --allow-missing says what was skipped.
+need() {
+  command -v "$1" >/dev/null 2>&1 && return 0
+  if [ "$ALLOW_MISSING" -eq 1 ]; then
+    echo "::notice:: $1 is not installed; skipping $2."
+    return 1
+  fi
+  echo "$1 is not installed; it is needed for $2 (--allow-missing skips it)." >&2
+  exit 1
+}
+
+if [ -z "${JAVA_HOME:-}" ] && [ -x /usr/libexec/java_home ]; then
+  JAVA_HOME="$(/usr/libexec/java_home 2>/dev/null || true)"
+  export JAVA_HOME
+fi
 if [ -z "${JAVA_HOME:-}" ]; then
-  echo "JAVA_HOME is not set." >&2
-  echo "On this machine the Android Studio JBR works, e.g.:" >&2
-  echo "  export JAVA_HOME=\"C:/Program Files/Android/Android Studio/jbr\"" >&2
+  echo "JAVA_HOME is not set and no JDK was found. Gradle needs one to start; the build's own JDK comes from gradle/gradle-daemon-jvm.properties, and CI runs Temurin 17." >&2
   exit 1
 fi
-
-# The POSIX wrapper runs under Git Bash on Windows too, so one path covers
-# every OS. Local dependency-verification metadata is gitignored and drifts
-# from committed dep bumps; CI regenerates it, so disable it locally to match.
-GRADLE="./gradlew"
-GRADLE_ARGS="--dependency-verification off --console=plain"
-# The instrumented gate is the integration package: the screenshots harness
-# has its own per-locale workflow and the ad-hoc launch tests predate the
-# guided-setup redirect, so neither belongs in the gate.
-INTEGRATION_FILTER="-Pandroid.testInstrumentationRunnerArguments.package=com.tinkernorth.dish.integration"
-
-step() { echo ""; echo "=== $1 ==="; }
+need python3 "every script gate" || true
+export GRADLE_FLAGS="--no-daemon --console=plain"
+read -r -a GRADLE <<< "./gradlew $GRADLE_FLAGS"
 
 step "clang-format (JNI, check only)"
-if command -v clang-format >/dev/null 2>&1; then
-  FILES=$(find app/src/main/cpp -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.c' \))
-  [ -z "$FILES" ] || echo "$FILES" | xargs clang-format --dry-run --Werror
-else
-  echo "::notice:: clang-format not installed; CI pins 22.1.4. Skipping locally."
-fi
+scripts/check-format.sh
 
 step "Play metadata lint"
-python scripts/check_play_metadata.py
+python3 scripts/check_play_metadata.py
+
+step "Translations are complete in every locale"
+python3 scripts/check-translations.py
 
 step "Release script tests"
-python -m unittest discover -s scripts -p '*_test.py' -t scripts
+python3 -m unittest discover -s scripts -p '*_test.py' -t scripts
 
-step "ktlint + detekt (all source sets incl. test + androidTest)"
-$GRADLE :app:ktlintCheck :app:detekt $GRADLE_ARGS
+step "ktlint"
+"${GRADLE[@]}" ktlintCheck
 
-step "Android lint"
-$GRADLE :app:lintGithubDebug :app:lintPlayDebug :app:lintAmazonDebug $GRADLE_ARGS
+step "detekt"
+"${GRADLE[@]}" detekt
 
-step "JVM unit tests"
-$GRADLE :app:testGithubDebugUnitTest :app:testPlayDebugUnitTest :app:testAmazonDebugUnitTest $GRADLE_ARGS
-
-step "Native C++ tests"
-$GRADLE :app:nativeTest $GRADLE_ARGS
-
-step "Native C++ tests (32-bit ARM, qemu)"
-if command -v arm-linux-gnueabihf-g++ >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1; then
-  cmake -S app/src/test/cpp -B build/native-test-armv7 \
-    -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=arm \
-    -DCMAKE_C_COMPILER=arm-linux-gnueabihf-gcc -DCMAKE_CXX_COMPILER=arm-linux-gnueabihf-g++ \
-    -DCMAKE_C_FLAGS=-mfpu=neon -DCMAKE_CXX_FLAGS=-mfpu=neon \
-    "-DCMAKE_CROSSCOMPILING_EMULATOR=qemu-arm;-L;/usr/arm-linux-gnueabihf"
-  cmake --build build/native-test-armv7 --parallel
-  ctest --test-dir build/native-test-armv7 --output-on-failure --no-tests=error
-else
-  echo "::notice:: g++-arm-linux-gnueabihf and qemu-user not installed; CI runs this lane. Skipping locally."
-fi
-
-step "Native C++ tests and bench smoke (host, with the lock-statistics bench)"
-HOST_GENERATOR=()
-if [ "${OS:-}" = "Windows_NT" ]; then HOST_GENERATOR=(-G Ninja); fi
-cmake -S app/src/test/cpp -B build/native-test-host ${HOST_GENERATOR[@]+"${HOST_GENERATOR[@]}"} \
-  -DDISH_BENCH_LOCKSTATS=ON
-cmake --build build/native-test-host --parallel
-ctest --test-dir build/native-test-host --output-on-failure --no-tests=error
-build/native-test-host/bench_send_path --smoke
-
-step "Measurements report tests (with the JSON both smokes wrote)"
-PATH_SEP=$(python -c 'import os, sys; sys.stdout.write(os.pathsep)')
-DISH_BENCH_JSON="build/native-test-host/send_path_bench_smoke.json${PATH_SEP}build/native-test-host/send_path_bench_lockstats_smoke.json" \
-  python -m unittest discover -s scripts -p 'measurements_report_test.py' -t scripts
-
-step "Assemble debug APKs (github + play + amazon flavors)"
-$GRADLE :app:assembleGithubDebug :app:assemblePlayDebug :app:assembleAmazonDebug $GRADLE_ARGS
-
-step "Each APK carries its flavor's ABIs"
-python scripts/check_apk_abis.py app/build/outputs/apk/github/debug/app-github-debug.apk armeabi-v7a arm64-v8a x86_64
-python scripts/check_apk_abis.py app/build/outputs/apk/play/debug/app-play-debug.apk armeabi-v7a arm64-v8a x86_64
-python scripts/check_apk_abis.py app/build/outputs/apk/amazon/debug/app-amazon-debug.apk armeabi-v7a arm64-v8a x86_64
-
-step "libsodium uses 128-bit arithmetic on 64-bit ABIs only"
-python scripts/check_sodium_ti_mode.py app/.cxx
-
-if [ "$INSTRUMENTED" -eq 0 ]; then
-  echo ""; echo "=== instrumented tests skipped (--no-instrumented) ==="
-  echo "All non-instrumented gates passed."
+if [ "$QUICK" -eq 1 ]; then
+  step "JVM unit tests"
+  "${GRADLE[@]}" testGithubDebugUnitTest testPlayDebugUnitTest testAmazonDebugUnitTest
+  echo ""; echo "Quick gates passed. Run without --quick before pushing a build input."
   exit 0
 fi
 
+step "Android lint"
+"${GRADLE[@]}" lintGithubDebug lintPlayDebug lintAmazonDebug
+
+step "JVM unit tests"
+"${GRADLE[@]}" testGithubDebugUnitTest testPlayDebugUnitTest testAmazonDebugUnitTest
+
+if [ "$(uname -s)" = Linux ]; then
+  step "Native C++ tests (:app:nativeTest)"
+  "${GRADLE[@]}" :app:nativeTest
+  step "Native C++ tests and bench smoke (host, with the lock-statistics bench)"
+  scripts/native-tests.sh host
+  step "Native C++ tests (32-bit ARM, qemu)"
+  if need arm-linux-gnueabihf-g++ "the 32-bit ARM host tests" && need qemu-arm "the 32-bit ARM host tests"; then
+    scripts/native-tests.sh armv7
+  fi
+else
+  step "Native C++ tests and bench smoke (ubuntu:24.04 container)"
+  if need docker "the C++ host tests, which build on Linux only"; then
+    scripts/native-tests-docker.sh host
+    if [ "$ARMV7" -eq 1 ]; then
+      step "Native C++ tests (32-bit ARM, qemu, ubuntu:24.04 container)"
+      scripts/native-tests-docker.sh armv7
+    fi
+  fi
+fi
+
+step "Debug APKs (github, play, amazon): each carries its flavor's ABIs"
+scripts/check-builds.sh debug
+
+step "Release builds, unsigned: ABIs, and every member native code resolves by name is kept"
+scripts/check-builds.sh release
+
+step "libsodium uses 128-bit arithmetic on 64-bit ABIs only"
+python3 scripts/check_sodium_ti_mode.py app/.cxx
+
+# The integration package is the gate: the screenshots harness has its own per-locale workflow and
+# the ad-hoc launch tests predate the guided-setup redirect.
+INTEGRATION_FILTER="-Pandroid.testInstrumentationRunnerArguments.package=com.tinkernorth.dish.integration"
+
 if [ "$GMD" -eq 1 ]; then
   step "Instrumented tests (pixel6Api34 managed device)"
-  $GRADLE :app:pixel6Api34GithubDebugAndroidTest $GRADLE_ARGS $INTEGRATION_FILTER
-else
-  ADB="adb"
-  command -v adb >/dev/null 2>&1 || {
-    for root in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "${LOCALAPPDATA:-}/Android/Sdk"; do
-      [ -n "$root" ] && [ -x "$root/platform-tools/adb" ] && ADB="$root/platform-tools/adb" && break
-      [ -n "$root" ] && [ -x "$root/platform-tools/adb.exe" ] && ADB="$root/platform-tools/adb.exe" && break
-    done
-  }
-  DEVICES=$("$ADB" devices 2>/dev/null | grep -c -w device || true)
-  if [ "${DEVICES:-0}" -ge 1 ]; then
-    step "Instrumented tests (attached device)"
-    $GRADLE :app:connectedGithubDebugAndroidTest $GRADLE_ARGS $INTEGRATION_FILTER
-  else
-    echo ""; echo "=== instrumented tests skipped (no device) ==="
-    echo "Attach a device/emulator, or re-run with --gmd, to run integration tests."
+  "${GRADLE[@]}" :app:pixel6Api34GithubDebugAndroidTest "$INTEGRATION_FILTER"
+fi
+
+if [ "$INSTRUMENTED" -eq 1 ]; then
+  step "Instrumented tests (attached device or emulator)"
+  if [ -z "${ANDROID_HOME:-}" ]; then echo "ANDROID_HOME is not set." >&2; exit 1; fi
+  if [ "$("$ANDROID_HOME/platform-tools/adb" devices | grep -c -w device || true)" -lt 1 ]; then
+    echo "--with-instrumented needs a device or emulator attached (adb devices lists none)." >&2
+    exit 1
   fi
+  "${GRADLE[@]}" :app:connectedGithubDebugAndroidTest "$INTEGRATION_FILTER"
 fi
 
 echo ""; echo "All requested gates passed."
