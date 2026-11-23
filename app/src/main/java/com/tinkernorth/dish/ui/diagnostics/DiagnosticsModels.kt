@@ -307,6 +307,8 @@ internal data class PadWorld(
     val lastWrite: Map<Int, WriteVerdict> = emptyMap(),
     val hardware: Map<Int, UsbHardwareFacts> = emptyMap(),
     val outcomes: Map<String, List<TestOutcome>> = emptyMap(),
+    // The Direct pads whose reports carry the mic-mute lamp: the only place the lamp can light.
+    val micLamps: Set<Int> = emptySet(),
 )
 
 // The controller database as the report reads it, and the phone facts its issues match against.

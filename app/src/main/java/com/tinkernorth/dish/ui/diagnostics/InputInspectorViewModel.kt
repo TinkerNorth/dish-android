@@ -84,6 +84,7 @@ data class FeatureBench(
 fun featureBenchFor(
     caps: SlotCapabilities?,
     virtual: Boolean,
+    lampReachable: Boolean,
 ): FeatureBench {
     if (virtual) return FeatureBench.VIRTUAL
     caps ?: return FeatureBench.NONE
@@ -93,7 +94,7 @@ fun featureBenchFor(
         lightbar = caps.inputOk(Feature.LIGHTBAR),
         playerLeds = caps.inputOk(Feature.PLAYER_LEDS),
         triggerEffects = caps.inputOk(Feature.TRIGGER_EFFECTS),
-        micLed = caps.inputOk(Feature.MIC),
+        micLed = lampReachable,
         speaker = caps.inputOk(Feature.SPEAKER),
         haptics = caps.inputOk(Feature.HAPTIC_AUDIO),
         mic = caps.inputOk(Feature.MIC),
@@ -170,7 +171,7 @@ class InputInspectorViewModel
             combine(sources.world, micPermission.state) { world, granted ->
                 InspectorUiState(
                     controller = controllerDiags(world, sources::touchpadMode).firstOrNull { it.slotId == slotId },
-                    bench = featureBenchFor(world.caps[slotId], isVirtual),
+                    bench = featureBenchFor(world.caps[slotId], isVirtual, deviceId in world.pads.micLamps),
                     micPermissionGranted = granted,
                     nowMs = world.nowMs,
                 )

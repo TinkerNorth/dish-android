@@ -1298,6 +1298,11 @@ Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasTriggerEffects(JNIEn
     return modelPredicate(vid, pid, usbparsers::parserHasTriggerEffects);
 }
 
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasMicMuteLed(
+    JNIEnv*, jobject, jint vid, jint pid) {
+    return modelPredicate(vid, pid, usbparsers::parserHasMicMuteLed);
+}
+
 JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasHapticLanes(
     JNIEnv*, jobject, jint vid, jint pid) {
     return modelPredicate(vid, pid, usbparsers::parserHasHapticLanes);

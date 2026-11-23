@@ -41,6 +41,12 @@ object ModelTableNative {
         productId: Int,
     ): Boolean
 
+    // The DualSense's mic-mute lamp, the only lamp a Direct report carries.
+    external fun modelHasMicMuteLed(
+        vendorId: Int,
+        productId: Int,
+    ): Boolean
+
     external fun modelHasHapticLanes(
         vendorId: Int,
         productId: Int,
