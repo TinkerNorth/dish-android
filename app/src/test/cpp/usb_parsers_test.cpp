@@ -90,14 +90,12 @@ std::vector<uint8_t> switchReport(size_t len) {
 
 constexpr size_t kSwitchUsbCommandBytes = 64;
 constexpr size_t kSwitchSubcommandBytes = 12;
-constexpr int kSwitchInitPacketCount = 7;
+constexpr int kSwitchInitPacketCount = 5;
 constexpr int kSwitchHandshakeStep = 0;
-constexpr int kSwitchThreeMegabitStep = 1;
-constexpr int kSwitchHandshakeAtThreeMegabitStep = 2;
-constexpr int kSwitchTimeoutDisableStep = 3;
-constexpr int kSwitchReportModeStep = 4;
-constexpr int kSwitchEnableVibrationStep = 5;
-constexpr int kSwitchEnableImuStep = 6;
+constexpr int kSwitchTimeoutDisableStep = 1;
+constexpr int kSwitchReportModeStep = 2;
+constexpr int kSwitchEnableVibrationStep = 3;
+constexpr int kSwitchEnableImuStep = 4;
 
 // The index-th packet of the Switch init sequence, empty once the sequence has ended.
 std::vector<uint8_t> switchInitPacket(const int index) {
@@ -921,10 +919,8 @@ TEST(KnownDevices, ThePlayStationClassicControllerIsGenericHidInItsOwnOrder) {
     EXPECT_FALSE(usbparsers::isVerifiedFastLane(0x054C, 0x0CDA));
 }
 
-TEST(SwitchInit, TheUsbCommandsAreHandshakeThreeMegabitHandshakeThenTimeoutDisable) {
+TEST(SwitchInit, TheUsbCommandsAreHandshakeThenTimeoutDisable) {
     EXPECT_EQ(switchUsbCommand(0x02), switchInitPacket(kSwitchHandshakeStep));
-    EXPECT_EQ(switchUsbCommand(0x03), switchInitPacket(kSwitchThreeMegabitStep));
-    EXPECT_EQ(switchUsbCommand(0x02), switchInitPacket(kSwitchHandshakeAtThreeMegabitStep));
     EXPECT_EQ(switchUsbCommand(0x04), switchInitPacket(kSwitchTimeoutDisableStep));
 }
 
@@ -958,7 +954,7 @@ TEST(SwitchInit, TheSubcommandsCountTheirPacketsInTheirSecondByte) {
     EXPECT_EQ(0x02, enableImu[1]);
 }
 
-TEST(SwitchInit, TheSequenceEndsAfterSevenPacketsAndRefusesASmallBuffer) {
+TEST(SwitchInit, TheSequenceEndsAfterFivePacketsAndRefusesASmallBuffer) {
     EXPECT_FALSE(switchInitPacket(kSwitchInitPacketCount - 1).empty());
     EXPECT_TRUE(switchInitPacket(kSwitchInitPacketCount).empty());
     EXPECT_TRUE(switchInitPacket(-1).empty());
@@ -969,14 +965,6 @@ TEST(SwitchInit, TheSequenceEndsAfterSevenPacketsAndRefusesASmallBuffer) {
 TEST(SwitchInit, AFailedFirstHandshakeOrReportModeWriteEndsTheSequence) {
     EXPECT_TRUE(usbparsers::switchInitStepIsFatal(kSwitchHandshakeStep));
     EXPECT_TRUE(usbparsers::switchInitStepIsFatal(kSwitchReportModeStep));
-}
-
-TEST(SwitchInit, AThreeMegabitWriteFailingAsOnThe8BitDoM30DoesNotEndTheSequence) {
-    EXPECT_FALSE(usbparsers::switchInitStepIsFatal(kSwitchThreeMegabitStep));
-}
-
-TEST(SwitchInit, AFailedHandshakeAtThreeMegabitDoesNotEndTheSequence) {
-    EXPECT_FALSE(usbparsers::switchInitStepIsFatal(kSwitchHandshakeAtThreeMegabitStep));
 }
 
 TEST(SwitchInit, AFailedTimeoutDisableVibrationEnableOrImuEnableDoesNotEndTheSequence) {

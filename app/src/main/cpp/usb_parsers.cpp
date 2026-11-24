@@ -2165,11 +2165,10 @@ constexpr InitPacket kGipSSeq[] = {
 
 // The Switch Pro's USB commands, each a full 64-byte packet as SDL writes them (the 8BitDo USB
 // Wireless Adapter 2 ignores a two-byte write): the handshake (0x80 0x02; the Pro answers 0x81 0x02
-// on its IN endpoint, which is never read), the switch of its link to 3 Mbit (0x80 0x03) and the
-// timeout disable (0x80 0x04) that keeps the pad reporting.
+// on its IN endpoint, which is never read) and the timeout disable (0x80 0x04) that keeps the pad
+// reporting.
 constexpr size_t kSwitchUsbPacketBytes = 64;
 constexpr uint8_t kSwitchHandshake[kSwitchUsbPacketBytes] = {0x80, 0x02};
-constexpr uint8_t kSwitchThreeMegabit[kSwitchUsbPacketBytes] = {0x80, 0x03};
 constexpr uint8_t kSwitchDisableTimeout[kSwitchUsbPacketBytes] = {0x80, 0x04};
 
 // Input report mode 0x30 (buttons + sticks + IMU) as one rumble + subcommand output report:
@@ -2201,9 +2200,8 @@ struct SwitchInitStep {
     const char* what;
 };
 
-// hid-nintendo's and SDL's USB order: a Pro on a cable answers the handshake and streams nothing
-// until the timeout disable follows a handshake sent at 3 Mbit. A fatal step failing leaves the pad
-// unusable, so the sequence stops; the others cost a feature at most.
+// hid-nintendo's USB order: handshake (0x80 0x02), timeout disable (0x80 0x04), then report mode,
+// vibration enable and IMU enable.
 template <size_t N>
 constexpr SwitchInitStep switchStep(const uint8_t (&packet)[N], const unsigned timeoutMs,
                                     const unsigned settleUs, const bool isFatal, const char* what) {
@@ -2212,10 +2210,6 @@ constexpr SwitchInitStep switchStep(const uint8_t (&packet)[N], const unsigned t
 
 constexpr SwitchInitStep kSwitchInitSequence[] = {
     switchStep(kSwitchHandshake, kSwitchStatusTimeoutMs, kSwitchInitSettleUs, true, "handshake"),
-    switchStep(kSwitchThreeMegabit, kSwitchStatusTimeoutMs, kSwitchInitSettleUs, false,
-               "3 Mbit write"),
-    switchStep(kSwitchHandshake, kSwitchStatusTimeoutMs, kSwitchInitSettleUs, false,
-               "handshake at 3 Mbit"),
     switchStep(kSwitchDisableTimeout, kSwitchStatusTimeoutMs, kSwitchInitSettleUs, false,
                "disable-timeout write"),
     switchStep(kSwitchSetReportMode, kSwitchModeTimeoutMs, kSwitchInitSettleUs, true,
