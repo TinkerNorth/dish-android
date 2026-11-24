@@ -15,7 +15,7 @@ These are the store screenshots, taken from the app with made-up PCs and control
 
 ## Download
 
-Dish for Android 2.7.0 is the current release. Every link below always points at the newest one.
+Dish for Android 2.8.0 is the current release. Every link below always points at the newest one.
 
 Most phones, tablets and handhelds: install [Dish from Google Play](https://play.google.com/store/apps/details?id=com.tinkernorth.dish). Google Play keeps it up to date. A new version can reach Google Play a little after GitHub, while Google reviews it.
 

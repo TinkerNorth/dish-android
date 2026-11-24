@@ -76,7 +76,7 @@ Out of scope:
 | Repo | Supported | Notes |
 |---|---|---|
 | `satellite` | latest minor on `main` (2.3.x); previous minor for 90 days | Windows is the canonical target; Linux is supported; macOS ships as a stub (no virtual gamepad) |
-| `dish-android` | latest minor on `main` (2.7.x); previous minor for 90 days | minSdk 24 |
+| `dish-android` | latest minor on `main` (2.8.x); previous minor for 90 days | minSdk 24 |
 | `dish-ios` | `main` until the first release | not yet released |
 | `dish-mac` | latest minor on `main` (1.4.x); previous minor for 90 days | macOS 13+ |
 | `dish-windows` | latest minor on `main` (2.8.x); previous minor for 90 days | Windows 10 (1809) or 11 |

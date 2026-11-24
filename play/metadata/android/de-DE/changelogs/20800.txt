@@ -1,0 +1,5 @@
+Dish 2.8.0: neuere Bausteine und eine korrekte Lizenzliste.
+
+• Einstellungen, Lizenzen zeigt jetzt, was die App wirklich enthält, auch Google Play Billing.
+• Der Audio-Codec hinter dem Controller-Ton und die Verschlüsselungsbibliothek sind aktualisiert.
+• Dein Controller funktioniert wie bisher; aktualisiere, wann es dir passt.

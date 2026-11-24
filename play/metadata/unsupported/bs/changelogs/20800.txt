@@ -1,0 +1,5 @@
+Dish 2.8.0: novije komponente i tačan popis licenci.
+
+• Postavke, Licence sada prikazuju šta aplikacija zaista sadrži, uključujući Google Play Billing.
+• Audio kodek za zvuk kontrolera i biblioteka za šifriranje su ažurirani.
+• Kontroler radi kao i prije; ažuriraj kad ti odgovara.

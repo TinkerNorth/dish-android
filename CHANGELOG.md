@@ -21,11 +21,32 @@ lockstep, and do not share a version number.
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-11-23
+
+The licence list in Settings is correct again, the audio codec and the encryption library are
+current, and every release is built, checked and signed in a way anyone can verify.
+
+### Fixed
+
+- **Settings, Licenses lists what the app really contains.** The list had stopped
+  updating when the app grew its three builds, so it still named older versions
+  of several libraries and left out Google Play Billing. It is regenerated from
+  the libraries each build ships, and a pull request that changes one without
+  regenerating the list now fails.
+- **The Google Play listing no longer says Satellite runs on macOS.** It runs on
+  Windows and Linux; on macOS it is a stub that creates no controllers.
+
 ### Changed
 
 - **Newer building blocks.** The audio codec (Opus 1.6.1) and the encryption
   library (libsodium 1.0.22) are updated, along with Android Gradle Plugin
   9.5.2 and the Android lifecycle libraries 2.11.1.
+- **A README for people who want to use Dish.** It starts with where to get
+  it (Google Play, or the APK from GitHub), how to get a controller working on
+  your PC, what the app does, what it needs, and what leaves your device; the
+  build instructions moved to the end. It also says what is known about the
+  signing keys of the Google Play build and the GitHub APK, and that the Amazon
+  Appstore build is not published.
 - **The Play and Amazon builds are now built and checked on every pull request**
   (unsigned), including the check that the release build keeps every method the
   native code calls, so a problem that only showed at release time shows
@@ -35,6 +56,9 @@ lockstep, and do not share a version number.
   codecs, the USB report decoders and the HID reader takes no signed operand any more, and the
   tests pin it at the values a wrong shift or sign extension gets wrong. Nothing a user can see
   changed.
+
+### Added
+
 - **The dependencies the app ships are pinned and scanned.** Their exact versions
   are committed in `app/gradle.lockfile`, a vulnerability scanner reads that
   file on every pull request, and a pull request that changes a dependency
@@ -46,10 +70,6 @@ lockstep, and do not share a version number.
   releases up to 2.7.0. Each release also carries `dish-android-components.spdx.json`, a bill of
   materials of every library in the app (its Gradle lockfile) and the two C libraries it builds in,
   with versions and licences, which the vulnerability scan reads.
-- **A README for people who want to use Dish.** It starts with where to get
-  it (Google Play, or the APK from GitHub), how to get a controller working on
-  your PC, what the app does, what it needs, and what leaves your device; the
-  build instructions moved to the end.
 
 ## [2.7.0] - 2026-11-23
 
