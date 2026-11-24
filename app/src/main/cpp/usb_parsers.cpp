@@ -2163,12 +2163,13 @@ constexpr InitPacket kGipSSeq[] = {
     {kGipAuthDone, sizeof(kGipAuthDone)},
 };
 
-// The Switch Pro's USB commands, each a full 64-byte packet as SDL writes them (the 8BitDo USB
-// Wireless Adapter 2 ignores a two-byte write): the handshake (0x80 0x02; the Pro answers 0x81 0x02
-// on its IN endpoint, which is never read) and the timeout disable (0x80 0x04) that keeps the pad
-// reporting.
+// The Switch start's USB commands, each a full 64-byte packet as SDL writes them (the 8BitDo USB
+// Wireless Adapter 2 ignores a two-byte write): the handshake (0x80 0x02, answered 0x81 0x02 on the
+// IN endpoint), the switch of the link to 3 Mbit (0x80 0x03, answered 0x81 0x03) and the timeout
+// disable (0x80 0x04) that keeps the pad reporting.
 constexpr size_t kSwitchUsbPacketBytes = 64;
 constexpr uint8_t kSwitchHandshake[kSwitchUsbPacketBytes] = {0x80, 0x02};
+constexpr uint8_t kSwitchThreeMegabit[kSwitchUsbPacketBytes] = {0x80, 0x03};
 constexpr uint8_t kSwitchDisableTimeout[kSwitchUsbPacketBytes] = {0x80, 0x04};
 
 // Input report mode 0x30 (buttons + sticks + IMU) as one rumble + subcommand output report:
@@ -2190,40 +2191,38 @@ constexpr uint8_t kSwitchEnableImu[] = {
 
 constexpr unsigned kSwitchStatusTimeoutMs = 100;
 constexpr unsigned kSwitchModeTimeoutMs = 200;
-constexpr unsigned kSwitchInitSettleUs = 40000;
 
-struct SwitchInitStep {
+struct SwitchStartPacket {
     InitPacket packet;
     unsigned timeoutMs;
-    unsigned settleUs;
-    bool isFatal;
+    bool isUsbCommand;
     const char* what;
 };
 
-// hid-nintendo's USB order: handshake (0x80 0x02), timeout disable (0x80 0x04), then report mode,
-// vibration enable and IMU enable.
 template <size_t N>
-constexpr SwitchInitStep switchStep(const uint8_t (&packet)[N], const unsigned timeoutMs,
-                                    const unsigned settleUs, const bool isFatal, const char* what) {
-    return {{packet, N}, timeoutMs, settleUs, isFatal, what};
+constexpr SwitchStartPacket switchPacket(const uint8_t (&packet)[N], const unsigned timeoutMs,
+                                         const bool isUsbCommand, const char* what) {
+    return {{packet, N}, timeoutMs, isUsbCommand, what};
 }
 
-constexpr SwitchInitStep kSwitchInitSequence[] = {
-    switchStep(kSwitchHandshake, kSwitchStatusTimeoutMs, kSwitchInitSettleUs, true, "handshake"),
-    switchStep(kSwitchDisableTimeout, kSwitchStatusTimeoutMs, kSwitchInitSettleUs, false,
-               "disable-timeout write"),
-    switchStep(kSwitchSetReportMode, kSwitchModeTimeoutMs, kSwitchInitSettleUs, true,
-               "set-report-mode write"),
-    switchStep(kSwitchEnableVibration, kSwitchModeTimeoutMs, kSwitchInitSettleUs, false,
-               "enable-vibration write"),
-    switchStep(kSwitchEnableImu, kSwitchModeTimeoutMs, 0, false, "enable-IMU write"),
+// Indexed by SwitchStartStep.
+constexpr SwitchStartPacket kSwitchStartPackets[] = {
+    switchPacket(kSwitchHandshake, kSwitchStatusTimeoutMs, true, "handshake"),
+    switchPacket(kSwitchThreeMegabit, kSwitchStatusTimeoutMs, true, "3 Mbit write"),
+    switchPacket(kSwitchHandshake, kSwitchStatusTimeoutMs, true, "handshake at 3 Mbit"),
+    switchPacket(kSwitchDisableTimeout, kSwitchStatusTimeoutMs, true, "disable-timeout write"),
+    switchPacket(kSwitchSetReportMode, kSwitchModeTimeoutMs, false, "set-report-mode write"),
+    switchPacket(kSwitchEnableVibration, kSwitchModeTimeoutMs, false, "enable-vibration write"),
+    switchPacket(kSwitchEnableImu, kSwitchModeTimeoutMs, false, "enable-IMU write"),
 };
 
-template <size_t N> constexpr int countOf(const SwitchInitStep (&)[N]) { return (int)N; }
-
-bool switchInitStepExists(const int index) {
-    return index >= 0 && index < countOf(kSwitchInitSequence);
+const SwitchStartPacket& switchPacketOf(const SwitchStartStep step) {
+    return kSwitchStartPackets[static_cast<size_t>(step)];
 }
+
+constexpr uint8_t kSwitchUsbReply = 0x81;
+constexpr uint8_t kSwitchSubcommandReply = 0x21;
+constexpr size_t kSwitchReplyMinLen = 2;
 
 InitSequence gipSequenceFor(const InitKind init) {
     if (init == InitKind::XBOX_ONE_POWERON) return {kGipPowerOnSeq, countOf(kGipPowerOnSeq)};
@@ -2241,13 +2240,141 @@ size_t buildGipInitPacket(const InitKind init, const int index, const uint8_t se
     return len;
 }
 
-size_t buildSwitchInitPacket(const int index, uint8_t* out, const size_t outCap) {
-    if (!switchInitStepExists(index)) return 0;
-    return copyPacket(kSwitchInitSequence[index].packet, out, outCap);
+size_t buildSwitchStartPacket(const SwitchStartStep step, uint8_t* out, const size_t outCap) {
+    return copyPacket(switchPacketOf(step).packet, out, outCap);
 }
 
-bool switchInitStepIsFatal(const int index) {
-    return switchInitStepExists(index) && kSwitchInitSequence[index].isFatal;
+bool switchStartStepIsUsbCommand(const SwitchStartStep step) {
+    return switchPacketOf(step).isUsbCommand;
+}
+
+const char* switchStartStepName(const SwitchStartStep step) { return switchPacketOf(step).what; }
+
+unsigned switchStartWriteTimeoutMs(const SwitchStartStep step) {
+    return switchPacketOf(step).timeoutMs;
+}
+
+bool isSwitchFullReport(const uint8_t* buf, const size_t len) {
+    return len >= kSwitchInputMinLen && buf[0] == kSwitchInputReport;
+}
+
+SwitchReply switchReplyOf(const uint8_t* buf, const size_t len) {
+    if (len < kSwitchReplyMinLen) return SwitchReply::NONE;
+    if (buf[0] == kSwitchSubcommandReply) return SwitchReply::SUBCOMMAND;
+    if (buf[0] != kSwitchUsbReply) return SwitchReply::NONE;
+    switch (buf[1]) {
+    case 0x02:
+        return SwitchReply::HANDSHAKE;
+    case 0x03:
+        return SwitchReply::HIGH_SPEED;
+    case 0x04:
+        return SwitchReply::TIMEOUT_DISABLED;
+    default:
+        return SwitchReply::NONE;
+    }
+}
+
+namespace {
+
+bool hasSeen(const int64_t at) { return at != NEVER_SENT_MS; }
+
+bool followsInSequence(const SwitchStartStep step, SwitchStartStep& next) {
+    switch (step) {
+    case SwitchStartStep::HANDSHAKE:
+        next = SwitchStartStep::HIGH_SPEED;
+        return true;
+    case SwitchStartStep::HIGH_SPEED:
+        next = SwitchStartStep::HANDSHAKE_AT_HIGH_SPEED;
+        return true;
+    case SwitchStartStep::HANDSHAKE_AT_HIGH_SPEED:
+        next = SwitchStartStep::DISABLE_TIMEOUT;
+        return true;
+    case SwitchStartStep::DISABLE_TIMEOUT:
+        next = SwitchStartStep::REPORT_MODE;
+        return true;
+    case SwitchStartStep::REPORT_MODE:
+        next = SwitchStartStep::ENABLE_VIBRATION;
+        return true;
+    case SwitchStartStep::ENABLE_VIBRATION:
+        next = SwitchStartStep::ENABLE_IMU;
+        return true;
+    case SwitchStartStep::ENABLE_IMU:
+        return false;
+    }
+    return false;
+}
+
+SwitchReply replyTo(const SwitchStartStep step) {
+    switch (step) {
+    case SwitchStartStep::HANDSHAKE:
+    case SwitchStartStep::HANDSHAKE_AT_HIGH_SPEED:
+        return SwitchReply::HANDSHAKE;
+    case SwitchStartStep::HIGH_SPEED:
+        return SwitchReply::HIGH_SPEED;
+    case SwitchStartStep::DISABLE_TIMEOUT:
+        return SwitchReply::TIMEOUT_DISABLED;
+    case SwitchStartStep::REPORT_MODE:
+    case SwitchStartStep::ENABLE_VIBRATION:
+    case SwitchStartStep::ENABLE_IMU:
+        return SwitchReply::SUBCOMMAND;
+    }
+    return SwitchReply::NONE;
+}
+
+} // namespace
+
+SwitchStartAction SwitchStart::due(const int64_t lastFullReportMs, const int64_t nowMs) const {
+    using Kind = SwitchStartAction::Kind;
+    const bool everStreamed = hasSeen(lastFullReportMs);
+    const bool streaming = everStreamed && nowMs - lastFullReportMs < SWITCH_STALL_MS;
+
+    if (hasNext_) {
+        // The pad streams since the last write: the rest of the 0x80 commands are not needed, and
+        // the one after the timeout disable would only unsettle it. Go on to the subcommands.
+        const bool streamsSinceLastWrite = everStreamed && lastFullReportMs >= sentMs_;
+        const bool skipsToSubcommands =
+            switchStartStepIsUsbCommand(next_) && sent_ && streamsSinceLastWrite;
+        const SwitchStartStep step = skipsToSubcommands ? SwitchStartStep::REPORT_MODE : next_;
+        const int64_t sinceSent = nowMs - sentMs_;
+        const bool repliedAndSettled = replied_ && sinceSent >= SWITCH_SETTLE_MS;
+        const bool settledAfterStream = skipsToSubcommands && sinceSent >= SWITCH_SETTLE_MS;
+        const bool ready =
+            !sent_ || repliedAndSettled || settledAfterStream || sinceSent >= SWITCH_REPLY_WAIT_MS;
+        return {ready ? Kind::SEND : Kind::WAIT, step};
+    }
+    if (streaming) {
+        // Streaming and nothing sent: the phone's own driver brought it up. No USB command, only
+        // the subcommands this app depends on.
+        if (!sent_) return {Kind::SEND, SwitchStartStep::REPORT_MODE};
+        return {Kind::STREAMING, SwitchStartStep::HANDSHAKE};
+    }
+    const bool inGrace = !everStreamed && nowMs - openedMs_ < SWITCH_GRACE_MS;
+    if (inGrace) return {Kind::WAIT, SwitchStartStep::HANDSHAKE};
+    if (!hasSeen(lastStartMs_)) return {Kind::SEND, SwitchStartStep::HANDSHAKE};
+    const bool quick = startsWithoutStream_ < SWITCH_QUICK_STARTS;
+    const int64_t interval = quick ? SWITCH_RETRY_MS : SWITCH_SLOW_RETRY_MS;
+    return {nowMs - lastStartMs_ >= interval ? Kind::SEND : Kind::WAIT, SwitchStartStep::HANDSHAKE};
+}
+
+void SwitchStart::noteSent(const SwitchStartStep step, const int64_t nowMs) {
+    sent_ = true;
+    sentMs_ = nowMs;
+    replied_ = false;
+    lastSent_ = step;
+    if (step == SwitchStartStep::HANDSHAKE) {
+        lastStartMs_ = nowMs;
+        startsWithoutStream_++;
+    }
+    hasNext_ = followsInSequence(step, next_);
+}
+
+void SwitchStart::noteReply(const SwitchReply reply) {
+    if (sent_ && reply != SwitchReply::NONE && reply == replyTo(lastSent_)) replied_ = true;
+}
+
+void SwitchStart::noteStreaming() {
+    startsWithoutStream_ = 0;
+    lastStartMs_ = NEVER_SENT_MS;
 }
 
 size_t buildGipAck(const uint8_t* report, const size_t len, uint8_t* out, const size_t outCap) {
@@ -2994,38 +3121,30 @@ bool runGipInit(const int fd, const uint8_t epOut, const InitKind init, const in
     return true;
 }
 
-bool runSwitchInitStep(const int fd, const uint8_t epOut, const SwitchInitStep& step,
-                       const int64_t atMs, WriteVerdict& verdict) {
-    const int32_t err = bulkWrite(fd, epOut, step.packet.data, step.packet.len, step.timeoutMs);
-    verdict = writeVerdictOf(OutputRoute::INTERRUPT_OUT, epOut, step.packet.data, step.packet.len,
-                             err, atMs);
-    const bool sent = err == WRITE_OK;
-    if (!sent && step.isFatal) {
-        logError("Switch Pro: %s failed", step.what);
-        return false;
-    }
-    if (!sent) logInfo("Switch Pro: %s failed (non-fatal)", step.what);
-    if (step.settleUs != 0) usleep(step.settleUs);
-    return true;
-}
-
-bool runSwitchProHandshake(const int fd, const uint8_t epOut, const int64_t atMs,
+bool runSwitchProHandshake(const int, const uint8_t epOut, const int64_t atMs,
                            WriteVerdict& verdict) {
-    if (epOut == 0) {
-        const SwitchInitStep& first = kSwitchInitSequence[0];
-        verdict = writeVerdictOf(OutputRoute::NONE, 0, first.packet.data, first.packet.len,
-                                 WRITE_OK, atMs);
-        logError("Switch Pro: no OUT endpoint, cannot init");
-        return false;
-    }
-    for (const SwitchInitStep& step : kSwitchInitSequence) {
-        if (!runSwitchInitStep(fd, epOut, step, atMs, verdict)) return false;
-    }
-    logInfo("Switch Pro USB init sequence sent");
-    return true;
+    // Nothing is sent when the pad is claimed: SwitchStart decides from what the pad sends, once
+    // the poller reads the IN endpoint. Only the OUT endpoint is needed.
+    if (epOut != 0) return true;
+    const SwitchStartPacket& first = switchPacketOf(SwitchStartStep::HANDSHAKE);
+    verdict =
+        writeVerdictOf(OutputRoute::NONE, 0, first.packet.data, first.packet.len, WRITE_OK, atMs);
+    logError("Switch Pro: no OUT endpoint, cannot start");
+    return false;
 }
 
 } // namespace
+
+bool runSwitchStartStep(const int fd, const uint8_t epOut, const SwitchStartStep step,
+                        const int64_t atMs, WriteVerdict& verdict) {
+    const SwitchStartPacket& p = switchPacketOf(step);
+    const int32_t err = bulkWrite(fd, epOut, p.packet.data, p.packet.len, p.timeoutMs);
+    verdict =
+        writeVerdictOf(OutputRoute::INTERRUPT_OUT, epOut, p.packet.data, p.packet.len, err, atMs);
+    const bool sent = err == WRITE_OK;
+    if (!sent) logInfo("Switch Pro: %s failed (non-fatal)", p.what);
+    return sent;
+}
 
 // One OUT report, as built by the feedback builders: nothing to write is a refusal, not a no-op.
 bool writeOutReport(const int fd, const uint8_t epOut, const uint8_t* buf, const size_t n) {

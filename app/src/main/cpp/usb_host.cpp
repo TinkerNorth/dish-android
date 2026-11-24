@@ -761,6 +761,63 @@ void giveBack(const AttachTarget& t, const bool receiverSlot) {
     giveBackPad(t);
 }
 
+// The Switch family's attach: the pad is started by what it sends (usbparsers::SwitchStart), not by
+// a fixed list, and judged on whether it streams afterwards. A Pro the phone's own driver already
+// brought up streams from the claim and is sent only the subcommands; a cold one is walked through
+// the handshake, the 3 Mbit step, the handshake again and the timeout disable, one packet at a
+// time, each waited for. A pad that streams nothing after one full sequence is silent, as before,
+// and the probe rule refuses it. The whole start is bounded, because the claim waits for it.
+constexpr int64_t kSwitchStartBudgetMs = 4000;
+constexpr int64_t kSwitchSettleAfterSequenceMs = 300;
+
+usbparsers::ProbeOutcome startSwitchPad(const AttachTarget& t, usbparsers::WriteVerdict& verdict) {
+    const usbparsers::Parser parser = t.classification.parser;
+    std::vector<uint8_t> buf(t.epInMaxPacket == 0 ? 64 : t.epInMaxPacket);
+    gamepad::DeviceState scratch{};
+    usbparsers::ParserState sticks;
+    const int64_t openedMs = dish_usb::outputClockMs();
+    usbparsers::SwitchStart start(openedMs);
+    int64_t lastFullMs = usbparsers::NEVER_SENT_MS;
+    int64_t sequenceDoneMs = usbparsers::NEVER_SENT_MS;
+    bool sawTraffic = false;
+    bool decoded = false;
+    while (dish_usb::outputClockMs() - openedMs < kSwitchStartBudgetMs) {
+        struct usbdevfs_bulktransfer xfer = {};
+        xfer.ep = t.epIn;
+        xfer.len = static_cast<unsigned int>(buf.size());
+        xfer.timeout = kProbeReadTimeoutMs;
+        xfer.data = buf.data();
+        const int n = ioctl(t.fd, USBDEVFS_BULK, &xfer);
+        const int64_t nowMs = dish_usb::outputClockMs();
+        if (n > 0) {
+            sawTraffic = true;
+            const auto len = static_cast<size_t>(n);
+            if (usbparsers::isSwitchFullReport(buf.data(), len)) {
+                lastFullMs = nowMs;
+                scratch = gamepad::DeviceState{};
+                decoded =
+                    usbparsers::decodeReport(parser, buf.data(), len, scratch, &sticks) || decoded;
+                start.noteStreaming();
+            } else {
+                start.noteReply(usbparsers::switchReplyOf(buf.data(), len));
+            }
+        }
+        const usbparsers::SwitchStartAction action = start.due(lastFullMs, nowMs);
+        if (action.kind == usbparsers::SwitchStartAction::Kind::SEND) {
+            usbparsers::runSwitchStartStep(t.fd, t.epOut, action.step, nowMs, verdict);
+            start.noteSent(action.step, dish_usb::outputClockMs());
+        }
+        const bool done = start.sequenceDone();
+        if (done && sequenceDoneMs == usbparsers::NEVER_SENT_MS) sequenceDoneMs = nowMs;
+        const bool streamsAfterStart = done && decoded && lastFullMs != usbparsers::NEVER_SENT_MS;
+        if (streamsAfterStart) return usbparsers::ProbeOutcome::DECODED;
+        const bool outWaited = done && nowMs - sequenceDoneMs >= kSwitchSettleAfterSequenceMs;
+        if (outWaited) break;
+    }
+    if (decoded) return usbparsers::ProbeOutcome::DECODED;
+    return sawTraffic ? usbparsers::ProbeOutcome::UNDECODED : usbparsers::ProbeOutcome::SILENT;
+}
+
 // Whether a pad came up, and when its init went out: the Steam Controller (2026)'s first refresh
 // is owed from then.
 struct PadReady {
@@ -776,6 +833,8 @@ PadReady readyPad(const AttachTarget& t) {
     const bool initialised =
         usbparsers::runInit(t.fd, t.interfaceNumber, t.epOut, t.classification.init,
                             dish_usb::outputClockMs(), initVerdict);
+    const bool startsBySwitchMachine =
+        t.classification.init == usbparsers::InitKind::SWITCH_PRO_HANDSHAKE;
     if (!initialised) {
         LOGI("attach %04X:%04X (%s): init failed, falling back to routed", t.vid, t.pid,
              t.modelName.c_str());
@@ -783,7 +842,9 @@ PadReady readyPad(const AttachTarget& t) {
         return PadReady{};
     }
     const int64_t initSentMs = dish_usb::outputClockMs();
-    const usbparsers::ProbeOutcome probed = probeEndpoint(t.fd, t.epIn, t.epInMaxPacket, parser);
+    const usbparsers::ProbeOutcome probed =
+        startsBySwitchMachine ? startSwitchPad(t, initVerdict)
+                              : probeEndpoint(t.fd, t.epIn, t.epInMaxPacket, parser);
     if (!usbparsers::probePermitsClaim(probed, usbparsers::isVerifiedFastLane(t.vid, t.pid),
                                        parser)) {
         LOGI("attach %04X:%04X (%s): %s, releasing to framework", t.vid, t.pid, t.modelName.c_str(),

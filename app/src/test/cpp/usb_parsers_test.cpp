@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <initializer_list>
@@ -90,17 +91,12 @@ std::vector<uint8_t> switchReport(size_t len) {
 
 constexpr size_t kSwitchUsbCommandBytes = 64;
 constexpr size_t kSwitchSubcommandBytes = 12;
-constexpr int kSwitchInitPacketCount = 5;
-constexpr int kSwitchHandshakeStep = 0;
-constexpr int kSwitchTimeoutDisableStep = 1;
-constexpr int kSwitchReportModeStep = 2;
-constexpr int kSwitchEnableVibrationStep = 3;
-constexpr int kSwitchEnableImuStep = 4;
+using usbparsers::SwitchStartStep;
 
-// The index-th packet of the Switch init sequence, empty once the sequence has ended.
-std::vector<uint8_t> switchInitPacket(const int index) {
+// The step's packet, empty when it does not fit.
+std::vector<uint8_t> switchStartPacket(const SwitchStartStep step) {
     std::vector<uint8_t> packet(kSwitchUsbCommandBytes, 0xAA);
-    const size_t n = usbparsers::buildSwitchInitPacket(index, packet.data(), packet.size());
+    const size_t n = usbparsers::buildSwitchStartPacket(step, packet.data(), packet.size());
     packet.resize(n);
     return packet;
 }
@@ -919,63 +915,312 @@ TEST(KnownDevices, ThePlayStationClassicControllerIsGenericHidInItsOwnOrder) {
     EXPECT_FALSE(usbparsers::isVerifiedFastLane(0x054C, 0x0CDA));
 }
 
-TEST(SwitchInit, TheUsbCommandsAreHandshakeThenTimeoutDisable) {
-    EXPECT_EQ(switchUsbCommand(0x02), switchInitPacket(kSwitchHandshakeStep));
-    EXPECT_EQ(switchUsbCommand(0x04), switchInitPacket(kSwitchTimeoutDisableStep));
+TEST(SwitchStart, TheUsbCommandsAreHandshakeThreeMegabitHandshakeThenTimeoutDisable) {
+    EXPECT_EQ(switchUsbCommand(0x02), switchStartPacket(SwitchStartStep::HANDSHAKE));
+    EXPECT_EQ(switchUsbCommand(0x03), switchStartPacket(SwitchStartStep::HIGH_SPEED));
+    EXPECT_EQ(switchUsbCommand(0x02), switchStartPacket(SwitchStartStep::HANDSHAKE_AT_HIGH_SPEED));
+    EXPECT_EQ(switchUsbCommand(0x04), switchStartPacket(SwitchStartStep::DISABLE_TIMEOUT));
 }
 
-TEST(SwitchInit, EachUsbCommandGoesOutAsAFullSixtyFourBytePacket) {
-    for (int step = kSwitchHandshakeStep; step <= kSwitchTimeoutDisableStep; step++) {
-        EXPECT_EQ(kSwitchUsbCommandBytes, switchInitPacket(step).size()) << step;
+TEST(SwitchStart, EachUsbCommandGoesOutAsAFullSixtyFourBytePacket) {
+    for (const SwitchStartStep step :
+         {SwitchStartStep::HANDSHAKE, SwitchStartStep::HIGH_SPEED,
+          SwitchStartStep::HANDSHAKE_AT_HIGH_SPEED, SwitchStartStep::DISABLE_TIMEOUT}) {
+        EXPECT_EQ(kSwitchUsbCommandBytes, switchStartPacket(step).size());
+        EXPECT_TRUE(usbparsers::switchStartStepIsUsbCommand(step));
     }
 }
 
-TEST(SwitchInit, TheSubcommandsFollowTheUsbCommandsAsTwelveBytesEach) {
-    const std::vector<uint8_t> reportMode = switchInitPacket(kSwitchReportModeStep);
+TEST(SwitchStart, TheSubcommandsAreTwelveBytesEach) {
+    const std::vector<uint8_t> reportMode = switchStartPacket(SwitchStartStep::REPORT_MODE);
     ASSERT_EQ(kSwitchSubcommandBytes, reportMode.size());
     EXPECT_EQ(0x01, reportMode[0]);
     EXPECT_EQ(0x03, reportMode[10]);
     EXPECT_EQ(0x30, reportMode[11]);
-    const std::vector<uint8_t> enableVibration = switchInitPacket(kSwitchEnableVibrationStep);
+    const std::vector<uint8_t> enableVibration = switchStartPacket(SwitchStartStep::ENABLE_VIBRATION);
     ASSERT_EQ(kSwitchSubcommandBytes, enableVibration.size());
     EXPECT_EQ(0x48, enableVibration[10]);
     EXPECT_EQ(0x01, enableVibration[11]);
-    const std::vector<uint8_t> enableImu = switchInitPacket(kSwitchEnableImuStep);
+    const std::vector<uint8_t> enableImu = switchStartPacket(SwitchStartStep::ENABLE_IMU);
     ASSERT_EQ(kSwitchSubcommandBytes, enableImu.size());
     EXPECT_EQ(0x40, enableImu[10]);
     EXPECT_EQ(0x01, enableImu[11]);
+    for (const SwitchStartStep step : {SwitchStartStep::REPORT_MODE, SwitchStartStep::ENABLE_VIBRATION,
+                                       SwitchStartStep::ENABLE_IMU}) {
+        EXPECT_FALSE(usbparsers::switchStartStepIsUsbCommand(step));
+    }
 }
 
-TEST(SwitchInit, TheSubcommandsCountTheirPacketsInTheirSecondByte) {
-    const std::vector<uint8_t> enableImu = switchInitPacket(kSwitchEnableImuStep);
-    ASSERT_EQ(kSwitchSubcommandBytes, enableImu.size());
-    EXPECT_EQ(0x00, switchInitPacket(kSwitchReportModeStep)[1]);
-    EXPECT_EQ(0x01, switchInitPacket(kSwitchEnableVibrationStep)[1]);
-    EXPECT_EQ(0x02, enableImu[1]);
+TEST(SwitchStart, TheSubcommandsCountTheirPacketsInTheirSecondByte) {
+    EXPECT_EQ(0x00, switchStartPacket(SwitchStartStep::REPORT_MODE)[1]);
+    EXPECT_EQ(0x01, switchStartPacket(SwitchStartStep::ENABLE_VIBRATION)[1]);
+    EXPECT_EQ(0x02, switchStartPacket(SwitchStartStep::ENABLE_IMU)[1]);
 }
 
-TEST(SwitchInit, TheSequenceEndsAfterFivePacketsAndRefusesASmallBuffer) {
-    EXPECT_FALSE(switchInitPacket(kSwitchInitPacketCount - 1).empty());
-    EXPECT_TRUE(switchInitPacket(kSwitchInitPacketCount).empty());
-    EXPECT_TRUE(switchInitPacket(-1).empty());
+TEST(SwitchStart, APacketRefusesASmallBuffer) {
     uint8_t small[16];
-    EXPECT_EQ(0u, usbparsers::buildSwitchInitPacket(kSwitchHandshakeStep, small, sizeof(small)));
+    EXPECT_EQ(0u, usbparsers::buildSwitchStartPacket(SwitchStartStep::HANDSHAKE, small, sizeof(small)));
 }
 
-TEST(SwitchInit, AFailedFirstHandshakeOrReportModeWriteEndsTheSequence) {
-    EXPECT_TRUE(usbparsers::switchInitStepIsFatal(kSwitchHandshakeStep));
-    EXPECT_TRUE(usbparsers::switchInitStepIsFatal(kSwitchReportModeStep));
+// What the pad sends back, as dish-mac captured a Pro on macOS 27 (dish-mac's CapturedSwitchPro):
+// every report is one 64-byte packet, the replies are not full reports.
+std::vector<uint8_t> paddedToOnePacket(std::vector<uint8_t> bytes) {
+    bytes.resize(kSwitchUsbCommandBytes, 0);
+    return bytes;
+}
+const std::vector<uint8_t> kHandshakeReply = paddedToOnePacket({0x81, 0x02});
+const std::vector<uint8_t> kHighSpeedReply = paddedToOnePacket({0x81, 0x03});
+const std::vector<uint8_t> kSubcommandReply = paddedToOnePacket(
+    {0x21, 0xDC, 0x81, 0x00, 0x80, 0x00, 0x18, 0xB7, 0x7F, 0x4A, 0xE8, 0x82, 0x00, 0x80, 0x03});
+const std::vector<uint8_t> kIdleFullReport = paddedToOnePacket(
+    {0x30, 0xA7, 0x81, 0x00, 0x80, 0x00, 0x19, 0xB7, 0x7F, 0x4B, 0xF8, 0x82});
+
+TEST(SwitchStart, TheProsRepliesAreNoFullReports) {
+    for (const auto& reply : {kHandshakeReply, kHighSpeedReply, kSubcommandReply}) {
+        EXPECT_FALSE(usbparsers::isSwitchFullReport(reply.data(), reply.size()));
+    }
+    EXPECT_TRUE(usbparsers::isSwitchFullReport(kIdleFullReport.data(), kIdleFullReport.size()));
+    EXPECT_EQ(usbparsers::SwitchReply::HANDSHAKE,
+              usbparsers::switchReplyOf(kHandshakeReply.data(), kHandshakeReply.size()));
+    EXPECT_EQ(usbparsers::SwitchReply::HIGH_SPEED,
+              usbparsers::switchReplyOf(kHighSpeedReply.data(), kHighSpeedReply.size()));
+    EXPECT_EQ(usbparsers::SwitchReply::SUBCOMMAND,
+              usbparsers::switchReplyOf(kSubcommandReply.data(), kSubcommandReply.size()));
+    EXPECT_EQ(usbparsers::SwitchReply::NONE,
+              usbparsers::switchReplyOf(kIdleFullReport.data(), kIdleFullReport.size()));
 }
 
-TEST(SwitchInit, AFailedTimeoutDisableVibrationEnableOrImuEnableDoesNotEndTheSequence) {
-    EXPECT_FALSE(usbparsers::switchInitStepIsFatal(kSwitchTimeoutDisableStep));
-    EXPECT_FALSE(usbparsers::switchInitStepIsFatal(kSwitchEnableVibrationStep));
-    EXPECT_FALSE(usbparsers::switchInitStepIsFatal(kSwitchEnableImuStep));
+// A Pro as the machine meets it, advanced in 10 ms ticks. The commands the pad takes are its
+// whole interface; what it answers and when it streams is what each evidence says.
+enum class ProKind {
+    // dish-mac's table, a silent plugged-in Pro on macOS: only 0x80 0x02, 0x03, 0x02, 0x04 in a row
+    // streams (about 75 reports a second); the shorter lists stay silent.
+    COLD,
+    // The Pixel 8 run: hid-nintendo had already started it, so it streams from the claim, and the
+    // 3 Mbit step silences it (the 2.7.0 list did, the five-packet list that leaves it out did not).
+    STARTED_BY_THE_KERNEL,
+};
+
+class SimulatedPro {
+  public:
+    explicit SimulatedPro(const ProKind kind) : kind_(kind), streams_(kind == ProKind::STARTED_BY_THE_KERNEL) {}
+
+    void receive(const std::vector<uint8_t>& packet, const int64_t nowMs) {
+        const uint8_t first = packet[0];
+        const uint8_t second = packet[1];
+        received_.push_back({first, second});
+        if (first == 0x80 && second == 0x02) queue(kHandshakeReply, nowMs);
+        if (first == 0x80 && second == 0x03) {
+            queue(kHighSpeedReply, nowMs);
+            if (kind_ == ProKind::STARTED_BY_THE_KERNEL) streams_ = false;
+        }
+        if (first == 0x01) queue(kSubcommandReply, nowMs);
+        if (kind_ == ProKind::COLD && endsWithTheColdOrder()) streams_ = true;
+    }
+
+    // The reports the pad puts on its IN endpoint at nowMs, oldest first.
+    std::vector<std::vector<uint8_t>> reportsAt(const int64_t nowMs) {
+        std::vector<std::vector<uint8_t>> out;
+        while (!replies_.empty() && replies_.front().first <= nowMs) {
+            out.push_back(replies_.front().second);
+            replies_.erase(replies_.begin());
+        }
+        const int64_t reportEveryMs = 13;
+        if (streams_ && nowMs - lastReportMs_ >= reportEveryMs) {
+            out.push_back(kIdleFullReport);
+            lastReportMs_ = nowMs;
+        }
+        return out;
+    }
+
+    bool streams() const { return streams_; }
+    int count(const uint8_t first, const uint8_t second) const {
+        int n = 0;
+        for (const auto& command : received_) n += command[0] == first && command[1] == second ? 1 : 0;
+        return n;
+    }
+    size_t packetsReceived() const { return received_.size(); }
+
+  private:
+    void queue(const std::vector<uint8_t>& reply, const int64_t nowMs) { replies_.push_back({nowMs + 5, reply}); }
+
+    bool endsWithTheColdOrder() const {
+        const std::vector<std::array<uint8_t, 2>> order = {{0x80, 0x02}, {0x80, 0x03}, {0x80, 0x02}, {0x80, 0x04}};
+        if (received_.size() < order.size()) return false;
+        return std::equal(order.begin(), order.end(), received_.end() - order.size());
+    }
+
+    ProKind kind_;
+    bool streams_;
+    int64_t lastReportMs_ = -1000;
+    std::vector<std::array<uint8_t, 2>> received_;
+    std::vector<std::pair<int64_t, std::vector<uint8_t>>> replies_;
+};
+
+// Runs the machine against the pad for `seconds`: reads what the pad sends, sends what due says.
+struct StartRun {
+    int64_t lastFullMs = usbparsers::NEVER_SENT_MS;
+    std::vector<SwitchStartStep> sent;
+};
+
+StartRun drive(SimulatedPro& pad, const int64_t openedMs, const int64_t seconds) {
+    usbparsers::SwitchStart start(openedMs);
+    StartRun run;
+    for (int64_t now = openedMs; now < openedMs + seconds * 1000; now += 10) {
+        for (const auto& report : pad.reportsAt(now)) {
+            if (usbparsers::isSwitchFullReport(report.data(), report.size())) {
+                run.lastFullMs = now;
+                start.noteStreaming();
+            } else {
+                start.noteReply(usbparsers::switchReplyOf(report.data(), report.size()));
+            }
+        }
+        const usbparsers::SwitchStartAction action = start.due(run.lastFullMs, now);
+        if (action.kind == usbparsers::SwitchStartAction::Kind::SEND) {
+            pad.receive(switchStartPacket(action.step), now);
+            start.noteSent(action.step, now);
+            run.sent.push_back(action.step);
+        }
+    }
+    return run;
 }
 
-TEST(SwitchInit, NoStepPastTheSequenceIsFatal) {
-    EXPECT_FALSE(usbparsers::switchInitStepIsFatal(kSwitchInitPacketCount));
-    EXPECT_FALSE(usbparsers::switchInitStepIsFatal(-1));
+TEST(SwitchStart, AColdProReplayedFromDishMacsTableEndsStreaming) {
+    SimulatedPro pad(ProKind::COLD);
+    const StartRun run = drive(pad, 1000, 6);
+    EXPECT_TRUE(pad.streams()) << "the Pro took " << pad.packetsReceived() << " packets and stayed silent";
+    EXPECT_NE(run.lastFullMs, usbparsers::NEVER_SENT_MS);
+}
+
+TEST(SwitchStart, AColdProIsSentTheColdOrderThenTheSubcommandsAndNothingElse) {
+    SimulatedPro pad(ProKind::COLD);
+    const StartRun run = drive(pad, 1000, 6);
+    const std::vector<SwitchStartStep> expected = {
+        SwitchStartStep::HANDSHAKE,         SwitchStartStep::HIGH_SPEED,
+        SwitchStartStep::HANDSHAKE_AT_HIGH_SPEED, SwitchStartStep::DISABLE_TIMEOUT,
+        SwitchStartStep::REPORT_MODE,       SwitchStartStep::ENABLE_VIBRATION,
+        SwitchStartStep::ENABLE_IMU};
+    EXPECT_EQ(expected, run.sent);
+}
+
+TEST(SwitchStart, ASilentPadWaitsOutTheGraceBeforeTheFirstPacket) {
+    usbparsers::SwitchStart start(1000);
+    using Kind = usbparsers::SwitchStartAction::Kind;
+    EXPECT_EQ(Kind::WAIT, start.due(usbparsers::NEVER_SENT_MS, 1000 + usbparsers::SWITCH_GRACE_MS - 1).kind);
+    const auto first = start.due(usbparsers::NEVER_SENT_MS, 1000 + usbparsers::SWITCH_GRACE_MS);
+    EXPECT_EQ(Kind::SEND, first.kind);
+    EXPECT_EQ(SwitchStartStep::HANDSHAKE, first.step);
+}
+
+TEST(SwitchStart, APadTheKernelAlreadyStartedIsSentNoHandshakeAndNoThreeMegabitStep) {
+    SimulatedPro pad(ProKind::STARTED_BY_THE_KERNEL);
+    const StartRun run = drive(pad, 1000, 6);
+    EXPECT_EQ(0, pad.count(0x80, 0x02));
+    EXPECT_EQ(0, pad.count(0x80, 0x03));
+    EXPECT_EQ(0, pad.count(0x80, 0x04));
+    EXPECT_TRUE(pad.streams());
+    const std::vector<SwitchStartStep> expected = {SwitchStartStep::REPORT_MODE,
+                                                   SwitchStartStep::ENABLE_VIBRATION,
+                                                   SwitchStartStep::ENABLE_IMU};
+    EXPECT_EQ(expected, run.sent);
+}
+
+TEST(SwitchStart, APadThatStreamsWhenClaimedAndGoesSilentOnTheThreeMegabitStepStillStreamsAtTheEnd) {
+    // The regression of the Pixel 8 run: 2.7.0 sent 0x80 0x03 to a pad the kernel had started and
+    // it never streamed again.
+    SimulatedPro pad(ProKind::STARTED_BY_THE_KERNEL);
+    drive(pad, 1000, 12);
+    EXPECT_TRUE(pad.streams());
+    EXPECT_EQ(0, pad.count(0x80, 0x03));
+}
+
+TEST(SwitchStart, TheFixedListsAreWhyTheMachineExists) {
+    // The 2.7.0 list (seven packets) silences a pad the kernel started; the five-packet list that
+    // leaves out the 3 Mbit step leaves a cold Pro silent. Neither is right for both.
+    const std::vector<std::vector<SwitchStartStep>> lists = {
+        {SwitchStartStep::HANDSHAKE, SwitchStartStep::HIGH_SPEED, SwitchStartStep::HANDSHAKE_AT_HIGH_SPEED,
+         SwitchStartStep::DISABLE_TIMEOUT, SwitchStartStep::REPORT_MODE, SwitchStartStep::ENABLE_VIBRATION,
+         SwitchStartStep::ENABLE_IMU},
+        {SwitchStartStep::HANDSHAKE, SwitchStartStep::DISABLE_TIMEOUT, SwitchStartStep::REPORT_MODE,
+         SwitchStartStep::ENABLE_VIBRATION, SwitchStartStep::ENABLE_IMU}};
+    SimulatedPro kernelStarted(ProKind::STARTED_BY_THE_KERNEL);
+    SimulatedPro cold(ProKind::COLD);
+    for (const SwitchStartStep step : lists[0]) kernelStarted.receive(switchStartPacket(step), 0);
+    for (const SwitchStartStep step : lists[1]) cold.receive(switchStartPacket(step), 0);
+    EXPECT_FALSE(kernelStarted.streams());
+    EXPECT_FALSE(cold.streams());
+}
+
+TEST(SwitchStart, TheUsbCommandsStopTheMomentFullReportsArrive) {
+    // A pad that begins to stream after the second handshake is not sent the timeout disable it
+    // would also have taken: the subcommands follow at once.
+    usbparsers::SwitchStart start(0);
+    using Kind = usbparsers::SwitchStartAction::Kind;
+    start.noteSent(SwitchStartStep::HANDSHAKE, 1000);
+    start.noteSent(SwitchStartStep::HIGH_SPEED, 1100);
+    start.noteSent(SwitchStartStep::HANDSHAKE_AT_HIGH_SPEED, 1200);
+    const auto action = start.due(1230, 1300);
+    EXPECT_EQ(Kind::SEND, action.kind);
+    EXPECT_EQ(SwitchStartStep::REPORT_MODE, action.step);
+}
+
+TEST(SwitchStart, AMissingThreeMegabitReplyIsWaitedOutAndTheOrderGoesOn) {
+    // hid-nintendo and SDL carry on when the 3 Mbit step is not answered.
+    usbparsers::SwitchStart start(0);
+    using Kind = usbparsers::SwitchStartAction::Kind;
+    start.noteSent(SwitchStartStep::HANDSHAKE, 1000);
+    start.noteReply(usbparsers::SwitchReply::HANDSHAKE);
+    start.noteSent(SwitchStartStep::HIGH_SPEED, 1100);
+    EXPECT_EQ(Kind::WAIT, start.due(usbparsers::NEVER_SENT_MS, 1100 + usbparsers::SWITCH_REPLY_WAIT_MS - 1).kind);
+    const auto action = start.due(usbparsers::NEVER_SENT_MS, 1100 + usbparsers::SWITCH_REPLY_WAIT_MS);
+    EXPECT_EQ(Kind::SEND, action.kind);
+    EXPECT_EQ(SwitchStartStep::HANDSHAKE_AT_HIGH_SPEED, action.step);
+}
+
+TEST(SwitchStart, ARepliedStepIsFollowedAfterTheSettleTime) {
+    usbparsers::SwitchStart start(0);
+    using Kind = usbparsers::SwitchStartAction::Kind;
+    start.noteSent(SwitchStartStep::HANDSHAKE, 1000);
+    start.noteReply(usbparsers::SwitchReply::HANDSHAKE);
+    EXPECT_EQ(Kind::WAIT, start.due(usbparsers::NEVER_SENT_MS, 1000 + usbparsers::SWITCH_SETTLE_MS - 1).kind);
+    EXPECT_EQ(Kind::SEND, start.due(usbparsers::NEVER_SENT_MS, 1000 + usbparsers::SWITCH_SETTLE_MS).kind);
+}
+
+TEST(SwitchStart, ASequenceThatBroughtNoStreamIsRepeatedAfterTheRetryIntervalThenSlowly) {
+    usbparsers::SwitchStart start(0);
+    using Kind = usbparsers::SwitchStartAction::Kind;
+    int64_t at = usbparsers::SWITCH_GRACE_MS;
+    for (int sequence = 0; sequence < usbparsers::SWITCH_QUICK_STARTS; sequence++) {
+        EXPECT_EQ(Kind::SEND, start.due(usbparsers::NEVER_SENT_MS, at).kind) << sequence;
+        start.noteSent(SwitchStartStep::HANDSHAKE, at);
+        for (const SwitchStartStep step : {SwitchStartStep::HIGH_SPEED, SwitchStartStep::HANDSHAKE_AT_HIGH_SPEED,
+                                           SwitchStartStep::DISABLE_TIMEOUT, SwitchStartStep::REPORT_MODE,
+                                           SwitchStartStep::ENABLE_VIBRATION, SwitchStartStep::ENABLE_IMU}) {
+            start.noteSent(step, at + 1);
+        }
+        EXPECT_EQ(Kind::WAIT, start.due(usbparsers::NEVER_SENT_MS, at + usbparsers::SWITCH_RETRY_MS - 1).kind);
+        at += usbparsers::SWITCH_RETRY_MS;
+    }
+    EXPECT_EQ(Kind::WAIT, start.due(usbparsers::NEVER_SENT_MS, at + 1).kind);
+    EXPECT_EQ(Kind::SEND, start.due(usbparsers::NEVER_SENT_MS, at - usbparsers::SWITCH_RETRY_MS + usbparsers::SWITCH_SLOW_RETRY_MS).kind);
+}
+
+TEST(SwitchStart, AnAdapterThatNeverAnswersIsNotStartedAgainAtOnce) {
+    // An 8BitDo adapter in another mode, or an N64 pad's own protocol: it answers nothing and
+    // streams nothing, so the sequence ends and the probe rule refuses the claim, as before.
+    SimulatedPro silent(ProKind::COLD);
+    usbparsers::SwitchStart start(0);
+    int64_t last = usbparsers::NEVER_SENT_MS;
+    int sequences = 0;
+    for (int64_t now = 0; now < 2500; now += 10) {
+        const auto action = start.due(last, now);
+        if (action.kind == usbparsers::SwitchStartAction::Kind::SEND) {
+            if (action.step == SwitchStartStep::HANDSHAKE) sequences++;
+            start.noteSent(action.step, now);
+        }
+    }
+    EXPECT_EQ(1, sequences);
+    EXPECT_TRUE(start.sequenceDone());
 }
 
 TEST(GipAck, AReportThatAsksForAnAckGetsXpadsAnswer) {

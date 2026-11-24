@@ -393,13 +393,91 @@ size_t buildMicMuteLedReport(Parser p, FeedbackState& st, uint8_t state, uint8_t
 // number at byte 2), returns its length or 0 when there are no more. runInit sends them in order.
 size_t buildGipInitPacket(InitKind init, int index, uint8_t seq, uint8_t* out, size_t outCap);
 
-// The Switch Pro USB init sequence, packet by packet: the four 0x80 commands as full 64-byte
-// packets, then the three subcommands (report mode, vibration, IMU). Zero once the sequence ends
-// or the packet does not fit.
-size_t buildSwitchInitPacket(int index, uint8_t* out, size_t outCap);
+// ── The Switch start ───────────────────────────────────────────────────────────────────────────
+//
+// A Switch-family pad on USB (the Pro, the N64 and SNES pads, the 8BitDo adapters in Switch mode)
+// streams its full 0x30 reports only once something has started it, and what has started it
+// differs by pad. A Pro the phone's own driver (hid-nintendo) already brought up streams from the
+// moment it is claimed and goes silent if it is sent the 3 Mbit step (0x80 0x03); a cold Pro on a
+// system with no such driver stays silent until the whole order arrives: handshake, 3 Mbit,
+// handshake again, timeout disable (0x80 0x02, 0x80 0x03, 0x80 0x02, 0x80 0x04), the order Linux's
+// hid-nintendo sends in joycon_init, which waits for each reply and carries on if the 3 Mbit
+// step is not answered. So no fixed list is right, and SwitchStart decides from what the pad
+// sends: leave a pad that streams alone but for the subcommands, walk the cold order for one that
+// stays silent, one packet at a time, and stop the 0x80 commands the moment full reports arrive.
+// dish-mac's SwitchStreamWatch is the same machine on a 250 ms tick.
+enum class SwitchStartStep : uint8_t {
+    HANDSHAKE,
+    HIGH_SPEED,
+    HANDSHAKE_AT_HIGH_SPEED,
+    DISABLE_TIMEOUT,
+    REPORT_MODE,
+    ENABLE_VIBRATION,
+    ENABLE_IMU,
+};
 
-// Pure: whether a failed write of the index-th Switch init packet ends the sequence.
-bool switchInitStepIsFatal(int index);
+// The step's packet: the four 0x80 commands as full 64-byte packets, the three subcommands as
+// 12-byte output reports. Zero when it does not fit.
+size_t buildSwitchStartPacket(SwitchStartStep step, uint8_t* out, size_t outCap);
+// A 0x80 USB command, as against a subcommand.
+bool switchStartStepIsUsbCommand(SwitchStartStep step);
+const char* switchStartStepName(SwitchStartStep step);
+// How long a write of the step may block.
+unsigned switchStartWriteTimeoutMs(SwitchStartStep step);
+
+// A full input report: 0x30. Its replies (0x81 0x02, 0x81 0x03, the 0x21 subcommand reply) and the
+// idle 0x3F report never count as the stream.
+bool isSwitchFullReport(const uint8_t* buf, size_t len);
+
+enum class SwitchReply : uint8_t { NONE, HANDSHAKE, HIGH_SPEED, TIMEOUT_DISABLED, SUBCOMMAND };
+SwitchReply switchReplyOf(const uint8_t* buf, size_t len);
+
+inline constexpr int64_t SWITCH_GRACE_MS = 300;      // a silent pad waits this long before a start
+inline constexpr int64_t SWITCH_REPLY_WAIT_MS = 250; // a step's reply is waited for this long
+inline constexpr int64_t SWITCH_SETTLE_MS = 40;  // and the next step follows this long behind it
+inline constexpr int64_t SWITCH_STALL_MS = 2000; // full reports this long overdue: stopped
+inline constexpr int64_t SWITCH_RETRY_MS = 3000; // between starts while the pad stays silent
+inline constexpr int64_t SWITCH_SLOW_RETRY_MS = 10000; // and once SWITCH_QUICK_STARTS were spent
+inline constexpr int SWITCH_QUICK_STARTS = 3;
+
+struct SwitchStartAction {
+    enum class Kind : uint8_t { STREAMING, WAIT, SEND };
+    Kind kind = Kind::WAIT;
+    SwitchStartStep step = SwitchStartStep::HANDSHAKE;
+};
+
+// One pad's start over time. Pure: the caller reads the IN endpoint, tells the machine what it saw
+// and what it sent, and sends what due says.
+class SwitchStart {
+  public:
+    explicit SwitchStart(int64_t openedMs) : openedMs_(openedMs) {}
+
+    // lastFullReportMs is when the last full report arrived, NEVER_SENT_MS before the first.
+    SwitchStartAction due(int64_t lastFullReportMs, int64_t nowMs) const;
+    void noteSent(SwitchStartStep step, int64_t nowMs);
+    void noteReply(SwitchReply reply);
+    // Full reports are arriving after a start: a later stall begins again with the quick retries.
+    void noteStreaming();
+
+    // Every packet of the sequence in flight has gone out.
+    bool sequenceDone() const { return sent_ && !hasNext_; }
+    int startsWithoutStream() const { return startsWithoutStream_; }
+
+  private:
+    int64_t openedMs_;
+    int64_t sentMs_ = 0;
+    int64_t lastStartMs_ = NEVER_SENT_MS;
+    SwitchStartStep next_ = SwitchStartStep::HANDSHAKE;
+    SwitchStartStep lastSent_ = SwitchStartStep::HANDSHAKE;
+    bool hasNext_ = false;
+    bool sent_ = false;
+    bool replied_ = false;
+    int startsWithoutStream_ = 0;
+};
+
+// Writes the step to the OUT endpoint, recording the write's verdict. False when it failed.
+bool runSwitchStartStep(int fd, uint8_t epOut, SwitchStartStep step, int64_t atMs,
+                        WriteVerdict& verdict);
 
 // A GIP report whose flags ask for an acknowledgement (the mode-button report does) is
 // retransmitted until one arrives; this builds the ack xpad sends. Zero when none is owed.
