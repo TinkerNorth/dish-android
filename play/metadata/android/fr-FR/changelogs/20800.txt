@@ -1,5 +1,6 @@
 Dish 2.8.0 : des composants plus récents et une liste de licences exacte.
 
+• Une manette Switch Pro en USB direct ne se connecte plus pour ne rien envoyer ensuite.
 • Réglages, Licences montre maintenant ce que l’appli contient vraiment, Google Play Billing compris.
 • Le codec audio du son de la manette et la bibliothèque de chiffrement sont mis à jour.
-• Votre manette fonctionne comme avant ; mettez à jour quand cela vous convient.
+• Tout le reste fonctionne comme avant.

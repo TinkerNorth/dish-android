@@ -129,24 +129,51 @@ End-to-end Guide also needs the satellite to forward `wButtons` bit `0x0400` to 
 
 ### 2. Switch Pro: the USB start sequence has not run on Android, and the IMU signs are unverified
 
-**Context, start sequence:** A Switch Pro Controller on a cable stays silent after the sequence Dish
-used to send (handshake `80 02`, timeout disable `80 04`, full report mode): it acknowledges the
-handshake and streams nothing. It streams only once the timeout disable follows a handshake sent at
-3 Mbit, which is the order Linux's hid-nintendo and SDL send every USB Switch pad: `80 02`, `80 03`,
-`80 02`, `80 04`. Dish now sends that order, then the report-mode, vibration-enable and IMU-enable
-subcommands, to every model on `InitKind::SWITCH_PRO_HANDSHAKE` (the Pro, the 8BitDo adapters, the
-N64 Online pad). The pad's need for the 3 Mbit step was shown on a Pro Controller over macOS
-(dish-mac PR 101 carries the probe table); the new sequence has not yet been run on an Android
-device. On a phone whose kernel driver (hid-nintendo) ran the full sequence before Dish claimed the
-interface, the pad streamed either way, which is the likely reason the old sequence passed its
-Android hardware checks.
+**Context, start sequence:** No fixed list of USB packets starts every Switch Pro, so Dish no longer
+sends one: `usbparsers::SwitchStart` (`usb_parsers.h`) decides from what the pad sends, and
+dish-mac's `SwitchStreamWatch` is the same machine on a 250 ms tick. The evidence behind it:
+
+- A Pixel 8 on Android 17 (Pro Controller 057e:2009, bcdDevice 0210, endpoints IN `0x81` / OUT
+  `0x01`), Dish 2.7.0: in Standard the Pro works and Android lists "Nintendo Switch Pro Controller
+  IMU", so the phone's kernel has hid-nintendo and had already started the pad. On USB Direct the
+  log read `Switch Pro USB init sequence sent` and `attach ok`, the write verdict was OK and
+  `input.frames` stayed 0: claimed and never streaming. With the list shortened to the handshake,
+  the timeout disable and the subcommands (no `80 03`, 87588ec) the same pad on the same phone
+  streamed. So a pad the kernel started goes silent when it is sent the 3 Mbit step.
+- dish-mac PR 101's probe table, each run from a cold, plugged-in, silent Pro on macOS (nothing
+  there starts it): `80 02, 80 04, report mode`, `80 02, 80 03, 80 04` and `80 02, 80 03, 80 02`
+  all stay silent; only `80 02, 80 03, 80 02, 80 04` streams (about 75 reports a second). So a cold
+  pad needs the 3 Mbit step and the second handshake.
+- Linux's hid-nintendo, `joycon_init` in `drivers/hid/hid-nintendo.c`: handshake, the 3 Mbit step
+  (`JC_USB_CMD_BAUDRATE_3M`, "we can function with the default baudrate ... continuing anyway" when
+  it fails), the handshake again, then the timeout disable, each waiting for the previous command's
+  reply (up to a second) before the next goes out.
+
+Android's old sender differed from both references the same way: it wrote blind, 40 ms apart, never
+read the IN endpoint, and never looked at whether the pad already streamed. The machine reads the
+endpoint while the claim waits (at most 4 s, `startSwitchPad` in `usb_host.cpp`): a pad that streams
+from the claim is sent no USB command, only the report-mode, vibration and IMU subcommands; a pad
+still silent after 300 ms is walked through `80 02, 80 03, 80 02, 80 04`, each step waiting for its
+reply (`81 02`, `81 03`) or 250 ms, a missing 3 Mbit reply being non-fatal as in hid-nintendo and
+SDL, and the USB commands stop the moment full reports arrive; then the subcommands. A pad that
+streams nothing after one whole sequence is refused as before, which keeps an 8BitDo adapter in
+another mode on the Standard path. The tests replay both pads (`SwitchStart.*` in
+`usb_parsers_test.cpp`, with dish-mac's captured replies) and fail on the old seven-packet list and
+on the five-packet list.
+
+**Unverified:** a cold Pro on an Android device without hid-nintendo (the Pixel 8 run covers the
+kernel-started pad only; the cold order was run on macOS and is replayed here, not run on a phone);
+the 8BitDo USB adapters and the N64 Online pad, which share `InitKind::SWITCH_PRO_HANDSHAKE` and so
+take the same machine (their pre-change behaviour was not recorded, and an adapter that streams only
+after something else keeps being refused, as the probe rule always did); a stream that stalls after
+the claim is not restarted (dish-mac restarts it after two seconds).
 
 **Context, IMU enable:** Until subcommand `0x40` with argument `0x01` is sent, every IMU word of the
 Pro's 0x30 reports reads zero. Shown on a Pro over macOS through dish-mac's own reader: with the
 report-mode subcommand alone, 282 motion samples at rest read six zeros; with the IMU enable sent
 after it, the accelerometer reads about 1 g at rest (dish-mac PR 101 saw the zeros, and dish-mac
-PR 109 sends the enable and carries the run). Dish now sends it as the last step of
-`kSwitchInitSequence`, after the vibration enable, non-fatal as in SDL. It has not yet been run on
+PR 109 sends the enable and carries the run). Dish sends it as the last step of
+the start, after the vibration enable, non-fatal as in SDL. It has not yet been run on
 an Android device, and whether the Android pitch and yaw confirmation below relied on the kernel
 driver having turned the IMU on first is not known.
 
@@ -155,8 +182,8 @@ and the axis order is now rotated onto the DS4 wire convention with pitch and ya
 hardware-confirmed. Roll's sign and the three accel signs are still unverified (the code notes
 exactly this).
 
-**Where:** `app/src/main/cpp/usb_parsers.cpp` (`kSwitchInitSequence`, `runSwitchProHandshake`;
-`decodeSwitchProUsb`, IMU block).
+**Where:** `app/src/main/cpp/usb_parsers.cpp` (`SwitchStart`, `kSwitchStartPackets`;
+`decodeSwitchProUsb`, IMU block) and `usb_host.cpp` (`startSwitchPad`).
 
 **Task:** With a real Switch Pro on a phone whose kernel has no hid-nintendo, confirm the pad streams
 from its plugged-in state through Dish's own sequence, with non-zero IMU words. Then, in Direct mode,

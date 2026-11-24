@@ -28,6 +28,11 @@ current, and every release is built, checked and signed in a way anyone can veri
 
 ### Fixed
 
+- **A Switch Pro Controller on USB Direct no longer gets claimed and then sends nothing.**
+  On phones whose system had already set the controller up (seen on a Pixel 8
+  with Android 17), Dish's start sequence silenced it. Dish now looks at what the
+  controller sends: one that is already streaming is left alone, and one that
+  stays silent is started step by step, the way Linux's driver does it.
 - **Settings, Licenses lists what the app really contains.** The list had stopped
   updating when the app grew its three builds, so it still named older versions
   of several libraries and left out Google Play Billing. It is regenerated from

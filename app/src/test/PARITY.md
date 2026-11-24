@@ -20,7 +20,8 @@
 | Controller database | bundled copy, fetched update from `dish.tinkernorth.com/controllers/v1/` after launch and every six hours, size and SHA-256 checked, opt-out in Settings |
 | Diagnostics bundle | works; the host `snapshot` is the Satellite's own view from `GET /api/connections/{id}/diagnostics` (Satellite 2.3.0), with the capabilities fallback for older ones |
 | Steam Controllers (USB and Bluetooth LE) | shipped, not verified on hardware (`docs/usb-direct-mode-followups.md`, items 8 to 10) |
-| USB Direct: Xbox One, Switch Pro, USB rumble | shipped, not verified on hardware (followups items 1, 2 and 7) |
+| USB Direct: Xbox One, USB rumble | shipped, not verified on hardware (followups items 1 and 7) |
+| USB Direct: Switch Pro | started by what the pad sends (`SwitchStart`): a pad the kernel started streams untouched, a cold one is walked through the hid-nintendo order. Run on a Pixel 8 (kernel-started pad) by the maintainer; a cold Pro on an Android device is not run, and neither are the 8BitDo adapters and the N64 Online pad (followups item 2) |
 | Distribution | GitHub APK (self-update notice), Google Play AAB (Play Billing tips), Amazon Appstore APK (32-bit Fire tablets through ARM translation) |
 
 ## 2. Deferred

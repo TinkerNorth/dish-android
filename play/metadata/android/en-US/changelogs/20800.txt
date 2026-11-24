@@ -1,5 +1,6 @@
 Dish 2.8.0: newer building blocks and a correct licence list.
 
+• A Switch Pro Controller on USB Direct no longer connects and then sends nothing.
 • Settings, Licenses now lists what the app really contains, Google Play Billing included.
 • The audio codec behind controller sound and the encryption library are updated.
-• Your controller works as before; update when it suits you.
+• Everything else works as before.

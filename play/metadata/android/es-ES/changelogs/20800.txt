@@ -1,5 +1,6 @@
 Dish 2.8.0: componentes más nuevos y una lista de licencias correcta.
 
+• Un mando Switch Pro con USB Directo ya no se conecta para luego no enviar nada.
 • Ajustes, Licencias muestra ahora lo que la app contiene de verdad, incluido Google Play Billing.
 • Se actualizan el códec de audio del sonido del mando y la biblioteca de cifrado.
-• Tu mando funciona como antes; actualiza cuando te venga bien.
+• Todo lo demás funciona como antes.
