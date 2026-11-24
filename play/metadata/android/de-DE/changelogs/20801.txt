@@ -1,0 +1,6 @@
+Dish 2.8.1: neuere Bausteine und eine korrekte Lizenzliste.
+
+• Ein Switch Pro Controller mit USB Direct wird nicht mehr verbunden und bleibt dann stumm.
+• Einstellungen, Lizenzen zeigt jetzt, was die App wirklich enthält, auch Google Play Billing.
+• Der Audio-Codec hinter dem Controller-Ton und die Verschlüsselungsbibliothek sind aktualisiert.
+• Alles andere funktioniert wie bisher.

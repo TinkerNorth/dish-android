@@ -1,0 +1,6 @@
+Dish 2.8.1: componentes mais novos e uma lista de licenças correta.
+
+• Um controle Switch Pro com USB Direct não se conecta mais para depois não enviar nada.
+• Configurações, Licenças agora mostra o que o app realmente contém, incluindo o Google Play Billing.
+• O codec de áudio do som do controle e a biblioteca de criptografia foram atualizados.
+• Todo o resto funciona como antes.
