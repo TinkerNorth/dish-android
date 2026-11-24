@@ -21,6 +21,13 @@ lockstep, and do not share a version number.
 
 ## [Unreleased]
 
+## [2.8.1] - 2026-11-24
+
+### Fixed
+
+- **Install fastlane in GitHub Actions.** Set up Ruby and Bundler before
+  fastlane runs so releasing to Google Play succeeds.
+
 ## [2.8.0] - 2026-11-23
 
 The licence list in Settings is correct again, the audio codec and the encryption library are
