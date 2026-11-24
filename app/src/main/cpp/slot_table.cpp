@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 #include "slot_table.h"
+#include "bits.h"
 
 #include <string.h>
 
@@ -76,7 +77,7 @@ void applyJoystickSample(DeviceState& state, const gamepad::FrameworkAxes& sampl
 }
 
 uint64_t tagOf(const int32_t deviceId) {
-    return (uint64_t{1} << 32) | static_cast<uint32_t>(deviceId);
+    return (uint64_t{1} << 32U) | static_cast<uint32_t>(deviceId);
 }
 
 // The reporting thread inside its slot: odd epoch, a full fence, then the generation. A cold write
@@ -145,8 +146,9 @@ void mirrorState(HotSlot& slot) {
     const uint32_t gen = slot.mirrorGen.load(std::memory_order_relaxed);
     slot.mirrorGen.store(gen + 1, std::memory_order_relaxed);
     std::atomic_thread_fence(std::memory_order_release);
-    for (size_t i = 0; i < STATE_WORDS; i++)
+    for (size_t i = 0; i < STATE_WORDS; i++) {
         slot.mirror[i].store(raw[i], std::memory_order_relaxed);
+    }
     slot.mirrorGen.store(gen + 2, std::memory_order_release);
 }
 
@@ -343,7 +345,7 @@ void SlotTable::sendUsbFrame(HotSlot& slot, const UsbFrame& frame, const bool wi
     }
     if (frame.touch != nullptr) {
         dish_send::frameTouchpad(batch[count++], protocolVersion,
-                                 (uint8_t)(binding.controllerIndex & 0xFF), *frame.touch,
+                                 dish_bits::lowByte(binding.controllerIndex), *frame.touch,
                                  frame.touch->rightDown, false, frame.touchEventTimeMs,
                                  frame.touchScrollV);
     }

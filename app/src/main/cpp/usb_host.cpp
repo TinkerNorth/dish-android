@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 #include "usb_host.h"
+#include "bits.h"
+#include "text_format.h"
 
 #include <android/log.h>
 #include <linux/usbdevice_fs.h>
@@ -293,16 +295,16 @@ int setUpUrbSlots(DeviceCtx& ctx, std::unique_ptr<UrbSlot> (&storage)[kInFlightU
         slots[i] = storage[i].get();
     }
     int submitted = 0;
-    for (int i = 0; i < kInFlightUrbs; i++) {
-        if (!submitUrb(ctx, *slots[i])) break;
+    for (UrbSlot* slot : slots) {
+        if (!submitUrb(ctx, *slot)) break;
         submitted++;
     }
     return submitted;
 }
 
 UrbSlot* findCompletedSlot(UrbSlot* (&slots)[kInFlightUrbs], const usbdevfs_urb* reaped) {
-    for (int i = 0; i < kInFlightUrbs; i++) {
-        if (slots[i]->urb.get() == reaped) return slots[i];
+    for (UrbSlot* slot : slots) {
+        if (slot->urb.get() == reaped) return slot;
     }
     return nullptr;
 }
@@ -310,8 +312,9 @@ UrbSlot* findCompletedSlot(UrbSlot* (&slots)[kInFlightUrbs], const usbdevfs_urb*
 // A level in tenths moves minutes apart and Kotlin polls it, so a store is all the mirror costs.
 void publishBattery(DeviceCtx& ctx, const gamepad::DeviceState& scratch) {
     if (!scratch.batteryValid) return;
-    const uint32_t packed = ((uint32_t)scratch.batteryLevel << 8) | scratch.batteryStatus;
-    ctx.entry->stats.lastBattery.store((int32_t)packed, std::memory_order_relaxed);
+    const uint32_t packed =
+        (dish_bits::u32(scratch.batteryLevel) << 8U) | dish_bits::u32(scratch.batteryStatus);
+    ctx.entry->stats.lastBattery.store(dish_bits::asInt32(packed), std::memory_order_relaxed);
 }
 
 // The decoder owns the mute latch (the wire bit has to be folded in here, on this thread, with no
@@ -440,7 +443,7 @@ void publishReport(DeviceCtx& ctx, const uint8_t* report, const size_t len,
     hotpath::markInputRead(ctx.syntheticDeviceId); // stage-1 start: a fresh input report is in hand
     dish_usb::bump(ctx.entry->stats.urbCount);
     ackGipReport(ctx, report, len);
-    memset(&scratch, 0, sizeof(scratch));
+    scratch = gamepad::DeviceState{};
 
     const usbparsers::WirelessEvent wev = usbparsers::checkWirelessEvent(ctx.parser, report, len);
     if (wev != usbparsers::WirelessEvent::NONE) {
@@ -473,9 +476,9 @@ void DeviceCtx::report(const uint8_t* value, const size_t len) {
 
 void discardPendingUrbs(DeviceCtx& ctx, UrbSlot* (&slots)[kInFlightUrbs]) {
     int pendingCount = 0;
-    for (int i = 0; i < kInFlightUrbs; i++) {
-        if (!slots[i]->pending) continue;
-        ioctl(ctx.fd, USBDEVFS_DISCARDURB, slots[i]->urb.get());
+    for (UrbSlot* slot : slots) {
+        if (!slot->pending) continue;
+        ioctl(ctx.fd, USBDEVFS_DISCARDURB, slot->urb.get());
         pendingCount++;
     }
     while (pendingCount > 0) {
@@ -536,7 +539,7 @@ bool reapReadyUrbs(DeviceCtx& ctx, UrbSlot* (&slots)[kInFlightUrbs], gamepad::De
 
 // What one wait on the URB fd came back with. Idle covers both a timeout and an EINTR: neither
 // is an error and neither has a completion to reap.
-enum class PollOutcome { Ready, Idle, Stop };
+enum class PollOutcome : uint8_t { Ready, Idle, Stop };
 
 PollOutcome waitForUrbCompletion(DeviceCtx& ctx) {
     struct pollfd pfd = {};
@@ -551,7 +554,7 @@ PollOutcome waitForUrbCompletion(DeviceCtx& ctx) {
     return PollOutcome::Stop;
 }
 
-void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
+void pollLoop(const std::shared_ptr<DeviceCtx>& ctx) {
     const ScopedThreadRole role(ThreadRole::UsbPoller);
     dish::elevateCurrentThreadToInputPriority();
     std::unique_ptr<UrbSlot> slotStorage[kInFlightUrbs];
@@ -584,7 +587,7 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
 // Best effort; logs if the kernel refuses CONNECT.
 void releaseAndReattach(int fd, int interfaceNumber) {
     if (interfaceNumber < 0) return;
-    unsigned int iface = (unsigned int)interfaceNumber;
+    auto iface = static_cast<unsigned int>(interfaceNumber);
     ioctl(fd, USBDEVFS_RELEASEINTERFACE, &iface);
     usbdevfs_ioctl reattach{};
     reattach.ifno = interfaceNumber;
@@ -644,7 +647,7 @@ usbparsers::ProbeOutcome probeEndpoint(int fd, uint8_t epIn, uint16_t epInMaxPac
             usbparsers::WirelessEvent::NONE) {
             return usbparsers::ProbeOutcome::DECODED;
         }
-        memset(&scratch, 0, sizeof(scratch));
+        scratch = gamepad::DeviceState{};
         if (usbparsers::decodeReport(parser, buf.data(), (size_t)n, scratch, &probeSticks)) {
             return usbparsers::ProbeOutcome::DECODED;
         }
@@ -660,7 +663,7 @@ void fetchHidLayout(int fd, int interfaceNumber, usbhid::HidLayout& out) {
     struct usbdevfs_ctrltransfer ct = {};
     ct.bRequestType = usbparsers::USB_REQUEST_TYPE_IN_STANDARD_INTERFACE;
     ct.bRequest = usbparsers::USB_REQUEST_GET_DESCRIPTOR;
-    ct.wValue = (uint16_t)(usbparsers::HID_DESCRIPTOR_TYPE_REPORT << 8); // index 0
+    ct.wValue = usbparsers::hidControlValue(usbparsers::HID_DESCRIPTOR_TYPE_REPORT, 0); // index 0
     ct.wIndex = (uint16_t)interfaceNumber;
     ct.wLength = sizeof(desc);
     ct.timeout = usbparsers::USB_CONTROL_TIMEOUT_MS;
@@ -675,7 +678,7 @@ int readFeatureReport(int fd, int interfaceNumber, uint8_t reportId, uint8_t* bu
     struct usbdevfs_ctrltransfer ct = {};
     ct.bRequestType = usbparsers::USB_REQUEST_TYPE_IN_CLASS_INTERFACE;
     ct.bRequest = usbparsers::USB_REQUEST_GET_REPORT;
-    ct.wValue = (uint16_t)((usbparsers::HID_REPORT_TYPE_FEATURE << 8) | reportId);
+    ct.wValue = usbparsers::hidControlValue(usbparsers::HID_REPORT_TYPE_FEATURE, reportId);
     ct.wIndex = (uint16_t)interfaceNumber;
     ct.wLength = (uint16_t)cap;
     ct.timeout = usbparsers::USB_CONTROL_TIMEOUT_MS;
@@ -728,7 +731,7 @@ struct AttachTarget {
 // holds the interface.
 bool claimInterface(const int fd, const int interfaceNumber) {
     if (interfaceNumber < 0) return true;
-    unsigned int iface = (unsigned int)interfaceNumber;
+    auto iface = static_cast<unsigned int>(interfaceNumber);
     if (ioctl(fd, USBDEVFS_CLAIMINTERFACE, &iface) >= 0 || errno == EBUSY) return true;
     LOGE("CLAIMINTERFACE %d failed: %s", interfaceNumber, strerror(errno));
     releaseAndReattach(fd, interfaceNumber);
@@ -758,6 +761,63 @@ void giveBack(const AttachTarget& t, const bool receiverSlot) {
     giveBackPad(t);
 }
 
+// The Switch family's attach: the pad is started by what it sends (usbparsers::SwitchStart), not by
+// a fixed list, and judged on whether it streams afterwards. A Pro the phone's own driver already
+// brought up streams from the claim and is sent only the subcommands; a cold one is walked through
+// the handshake, the 3 Mbit step, the handshake again and the timeout disable, one packet at a
+// time, each waited for. A pad that streams nothing after one full sequence is silent, as before,
+// and the probe rule refuses it. The whole start is bounded, because the claim waits for it.
+constexpr int64_t kSwitchStartBudgetMs = 4000;
+constexpr int64_t kSwitchSettleAfterSequenceMs = 300;
+
+usbparsers::ProbeOutcome startSwitchPad(const AttachTarget& t, usbparsers::WriteVerdict& verdict) {
+    const usbparsers::Parser parser = t.classification.parser;
+    std::vector<uint8_t> buf(t.epInMaxPacket == 0 ? 64 : t.epInMaxPacket);
+    gamepad::DeviceState scratch{};
+    usbparsers::ParserState sticks;
+    const int64_t openedMs = dish_usb::outputClockMs();
+    usbparsers::SwitchStart start(openedMs);
+    int64_t lastFullMs = usbparsers::NEVER_SENT_MS;
+    int64_t sequenceDoneMs = usbparsers::NEVER_SENT_MS;
+    bool sawTraffic = false;
+    bool decoded = false;
+    while (dish_usb::outputClockMs() - openedMs < kSwitchStartBudgetMs) {
+        struct usbdevfs_bulktransfer xfer = {};
+        xfer.ep = t.epIn;
+        xfer.len = static_cast<unsigned int>(buf.size());
+        xfer.timeout = kProbeReadTimeoutMs;
+        xfer.data = buf.data();
+        const int n = ioctl(t.fd, USBDEVFS_BULK, &xfer);
+        const int64_t nowMs = dish_usb::outputClockMs();
+        if (n > 0) {
+            sawTraffic = true;
+            const auto len = static_cast<size_t>(n);
+            if (usbparsers::isSwitchFullReport(buf.data(), len)) {
+                lastFullMs = nowMs;
+                scratch = gamepad::DeviceState{};
+                decoded =
+                    usbparsers::decodeReport(parser, buf.data(), len, scratch, &sticks) || decoded;
+                start.noteStreaming();
+            } else {
+                start.noteReply(usbparsers::switchReplyOf(buf.data(), len));
+            }
+        }
+        const usbparsers::SwitchStartAction action = start.due(lastFullMs, nowMs);
+        if (action.kind == usbparsers::SwitchStartAction::Kind::SEND) {
+            usbparsers::runSwitchStartStep(t.fd, t.epOut, action.step, nowMs, verdict);
+            start.noteSent(action.step, dish_usb::outputClockMs());
+        }
+        const bool done = start.sequenceDone();
+        if (done && sequenceDoneMs == usbparsers::NEVER_SENT_MS) sequenceDoneMs = nowMs;
+        const bool streamsAfterStart = done && decoded && lastFullMs != usbparsers::NEVER_SENT_MS;
+        if (streamsAfterStart) return usbparsers::ProbeOutcome::DECODED;
+        const bool outWaited = done && nowMs - sequenceDoneMs >= kSwitchSettleAfterSequenceMs;
+        if (outWaited) break;
+    }
+    if (decoded) return usbparsers::ProbeOutcome::DECODED;
+    return sawTraffic ? usbparsers::ProbeOutcome::UNDECODED : usbparsers::ProbeOutcome::SILENT;
+}
+
 // Whether a pad came up, and when its init went out: the Steam Controller (2026)'s first refresh
 // is owed from then.
 struct PadReady {
@@ -773,6 +833,8 @@ PadReady readyPad(const AttachTarget& t) {
     const bool initialised =
         usbparsers::runInit(t.fd, t.interfaceNumber, t.epOut, t.classification.init,
                             dish_usb::outputClockMs(), initVerdict);
+    const bool startsBySwitchMachine =
+        t.classification.init == usbparsers::InitKind::SWITCH_PRO_HANDSHAKE;
     if (!initialised) {
         LOGI("attach %04X:%04X (%s): init failed, falling back to routed", t.vid, t.pid,
              t.modelName.c_str());
@@ -780,7 +842,9 @@ PadReady readyPad(const AttachTarget& t) {
         return PadReady{};
     }
     const int64_t initSentMs = dish_usb::outputClockMs();
-    const usbparsers::ProbeOutcome probed = probeEndpoint(t.fd, t.epIn, t.epInMaxPacket, parser);
+    const usbparsers::ProbeOutcome probed =
+        startsBySwitchMachine ? startSwitchPad(t, initVerdict)
+                              : probeEndpoint(t.fd, t.epIn, t.epInMaxPacket, parser);
     if (!usbparsers::probePermitsClaim(probed, usbparsers::isVerifiedFastLane(t.vid, t.pid),
                                        parser)) {
         LOGI("attach %04X:%04X (%s): %s, releasing to framework", t.vid, t.pid, t.modelName.c_str(),
@@ -1017,9 +1081,10 @@ void detachBlePad(const int32_t padId, const bool restore) {
     g_usbDevices.retire(padId);
     ctx->entry->output.stop();
     const bool restored = !restore || runBleConfig(*ctx, usbparsers::SteamConfig::RESTORE);
-    if (!restored)
+    if (!restored) {
         LOGI("dev=%d (%s): a Bluetooth LE restore write was refused", padId,
              ctx->modelName.c_str());
+    }
     finishDetach(padId, *ctx);
 }
 
@@ -1089,21 +1154,20 @@ std::string deviceInfoJson(int32_t deviceId) {
     appendJsonString(out, ctx->parserName);
     out += ",\"init\":";
     appendJsonString(out, initKindName(ctx->init));
-    char buf[96];
-    snprintf(buf, sizeof(buf), ",\"reportBytes\":%u,\"endpointOut\":%s,\"lastUrbStatus\":%d",
-             (unsigned)ctx->epInMaxPacket, ctx->epOut != 0 ? "true" : "false",
-             (int)g_usbDevices.read<int32_t>(deviceId, 0, [](const dish_usb::UsbDeviceStats& s) {
-                 return s.lastUrbStatus.load(std::memory_order_relaxed);
-             }));
-    out += buf;
+    dish_text::appendFormatted<96>(
+        out, ",\"reportBytes\":%u,\"endpointOut\":%s,\"lastUrbStatus\":%d",
+        (unsigned)ctx->epInMaxPacket, ctx->epOut != 0 ? "true" : "false",
+        (int)g_usbDevices.read<int32_t>(deviceId, 0, [](const dish_usb::UsbDeviceStats& s) {
+            return s.lastUrbStatus.load(std::memory_order_relaxed);
+        }));
     if (ctx->firmware.valid) {
         // The DualSense's feature version as its firmware names it: 0x0221 is 2.21.
-        snprintf(buf, sizeof(buf), ",\"firmware\":\"%X.%02X\"",
-                 (unsigned)(ctx->firmware.featureVersion >> 8),
-                 (unsigned)(ctx->firmware.featureVersion & 0xFF));
-        out += buf;
+        dish_text::appendFormatted<96>(
+            out, ",\"firmware\":\"%X.%02X\"",
+            dish_bits::byteOf(dish_bits::u32(ctx->firmware.featureVersion), 1U),
+            dish_bits::byteOf(dish_bits::u32(ctx->firmware.featureVersion), 0U));
     }
-    out += "}";
+    out += '}';
     return out;
 }
 
@@ -1122,19 +1186,16 @@ std::string capturedReportsJson(const int32_t deviceId) {
     const size_t n = g_usbDevices.capturedReports(deviceId, reports, dish_usb::CAPTURE_REPORTS);
     const int64_t nowMs = dish_usb::outputClockMs();
     std::string out = "[";
-    char buf[32];
     for (size_t i = 0; i < n; i++) {
-        if (i > 0) out += ",";
-        snprintf(buf, sizeof(buf), "{\"ageMs\":%lld,\"hex\":\"",
-                 (long long)(nowMs - reports[i].atMs));
-        out += buf;
+        if (i > 0) out += ',';
+        dish_text::appendFormatted<32>(out, "{\"ageMs\":%lld,\"hex\":\"",
+                                       (long long)(nowMs - reports[i].atMs));
         for (size_t b = 0; b < reports[i].len; b++) {
-            snprintf(buf, sizeof(buf), "%02x", (unsigned)reports[i].bytes[b]);
-            out += buf;
+            dish_text::appendFormatted<32>(out, "%02x", (unsigned)reports[i].bytes[b]);
         }
         out += "\"}";
     }
-    out += "]";
+    out += ']';
     return out;
 }
 

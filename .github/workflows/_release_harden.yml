@@ -1,0 +1,276 @@
+name: _release_harden (reusable)
+
+# Shared release hardening, byte-identical in every TinkerNorth repository. One job: download
+# the per-platform build artifacts, Grype-scan them, write SPDX and CycloneDX SBOMs, write
+# SHA256SUMS, sign every file with cosign into a Sigstore bundle (<file>.sigstore.json),
+# verify every bundle, and upload the lot as the `release-bundle` artifact. The caller feeds
+# `outputs.hashes` to the SLSA generic generator and publishes `release-bundle`.
+#
+# Source of truth: TinkerNorth/satellite/.github/workflows/_release_harden.yml. A copy is
+# synced with `cp`, never edited in place; every per-repository difference is an input.
+#
+# Two modes:
+#
+#   dry-run: false (the tag)   keyless signing through GitHub OIDC, Fulcio and Rekor; Grype
+#                              SARIF to code scanning. The run must be on a tag ref, because
+#                              the signing certificate names it: its identity is
+#                              https://github.com/<repo>/.github/workflows/_release_harden.yml@refs/tags/X.Y.Z
+#                              and SECURITY.md tells users to verify exactly that. A
+#                              workflow_dispatch release therefore runs with `--ref X.Y.Z`.
+#                              Caller job grants:
+#                                contents: read
+#                                id-token: write         cosign keyless
+#                                security-events: write  Grype SARIF upload
+#
+#   dry-run: true (a PR)       the same downloads, scan, SBOMs, checksums and signing loop,
+#                              signed with a key generated in the run and a signing config
+#                              with no services, so nothing leaves the runner; each bundle is
+#                              then checked against that key. The SARIF becomes the
+#                              `grype-sarif` artifact. Caller job grants: contents: read.
+#                              Works on a pull request from a fork.
+#
+# No `permissions:` block here, on purpose: a called workflow asking for more than its caller
+# granted fails at startup, so one block could not serve both modes. The job inherits exactly
+# what the calling job grants, and the first step refuses a tag run that lacks id-token.
+#
+# Tools are pinned by version and by the SHA-256 of their linux-amd64 asset, copied from the
+# upstream checksum file named beside each one. The job runs on ubuntu-24.04 only.
+
+on:
+  workflow_call:
+    inputs:
+      artifact-pattern:
+        description: "download-artifact glob matching the per-platform build artifacts"
+        required: true
+        type: string
+      product:
+        description: "SBOM filename prefix (e.g. dish-mac, satellite)"
+        required: true
+        type: string
+      dry-run:
+        description: "Exercise the whole path on a PR-built artifact: local throwaway key, nothing published to Rekor or code scanning"
+        required: false
+        default: false
+        type: boolean
+    outputs:
+      hashes:
+        description: "base64-encoded sha256sum block over every file except the signature bundles, for the SLSA generic generator"
+        value: ${{ jobs.harden.outputs.hashes }}
+
+jobs:
+  harden:
+    name: scan, SBOM, sign
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      hashes: ${{ steps.hashes.outputs.hashes }}
+    steps:
+      - name: Check the mode's preconditions
+        shell: bash
+        env:
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -euo pipefail
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "Dry run on ${GITHUB_REF}: signing with a throwaway key, publishing nothing."
+            exit 0
+          fi
+          case "$GITHUB_REF" in
+            refs/tags/*) ;;
+            *)
+              echo "::error::A signing run must be on a tag ref, not ${GITHUB_REF}: the certificate identity names it. Dispatch with --ref <tag>."
+              exit 1 ;;
+          esac
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "::error::The calling job must grant id-token: write for keyless signing."
+            exit 1
+          fi
+
+      - name: Download platform artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: ${{ inputs.artifact-pattern }}
+          merge-multiple: true
+          path: release
+
+      - name: Show what arrived
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$(find release -maxdepth 1 -type f -print -quit)" ]; then
+            echo "::error::No files matched the artifact pattern."
+            exit 1
+          fi
+          find release -type f -printf '%p %s bytes\n' | LC_ALL=C sort
+
+      - name: Install Grype, Syft and cosign
+        shell: bash
+        env:
+          GRYPE_VERSION: "0.122.1"
+          # grype_0.122.1_linux_amd64.tar.gz, from grype_0.122.1_checksums.txt.
+          GRYPE_SHA256: "f1ba7e2917ee1395618de20a98da0aa7c0fb1788927797651047c50502a37538"
+          SYFT_VERSION: "1.57.2"
+          # syft_1.57.2_linux_amd64.tar.gz, from syft_1.57.2_checksums.txt.
+          SYFT_SHA256: "ad92bd3ec1b94a3df01d4d0aec199afa9c42b72e86da436ff5f837914d32706b"
+          COSIGN_VERSION: "3.1.4"
+          # cosign-linux-amd64, from cosign_checksums.txt on the v3.1.4 release.
+          COSIGN_SHA256: "424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa"
+        run: |
+          set -euo pipefail
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          fetch() { # url sha256 destination
+            curl -fsSL -o "$3" "$1"
+            echo "$2  $3" | sha256sum -c -
+          }
+          fetch "https://github.com/anchore/grype/releases/download/v${GRYPE_VERSION}/grype_${GRYPE_VERSION}_linux_amd64.tar.gz" \
+            "$GRYPE_SHA256" "$RUNNER_TEMP/grype.tar.gz"
+          tar -xzf "$RUNNER_TEMP/grype.tar.gz" -C "$bin" grype
+          fetch "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz" \
+            "$SYFT_SHA256" "$RUNNER_TEMP/syft.tar.gz"
+          tar -xzf "$RUNNER_TEMP/syft.tar.gz" -C "$bin" syft
+          fetch "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64" \
+            "$COSIGN_SHA256" "$bin/cosign"
+          chmod +x "$bin/cosign"
+          echo "$bin" >> "$GITHUB_PATH"
+          "$bin/grype" version
+          "$bin/syft" version
+          "$bin/cosign" version
+
+      - name: Generate SBOMs (SPDX, CycloneDX)
+        shell: bash
+        env:
+          PRODUCT: ${{ inputs.product }}
+        run: |
+          set -euo pipefail
+          # The tag names the version; a dry run has none, so the commit stands in.
+          case "$GITHUB_REF" in
+            refs/tags/*) version="$GITHUB_REF_NAME" ;;
+            *) version="$GITHUB_SHA" ;;
+          esac
+          # +sbom-cataloger: a repository whose build writes a bill of materials of what an
+          # archive or installer carries (an SPDX or CycloneDX document among the artifacts)
+          # has its packages folded in; the default selection skips SBOM files, and Syft does
+          # not open the archives itself. Without such a document the result is unchanged.
+          syft scan dir:release \
+            --select-catalogers "+sbom-cataloger" \
+            --source-name "$PRODUCT" \
+            --source-version "$version" \
+            --output "spdx-json=release/${PRODUCT}.sbom.spdx.json" \
+            --output "cyclonedx-json=release/${PRODUCT}.sbom.cdx.json"
+
+      # Fails the release on any high or critical finding, fixed upstream or not.
+      - name: Vulnerability scan (Grype)
+        shell: bash
+        env:
+          PRODUCT: ${{ inputs.product }}
+        run: |
+          set -euo pipefail
+          # The SBOM Syft just wrote, so the scan covers every package it names, a shipped
+          # components document's included; Grype itself selects no SBOM cataloger.
+          grype "sbom:release/${PRODUCT}.sbom.spdx.json" \
+            --name "$PRODUCT" \
+            --add-cpes-if-none \
+            --fail-on high \
+            --output table \
+            --output sarif=grype.sarif
+
+      - name: Upload Grype SARIF to code scanning
+        if: ${{ !cancelled() && !inputs.dry-run && hashFiles('grype.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          sarif_file: grype.sarif
+          category: release-grype
+
+      - name: Keep the Grype SARIF (dry run)
+        if: ${{ !cancelled() && inputs.dry-run && hashFiles('grype.sarif') != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: grype-sarif
+          path: grype.sarif
+          retention-days: 7
+
+      - name: Generate SHA256SUMS
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release
+          # Sorted, so the file order does not depend on how the artifacts arrived.
+          find . -maxdepth 1 -type f ! -name 'SHA256SUMS*' -printf '%f\n' \
+            | LC_ALL=C sort \
+            | xargs -d '\n' sha256sum --binary > SHA256SUMS
+          cat SHA256SUMS
+
+      # cosign 3 writes one Sigstore bundle per file (signature, certificate and transparency
+      # log proof together); the v2 --output-signature/--output-certificate pair is refused.
+      - name: Sign each file and SHA256SUMS
+        shell: bash
+        env:
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -euo pipefail
+          sign_args=(--yes)
+          if [ "$DRY_RUN" = "true" ]; then
+            key="$RUNNER_TEMP/dry-run"
+            COSIGN_PASSWORD="" cosign generate-key-pair --output-key-prefix "$key"
+            cosign signing-config create --out "$RUNNER_TEMP/no-services.json"
+            sign_args+=(--key "$key.key" --signing-config "$RUNNER_TEMP/no-services.json")
+          fi
+          cd release
+          for f in *; do
+            case "$f" in *.sigstore.json) continue ;; esac
+            COSIGN_PASSWORD="" cosign sign-blob "${sign_args[@]}" --bundle "${f}.sigstore.json" "$f"
+          done
+          ls -l
+
+      - name: Verify every bundle
+        shell: bash
+        env:
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -euo pipefail
+          cd release
+          if [ "$DRY_RUN" = "true" ]; then
+            # The throwaway key has no transparency log entry for cosign to check, so check
+            # what the bundle carries directly: the file's digest and a signature over it.
+            for f in *; do
+              case "$f" in *.sigstore.json) continue ;; esac
+              jq -er '.messageSignature.signature' "${f}.sigstore.json" | base64 -d > "$RUNNER_TEMP/sig.der"
+              want=$(jq -er '.messageSignature.messageDigest.digest' "${f}.sigstore.json" | base64 -d | od -An -tx1 | tr -d ' \n')
+              have=$(sha256sum "$f" | cut -d' ' -f1)
+              [ "$want" = "$have" ] || { echo "::error::${f}.sigstore.json names another digest"; exit 1; }
+              openssl dgst -sha256 -verify "$RUNNER_TEMP/dry-run.pub" -signature "$RUNNER_TEMP/sig.der" "$f"
+            done
+            exit 0
+          fi
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/_release_harden.yml@${GITHUB_REF}"
+          echo "Expected certificate identity: ${identity}"
+          for f in *; do
+            case "$f" in *.sigstore.json) continue ;; esac
+            cosign verify-blob \
+              --bundle "${f}.sigstore.json" \
+              --certificate-identity "$identity" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              "$f"
+          done
+
+      - name: Compute base64 SHA256 hashes for SLSA provenance
+        id: hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release
+          # The SLSA generic generator wants `<sha256>  <name>` lines, base64-encoded.
+          h=$(find . -maxdepth 1 -type f ! -name '*.sigstore.json' -printf '%f\n' \
+                | LC_ALL=C sort \
+                | xargs -d '\n' sha256sum \
+                | base64 -w0)
+          echo "hashes=${h}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload hardened bundle
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-bundle
+          path: release/
+          if-no-files-found: error
+          retention-days: 14

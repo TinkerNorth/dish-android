@@ -24,10 +24,14 @@ assignees: ''
 ## Screenshots
 <!-- If applicable, add screenshots to help explain your problem -->
 
-## Device Info
-- Device: [e.g. Pixel 8]
-- OS Version: [e.g. Android 15]
-- App Version: [e.g. 1.0.0]
+## Environment
+- Phone or tablet: [e.g. Pixel 8, Samsung Galaxy Tab S9]
+- Android version: [e.g. 15]
+- Build: [GitHub, Google Play or Amazon Appstore] and its version [e.g. 2.7.0]
+- Controller: [e.g. Xbox Series X over USB, DualSense over Bluetooth]
+- Host: [Satellite and its version, or a Moonlight host]
+
+The quickest way to give us all of this is *Report a problem* in the app's Diagnostics screen, which writes a file you can attach (see PRIVACY.md, section 2.7 for what it holds).
 
 ## Additional Context
 <!-- Add any other context about the problem here -->

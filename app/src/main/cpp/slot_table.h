@@ -106,7 +106,7 @@ struct HotSlot {
 
 class SlotTable {
   public:
-    SlotTable(dish_session::SessionTable& sessions, BridgeSink& bridge)
+    SlotTable(dish_session::SessionTable& sessions, BridgeSink& bridge) noexcept
         : sessions_(sessions), bridge_(bridge) {}
     SlotTable(const SlotTable&) = delete;
     SlotTable& operator=(const SlotTable&) = delete;

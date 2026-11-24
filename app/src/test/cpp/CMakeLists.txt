@@ -1,4 +1,4 @@
-# Host build for the host-testable JNI split (docs/architecture.md "Host-testable C++ split"):
+# Host build for the host-testable JNI split (docs/ARCHITECTURE.md "Host-testable C++ split"):
 # one googletest target per pure layer, so the keycode/deadzone/state-machine logic, the wire
 # layouts, the USB decoders and the audio path are all provable without a device.
 #
@@ -24,8 +24,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(FetchContent)
 FetchContent_Declare(
     googletest
-    URL      https://github.com/google/googletest/archive/refs/tags/v1.15.2.tar.gz
-    URL_HASH SHA256=7b42b4d6ed48810c5362c265a17faebe90dc2373c885e5216439d37927f02926
+    URL      https://github.com/google/googletest/archive/refs/tags/v1.18.0.tar.gz
+             https://github.com/google/googletest/releases/download/v1.18.0/googletest-1.18.0.tar.gz
+    URL_HASH SHA256=6e3191c1455468b3fc35a417fb565c1c5071aee1b7e7f85e30cf48a98d37d8b5
 )
 # Don't install gtest; we just want the test executable.
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
@@ -43,8 +44,9 @@ include("${SATELLITE_CPP}/controller_tables.cmake")
 # release tarball, so the send path's bytes and its seal cost are those of the one that ships.
 FetchContent_Declare(
     libsodium
-    URL      https://download.libsodium.org/libsodium/releases/libsodium-1.0.20-stable.tar.gz
-    URL_HASH SHA256=b6b1d2a8802cd8bfa611638c0e9ce31d14ef324e16062c39a76854091cba6d7f
+    URL      https://download.libsodium.org/libsodium/releases/libsodium-1.0.22.tar.gz
+             https://github.com/jedisct1/libsodium/releases/download/1.0.22-RELEASE/libsodium-1.0.22.tar.gz
+    URL_HASH SHA256=adbdd8f16149e81ac6078a03aca6fc03b592b89ef7b5ed83841c086191be3349
 )
 FetchContent_MakeAvailable(libsodium)
 set(SODIUM_SRC ${libsodium_SOURCE_DIR}/src/libsodium)
@@ -52,9 +54,9 @@ file(WRITE ${SODIUM_SRC}/include/sodium/version.h
 "#ifndef sodium_version_H\n\
 #define sodium_version_H\n\
 #include \"export.h\"\n\
-#define SODIUM_VERSION_STRING \"1.0.20\"\n\
+#define SODIUM_VERSION_STRING \"1.0.22\"\n\
 #define SODIUM_LIBRARY_VERSION_MAJOR 26\n\
-#define SODIUM_LIBRARY_VERSION_MINOR 2\n\
+#define SODIUM_LIBRARY_VERSION_MINOR 4\n\
 SODIUM_EXPORT const char *sodium_version_string(void);\n\
 SODIUM_EXPORT int sodium_library_version_major(void);\n\
 SODIUM_EXPORT int sodium_library_version_minor(void);\n\
@@ -218,9 +220,9 @@ target_link_libraries(hotpath_latency_test PRIVATE GTest::gtest_main Threads::Th
 # would prove nothing about the one that ships.
 FetchContent_Declare(
     opus
-    URL      https://downloads.xiph.org/releases/opus/opus-1.5.2.tar.gz
-             https://github.com/xiph/opus/releases/download/v1.5.2/opus-1.5.2.tar.gz
-    URL_HASH SHA256=65c1d2f78b9f2fb20082c38cbe47c951ad5839345876e46941612ee87f9a7ce1
+    URL      https://downloads.xiph.org/releases/opus/opus-1.6.1.tar.gz
+             https://ftp.osuosl.org/pub/xiph/releases/opus/opus-1.6.1.tar.gz
+    URL_HASH SHA256=6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1
 )
 set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
 set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
@@ -309,6 +311,18 @@ foreach(unit_test udp_socket_test session_table_test send_path_test slot_table_t
     target_link_libraries(${unit_test} PRIVATE GTest::gtest_main fake_satellite dish_core)
 endforeach()
 
+# The byte-level assembly (shifts, masks, sign extension) at 0x00, 0x7F, 0x80 and 0xFF in every
+# position, across the wire encoders, both paths, the USB decoders and the HID descriptor reader.
+add_executable(byte_boundaries_test
+    byte_boundaries_test.cpp
+    "${SATELLITE_CPP}/usb_parsers.cpp"
+    "${SATELLITE_CPP}/usb_hid_descriptor.cpp"
+)
+target_include_directories(byte_boundaries_test PRIVATE "${SATELLITE_CPP}")
+target_compile_options(byte_boundaries_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_link_libraries(byte_boundaries_test PRIVATE GTest::gtest_main fake_satellite dish_core)
+dish_use_controller_tables(byte_boundaries_test)
+
 # Which locks each thread role takes on the hot path, held to lists that only shrink.
 add_executable(lock_laws_test lock_laws_test.cpp)
 target_compile_options(lock_laws_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -373,3 +387,4 @@ gtest_discover_tests(heartbeat_thread_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(hotpath_latency_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(audio_codec_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(bridge_connection_ids_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(byte_boundaries_test DISCOVERY_MODE PRE_TEST)

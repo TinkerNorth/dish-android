@@ -24,7 +24,7 @@ NAPRAVLJEN ZA IGRANJE
 
 PREUZMITE SATELLITE
 
-Besplatni Satellite pomoćnik dostupan je za Windows, macOS i Linux na https://dish.tinkernorth.com/downloads/satellite. Bluetooth-host režim radi bez Satellite-a, ali Wi-Fi put pruža najbolje iskustvo.
+Besplatni Satellite pomoćnik dostupan je za Windows i Linux na https://dish.tinkernorth.com/downloads/satellite. Bluetooth-host režim radi bez Satellite-a, ali Wi-Fi put pruža najbolje iskustvo.
 
 
 ZA ENTUZIJASTE

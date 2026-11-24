@@ -69,9 +69,9 @@
     {
       "group": "androidx.appcompat",
       "artifact": "appcompat",
-      "version": "1.7.1",
+      "version": "1.8.0",
       "name": "AppCompat",
-      "url": "https://developer.android.com/jetpack/androidx/releases/appcompat#1.7.1",
+      "url": "https://developer.android.com/jetpack/androidx/releases/appcompat#1.8.0",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -82,9 +82,9 @@
     {
       "group": "androidx.appcompat",
       "artifact": "appcompat-resources",
-      "version": "1.7.1",
+      "version": "1.8.0",
       "name": "AppCompat Resources",
-      "url": "https://developer.android.com/jetpack/androidx/releases/appcompat#1.7.1",
+      "url": "https://developer.android.com/jetpack/androidx/releases/appcompat#1.8.0",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -134,9 +134,9 @@
     {
       "group": "androidx.collection",
       "artifact": "collection",
-      "version": "1.4.2",
+      "version": "1.5.0",
       "name": "collections",
-      "url": "https://developer.android.com/jetpack/androidx/releases/collection#1.4.2",
+      "url": "https://developer.android.com/jetpack/androidx/releases/collection#1.5.0",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -147,9 +147,9 @@
     {
       "group": "androidx.collection",
       "artifact": "collection-jvm",
-      "version": "1.4.2",
+      "version": "1.5.0",
       "name": "collections",
-      "url": "https://developer.android.com/jetpack/androidx/releases/collection#1.4.2",
+      "url": "https://developer.android.com/jetpack/androidx/releases/collection#1.5.0",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -199,9 +199,9 @@
     {
       "group": "androidx.constraintlayout",
       "artifact": "constraintlayout",
-      "version": "2.2.1",
+      "version": "2.2.2",
       "name": "ConstraintLayout",
-      "url": "https://developer.android.com/jetpack/androidx/releases/constraintlayout#2.2.1",
+      "url": "https://developer.android.com/jetpack/androidx/releases/constraintlayout#2.2.2",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -212,9 +212,9 @@
     {
       "group": "androidx.constraintlayout",
       "artifact": "constraintlayout-core",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "name": "ConstraintLayout Core",
-      "url": "https://developer.android.com/jetpack/androidx/releases/constraintlayout#1.1.1",
+      "url": "https://developer.android.com/jetpack/androidx/releases/constraintlayout#1.1.2",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -238,9 +238,9 @@
     {
       "group": "androidx.core",
       "artifact": "core",
-      "version": "1.19.0",
+      "version": "1.19.1",
       "name": "Core",
-      "url": "https://developer.android.com/jetpack/androidx/releases/core#1.19.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/core#1.19.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -251,9 +251,9 @@
     {
       "group": "androidx.core",
       "artifact": "core-ktx",
-      "version": "1.19.0",
+      "version": "1.19.1",
       "name": "Core Kotlin Extensions",
-      "url": "https://developer.android.com/jetpack/androidx/releases/core#1.19.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/core#1.19.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -329,7 +329,7 @@
     {
       "group": "androidx.databinding",
       "artifact": "viewbinding",
-      "version": "9.2.1",
+      "version": "9.5.2",
       "name": "androidx.databinding:viewbinding",
       "url": null,
       "licenses": [
@@ -615,9 +615,9 @@
     {
       "group": "androidx.lifecycle",
       "artifact": "lifecycle-common",
-      "version": "2.10.0",
+      "version": "2.11.1",
       "name": "Lifecycle-Common",
-      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.10.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -628,9 +628,9 @@
     {
       "group": "androidx.lifecycle",
       "artifact": "lifecycle-common-jvm",
-      "version": "2.10.0",
+      "version": "2.11.1",
       "name": "Lifecycle-Common",
-      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.10.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -641,9 +641,9 @@
     {
       "group": "androidx.lifecycle",
       "artifact": "lifecycle-livedata",
-      "version": "2.10.0",
+      "version": "2.11.1",
       "name": "Lifecycle LiveData",
-      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.10.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -654,9 +654,9 @@
     {
       "group": "androidx.lifecycle",
       "artifact": "lifecycle-livedata-core",
-      "version": "2.10.0",
+      "version": "2.11.1",
       "name": "Lifecycle LiveData Core",
-      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.10.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -667,9 +667,9 @@
     {
       "group": "androidx.lifecycle",
       "artifact": "lifecycle-livedata-core-ktx",
-      "version": "2.10.0",
+      "version": "2.11.1",
       "name": "LiveData Core Kotlin Extensions",
-      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.10.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -680,9 +680,9 @@
     {
       "group": "androidx.lifecycle",
       "artifact": "lifecycle-process",
-      "version": "2.10.0",
+      "version": "2.11.1",
       "name": "Lifecycle Process",
-      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.10.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -693,9 +693,9 @@
     {
       "group": "androidx.lifecycle",
       "artifact": "lifecycle-runtime",
-      "version": "2.10.0",
+      "version": "2.11.1",
       "name": "Lifecycle Runtime",
-      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.10.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -706,9 +706,9 @@
     {
       "group": "androidx.lifecycle",
       "artifact": "lifecycle-runtime-android",
-      "version": "2.10.0",
+      "version": "2.11.1",
       "name": "Lifecycle Runtime",
-      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.10.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -719,9 +719,9 @@
     {
       "group": "androidx.lifecycle",
       "artifact": "lifecycle-runtime-ktx",
-      "version": "2.10.0",
+      "version": "2.11.1",
       "name": "Lifecycle Kotlin Extensions",
-      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.10.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -732,9 +732,9 @@
     {
       "group": "androidx.lifecycle",
       "artifact": "lifecycle-runtime-ktx-android",
-      "version": "2.10.0",
+      "version": "2.11.1",
       "name": "Lifecycle Kotlin Extensions",
-      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.10.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -745,9 +745,9 @@
     {
       "group": "androidx.lifecycle",
       "artifact": "lifecycle-viewmodel",
-      "version": "2.10.0",
+      "version": "2.11.1",
       "name": "Lifecycle ViewModel",
-      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.10.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -758,9 +758,9 @@
     {
       "group": "androidx.lifecycle",
       "artifact": "lifecycle-viewmodel-android",
-      "version": "2.10.0",
+      "version": "2.11.1",
       "name": "Lifecycle ViewModel",
-      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.10.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -771,9 +771,9 @@
     {
       "group": "androidx.lifecycle",
       "artifact": "lifecycle-viewmodel-ktx",
-      "version": "2.10.0",
+      "version": "2.11.1",
       "name": "Lifecycle ViewModel Kotlin Extensions",
-      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.10.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -784,9 +784,9 @@
     {
       "group": "androidx.lifecycle",
       "artifact": "lifecycle-viewmodel-savedstate",
-      "version": "2.10.0",
+      "version": "2.11.1",
       "name": "Lifecycle ViewModel with SavedState",
-      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.10.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -797,9 +797,9 @@
     {
       "group": "androidx.lifecycle",
       "artifact": "lifecycle-viewmodel-savedstate-android",
-      "version": "2.10.0",
+      "version": "2.11.1",
       "name": "Lifecycle ViewModel with SavedState",
-      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.10.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -823,9 +823,9 @@
     {
       "group": "androidx.navigation",
       "artifact": "navigation-common",
-      "version": "2.9.8",
+      "version": "2.10.2",
       "name": "Navigation Common",
-      "url": "https://developer.android.com/jetpack/androidx/releases/navigation#2.9.8",
+      "url": "https://developer.android.com/jetpack/androidx/releases/navigation#2.10.2",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -836,9 +836,9 @@
     {
       "group": "androidx.navigation",
       "artifact": "navigation-common-android",
-      "version": "2.9.8",
+      "version": "2.10.2",
       "name": "Navigation Common",
-      "url": "https://developer.android.com/jetpack/androidx/releases/navigation#2.9.8",
+      "url": "https://developer.android.com/jetpack/androidx/releases/navigation#2.10.2",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -849,9 +849,9 @@
     {
       "group": "androidx.navigation",
       "artifact": "navigation-runtime",
-      "version": "2.9.8",
+      "version": "2.10.2",
       "name": "Navigation Runtime",
-      "url": "https://developer.android.com/jetpack/androidx/releases/navigation#2.9.8",
+      "url": "https://developer.android.com/jetpack/androidx/releases/navigation#2.10.2",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -862,9 +862,9 @@
     {
       "group": "androidx.navigation",
       "artifact": "navigation-runtime-android",
-      "version": "2.9.8",
+      "version": "2.10.2",
       "name": "Navigation Runtime",
-      "url": "https://developer.android.com/jetpack/androidx/releases/navigation#2.9.8",
+      "url": "https://developer.android.com/jetpack/androidx/releases/navigation#2.10.2",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -875,9 +875,9 @@
     {
       "group": "androidx.navigation",
       "artifact": "navigation-runtime-ktx",
-      "version": "2.9.8",
+      "version": "2.10.2",
       "name": "Navigation Runtime Kotlin Extensions",
-      "url": "https://developer.android.com/jetpack/androidx/releases/navigation#2.9.8",
+      "url": "https://developer.android.com/jetpack/androidx/releases/navigation#2.10.2",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -953,9 +953,9 @@
     {
       "group": "androidx.savedstate",
       "artifact": "savedstate",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "name": "Saved State",
-      "url": "https://developer.android.com/jetpack/androidx/releases/savedstate#1.4.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/savedstate#1.5.0",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -966,9 +966,9 @@
     {
       "group": "androidx.savedstate",
       "artifact": "savedstate-android",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "name": "Saved State",
-      "url": "https://developer.android.com/jetpack/androidx/releases/savedstate#1.4.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/savedstate#1.5.0",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -979,9 +979,9 @@
     {
       "group": "androidx.savedstate",
       "artifact": "savedstate-ktx",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "name": "SavedState Kotlin Extensions",
-      "url": "https://developer.android.com/jetpack/androidx/releases/savedstate#1.4.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/savedstate#1.5.0",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -1133,9 +1133,22 @@
       ]
     },
     {
+      "group": "com.android.billingclient",
+      "artifact": "billing",
+      "version": "9.1.0",
+      "name": "billing",
+      "url": null,
+      "licenses": [
+        {
+          "name": "Android Software Development Kit License",
+          "url": "https://developer.android.com/studio/terms.html"
+        }
+      ]
+    },
+    {
       "group": "com.google.android.datatransport",
       "artifact": "transport-api",
-      "version": "3.2.0",
+      "version": "5.0.0",
       "name": "com.google.android.datatransport:transport-api",
       "url": null,
       "licenses": [
@@ -1148,7 +1161,7 @@
     {
       "group": "com.google.android.datatransport",
       "artifact": "transport-backend-cct",
-      "version": "3.3.0",
+      "version": "5.0.0",
       "name": "com.google.android.datatransport:transport-backend-cct",
       "url": null,
       "licenses": [
@@ -1161,7 +1174,7 @@
     {
       "group": "com.google.android.datatransport",
       "artifact": "transport-runtime",
-      "version": "3.3.0",
+      "version": "5.0.0",
       "name": "com.google.android.datatransport:transport-runtime",
       "url": null,
       "licenses": [
@@ -1173,9 +1186,48 @@
     },
     {
       "group": "com.google.android.gms",
+      "artifact": "play-services-base",
+      "version": "18.5.0",
+      "name": "play-services-base",
+      "url": null,
+      "licenses": [
+        {
+          "name": "Android Software Development Kit License",
+          "url": "https://developer.android.com/studio/terms.html"
+        }
+      ]
+    },
+    {
+      "group": "com.google.android.gms",
       "artifact": "play-services-basement",
-      "version": "18.8.0",
+      "version": "18.9.0",
       "name": "play-services-basement",
+      "url": null,
+      "licenses": [
+        {
+          "name": "Android Software Development Kit License",
+          "url": "https://developer.android.com/studio/terms.html"
+        }
+      ]
+    },
+    {
+      "group": "com.google.android.gms",
+      "artifact": "play-services-location",
+      "version": "19.0.0",
+      "name": "play-services-location",
+      "url": null,
+      "licenses": [
+        {
+          "name": "Android Software Development Kit License",
+          "url": "https://developer.android.com/studio/terms.html"
+        }
+      ]
+    },
+    {
+      "group": "com.google.android.gms",
+      "artifact": "play-services-places-placereport",
+      "version": "17.0.0",
+      "name": "play-services-places-placereport",
       "url": null,
       "licenses": [
         {
@@ -1226,7 +1278,7 @@
     {
       "group": "com.google.dagger",
       "artifact": "dagger",
-      "version": "2.59.2",
+      "version": "2.60.1",
       "name": "Dagger",
       "url": "https://github.com/google/dagger",
       "licenses": [
@@ -1239,7 +1291,7 @@
     {
       "group": "com.google.dagger",
       "artifact": "dagger-lint-aar",
-      "version": "2.59.2",
+      "version": "2.60.1",
       "name": "Dagger Lint Rules AAR Distribution",
       "url": "https://github.com/google/dagger",
       "licenses": [
@@ -1252,7 +1304,7 @@
     {
       "group": "com.google.dagger",
       "artifact": "hilt-android",
-      "version": "2.59.2",
+      "version": "2.60.1",
       "name": "Hilt Android",
       "url": "https://github.com/google/dagger",
       "licenses": [
@@ -1265,7 +1317,7 @@
     {
       "group": "com.google.dagger",
       "artifact": "hilt-core",
-      "version": "2.59.2",
+      "version": "2.60.1",
       "name": "Hilt Core",
       "url": "https://github.com/google/dagger",
       "licenses": [
@@ -1291,7 +1343,7 @@
     {
       "group": "com.google.firebase",
       "artifact": "firebase-annotations",
-      "version": "17.0.0",
+      "version": "18.0.0",
       "name": "com.google.firebase:firebase-annotations",
       "url": null,
       "licenses": [
@@ -1304,7 +1356,7 @@
     {
       "group": "com.google.firebase",
       "artifact": "firebase-bom",
-      "version": "34.14.0",
+      "version": "35.2.0",
       "name": "com.google.firebase:firebase-bom",
       "url": null,
       "licenses": [
@@ -1317,7 +1369,7 @@
     {
       "group": "com.google.firebase",
       "artifact": "firebase-common",
-      "version": "22.0.1",
+      "version": "23.0.0",
       "name": "com.google.firebase:firebase-common",
       "url": null,
       "licenses": [
@@ -1330,7 +1382,7 @@
     {
       "group": "com.google.firebase",
       "artifact": "firebase-components",
-      "version": "19.0.0",
+      "version": "20.0.0",
       "name": "com.google.firebase:firebase-components",
       "url": null,
       "licenses": [
@@ -1343,7 +1395,7 @@
     {
       "group": "com.google.firebase",
       "artifact": "firebase-config-interop",
-      "version": "16.0.1",
+      "version": "17.0.0",
       "name": "com.google.firebase:firebase-config-interop",
       "url": null,
       "licenses": [
@@ -1356,7 +1408,7 @@
     {
       "group": "com.google.firebase",
       "artifact": "firebase-crashlytics",
-      "version": "20.0.6",
+      "version": "21.1.0",
       "name": "com.google.firebase:firebase-crashlytics",
       "url": null,
       "licenses": [
@@ -1368,8 +1420,21 @@
     },
     {
       "group": "com.google.firebase",
+      "artifact": "firebase-crashlytics-ndk",
+      "version": "21.1.0",
+      "name": "com.google.firebase:firebase-crashlytics-ndk",
+      "url": null,
+      "licenses": [
+        {
+          "name": "The Apache Software License, Version 2.0",
+          "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+        }
+      ]
+    },
+    {
+      "group": "com.google.firebase",
       "artifact": "firebase-datatransport",
-      "version": "19.0.0",
+      "version": "21.0.0",
       "name": "com.google.firebase:firebase-datatransport",
       "url": null,
       "licenses": [
@@ -1382,8 +1447,8 @@
     {
       "group": "com.google.firebase",
       "artifact": "firebase-encoders",
-      "version": "17.0.0",
-      "name": "firebase-encoders",
+      "version": "18.0.0",
+      "name": "com.google.firebase:firebase-encoders",
       "url": null,
       "licenses": [
         {
@@ -1395,7 +1460,7 @@
     {
       "group": "com.google.firebase",
       "artifact": "firebase-encoders-json",
-      "version": "18.0.1",
+      "version": "19.0.0",
       "name": "com.google.firebase:firebase-encoders-json",
       "url": null,
       "licenses": [
@@ -1408,8 +1473,8 @@
     {
       "group": "com.google.firebase",
       "artifact": "firebase-encoders-proto",
-      "version": "16.0.0",
-      "name": "firebase-encoders-proto",
+      "version": "17.0.0",
+      "name": "com.google.firebase:firebase-encoders-proto",
       "url": null,
       "licenses": [
         {
@@ -1421,7 +1486,7 @@
     {
       "group": "com.google.firebase",
       "artifact": "firebase-installations",
-      "version": "19.1.0",
+      "version": "20.0.0",
       "name": "com.google.firebase:firebase-installations",
       "url": null,
       "licenses": [
@@ -1434,7 +1499,7 @@
     {
       "group": "com.google.firebase",
       "artifact": "firebase-installations-interop",
-      "version": "17.3.0",
+      "version": "18.0.0",
       "name": "com.google.firebase:firebase-installations-interop",
       "url": null,
       "licenses": [
@@ -1460,7 +1525,7 @@
     {
       "group": "com.google.firebase",
       "artifact": "firebase-sessions",
-      "version": "3.0.6",
+      "version": "4.0.2",
       "name": "com.google.firebase:firebase-sessions",
       "url": null,
       "licenses": [
@@ -1577,7 +1642,7 @@
     {
       "group": "org.jetbrains.kotlin",
       "artifact": "kotlin-stdlib",
-      "version": "2.3.21",
+      "version": "2.4.21",
       "name": "Kotlin Stdlib",
       "url": "https://kotlinlang.org/",
       "licenses": [
@@ -1590,7 +1655,7 @@
     {
       "group": "org.jetbrains.kotlin",
       "artifact": "kotlin-stdlib-jdk7",
-      "version": "1.8.22",
+      "version": "2.1.21",
       "name": "Kotlin Stdlib Jdk7",
       "url": "https://kotlinlang.org/",
       "licenses": [
@@ -1603,7 +1668,7 @@
     {
       "group": "org.jetbrains.kotlin",
       "artifact": "kotlin-stdlib-jdk8",
-      "version": "1.8.22",
+      "version": "2.1.21",
       "name": "Kotlin Stdlib Jdk8",
       "url": "https://kotlinlang.org/",
       "licenses": [
@@ -1681,7 +1746,7 @@
     {
       "group": "org.jetbrains.kotlinx",
       "artifact": "kotlinx-serialization-bom",
-      "version": "1.11.0",
+      "version": "1.13.0",
       "name": "kotlinx-serialization-bom",
       "url": "https://github.com/Kotlin/kotlinx.serialization",
       "licenses": [
@@ -1694,7 +1759,7 @@
     {
       "group": "org.jetbrains.kotlinx",
       "artifact": "kotlinx-serialization-core",
-      "version": "1.11.0",
+      "version": "1.13.0",
       "name": "kotlinx-serialization-core",
       "url": "https://github.com/Kotlin/kotlinx.serialization",
       "licenses": [
@@ -1707,7 +1772,7 @@
     {
       "group": "org.jetbrains.kotlinx",
       "artifact": "kotlinx-serialization-core-jvm",
-      "version": "1.11.0",
+      "version": "1.13.0",
       "name": "kotlinx-serialization-core",
       "url": "https://github.com/Kotlin/kotlinx.serialization",
       "licenses": [
@@ -1720,7 +1785,7 @@
     {
       "group": "org.jetbrains.kotlinx",
       "artifact": "kotlinx-serialization-json",
-      "version": "1.11.0",
+      "version": "1.13.0",
       "name": "kotlinx-serialization-json",
       "url": "https://github.com/Kotlin/kotlinx.serialization",
       "licenses": [
@@ -1733,7 +1798,7 @@
     {
       "group": "org.jetbrains.kotlinx",
       "artifact": "kotlinx-serialization-json-jvm",
-      "version": "1.11.0",
+      "version": "1.13.0",
       "name": "kotlinx-serialization-json",
       "url": "https://github.com/Kotlin/kotlinx.serialization",
       "licenses": [

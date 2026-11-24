@@ -1,109 +1,19 @@
-# USB Direct-mode follow-ups (low priority)
+# USB Direct-mode follow-ups
 
-Deferred items from the `explore/usb-direct-mode` review. The high and medium issues
-(resting-stick deadzone, off-main claim/detach, multi-identical-controller dedup, caps refresh
-after lane switch, migration attach fallback) are already fixed on the branch. Each item below is
-written so it can be picked up on its own. Verify file:line against current code first.
+What is still owed on the USB Direct path and the work around it, kept so each item can be picked up
+on its own. Item numbers are stable, so other documents can refer to one. Verify file:line against
+current code first.
 
----
-
-## 1. Xbox One (GIP) coverage is partial
-
-**Context:** `decodeXboxOneGip` handles input report `0x20` and the Guide button (decoded from the
-virtual-key `0x07` report and merged as a sticky `XUSB_GUIDE` bit via `ParserState`, covered by
-`usb_parsers_test.cpp`). Two gaps remain: the init is now a 3-packet GIP sequence (power-on, LED-on,
-auth-done) built by `buildGipInitPacket` for `InitKind::XBOX_ONE_POWERON`, with an extra set-mode
-packet for the Xbox One S and Elite Series 2 (`InitKind::XBOX_ONE_S`). This starts many controllers
-but still omits the full GIP announce/identify handshake some Series models expect, and
-`probeDecodable` gives up after ~320ms, so a slow-to-start GIP pad falls back to Routed.
-
-**Where:** `app/src/main/cpp/usb_parsers.cpp` (`buildGipInitPacket`), `app/src/main/cpp/usb_host.cpp`
-(`probeDecodable` timeouts).
-
-**Task:** Add the fuller GIP announce/identify handshake for the silent models, and re-evaluate the
-probe timeout/attempt counts so slow starters are not dropped. Both need that hardware to verify.
-
-**Acceptance:** A Series X|S and an Elite Series 2 reach Direct mode reliably from cold plug-in.
-End-to-end Guide also needs the satellite to forward `wButtons` bit `0x0400` to ViGEm.
+- **Open** (work nobody has done): items 6 and 11.
+- **Implemented, needs hardware** (the code is written and tested against fixtures, but no one has run
+  it on the device): items 1, 2, 7, 8, 9, 10 and 12.
+- **Done**: items 3, 4 and 5.
 
 ---
 
-## 2. Switch Pro: the USB start sequence has not run on Android, and the IMU signs are unverified
+## Open
 
-**Context, start sequence:** A Switch Pro Controller on a cable stays silent after the sequence Dish
-used to send (handshake `80 02`, timeout disable `80 04`, full report mode): it acknowledges the
-handshake and streams nothing. It streams only once the timeout disable follows a handshake sent at
-3 Mbit, which is the order Linux's hid-nintendo and SDL send every USB Switch pad: `80 02`, `80 03`,
-`80 02`, `80 04`. Dish now sends that order, then the report-mode, vibration-enable and IMU-enable
-subcommands, to every model on `InitKind::SWITCH_PRO_HANDSHAKE` (the Pro, the 8BitDo adapters, the
-N64 Online pad). The pad's need for the 3 Mbit step was shown on a Pro Controller over macOS
-(dish-mac PR 101 carries the probe table); the new sequence has not yet been run on an Android
-device. On a phone whose kernel driver (hid-nintendo) ran the full sequence before Dish claimed the
-interface, the pad streamed either way, which is the likely reason the old sequence passed its
-Android hardware checks.
-
-**Context, IMU enable:** Until subcommand `0x40` with argument `0x01` is sent, every IMU word of the
-Pro's 0x30 reports reads zero. Shown on a Pro over macOS through dish-mac's own reader: with the
-report-mode subcommand alone, 282 motion samples at rest read six zeros; with the IMU enable sent
-after it, the accelerometer reads about 1 g at rest (dish-mac PR 101 saw the zeros, and dish-mac
-PR 109 sends the enable and carries the run). Dish now sends it as the last step of
-`kSwitchInitSequence`, after the vibration enable, non-fatal as in SDL. It has not yet been run on
-an Android device, and whether the Android pitch and yaw confirmation below relied on the kernel
-driver having turned the IMU on first is not known.
-
-**Context, IMU:** The Switch Pro IMU scaling is correct (`32767/28568` gyro, `32767/16384` accel),
-and the axis order is now rotated onto the DS4 wire convention with pitch and yaw
-hardware-confirmed. Roll's sign and the three accel signs are still unverified (the code notes
-exactly this).
-
-**Where:** `app/src/main/cpp/usb_parsers.cpp` (`kSwitchInitSequence`, `runSwitchProHandshake`;
-`decodeSwitchProUsb`, IMU block).
-
-**Task:** With a real Switch Pro on a phone whose kernel has no hid-nintendo, confirm the pad streams
-from its plugged-in state through Dish's own sequence, with non-zero IMU words. Then, in Direct mode,
-confirm gyro/accel axis directions against the satellite's motion expectation and flip signs /
-reorder axes as needed.
-
-**Acceptance:** A Pro Controller plugged in cold reaches Direct mode and streams on a phone whose
-kernel never woke it. Tilting/rotating the controller moves the in-game motion in the matching
-direction on all three axes.
-
----
-
-## 3. Generic HID parser was unreachable (resolved)
-
-**Resolved.** A per-controller path toggle (`PathCard` / `ControllerAdapter`) routes an unrecognised
-gamepad-shaped device to the generic parser behind a "layout is guessed, may read wrong" confirm.
-Auto-claim still requires a known model (`resolvePath` defaults unknown models to Standard), so the
-generic parser is reached only through that deliberate, reversible action. No silent generic claims.
-
----
-
-## 4. Output mutex held across encrypt + sendto (resolved, measurement open)
-
-**Resolved.** `publishIfChanged` stages the report and draws its counter under `g_devicesMtx` and
-`g_slotsMtx`; the caller encrypts and sends it after letting both go (`stageDatagram`,
-`transmitDatagram`). The session's send turn is held from the counter to `sendto`, because the
-satellite drops a counter that is not above the last one it accepted from the session, whichever slot
-it carries: the turn keeps the wire in counter order, and staging under the device lock keeps a
-slot's counters in the order its latch consumed them. The global locks now cover the latch, the
-binding and a memcpy; two sends to one session still serialize on its turn.
-
-**Still open:** measure under a 3 to 4 controller load. **Acceptance:** no measurable added latency
-with four controllers streaming at their native rate.
-
----
-
-## 5. Framework device state leaked on lane switch (resolved)
-
-**Resolved.** `PhysicalSlotNative.forgetPhysicalDevice` (calling `dispatch::forgetDevice`) is invoked by
-`PhysicalSlotBindingObserver` for every departed framework device id (claimed synthetics are still
-freed by `detachUsbDevice`), so `g_devices` returns to baseline a few seconds after a plug, claim,
-unplug cycle.
-
----
-
-## 6. Move USB claim/detach off the main thread (safely)
+### 6. Move USB claim/detach off the main thread (safely)
 
 **Context:** `doClaim` (USB init handshake + decode probe, up to ~400ms) and `detachUsbDevice`
 (joins the native poll thread) still run synchronously on the broadcast/main thread, so a plug-in or
@@ -128,7 +38,165 @@ stress never drops the synthetic device or its host registration.
 
 ---
 
-## 7. USB-direct rumble output (implemented, needs hardware verification)
+### 11. Controller database and diagnostics: what 2.7.0 left out
+
+**Context:** 2.7.0 bundles the fleet's controller database (`app/src/main/assets/controllers/v1`),
+generates the compiled identity tables from it (`scripts/gen_controller_tables.py`, run by both
+CMake builds through `app/src/main/cpp/controller_tables.cmake`), checks dish.tinkernorth.com for a
+newer copy (`source/controllerdb/`), hands the active usb rows to native
+(`ModelTableNative.setServedModels`, `usbparsers::setServedDevices`), records each Direct pad's last
+write verdict, asks "Did it work?" after the inspector's tests, and sends a support report with a
+diagnostics bundle that carries both ends of each connection.
+These pieces were deferred or deliberately shaped differently from the contracts:
+
+- **The guided per-button capture is deferred.** "Capture this controller" keeps the USB and HID
+  descriptors and twenty reports at rest only. Walking the person through each button and recording
+  the report each press produces needs its own inspector flow and a bundle format for it.
+- **The report capture reads the poller.** The twenty reports at rest can only come from the pad's
+  own poller, so `keepIfCapturing` in `usb_host.cpp` costs the report path one relaxed atomic load
+  per URB while no capture is armed (the same cost as the inspector's `SlotTable::inspect_`), and a
+  fixed-slot copy for the twenty reports after a person arms it. Nothing else added in 2.7.0 touches
+  the report path. The measurement on a slow phone is owed.
+- **Served rows are usb only and carry no name natively.** The parallel arrays carry the record's
+  `identity.usb` rows; a served Bluetooth identity has no native lookup to reach
+  (`lookupBluetoothModel` is the Steam BLE pads' GATT path and stays compiled-only). A served row's
+  `KnownDevice::name` is null, so native calls it "USB controller" and the controller card falls back
+  to the pad's product string; Diagnostics names it from the database's strings ("Known as").
+  Feeding the database's name into `friendlyUsbName` is the follow-up.
+- **The first attach after launch may precede the served rows.** The bundled copy and any cached
+  download are loaded off the main thread at startup; a pad already plugged in that only a cached
+  download knows is classified by its interface until its next attach.
+- **Expect checks compare endpoints only.** Schema 1's `expect` names `endpoints.in` and
+  `endpoints.out`; the interface count is recorded in the bundle's hardware facts but there is no
+  field to compare it against.
+- **The bundle's `probe` is omitted.** The probe outcome at attach is not kept on the JVM; the
+  bundle carries `rateHz` and the last write instead.
+- **The init verdict is the sequence's last write.** A multi-packet init (GIP, Switch Pro, the
+  Steam Controllers' feature reports) records the verdict of the packet it stopped at, or of its
+  last packet; GIP acks and the Steam Controller (2026)'s settings refreshes record none.
+- **The report's second cut carries what the client holds today, and names nulls for the rest.**
+  `speaker.frames` and `haptics.frames` are null: the receive path counts speaker and haptic
+  datagrams per session (`received.speaker`, `received.haptic`), not per controller. A Moonlight
+  session has no ack and no RTT window, and counts only the reports it sent; a Bluetooth host only
+  its reports.
+- **Two hot-path additions, both one increment.** `send_path.cpp` `countFor` adds one relaxed
+  load and store under the session's gate per datagram (`sentByKind`, `message_tally.h`), the same
+  shape as the existing per-controller tallies; `receive_path.cpp` adds one relaxed `fetch_add` per
+  datagram that opened (`receivedByKind`). On the Kotlin receive path `FeedbackActivityStore.note`
+  now keeps each lane's count, last value and time in per-slot atomic arrays: it no longer allocates
+  a `FeedbackActivity` per packet, but its count is an `incrementAndGet` (no relaxed increment below
+  API 33). Both measurements are owed.
+- **A pad's last state is read by a mirror refresh.** The bundle's `input.last` comes from
+  `SlotTable::refreshMirrors`, the inspector's open-time copy, taken once when the report is
+  prepared; it is the slot's current state, which for a quiet pad is the last one it published.
+- **The capabilities fallback's protocol floor is written, not read.** Capabilities name only the
+  ceiling the host speaks, so `protocol` is `[1, ceiling]`: every Satellite accepts from 1, and its
+  own floor is only ever stated in a 409.
+- **A Moonlight host carries its version only.** The plaintext serverinfo the app parses reports
+  every host free and every caller unpaired, so `state` and `pairStatus` are null; the mutual-TLS
+  serverinfo would know both, and is not asked for a report.
+- **An older Satellite is decided by its version.** `isOlderSatellite` reads the serverVersion from
+  the capabilities the app last fetched (else the catalog's); an older host is never asked, and a
+  404 from 2.3.0 or later is `unknownConnection`. A host whose version the app never read is asked.
+**Where:** `app/src/main/cpp/usb_host.cpp`, `app/src/main/cpp/usb_parsers.cpp`,
+`app/src/main/java/com/tinkernorth/dish/source/usb/ControllerCapturer.kt`,
+`app/src/main/java/com/tinkernorth/dish/core/controllerdb/`.
+
+---
+
+## Implemented, needs hardware
+
+### 1. Xbox One (GIP) coverage is partial
+
+**Context:** `decodeXboxOneGip` handles input report `0x20` and the Guide button (decoded from the
+virtual-key `0x07` report and merged as a sticky `XUSB_GUIDE` bit via `ParserState`, covered by
+`usb_parsers_test.cpp`). Two gaps remain: the init is now a 3-packet GIP sequence (power-on, LED-on,
+auth-done) built by `buildGipInitPacket` for `InitKind::XBOX_ONE_POWERON`, with an extra set-mode
+packet for the Xbox One S and Elite Series 2 (`InitKind::XBOX_ONE_S`). This starts many controllers
+but still omits the full GIP announce/identify handshake some Series models expect, and
+`probeDecodable` gives up after ~320ms, so a slow-to-start GIP pad falls back to Routed.
+
+**Where:** `app/src/main/cpp/usb_parsers.cpp` (`buildGipInitPacket`), `app/src/main/cpp/usb_host.cpp`
+(`probeDecodable` timeouts).
+
+**Task:** Add the fuller GIP announce/identify handshake for the silent models, and re-evaluate the
+probe timeout/attempt counts so slow starters are not dropped. Both need that hardware to verify.
+
+**Acceptance:** A Series X|S and an Elite Series 2 reach Direct mode reliably from cold plug-in.
+End-to-end Guide also needs the satellite to forward `wButtons` bit `0x0400` to ViGEm.
+
+---
+
+### 2. Switch Pro: the USB start sequence has not run on Android, and the IMU signs are unverified
+
+**Context, start sequence:** No fixed list of USB packets starts every Switch Pro, so Dish no longer
+sends one: `usbparsers::SwitchStart` (`usb_parsers.h`) decides from what the pad sends, and
+dish-mac's `SwitchStreamWatch` is the same machine on a 250 ms tick. The evidence behind it:
+
+- A Pixel 8 on Android 17 (Pro Controller 057e:2009, bcdDevice 0210, endpoints IN `0x81` / OUT
+  `0x01`), Dish 2.7.0: in Standard the Pro works and Android lists "Nintendo Switch Pro Controller
+  IMU", so the phone's kernel has hid-nintendo and had already started the pad. On USB Direct the
+  log read `Switch Pro USB init sequence sent` and `attach ok`, the write verdict was OK and
+  `input.frames` stayed 0: claimed and never streaming. With the list shortened to the handshake,
+  the timeout disable and the subcommands (no `80 03`, 87588ec) the same pad on the same phone
+  streamed. So a pad the kernel started goes silent when it is sent the 3 Mbit step.
+- dish-mac PR 101's probe table, each run from a cold, plugged-in, silent Pro on macOS (nothing
+  there starts it): `80 02, 80 04, report mode`, `80 02, 80 03, 80 04` and `80 02, 80 03, 80 02`
+  all stay silent; only `80 02, 80 03, 80 02, 80 04` streams (about 75 reports a second). So a cold
+  pad needs the 3 Mbit step and the second handshake.
+- Linux's hid-nintendo, `joycon_init` in `drivers/hid/hid-nintendo.c`: handshake, the 3 Mbit step
+  (`JC_USB_CMD_BAUDRATE_3M`, "we can function with the default baudrate ... continuing anyway" when
+  it fails), the handshake again, then the timeout disable, each waiting for the previous command's
+  reply (up to a second) before the next goes out.
+
+Android's old sender differed from both references the same way: it wrote blind, 40 ms apart, never
+read the IN endpoint, and never looked at whether the pad already streamed. The machine reads the
+endpoint while the claim waits (at most 4 s, `startSwitchPad` in `usb_host.cpp`): a pad that streams
+from the claim is sent no USB command, only the report-mode, vibration and IMU subcommands; a pad
+still silent after 300 ms is walked through `80 02, 80 03, 80 02, 80 04`, each step waiting for its
+reply (`81 02`, `81 03`) or 250 ms, a missing 3 Mbit reply being non-fatal as in hid-nintendo and
+SDL, and the USB commands stop the moment full reports arrive; then the subcommands. A pad that
+streams nothing after one whole sequence is refused as before, which keeps an 8BitDo adapter in
+another mode on the Standard path. The tests replay both pads (`SwitchStart.*` in
+`usb_parsers_test.cpp`, with dish-mac's captured replies) and fail on the old seven-packet list and
+on the five-packet list.
+
+**Unverified:** a cold Pro on an Android device without hid-nintendo (the Pixel 8 run covers the
+kernel-started pad only; the cold order was run on macOS and is replayed here, not run on a phone);
+the 8BitDo USB adapters and the N64 Online pad, which share `InitKind::SWITCH_PRO_HANDSHAKE` and so
+take the same machine (their pre-change behaviour was not recorded, and an adapter that streams only
+after something else keeps being refused, as the probe rule always did); a stream that stalls after
+the claim is not restarted (dish-mac restarts it after two seconds).
+
+**Context, IMU enable:** Until subcommand `0x40` with argument `0x01` is sent, every IMU word of the
+Pro's 0x30 reports reads zero. Shown on a Pro over macOS through dish-mac's own reader: with the
+report-mode subcommand alone, 282 motion samples at rest read six zeros; with the IMU enable sent
+after it, the accelerometer reads about 1 g at rest (dish-mac PR 101 saw the zeros, and dish-mac
+PR 109 sends the enable and carries the run). Dish sends it as the last step of
+the start, after the vibration enable, non-fatal as in SDL. It has not yet been run on
+an Android device, and whether the Android pitch and yaw confirmation below relied on the kernel
+driver having turned the IMU on first is not known.
+
+**Context, IMU:** The Switch Pro IMU scaling is correct (`32767/28568` gyro, `32767/16384` accel),
+and the axis order is now rotated onto the DS4 wire convention with pitch and yaw
+hardware-confirmed. Roll's sign and the three accel signs are still unverified (the code notes
+exactly this).
+
+**Where:** `app/src/main/cpp/usb_parsers.cpp` (`SwitchStart`, `kSwitchStartPackets`;
+`decodeSwitchProUsb`, IMU block) and `usb_host.cpp` (`startSwitchPad`).
+
+**Task:** With a real Switch Pro on a phone whose kernel has no hid-nintendo, confirm the pad streams
+from its plugged-in state through Dish's own sequence, with non-zero IMU words. Then, in Direct mode,
+confirm gyro/accel axis directions against the satellite's motion expectation and flip signs /
+reorder axes as needed.
+
+**Acceptance:** A Pro Controller plugged in cold reaches Direct mode and streams on a phone whose
+kernel never woke it. Tilting/rotating the controller moves the in-game motion in the matching
+direction on all three axes.
+
+---
+
+### 7. USB-direct rumble output (implemented, needs hardware verification)
 
 **Status:** Implemented from the Linux kernel drivers, not yet verified on hardware. Builders exist
 for Xbox 360, Xbox One GIP, DualShock 4, DualSense, and Switch Pro. The write path, report layouts,
@@ -152,7 +220,7 @@ work or stay silent; none receives a malformed report.
 
 ---
 
-## 8. Steam Controller (implemented, needs hardware verification)
+### 8. Steam Controller (implemented, needs hardware verification)
 
 **Status:** Implemented from SDL and `hid-steam` (see `THIRD_PARTY.md`), never run against the
 hardware. `Parser::STEAM_CONTROLLER` decodes the state packet; `InitKind::STEAM_QUIET` stops the
@@ -273,7 +341,7 @@ unplugged or switched back to Standard.
 
 ---
 
-## 9. Steam Controller (2026, "Triton") (implemented from SDL, needs hardware verification)
+### 9. Steam Controller (2026, "Triton") (implemented from SDL, needs hardware verification)
 
 **Status:** Ported from SDL's `src/joystick/hidapi/SDL_hidapi_steam_triton.c` and the Valve headers
 beside it (see `THIRD_PARTY.md`), never run against the hardware. It covers the wired pad
@@ -373,7 +441,7 @@ being switched back to Standard or unplugged.
 
 ---
 
-## 10. Steam Controllers on Bluetooth LE (implemented from SDL, needs hardware verification)
+### 10. Steam Controllers on Bluetooth LE (implemented from SDL, needs hardware verification)
 
 **Status:** Ported from SDL's Android `HIDDeviceManager.java` and `HIDDeviceBLESteamController.java`
 (how the controller is found and connected, and how reports and writes are framed over GATT) and
@@ -455,73 +523,7 @@ card when it sleeps or Bluetooth goes off, and comes back as a card when it wake
 
 ---
 
-## 11. Controller database and diagnostics: what 2.7.0 left out
-
-**Context:** 2.7.0 bundles the fleet's controller database (`app/src/main/assets/controllers/v1`),
-generates the compiled identity tables from it (`scripts/gen_controller_tables.py`, run by both
-CMake builds through `app/src/main/cpp/controller_tables.cmake`), checks dish.tinkernorth.com for a
-newer copy (`source/controllerdb/`), hands the active usb rows to native
-(`ModelTableNative.setServedModels`, `usbparsers::setServedDevices`), records each Direct pad's last
-write verdict, asks "Did it work?" after the inspector's tests, and sends a support report with a
-diagnostics bundle that carries both ends of each connection.
-These pieces were deferred or deliberately shaped differently from the contracts:
-
-- **The guided per-button capture is deferred.** "Capture this controller" keeps the USB and HID
-  descriptors and twenty reports at rest only. Walking the person through each button and recording
-  the report each press produces needs its own inspector flow and a bundle format for it.
-- **The report capture reads the poller.** The twenty reports at rest can only come from the pad's
-  own poller, so `keepIfCapturing` in `usb_host.cpp` costs the report path one relaxed atomic load
-  per URB while no capture is armed (the same cost as the inspector's `SlotTable::inspect_`), and a
-  fixed-slot copy for the twenty reports after a person arms it. Nothing else added in 2.7.0 touches
-  the report path. Measure it on the hot-path bench before 2.7.0 ships to a slow phone.
-- **Served rows are usb only and carry no name natively.** The parallel arrays carry the record's
-  `identity.usb` rows; a served Bluetooth identity has no native lookup to reach
-  (`lookupBluetoothModel` is the Steam BLE pads' GATT path and stays compiled-only). A served row's
-  `KnownDevice::name` is null, so native calls it "USB controller" and the controller card falls back
-  to the pad's product string; Diagnostics names it from the database's strings ("Known as").
-  Feeding the database's name into `friendlyUsbName` is the follow-up.
-- **The first attach after launch may precede the served rows.** The bundled copy and any cached
-  download are loaded off the main thread at startup; a pad already plugged in that only a cached
-  download knows is classified by its interface until its next attach.
-- **Expect checks compare endpoints only.** Schema 1's `expect` names `endpoints.in` and
-  `endpoints.out`; the interface count is recorded in the bundle's hardware facts but there is no
-  field to compare it against.
-- **The bundle's `probe` is omitted.** The probe outcome at attach is not kept on the JVM; the
-  bundle carries `rateHz` and the last write instead.
-- **The init verdict is the sequence's last write.** A multi-packet init (GIP, Switch Pro, the
-  Steam Controllers' feature reports) records the verdict of the packet it stopped at, or of its
-  last packet; GIP acks and the Steam Controller (2026)'s settings refreshes record none.
-- **The report's second cut carries what the client holds today, and names nulls for the rest.**
-  `speaker.frames` and `haptics.frames` are null: the receive path counts speaker and haptic
-  datagrams per session (`received.speaker`, `received.haptic`), not per controller. A Moonlight
-  session has no ack and no RTT window, and counts only the reports it sent; a Bluetooth host only
-  its reports.
-- **Two hot-path additions, both one increment.** `send_path.cpp` `countFor` adds one relaxed
-  load and store under the session's gate per datagram (`sentByKind`, `message_tally.h`), the same
-  shape as the existing per-controller tallies; `receive_path.cpp` adds one relaxed `fetch_add` per
-  datagram that opened (`receivedByKind`). On the Kotlin receive path `FeedbackActivityStore.note`
-  now keeps each lane's count, last value and time in per-slot atomic arrays: it no longer allocates
-  a `FeedbackActivity` per packet, but its count is an `incrementAndGet` (no relaxed increment below
-  API 33). Measure both on the hot-path bench with the rest of 2.7.0.
-- **A pad's last state is read by a mirror refresh.** The bundle's `input.last` comes from
-  `SlotTable::refreshMirrors`, the inspector's open-time copy, taken once when the report is
-  prepared; it is the slot's current state, which for a quiet pad is the last one it published.
-- **The capabilities fallback's protocol floor is written, not read.** Capabilities name only the
-  ceiling the host speaks, so `protocol` is `[1, ceiling]`: every Satellite accepts from 1, and its
-  own floor is only ever stated in a 409.
-- **A Moonlight host carries its version only.** The plaintext serverinfo the app parses reports
-  every host free and every caller unpaired, so `state` and `pairStatus` are null; the mutual-TLS
-  serverinfo would know both, and is not asked for a report.
-- **An older Satellite is decided by its version.** `isOlderSatellite` reads the serverVersion from
-  the capabilities the app last fetched (else the catalog's); an older host is never asked, and a
-  404 from 2.3.0 or later is `unknownConnection`. A host whose version the app never read is asked.
-**Where:** `app/src/main/cpp/usb_host.cpp`, `app/src/main/cpp/usb_parsers.cpp`,
-`app/src/main/java/com/tinkernorth/dish/source/usb/ControllerCapturer.kt`,
-`app/src/main/java/com/tinkernorth/dish/core/controllerdb/`.
-
----
-
-## 12. The inspector's bench: how it keeps the game's state
+### 12. The inspector's bench: how it keeps the game's state
 
 **Context:** The bench tests every item its path carries, as the fleet's diagnostics contract
 ("The bench") defines them: rumble, trigger rumble, light bar, player LEDs, adaptive triggers, mic
@@ -561,3 +563,33 @@ on-screen pad, whose skin the bench never borrows. These pieces are shaped this 
 triggers and mic lamp, each test shows its pattern and then the pad shows the game's state again;
 the haptics test buzzes the grips with the two notes; a framework DualSense on Bluetooth gets its
 game color back after the light bar test.
+
+---
+
+## Done
+
+### 3. Generic HID parser was unreachable (resolved)
+
+**Resolved.** A per-controller path toggle (`PathCard` / `ControllerAdapter`) routes an unrecognised
+gamepad-shaped device to the generic parser behind a "layout is guessed, may read wrong" confirm.
+Auto-claim still requires a known model (`resolvePath` defaults unknown models to Standard), so the
+generic parser is reached only through that deliberate, reversible action. No silent generic claims.
+
+---
+
+### 4. Output mutex held across encrypt + sendto (resolved)
+
+**Resolved.** The send path takes no lock any more: a pad's slot and its session live in fixed hot
+tables, the datagram is framed on the stack, and sealing and sending hold only the session's send
+gate, which keeps the counters in order on the wire (`docs/ARCHITECTURE.md`, "The hot path"). The
+measurement this item asked for, four controllers at their native rate, is the "After" section of
+`tools/bench/README.md`, and `measurements.yml` records it for each release.
+
+---
+
+### 5. Framework device state leaked on lane switch (resolved)
+
+**Resolved.** `PhysicalSlotNative.forgetPhysicalDevice` (calling `dispatch::forgetDevice`) is invoked by
+`PhysicalSlotBindingObserver` for every departed framework device id (claimed synthetics are still
+freed by `detachUsbDevice`), so `g_devices` returns to baseline a few seconds after a plug, claim,
+unplug cycle.

@@ -12,7 +12,7 @@ Quick reference for filling out Play's IARC questionnaire. Dish is a utility-cla
 | User-to-user communication | INDIRECT (see below) | Dish has no chat, no comments and no messaging of its own. It can carry the user's voice to their own PC as the emulated controller's microphone, where apps already on that PC (party chat, Discord, a game) may transmit it. |
 | Sharing user location | NONE | No location permissions. |
 | Personal info sharing | NONE | No personal data collected. |
-| Digital purchases | NONE | Free, open source. No IAP. |
+| Digital purchases | YES, Play build only | Free and open source, with no paid features. The Play build sells optional tips through Google Play's billing system, one-time or as a monthly subscription (`play/BILLING.md`); a tip unlocks nothing and every feature works without one. The GitHub and Amazon builds sell nothing. |
 | Gambling references | NONE | |
 
 ## The controller microphone, in the questionnaire's terms

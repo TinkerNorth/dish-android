@@ -25,8 +25,9 @@ template <typename T, size_t Capacity> class MpmcRing {
     static constexpr size_t CAPACITY = Capacity;
 
     MpmcRing() noexcept {
-        for (size_t i = 0; i < Capacity; ++i)
+        for (size_t i = 0; i < Capacity; ++i) {
             cells_[i].sequence.store(i, std::memory_order_relaxed);
+        }
     }
     MpmcRing(const MpmcRing&) = delete;
     MpmcRing& operator=(const MpmcRing&) = delete;

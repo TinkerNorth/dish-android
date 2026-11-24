@@ -11,10 +11,10 @@ The in-app list is generated from the release runtime classpath's POMs, so it ca
 C libraries `app/src/main/cpp/CMakeLists.txt` fetches and links statically into
 `libsatellite.so`. Both are attributed here instead:
 
-- **libopus** (`opus-1.5.2`, https://opus-codec.org): the controller-audio codec. The pad's
+- **libopus** (`opus-1.6.1`, https://opus-codec.org): the controller-audio codec. The pad's
   microphone is encoded to Opus before it leaves the device and the pad's speaker stream is
   decoded on arrival (satellite `docs/contract.md` §Controller audio). Licensed BSD-3-Clause.
-- **libsodium** (`1.0.20`, https://libsodium.org): ChaCha20-Poly1305 for the encrypted UDP
+- **libsodium** (`1.0.22`, https://libsodium.org): ChaCha20-Poly1305 for the encrypted UDP
   wire protocol. Licensed ISC.
 
 ```
@@ -55,15 +55,43 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 Opus also carries a patent grant covering the Opus Interactive Audio Codec reference
 implementation; see the upstream `COPYING` file in the release tarball.
 
+## Build, scan and release tooling (not shipped)
+
+These run in CI and in `scripts/ci-local.sh`; none is compiled into or distributed with the app.
+Each is pinned by version and by the SHA-256 of its release asset, in `scripts/tools.sh` and the
+shared workflows (`.github/workflows/_security.yml`, `_release_harden.yml`), and
+`scripts/tools_pins_test.py` holds the copies together.
+
+- **googletest** (`1.18.0`, https://github.com/google/googletest): the C++ host tests' framework,
+  fetched by `app/src/test/cpp/CMakeLists.txt` and never part of the app. BSD-3-Clause.
+- **cosign** (`3.1.4`, https://github.com/sigstore/cosign): keyless signing of every release file.
+  Apache-2.0.
+- **Syft** (`1.57.2`, https://github.com/anchore/syft): the SPDX and CycloneDX SBOMs. Apache-2.0.
+- **Grype** (`0.122.1`, https://github.com/anchore/grype): the vulnerability scan of the release
+  artifacts. Apache-2.0.
+- **OSV-Scanner** (`2.7.1`, https://github.com/google/osv-scanner): the vulnerability scan of the
+  locked Maven and Ruby dependencies. Apache-2.0.
+- **gitleaks** (`8.30.1`, https://github.com/gitleaks/gitleaks): the secret scan of the full
+  history. MIT.
+- **clang-tidy** (`23.1.4`, https://pypi.org/project/clang-tidy/): the JNI's static analysis, run
+  against the debug build's compile database with the fleet's `.clang-tidy`. Apache-2.0 with LLVM
+  exceptions.
+- **clang-format** (`23.1.5`, https://pypi.org/project/clang-format/): the JNI's formatter.
+  Apache-2.0 with LLVM exceptions.
+
 ## SDL (Simple DirectMedia Layer): controller IDs, Switch Pro motion scaling, Steam Controller protocols
 
-The USB controller recognition table in `app/src/main/cpp/usb_parsers.cpp` (the `kImported`
-array) is a curated subset of the vendor/product IDs and controller-type classifications in
-SDL's `src/joystick/controller_list.h`. No SDL code is compiled into this project; only the
-device-identification facts were reused, remapped to this project's USB report parsers, and
-flagged unverified (recognized but never auto-claimed to Direct).
+The controller database (`app/src/main/assets/controllers/v1/controllers.json`, the fleet's
+shared data set, specified in `dish-website/docs/controller-db.md`) is where this app's USB
+recognition facts live. `scripts/gen_controller_tables.py` turns it into the compiled tables in
+`known_devices.generated.h`, which `app/src/main/cpp/usb_parsers.cpp` includes. Some of its USB rows,
+the ones its `sources` field credits to SDL, are a curated subset of the vendor/product IDs and
+controller-type classifications in SDL's `src/joystick/controller_list.h`. No SDL code is compiled
+into this project; only the device-identification facts were reused, remapped to this project's USB
+report parsers, and flagged unverified (recognized but never auto-claimed to Direct). The database
+itself is TinkerNorth's own work, distributed under this project's licence.
 
-The default Switch Pro motion scaling in the same file also follows SDL's
+The default Switch Pro motion scaling in `usb_parsers.cpp` also follows SDL's
 values (gyro raw / 14.2842 deg/s, accel raw / 4096 g) before remapping to
 the wire scale. That is a reuse of constants only, not SDL code.
 

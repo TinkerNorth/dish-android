@@ -3,12 +3,20 @@
 The protocol contract (REST surface, UDP streams, crypto, liveness, identity)
 lives in ONE place: **`satellite/docs/contract.md`** in the
 [TinkerNorth/satellite](https://github.com/TinkerNorth/satellite) repo. This
-client implements protocol 3 against it; this file only records the
-Android-side mapping. Protocol 3's one addition, HAPTIC_AUDIO 0x0015, plays into
-a USB DualSense's own 4-channel endpoint as a second quad `AudioTrack` beside the
-speaker one (`source/audio/SpeakerPlayoutPlan.kt`, `SpeakerPlayout.kt`); a slot
-that cannot play the waveform advertises no `hapticAudio` cap and takes the
-satellite's rumble reduction instead (see `core/net/DishProtocol.kt`). The former `wire-format.md` is replaced by the contract.
+client implements protocol 4 against it (`DISH_PROTOCOL_CURRENT` in
+`core/net/DishProtocol.kt`; it offers 4 and downgrades inside 1 to 4 on a
+Satellite's 409 echo); this file only records the Android-side mapping.
+
+What each protocol version added, as this client meets it:
+
+- **3** added HAPTIC_AUDIO 0x0015. It plays into a USB DualSense's own
+  4-channel endpoint as a second quad `AudioTrack` beside the speaker one
+  (`source/audio/SpeakerPlayoutPlan.kt`, `SpeakerPlayout.kt`); a slot that
+  cannot play the waveform advertises no `hapticAudio` cap and takes the
+  satellite's rumble reduction instead.
+- **4** added the extended-buttons word behind the INPUT report (17 bytes
+  instead of 13) and the descriptor cap `extendedButtons`. See "Extended
+  buttons and the Steam Controller's extras" below.
 
 ## Where the contract lands in this app
 
@@ -25,7 +33,49 @@ satellite's rumble reduction instead (see `core/net/DishProtocol.kt`). The forme
 | Host capabilities (`GET /api/server/capabilities`) pre-bind read | `repository/SatelliteCapabilitiesRepository.kt` → host layer + `source/store/SatelliteHostRuntimeStore.kt` |
 | Feedback return paths (RUMBLE 0x0009, LIGHTBAR 0x000D, TRIGGER_EFFECTS 0x0010, PLAYER_LEDS 0x0011) | native decode in `satellite_jni.cpp` → `hotpath/input/RumbleBridge.kt` + `hotpath/input/FeedbackBridge.kt` → `RumbleRouter` / `FeedbackRouter` |
 | Controller audio down (SPEAKER_AUDIO 0x0013, HAPTIC_AUDIO 0x0015) | native reorder + Opus decode per lane in `satellite_jni.cpp` → `hotpath/audio/SpeakerAudioBridge.kt` → `source/audio/SpeakerEngine.kt`, one `AudioTrack` per slot and lane at the pad endpoint's own width |
+| Extended buttons (INPUT 0x0001, 17 B on a session settled at protocol 4) | the word is sourced per pad in `app/src/main/cpp/gamepad_input.cpp` and `usb_parsers.cpp`, held in `slot_table.cpp`, and framed by `send_path.cpp` from the session's settled version; the cap `extendedButtons` is written by `core/net/ControllerDescriptor.kt` |
+| Controller database (`https://dish.tinkernorth.com/controllers/v1/`) | the fleet's contract is `dish-website/docs/controller-db.md`; the bundled copy is `app/src/main/assets/controllers/v1/`, read through `core/controllerdb/`, fetched by `source/controllerdb/HttpsControllerDbGateway.kt` and `ControllerDbUpdater.kt`, and turned into the native tables at build time by `scripts/gen_controller_tables.py` |
+| Connection diagnostics (`GET /api/connections/{id}/diagnostics`, Satellite 2.3.0) | `core/net/SatelliteHttpClient.getConnectionDiagnostics`, asked for while a support report is prepared; the answer becomes the host's `snapshot` in `composer/BundleHostJson.kt` |
 | Outbound telemetry destinations (satellite UDP vs Moonlight control stream) | `source/connection/TelemetrySink.kt`, resolved per slot by `composer/PhysicalReachabilityComposer.kt` |
+
+## Extended buttons and the Steam Controller's extras
+
+`wButtons` is full, so protocol 4 gives INPUT a second word, `extButtons`
+(u32 little-endian), for the buttons an XInput pad does not have: the four
+paddles, `misc1` (Capture, Share, the Steam "..." button), the Steam
+Controller's trackpad clicks, trigger clicks and stick touches. The bits are
+levels, like `wButtons`. The native send path frames 17 bytes on a session
+settled at 4 and 13 below that, so a slot that talks to an older satellite
+loses only the tail. A slot advertises the `extendedButtons` cap only when its
+pad sources the word. The bit table lives in the satellite's contract
+("Extended buttons").
+
+The Steam Controller (2015 over USB or Bluetooth, 2026 over Bluetooth LE) is
+the pad with the most extras. Each trackpad has a per-slot pick, Right stick,
+Touchpad, Mouse or Off (`ui/common/TrackpadPickLabels.kt`); a click rides
+`extButtons` as `leftPadClick` or `rightPadClick` only when the pick does not
+consume it. The desktop clients never offer the Mouse pick.
+
+## Controller database
+
+Every client and the satellite share one controller database. This client
+ships a copy, checks the website's manifest ten seconds after launch and every
+six hours (`ControllerDbUpdater`), downloads a newer version only when the
+manifest names one, and uses it only when every file matches the sizes and
+SHA-256 values the manifest publishes; otherwise it keeps the copy it has. The
+schema, the manifest and the rules for what a record may say are
+`dish-website/docs/controller-db.md`.
+
+## Diagnostics
+
+`GET /api/connections/{id}/diagnostics` is authenticated like the reconcile
+read and returns the satellite's own redacted view of one session
+(`satellite-connection-diagnostics.v1`). The client asks for it only when the
+person taps Report a problem, with a deadline of its own, and files the answer
+as the host's `snapshot` in its `dish-diagnostics.v1` bundle
+(`dish-website/docs/diagnostics-bundle.md`). A 404 to a valid proof means an
+older satellite, and the client falls back to what it already read from
+`/api/server/capabilities`. Nothing on UDP changes.
 
 ## Client behaviours required by the contract
 

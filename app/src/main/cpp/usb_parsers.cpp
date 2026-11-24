@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 #include "usb_parsers.h"
+#include "bits.h"
 #include "known_devices.generated.h"
 #include "wire_encoders.h"
 
@@ -364,18 +365,20 @@ namespace {
 #ifdef __ANDROID__
 constexpr const char* kLogTag = "SatelliteUsbParse";
 
-__attribute__((format(printf, 1, 2))) void logInfo(const char* fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    __android_log_vprint(ANDROID_LOG_INFO, kLogTag, fmt, args);
-    va_end(args);
+inline void logInfo(const char* message) {
+    __android_log_print(ANDROID_LOG_INFO, kLogTag, "%s", message);
 }
 
-__attribute__((format(printf, 1, 2))) void logError(const char* fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    __android_log_vprint(ANDROID_LOG_ERROR, kLogTag, fmt, args);
-    va_end(args);
+template <typename... Args> void logInfo(const char* fmt, const Args&... args) {
+    __android_log_print(ANDROID_LOG_INFO, kLogTag, fmt, args...);
+}
+
+inline void logError(const char* message) {
+    __android_log_print(ANDROID_LOG_ERROR, kLogTag, "%s", message);
+}
+
+template <typename... Args> void logError(const char* fmt, const Args&... args) {
+    __android_log_print(ANDROID_LOG_ERROR, kLogTag, fmt, args...);
 }
 
 // WRITE_OK, WRITE_ERR_SHORT, or the errno the transfer failed with.
@@ -418,7 +421,7 @@ int32_t sendFeatureReport(const int fd, const int interfaceNumber, const uint8_t
         struct usbdevfs_ctrltransfer ct = {};
         ct.bRequestType = USB_REQUEST_TYPE_OUT_CLASS_INTERFACE;
         ct.bRequest = USB_REQUEST_SET_REPORT;
-        ct.wValue = (uint16_t)((HID_REPORT_TYPE_FEATURE << 8) | reportId);
+        ct.wValue = hidControlValue(HID_REPORT_TYPE_FEATURE, reportId);
         ct.wIndex = (uint16_t)interfaceNumber;
         ct.wLength = (uint16_t)sizeof(buf);
         ct.timeout = USB_CONTROL_TIMEOUT_MS;
@@ -454,30 +457,29 @@ constexpr int32_t kU8AxisCenter = 128;
 // 255 * 257 = 65535: an 8-bit axis stretched over the whole 16-bit range.
 constexpr int32_t kU8ToI16 = 257;
 constexpr int32_t kWireAxisSpan = 65535;
-constexpr int kHighByteShift = 8;
-constexpr int kNibbleShift = 4;
-constexpr uint8_t kLowNibbleMask = 0x0F;
+constexpr uint32_t kHighByteShift = 8;
+constexpr uint32_t kNibbleShift = 4;
+constexpr uint32_t kLowNibbleMask = 0x0F;
 
 int16_t clampI16(const int64_t v) { return (int16_t)std::clamp(v, kAxisMin, kAxisMax); }
 
-uint8_t highByte(const uint16_t v) { return (uint8_t)(v >> kHighByteShift); }
+uint8_t highByte(const uint16_t v) { return dish_bits::byteOf(dish_bits::u32(v), 1U); }
 
 int16_t rdLe16(const uint8_t* b, const int off) {
-    return (int16_t)((uint16_t)b[off] | ((uint16_t)b[off + 1] << kHighByteShift));
+    return dish_bits::asInt16(dish_bits::loadLe16(b + off));
 }
 
-uint32_t rdLe24(const uint8_t* b) {
-    return (uint32_t)b[0] | ((uint32_t)b[1] << kHighByteShift) |
-           ((uint32_t)b[2] << (2 * kHighByteShift));
-}
+uint32_t rdLe24(const uint8_t* b) { return dish_bits::loadLe24(b); }
 
-uint32_t rdLe32(const uint8_t* b) { return rdLe24(b) | ((uint32_t)b[3] << (3 * kHighByteShift)); }
+uint32_t rdLe32(const uint8_t* b) { return dish_bits::loadLe32(b); }
 
 // Two 12-bit values packed little-endian into three bytes: the first is [0] plus the low nibble of
 // [1], the second the high nibble of [1] plus [2].
 void unpackTwo12Bit(const uint8_t* p, uint16_t& first, uint16_t& second) {
-    first = (uint16_t)((uint16_t)p[0] | (((uint16_t)p[1] & kLowNibbleMask) << kHighByteShift));
-    second = (uint16_t)(((uint16_t)p[1] >> kNibbleShift) | ((uint16_t)p[2] << kNibbleShift));
+    first = dish_bits::low16(dish_bits::u32(p[0]) |
+                             ((dish_bits::u32(p[1]) & kLowNibbleMask) << kHighByteShift));
+    second = dish_bits::low16((dish_bits::u32(p[1]) >> kNibbleShift) |
+                              (dish_bits::u32(p[2]) << kNibbleShift));
 }
 
 int16_t scaleU8Centered(const uint8_t v, const bool invert) {
@@ -591,8 +593,9 @@ int16_t ds4AccelAxisToWire(const int32_t raw, const PsImuCalib& c, const int axi
 }
 
 uint16_t setDpadFromHat(const uint16_t buttons, const uint8_t hat) {
-    const uint16_t withoutDpad = (uint16_t)(buttons & ~XUSB_DPAD_MASK);
-    const int direction = (int)(hat & kLowNibbleMask);
+    const uint16_t withoutDpad =
+        dish_bits::low16(dish_bits::u32(buttons) & ~dish_bits::u32(XUSB_DPAD_MASK));
+    const int direction = static_cast<int>(dish_bits::u32(hat) & kLowNibbleMask);
     return (uint16_t)(withoutDpad | hatDirectionBits(direction));
 }
 
@@ -675,7 +678,8 @@ constexpr ButtonBit kGipDpadByteBits[] = {
 };
 
 uint8_t gipTriggerToXusb(const uint8_t lo, const uint8_t hi) {
-    const uint16_t raw = (uint16_t)((uint16_t)lo | ((uint16_t)hi << kHighByteShift));
+    const uint16_t raw =
+        dish_bits::low16(dish_bits::u32(lo) | (dish_bits::u32(hi) << kHighByteShift));
     const uint16_t clamped = std::min(raw, kGipTriggerMax);
     return (uint8_t)((clamped * kTriggerMax) / kGipTriggerMax);
 }
@@ -688,7 +692,7 @@ bool applyXboxVirtualKey(const uint8_t* buf, DeviceState& s, ParserState& st) {
     if (st.xboxGuideHeld) {
         s.wButtons |= XUSB_GUIDE;
     } else {
-        s.wButtons = (uint16_t)(s.wButtons & ~XUSB_GUIDE);
+        s.wButtons = dish_bits::low16(dish_bits::u32(s.wButtons) & ~dish_bits::u32(XUSB_GUIDE));
     }
     return true;
 }
@@ -777,7 +781,7 @@ constexpr uint8_t kSonyTenthsMask = 0x0F;
 constexpr uint8_t kDs4CableBit = 0x10;
 constexpr uint8_t kSonyTenthsStillCharging = 10;
 constexpr uint8_t kSonyTenthsFull = 11;
-constexpr int kDs5BatteryStateShift = 4;
+constexpr uint32_t kDs5BatteryStateShift = 4;
 constexpr uint8_t kDs5BatteryDischarging = 0x0;
 constexpr uint8_t kDs5BatteryCharging = 0x1;
 constexpr uint8_t kDs5BatteryFull = 0x2;
@@ -817,14 +821,15 @@ void setBatteryUnknown(DeviceState& s) {
 // hid-playstation's status[0]: low nibble the charge in tenths, 0x10 the cable. With the cable in,
 // 10 is still charging, 11 is full, and 12..15 are the firmware's error states.
 void decodeDs4Battery(const uint8_t status, DeviceState& s) {
-    const uint8_t tenths = (uint8_t)(status & kSonyTenthsMask);
+    const auto tenths = static_cast<uint8_t>(status & kSonyTenthsMask);
     const bool cableIn = (status & kDs4CableBit) != 0;
     s.batteryValid = true;
     if (!cableIn) return setBattery(s, sonyTenthsToPercent(tenths), PAD_BATTERY_STATUS_DISCHARGING);
 
     const bool stillCharging = tenths <= kSonyTenthsStillCharging;
-    if (stillCharging)
+    if (stillCharging) {
         return setBattery(s, sonyTenthsToPercent(tenths), PAD_BATTERY_STATUS_CHARGING);
+    }
 
     const bool full = tenths == kSonyTenthsFull;
     if (full) return setBattery(s, (uint8_t)kPercentFull, PAD_BATTERY_STATUS_FULL);
@@ -834,8 +839,8 @@ void decodeDs4Battery(const uint8_t status, DeviceState& s) {
 // hid-playstation's status: low nibble the charge in tenths, high nibble the state. 0xA/0xB are a
 // temperature or voltage fault and 0xF a charging fault; a fault has no charge worth showing.
 void decodeDualSenseBattery(const uint8_t status, DeviceState& s) {
-    const uint8_t tenths = (uint8_t)(status & kSonyTenthsMask);
-    const uint8_t state = (uint8_t)(status >> kDs5BatteryStateShift);
+    const auto tenths = static_cast<uint8_t>(status & kSonyTenthsMask);
+    const uint8_t state = dish_bits::lowByte(dish_bits::u32(status) >> kDs5BatteryStateShift);
     s.batteryValid = true;
     switch (state) {
     case kDs5BatteryDischarging:
@@ -913,10 +918,16 @@ constexpr uint8_t kDs5EdgeRightPaddleBit = 0x80;
 
 uint32_t dualSenseEdgeExtendedButtons(const uint8_t misc) {
     uint32_t word = 0;
-    if (misc & kDs5EdgeLeftFnBit) word |= dish_wire::EXT_BUTTON_LEFT_PADDLE2;
-    if (misc & kDs5EdgeRightFnBit) word |= dish_wire::EXT_BUTTON_RIGHT_PADDLE2;
-    if (misc & kDs5EdgeLeftPaddleBit) word |= dish_wire::EXT_BUTTON_LEFT_PADDLE1;
-    if (misc & kDs5EdgeRightPaddleBit) word |= dish_wire::EXT_BUTTON_RIGHT_PADDLE1;
+    if (dish_bits::anyBit(misc, kDs5EdgeLeftFnBit)) { word |= dish_wire::EXT_BUTTON_LEFT_PADDLE2; }
+    if (dish_bits::anyBit(misc, kDs5EdgeRightFnBit)) {
+        word |= dish_wire::EXT_BUTTON_RIGHT_PADDLE2;
+    }
+    if (dish_bits::anyBit(misc, kDs5EdgeLeftPaddleBit)) {
+        word |= dish_wire::EXT_BUTTON_LEFT_PADDLE1;
+    }
+    if (dish_bits::anyBit(misc, kDs5EdgeRightPaddleBit)) {
+        word |= dish_wire::EXT_BUTTON_RIGHT_PADDLE1;
+    }
     return word;
 }
 
@@ -981,7 +992,8 @@ uint16_t decodeSwitchProButtons(const uint8_t right, const uint8_t shared, const
     const uint16_t rightSide = buttonsFromByte(right, kSwitchRightByteBits);
     const uint16_t middle = buttonsFromByte(shared, kSwitchSharedByteBits);
     const uint16_t leftSide = buttonsFromByte(left, kSwitchLeftByteBits);
-    return (uint16_t)(rightSide | middle | leftSide);
+    return dish_bits::low16(dish_bits::u32(rightSide) | dish_bits::u32(middle) |
+                            dish_bits::u32(leftSide));
 }
 
 bool isSwitchInputReport(const uint8_t* buf, const size_t len) {
@@ -1007,14 +1019,14 @@ void decodeSwitchRightStick(const uint8_t* buf, ParserState& sticks, DeviceState
 // hid-nintendo's bat_con: bits 7..5 the charge in five steps (empty, critical, low, medium,
 // full), bit 4 charging, bit 0 host-powered. The percent is the step's midpoint, the same coarse
 // number the framework shows for this pad.
-constexpr int kSwitchBatteryStepShift = 5;
+constexpr uint32_t kSwitchBatteryStepShift = 5;
 constexpr uint8_t kSwitchChargingBit = 0x10;
 constexpr uint8_t kSwitchHostPoweredBit = 0x01;
 constexpr uint8_t kSwitchBatteryStepPercent[] = {5, 25, 50, 75, 100};
 constexpr uint8_t kSwitchBatteryFullStep = 4;
 
 void decodeSwitchProBattery(const uint8_t batCon, DeviceState& s) {
-    const uint8_t step = (uint8_t)(batCon >> kSwitchBatteryStepShift);
+    const uint8_t step = dish_bits::lowByte(dish_bits::u32(batCon) >> kSwitchBatteryStepShift);
     const bool charging = (batCon & kSwitchChargingBit) != 0;
     const bool hostPowered = (batCon & kSwitchHostPoweredBit) != 0;
     const bool stepIsKnown = step <= kSwitchBatteryFullStep;
@@ -1081,9 +1093,10 @@ bool decodeSwitchProUsb(const uint8_t* buf, const size_t len, DeviceState& s, Pa
     const uint8_t leftByte = buf[kSwitchLeftByte];
 
     s.wButtons = decodeSwitchProButtons(rightByte, sharedByte, leftByte);
-    s.extButtons = (sharedByte & kSwitchCaptureBit) ? dish_wire::EXT_BUTTON_MISC1 : 0;
-    s.bLT = (leftByte & kSwitchZlBit) ? kTriggerMax : 0;
-    s.bRT = (rightByte & kSwitchZrBit) ? kTriggerMax : 0;
+    s.extButtons =
+        dish_bits::anyBit(sharedByte, kSwitchCaptureBit) ? dish_wire::EXT_BUTTON_MISC1 : 0;
+    s.bLT = dish_bits::anyBit(leftByte, kSwitchZlBit) ? kTriggerMax : 0;
+    s.bRT = dish_bits::anyBit(rightByte, kSwitchZrBit) ? kTriggerMax : 0;
 
     decodeSwitchLeftStick(buf, sticks, s);
     decodeSwitchRightStick(buf, sticks, s);
@@ -1114,10 +1127,10 @@ constexpr uint8_t kN64LeftZBit = 0x80;
 
 uint8_t n64CButtons(const uint8_t right, const uint8_t shared) {
     uint8_t c = 0;
-    if (right & kN64RightCUpBit) c |= gamepad::N64_C_UP;
-    if (right & kN64RightCDownBit) c |= gamepad::N64_C_DOWN;
-    if (right & kN64RightCLeftBit) c |= gamepad::N64_C_LEFT;
-    if (shared & kN64SharedCRightBit) c |= gamepad::N64_C_RIGHT;
+    if (dish_bits::anyBit(right, kN64RightCUpBit)) c |= gamepad::N64_C_UP;
+    if (dish_bits::anyBit(right, kN64RightCDownBit)) c |= gamepad::N64_C_DOWN;
+    if (dish_bits::anyBit(right, kN64RightCLeftBit)) c |= gamepad::N64_C_LEFT;
+    if (dish_bits::anyBit(shared, kN64SharedCRightBit)) c |= gamepad::N64_C_RIGHT;
     return c;
 }
 
@@ -1131,9 +1144,10 @@ bool decodeSwitchN64Usb(const uint8_t* buf, const size_t len, DeviceState& s, Pa
     const uint16_t rightSide = buttonsFromByte(rightByte, kN64RightByteBits);
     const uint16_t middle = buttonsFromByte(sharedByte, kN64SharedByteBits);
     const uint16_t leftSide = buttonsFromByte(leftByte, kN64LeftByteBits);
-    s.wButtons = (uint16_t)(rightSide | middle | leftSide);
-    s.bLT = (leftByte & kN64LeftZBit) ? kTriggerMax : 0;
-    s.bRT = (sharedByte & kN64SharedZrBit) ? kTriggerMax : 0;
+    s.wButtons = dish_bits::low16(dish_bits::u32(rightSide) | dish_bits::u32(middle) |
+                                  dish_bits::u32(leftSide));
+    s.bLT = dish_bits::anyBit(leftByte, kN64LeftZBit) ? kTriggerMax : 0;
+    s.bRT = dish_bits::anyBit(sharedByte, kN64SharedZrBit) ? kTriggerMax : 0;
 
     decodeSwitchLeftStick(buf, sticks, s);
     gamepad::applyCButtonStick(s, n64CButtons(rightByte, sharedByte));
@@ -1226,7 +1240,7 @@ constexpr int kSteamAccelOffset = 28;
 constexpr int kSteamGyroOffset = 34;
 constexpr int32_t kSteamTriggerMaxAnalog = 26000;
 // The 8-bit trigger byte replicated into the 15-bit scale SDL reads the pad at.
-constexpr int kSteamTriggerWidenShift = 7;
+constexpr uint32_t kSteamTriggerWidenShift = 7;
 constexpr int64_t kQ16One = 65536;
 // 15 degrees in Q16; the pads sit rotated on the shell and SDL applies the same correction.
 constexpr int64_t kSteamPadCos = 63303;
@@ -1242,7 +1256,8 @@ bool isSteamPacket(const uint8_t* buf, const uint8_t type) {
 }
 
 uint8_t steamTriggerToWire(const uint8_t raw) {
-    const int32_t widened = ((int32_t)raw << kSteamTriggerWidenShift) | raw;
+    const int32_t widened =
+        dish_bits::asInt32((dish_bits::u32(raw) << kSteamTriggerWidenShift) | dish_bits::u32(raw));
     const int32_t clamped = std::min(widened, kSteamTriggerMaxAnalog);
     return (uint8_t)((clamped * kTriggerMax) / kSteamTriggerMaxAnalog);
 }
@@ -1270,19 +1285,19 @@ int16_t steamAccelToWire(const int32_t raw) {
 
 uint16_t decodeSteamButtons(const uint32_t btn) {
     uint16_t buttons = 0;
-    if (btn & kSteamSouth) buttons |= XUSB_A;
-    if (btn & kSteamEast) buttons |= XUSB_B;
-    if (btn & kSteamWest) buttons |= XUSB_X;
-    if (btn & kSteamNorth) buttons |= XUSB_Y;
-    if (btn & kSteamLeftBumper) buttons |= XUSB_LB;
-    if (btn & kSteamRightBumper) buttons |= XUSB_RB;
-    if (btn & kSteamMenu) buttons |= XUSB_BACK;
-    if (btn & kSteamEscape) buttons |= XUSB_START;
-    if (btn & kSteamGuide) buttons |= XUSB_GUIDE;
-    if (btn & kSteamDpadUp) buttons |= XUSB_DPAD_UP;
-    if (btn & kSteamDpadDown) buttons |= XUSB_DPAD_DOWN;
-    if (btn & kSteamDpadLeft) buttons |= XUSB_DPAD_LEFT;
-    if (btn & kSteamDpadRight) buttons |= XUSB_DPAD_RIGHT;
+    if (dish_bits::anyBit(btn, kSteamSouth)) buttons |= XUSB_A;
+    if (dish_bits::anyBit(btn, kSteamEast)) buttons |= XUSB_B;
+    if (dish_bits::anyBit(btn, kSteamWest)) buttons |= XUSB_X;
+    if (dish_bits::anyBit(btn, kSteamNorth)) buttons |= XUSB_Y;
+    if (dish_bits::anyBit(btn, kSteamLeftBumper)) buttons |= XUSB_LB;
+    if (dish_bits::anyBit(btn, kSteamRightBumper)) buttons |= XUSB_RB;
+    if (dish_bits::anyBit(btn, kSteamMenu)) buttons |= XUSB_BACK;
+    if (dish_bits::anyBit(btn, kSteamEscape)) buttons |= XUSB_START;
+    if (dish_bits::anyBit(btn, kSteamGuide)) buttons |= XUSB_GUIDE;
+    if (dish_bits::anyBit(btn, kSteamDpadUp)) buttons |= XUSB_DPAD_UP;
+    if (dish_bits::anyBit(btn, kSteamDpadDown)) buttons |= XUSB_DPAD_DOWN;
+    if (dish_bits::anyBit(btn, kSteamDpadLeft)) buttons |= XUSB_DPAD_LEFT;
+    if (dish_bits::anyBit(btn, kSteamDpadRight)) buttons |= XUSB_DPAD_RIGHT;
     return buttons;
 }
 
@@ -1290,10 +1305,14 @@ uint16_t decodeSteamButtons(const uint32_t btn) {
 // trigger clicks. The pad clicks are the trackpad router's.
 uint32_t steamExtendedButtons(const uint32_t btn) {
     uint32_t word = 0;
-    if (btn & kSteamBackLeft) word |= dish_wire::EXT_BUTTON_LEFT_PADDLE1;
-    if (btn & kSteamBackRight) word |= dish_wire::EXT_BUTTON_RIGHT_PADDLE1;
-    if (btn & kSteamLeftTriggerClick) word |= dish_wire::EXT_BUTTON_LEFT_TRIGGER_CLICK;
-    if (btn & kSteamRightTriggerClick) word |= dish_wire::EXT_BUTTON_RIGHT_TRIGGER_CLICK;
+    if (dish_bits::anyBit(btn, kSteamBackLeft)) word |= dish_wire::EXT_BUTTON_LEFT_PADDLE1;
+    if (dish_bits::anyBit(btn, kSteamBackRight)) word |= dish_wire::EXT_BUTTON_RIGHT_PADDLE1;
+    if (dish_bits::anyBit(btn, kSteamLeftTriggerClick)) {
+        word |= dish_wire::EXT_BUTTON_LEFT_TRIGGER_CLICK;
+    }
+    if (dish_bits::anyBit(btn, kSteamRightTriggerClick)) {
+        word |= dish_wire::EXT_BUTTON_RIGHT_TRIGGER_CLICK;
+    }
     return word;
 }
 
@@ -1339,7 +1358,7 @@ void trackSteamLeftStick(const uint8_t* buf, const uint32_t btn, ParserState& st
         st.steamStickX = 0;
         st.steamStickY = 0;
     }
-    if (btn & kSteamStickButton) buttons |= XUSB_THUMB_L;
+    if (dish_bits::anyBit(btn, kSteamStickButton)) buttons |= XUSB_THUMB_L;
 }
 
 void publishSteamMotion(const SteamImu& imu, DeviceState& s) {
@@ -1349,7 +1368,11 @@ void publishSteamMotion(const SteamImu& imu, DeviceState& s) {
     const int16_t gx = imu.gyro[0];
     const int16_t gy = imu.gyro[1];
     const int16_t gz = imu.gyro[2];
-    const bool imuIsAlive = (ax | ay | az | gx | gy | gz) != 0;
+    const uint32_t imuBits =
+        dish_bits::u32(dish_bits::asUint16(ax)) | dish_bits::u32(dish_bits::asUint16(ay)) |
+        dish_bits::u32(dish_bits::asUint16(az)) | dish_bits::u32(dish_bits::asUint16(gx)) |
+        dish_bits::u32(dish_bits::asUint16(gy)) | dish_bits::u32(dish_bits::asUint16(gz));
+    const bool imuIsAlive = imuBits != 0U;
     if (!imuIsAlive) return;
 
     s.gyroX = steamGyroToWire(gx);
@@ -1522,7 +1545,8 @@ void stepOverSteamBleChunk(SteamBleChunks& c, const uint32_t chunk, const size_t
 // What a packet's chunks say over the held state, kept only when the packet holds every chunk it
 // names.
 bool readSteamBleChunks(const uint8_t* packet, const size_t len, SteamBleHeld& held) {
-    const uint32_t mask = (packet[0] & kSteamBleMaskLowNibble) | ((uint32_t)packet[1] << 8);
+    const uint32_t mask =
+        (dish_bits::u32(packet[0]) & kSteamBleMaskLowNibble) | (dish_bits::u32(packet[1]) << 8U);
     SteamBleChunks c{packet, len, mask};
     SteamBleHeld next = held;
     readSteamBleButtons(c, next);
@@ -1543,7 +1567,7 @@ bool readSteamBleChunks(const uint8_t* packet, const size_t len, SteamBleHeld& h
 // are chunks of their own, so the stick's click is only ever its own bit.
 void publishSteamBleHeld(const SteamBleHeld& held, DeviceState& s, ParserState& st) {
     uint16_t buttons = decodeSteamButtons(held.buttons);
-    if (held.buttons & kSteamStickButton) buttons |= XUSB_THUMB_L;
+    if (dish_bits::anyBit(held.buttons, kSteamStickButton)) buttons |= XUSB_THUMB_L;
     s.wButtons = buttons;
     s.extButtons = steamExtendedButtons(held.buttons);
     s.bLT = steamTriggerToWire(held.leftTrigger);
@@ -1965,7 +1989,7 @@ bool decodeReport(const Parser p, const uint8_t* buf, const size_t len, DeviceSt
     case Parser::XBOX_ONE_GIP:
         return sticks != nullptr && decodeXboxOneGip(buf, len, s, *sticks);
     case Parser::DUALSHOCK4:
-        return decodeDualShock4(buf, len, s, sticks ? &sticks->psImu : nullptr);
+        return decodeDualShock4(buf, len, s, sticks != nullptr ? &sticks->psImu : nullptr);
     case Parser::DUALSENSE:
         return decodeDualSense(buf, len, s, sticks);
     case Parser::SWITCH_PRO_USB:
@@ -2082,8 +2106,8 @@ bool decodeGenericHidGamepad(const uint8_t* buf, const size_t len, DeviceState& 
     const uint8_t btnLo = buf[kHidButtonsLoByte];
     const uint8_t btnHi = buf[kHidButtonsHiByte];
     s.wButtons = decodeGenericHidButtons(btnLo, btnHi);
-    s.bLT = (btnHi & kHidLeftTriggerBit) ? kTriggerMax : 0;
-    s.bRT = (btnHi & kHidRightTriggerBit) ? kTriggerMax : 0;
+    s.bLT = dish_bits::anyBit(btnHi, kHidLeftTriggerBit) ? kTriggerMax : 0;
+    s.bRT = dish_bits::anyBit(btnHi, kHidRightTriggerBit) ? kTriggerMax : 0;
     return true;
 }
 
@@ -2139,10 +2163,10 @@ constexpr InitPacket kGipSSeq[] = {
     {kGipAuthDone, sizeof(kGipAuthDone)},
 };
 
-// The Switch Pro's USB commands, each a full 64-byte packet as SDL writes them (the 8BitDo USB
-// Wireless Adapter 2 ignores a two-byte write): the handshake (0x80 0x02; the Pro answers 0x81 0x02
-// on its IN endpoint, which is never read), the switch of its link to 3 Mbit (0x80 0x03) and the
-// timeout disable (0x80 0x04) that keeps the pad reporting.
+// The Switch start's USB commands, each a full 64-byte packet as SDL writes them (the 8BitDo USB
+// Wireless Adapter 2 ignores a two-byte write): the handshake (0x80 0x02, answered 0x81 0x02 on the
+// IN endpoint), the switch of the link to 3 Mbit (0x80 0x03, answered 0x81 0x03) and the timeout
+// disable (0x80 0x04) that keeps the pad reporting.
 constexpr size_t kSwitchUsbPacketBytes = 64;
 constexpr uint8_t kSwitchHandshake[kSwitchUsbPacketBytes] = {0x80, 0x02};
 constexpr uint8_t kSwitchThreeMegabit[kSwitchUsbPacketBytes] = {0x80, 0x03};
@@ -2167,45 +2191,38 @@ constexpr uint8_t kSwitchEnableImu[] = {
 
 constexpr unsigned kSwitchStatusTimeoutMs = 100;
 constexpr unsigned kSwitchModeTimeoutMs = 200;
-constexpr unsigned kSwitchInitSettleUs = 40000;
 
-struct SwitchInitStep {
+struct SwitchStartPacket {
     InitPacket packet;
     unsigned timeoutMs;
-    unsigned settleUs;
-    bool isFatal;
+    bool isUsbCommand;
     const char* what;
 };
 
-// hid-nintendo's and SDL's USB order: a Pro on a cable answers the handshake and streams nothing
-// until the timeout disable follows a handshake sent at 3 Mbit. A fatal step failing leaves the pad
-// unusable, so the sequence stops; the others cost a feature at most.
 template <size_t N>
-constexpr SwitchInitStep switchStep(const uint8_t (&packet)[N], const unsigned timeoutMs,
-                                    const unsigned settleUs, const bool isFatal, const char* what) {
-    return {{packet, N}, timeoutMs, settleUs, isFatal, what};
+constexpr SwitchStartPacket switchPacket(const uint8_t (&packet)[N], const unsigned timeoutMs,
+                                         const bool isUsbCommand, const char* what) {
+    return {{packet, N}, timeoutMs, isUsbCommand, what};
 }
 
-constexpr SwitchInitStep kSwitchInitSequence[] = {
-    switchStep(kSwitchHandshake, kSwitchStatusTimeoutMs, kSwitchInitSettleUs, true, "handshake"),
-    switchStep(kSwitchThreeMegabit, kSwitchStatusTimeoutMs, kSwitchInitSettleUs, false,
-               "3 Mbit write"),
-    switchStep(kSwitchHandshake, kSwitchStatusTimeoutMs, kSwitchInitSettleUs, false,
-               "handshake at 3 Mbit"),
-    switchStep(kSwitchDisableTimeout, kSwitchStatusTimeoutMs, kSwitchInitSettleUs, false,
-               "disable-timeout write"),
-    switchStep(kSwitchSetReportMode, kSwitchModeTimeoutMs, kSwitchInitSettleUs, true,
-               "set-report-mode write"),
-    switchStep(kSwitchEnableVibration, kSwitchModeTimeoutMs, kSwitchInitSettleUs, false,
-               "enable-vibration write"),
-    switchStep(kSwitchEnableImu, kSwitchModeTimeoutMs, 0, false, "enable-IMU write"),
+// Indexed by SwitchStartStep.
+constexpr SwitchStartPacket kSwitchStartPackets[] = {
+    switchPacket(kSwitchHandshake, kSwitchStatusTimeoutMs, true, "handshake"),
+    switchPacket(kSwitchThreeMegabit, kSwitchStatusTimeoutMs, true, "3 Mbit write"),
+    switchPacket(kSwitchHandshake, kSwitchStatusTimeoutMs, true, "handshake at 3 Mbit"),
+    switchPacket(kSwitchDisableTimeout, kSwitchStatusTimeoutMs, true, "disable-timeout write"),
+    switchPacket(kSwitchSetReportMode, kSwitchModeTimeoutMs, false, "set-report-mode write"),
+    switchPacket(kSwitchEnableVibration, kSwitchModeTimeoutMs, false, "enable-vibration write"),
+    switchPacket(kSwitchEnableImu, kSwitchModeTimeoutMs, false, "enable-IMU write"),
 };
 
-template <size_t N> constexpr int countOf(const SwitchInitStep (&)[N]) { return (int)N; }
-
-bool switchInitStepExists(const int index) {
-    return index >= 0 && index < countOf(kSwitchInitSequence);
+const SwitchStartPacket& switchPacketOf(const SwitchStartStep step) {
+    return kSwitchStartPackets[static_cast<size_t>(step)];
 }
+
+constexpr uint8_t kSwitchUsbReply = 0x81;
+constexpr uint8_t kSwitchSubcommandReply = 0x21;
+constexpr size_t kSwitchReplyMinLen = 2;
 
 InitSequence gipSequenceFor(const InitKind init) {
     if (init == InitKind::XBOX_ONE_POWERON) return {kGipPowerOnSeq, countOf(kGipPowerOnSeq)};
@@ -2223,13 +2240,141 @@ size_t buildGipInitPacket(const InitKind init, const int index, const uint8_t se
     return len;
 }
 
-size_t buildSwitchInitPacket(const int index, uint8_t* out, const size_t outCap) {
-    if (!switchInitStepExists(index)) return 0;
-    return copyPacket(kSwitchInitSequence[index].packet, out, outCap);
+size_t buildSwitchStartPacket(const SwitchStartStep step, uint8_t* out, const size_t outCap) {
+    return copyPacket(switchPacketOf(step).packet, out, outCap);
 }
 
-bool switchInitStepIsFatal(const int index) {
-    return switchInitStepExists(index) && kSwitchInitSequence[index].isFatal;
+bool switchStartStepIsUsbCommand(const SwitchStartStep step) {
+    return switchPacketOf(step).isUsbCommand;
+}
+
+const char* switchStartStepName(const SwitchStartStep step) { return switchPacketOf(step).what; }
+
+unsigned switchStartWriteTimeoutMs(const SwitchStartStep step) {
+    return switchPacketOf(step).timeoutMs;
+}
+
+bool isSwitchFullReport(const uint8_t* buf, const size_t len) {
+    return len >= kSwitchInputMinLen && buf[0] == kSwitchInputReport;
+}
+
+SwitchReply switchReplyOf(const uint8_t* buf, const size_t len) {
+    if (len < kSwitchReplyMinLen) return SwitchReply::NONE;
+    if (buf[0] == kSwitchSubcommandReply) return SwitchReply::SUBCOMMAND;
+    if (buf[0] != kSwitchUsbReply) return SwitchReply::NONE;
+    switch (buf[1]) {
+    case 0x02:
+        return SwitchReply::HANDSHAKE;
+    case 0x03:
+        return SwitchReply::HIGH_SPEED;
+    case 0x04:
+        return SwitchReply::TIMEOUT_DISABLED;
+    default:
+        return SwitchReply::NONE;
+    }
+}
+
+namespace {
+
+bool hasSeen(const int64_t at) { return at != NEVER_SENT_MS; }
+
+bool followsInSequence(const SwitchStartStep step, SwitchStartStep& next) {
+    switch (step) {
+    case SwitchStartStep::HANDSHAKE:
+        next = SwitchStartStep::HIGH_SPEED;
+        return true;
+    case SwitchStartStep::HIGH_SPEED:
+        next = SwitchStartStep::HANDSHAKE_AT_HIGH_SPEED;
+        return true;
+    case SwitchStartStep::HANDSHAKE_AT_HIGH_SPEED:
+        next = SwitchStartStep::DISABLE_TIMEOUT;
+        return true;
+    case SwitchStartStep::DISABLE_TIMEOUT:
+        next = SwitchStartStep::REPORT_MODE;
+        return true;
+    case SwitchStartStep::REPORT_MODE:
+        next = SwitchStartStep::ENABLE_VIBRATION;
+        return true;
+    case SwitchStartStep::ENABLE_VIBRATION:
+        next = SwitchStartStep::ENABLE_IMU;
+        return true;
+    case SwitchStartStep::ENABLE_IMU:
+        return false;
+    }
+    return false;
+}
+
+SwitchReply replyTo(const SwitchStartStep step) {
+    switch (step) {
+    case SwitchStartStep::HANDSHAKE:
+    case SwitchStartStep::HANDSHAKE_AT_HIGH_SPEED:
+        return SwitchReply::HANDSHAKE;
+    case SwitchStartStep::HIGH_SPEED:
+        return SwitchReply::HIGH_SPEED;
+    case SwitchStartStep::DISABLE_TIMEOUT:
+        return SwitchReply::TIMEOUT_DISABLED;
+    case SwitchStartStep::REPORT_MODE:
+    case SwitchStartStep::ENABLE_VIBRATION:
+    case SwitchStartStep::ENABLE_IMU:
+        return SwitchReply::SUBCOMMAND;
+    }
+    return SwitchReply::NONE;
+}
+
+} // namespace
+
+SwitchStartAction SwitchStart::due(const int64_t lastFullReportMs, const int64_t nowMs) const {
+    using Kind = SwitchStartAction::Kind;
+    const bool everStreamed = hasSeen(lastFullReportMs);
+    const bool streaming = everStreamed && nowMs - lastFullReportMs < SWITCH_STALL_MS;
+
+    if (hasNext_) {
+        // The pad streams since the last write: the rest of the 0x80 commands are not needed, and
+        // the one after the timeout disable would only unsettle it. Go on to the subcommands.
+        const bool streamsSinceLastWrite = everStreamed && lastFullReportMs >= sentMs_;
+        const bool skipsToSubcommands =
+            switchStartStepIsUsbCommand(next_) && sent_ && streamsSinceLastWrite;
+        const SwitchStartStep step = skipsToSubcommands ? SwitchStartStep::REPORT_MODE : next_;
+        const int64_t sinceSent = nowMs - sentMs_;
+        const bool repliedAndSettled = replied_ && sinceSent >= SWITCH_SETTLE_MS;
+        const bool settledAfterStream = skipsToSubcommands && sinceSent >= SWITCH_SETTLE_MS;
+        const bool ready =
+            !sent_ || repliedAndSettled || settledAfterStream || sinceSent >= SWITCH_REPLY_WAIT_MS;
+        return {ready ? Kind::SEND : Kind::WAIT, step};
+    }
+    if (streaming) {
+        // Streaming and nothing sent: the phone's own driver brought it up. No USB command, only
+        // the subcommands this app depends on.
+        if (!sent_) return {Kind::SEND, SwitchStartStep::REPORT_MODE};
+        return {Kind::STREAMING, SwitchStartStep::HANDSHAKE};
+    }
+    const bool inGrace = !everStreamed && nowMs - openedMs_ < SWITCH_GRACE_MS;
+    if (inGrace) return {Kind::WAIT, SwitchStartStep::HANDSHAKE};
+    if (!hasSeen(lastStartMs_)) return {Kind::SEND, SwitchStartStep::HANDSHAKE};
+    const bool quick = startsWithoutStream_ < SWITCH_QUICK_STARTS;
+    const int64_t interval = quick ? SWITCH_RETRY_MS : SWITCH_SLOW_RETRY_MS;
+    return {nowMs - lastStartMs_ >= interval ? Kind::SEND : Kind::WAIT, SwitchStartStep::HANDSHAKE};
+}
+
+void SwitchStart::noteSent(const SwitchStartStep step, const int64_t nowMs) {
+    sent_ = true;
+    sentMs_ = nowMs;
+    replied_ = false;
+    lastSent_ = step;
+    if (step == SwitchStartStep::HANDSHAKE) {
+        lastStartMs_ = nowMs;
+        startsWithoutStream_++;
+    }
+    hasNext_ = followsInSequence(step, next_);
+}
+
+void SwitchStart::noteReply(const SwitchReply reply) {
+    if (sent_ && reply != SwitchReply::NONE && reply == replyTo(lastSent_)) replied_ = true;
+}
+
+void SwitchStart::noteStreaming() {
+    startsWithoutStream_ = 0;
+    lastStartMs_ = NEVER_SENT_MS;
 }
 
 size_t buildGipAck(const uint8_t* report, const size_t len, uint8_t* out, const size_t outCap) {
@@ -2531,7 +2676,9 @@ bool rumbleIsRunning(const FeedbackState& st) { return st.strong != 0 || st.weak
 // pad, and pulse counts as lit.
 void reassertDs5MicMuteLed(const FeedbackState& st, uint8_t* out) {
     if (!st.ds5MicMuteLedSet) return;
-    out[kDs5ValidFlag1Byte] |= kDs5ValidFlag1MicMuteLed | kDs5ValidFlag1PowerSave;
+    out[kDs5ValidFlag1Byte] = dish_bits::lowByte(dish_bits::u32(out[kDs5ValidFlag1Byte]) |
+                                                 dish_bits::u32(kDs5ValidFlag1MicMuteLed) |
+                                                 dish_bits::u32(kDs5ValidFlag1PowerSave));
     out[kDs5MicMuteLedByte] = st.ds5MicMuteLed;
     const bool lampIsLit = st.ds5MicMuteLed != MIC_MUTE_LED_OFF;
     out[kDs5PowerSaveByte] = lampIsLit ? kDs5PowerSaveMicMute : 0x00;
@@ -2917,7 +3064,7 @@ int32_t writeHidOutputReport(const int fd, const int interfaceNumber, const uint
     struct usbdevfs_ctrltransfer ct = {};
     ct.bRequestType = USB_REQUEST_TYPE_OUT_CLASS_INTERFACE;
     ct.bRequest = USB_REQUEST_SET_REPORT;
-    ct.wValue = (uint16_t)((HID_REPORT_TYPE_OUTPUT << 8) | buf[0]);
+    ct.wValue = hidControlValue(HID_REPORT_TYPE_OUTPUT, buf[0]);
     ct.wIndex = (uint16_t)interfaceNumber;
     ct.wLength = (uint16_t)n;
     ct.timeout = USB_CONTROL_TIMEOUT_MS;
@@ -2974,38 +3121,30 @@ bool runGipInit(const int fd, const uint8_t epOut, const InitKind init, const in
     return true;
 }
 
-bool runSwitchInitStep(const int fd, const uint8_t epOut, const SwitchInitStep& step,
-                       const int64_t atMs, WriteVerdict& verdict) {
-    const int32_t err = bulkWrite(fd, epOut, step.packet.data, step.packet.len, step.timeoutMs);
-    verdict = writeVerdictOf(OutputRoute::INTERRUPT_OUT, epOut, step.packet.data, step.packet.len,
-                             err, atMs);
-    const bool sent = err == WRITE_OK;
-    if (!sent && step.isFatal) {
-        logError("Switch Pro: %s failed", step.what);
-        return false;
-    }
-    if (!sent) logInfo("Switch Pro: %s failed (non-fatal)", step.what);
-    if (step.settleUs != 0) usleep(step.settleUs);
-    return true;
-}
-
-bool runSwitchProHandshake(const int fd, const uint8_t epOut, const int64_t atMs,
+bool runSwitchProHandshake(const int, const uint8_t epOut, const int64_t atMs,
                            WriteVerdict& verdict) {
-    if (epOut == 0) {
-        const SwitchInitStep& first = kSwitchInitSequence[0];
-        verdict = writeVerdictOf(OutputRoute::NONE, 0, first.packet.data, first.packet.len,
-                                 WRITE_OK, atMs);
-        logError("Switch Pro: no OUT endpoint, cannot init");
-        return false;
-    }
-    for (const SwitchInitStep& step : kSwitchInitSequence) {
-        if (!runSwitchInitStep(fd, epOut, step, atMs, verdict)) return false;
-    }
-    logInfo("Switch Pro USB init sequence sent");
-    return true;
+    // Nothing is sent when the pad is claimed: SwitchStart decides from what the pad sends, once
+    // the poller reads the IN endpoint. Only the OUT endpoint is needed.
+    if (epOut != 0) return true;
+    const SwitchStartPacket& first = switchPacketOf(SwitchStartStep::HANDSHAKE);
+    verdict =
+        writeVerdictOf(OutputRoute::NONE, 0, first.packet.data, first.packet.len, WRITE_OK, atMs);
+    logError("Switch Pro: no OUT endpoint, cannot start");
+    return false;
 }
 
 } // namespace
+
+bool runSwitchStartStep(const int fd, const uint8_t epOut, const SwitchStartStep step,
+                        const int64_t atMs, WriteVerdict& verdict) {
+    const SwitchStartPacket& p = switchPacketOf(step);
+    const int32_t err = bulkWrite(fd, epOut, p.packet.data, p.packet.len, p.timeoutMs);
+    verdict =
+        writeVerdictOf(OutputRoute::INTERRUPT_OUT, epOut, p.packet.data, p.packet.len, err, atMs);
+    const bool sent = err == WRITE_OK;
+    if (!sent) logInfo("Switch Pro: %s failed (non-fatal)", p.what);
+    return sent;
+}
 
 // One OUT report, as built by the feedback builders: nothing to write is a refusal, not a no-op.
 bool writeOutReport(const int fd, const uint8_t epOut, const uint8_t* buf, const size_t n) {

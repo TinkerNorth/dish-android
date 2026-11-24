@@ -44,7 +44,7 @@ class SpeakerQueue {
     // oldest is exactly what the reorder window's gap handling covers.
     static constexpr size_t FRAMES = 8;
 
-    SpeakerQueue();
+    SpeakerQueue() = default;
     SpeakerQueue(const SpeakerQueue&) = delete;
     SpeakerQueue& operator=(const SpeakerQueue&) = delete;
 

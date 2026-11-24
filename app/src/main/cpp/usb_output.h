@@ -177,14 +177,14 @@ class OutputWorker {
     uint64_t droppedAcks() const { return droppedAcks_.load(std::memory_order_relaxed); }
 
   private:
-    enum Kind : uint32_t {
-        RUMBLE = 1u << 0,
-        TRIGGER_RUMBLE = 1u << 1,
-        LIGHTBAR = 1u << 2,
-        PLAYER_LEDS = 1u << 3,
-        TRIGGER_EFFECTS = 1u << 4,
-        MIC_LED = 1u << 5,
-        LINK = 1u << 6,
+    enum Kind : uint8_t {
+        RUMBLE = 1U << 0U,
+        TRIGGER_RUMBLE = 1U << 1U,
+        LIGHTBAR = 1U << 2U,
+        PLAYER_LEDS = 1U << 3U,
+        TRIGGER_EFFECTS = 1U << 4U,
+        MIC_LED = 1U << 5U,
+        LINK = 1U << 6U,
     };
 
     void announce(uint32_t kind);

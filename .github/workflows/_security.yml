@@ -1,229 +1,181 @@
 name: _security (reusable)
 
-# Reusable security workflow shared by all four TinkerNorth repos
-# (satellite, dish-android, dish-linux, dish-mac).
+# Shared security gates, byte-identical in every TinkerNorth repository: action-pin lint,
+# allowlist expiry, OSV-Scanner, dependency review, gitleaks. security.yml calls it on every
+# pull request, push to main and weekly; release.yml's `gates` job calls it on the tag.
 #
-# Callers invoke this with:
+# Source of truth: TinkerNorth/satellite/.github/workflows/_security.yml. A copy is synced
+# with `cp`, never edited in place; every per-repository difference is an input below.
 #
-#   jobs:
-#     security:
-#       uses: tinkernorth/satellite/.github/workflows/_security.yml@<pinned-sha>
-#       with:
-#         osv_scan_paths: '.'                 # comma- or newline-separated
-#         osv_config: 'osv-scanner.toml'      # optional, repo-relative
-#         gitleaks_enabled: true
-#         dependency_review_enabled: true
-#         action_pin_lint_enabled: true
-#         allowlist_expiry_enabled: true
+# The jobs run the repository's own copies of three shared scripts, so CI and
+# scripts/ci-local.sh run the same thing:
+#   scripts/check-action-pins.sh    the pin lint
+#   scripts/security-allowlist.py   the allowlist gate and its OSV-Scanner form
+#   scripts/osv-scan.sh             the OSV-Scanner invocation
 #
-# Owner / SHA pins below are documented for reviewers so they can verify
-# each pin against the upstream release tag with:
-#   gh api repos/<owner>/<repo>/git/ref/tags/<tag>
+# Each downloaded tool is pinned by version and by the SHA-256 of its linux-amd64 asset,
+# copied from the upstream checksum file named beside it. Every job runs on ubuntu-24.04.
 #
-# OSV-Scanner and gitleaks are installed directly from upstream release
-# binaries (see the respective jobs below) rather than via third-party
-# action wrappers, so their version pins live in each job's env block
-# and not in this list.
+# Job names are required status checks: renaming one breaks branch protection.
 
 on:
   workflow_call:
     inputs:
       osv_scan_paths:
-        description: "Newline- or comma-separated list of paths to scan with OSV-Scanner. Empty disables that step."
+        description: "Newline- or comma-separated directories OSV-Scanner scans recursively. Empty scans only the osv_lockfile_script output."
         required: false
         type: string
-        default: ""
+        default: "."
       osv_config:
-        description: "Path to an OSV-Scanner config file (`osv-scanner.toml`) carrying [[PackageOverrides]] / [[IgnoredVulns]] entries. Empty disables."
+        description: "Repo-relative OSV-Scanner TOML merged under the allowlist (settings and [[PackageOverrides]]; never [[IgnoredVulns]]). Empty for none."
         required: false
         type: string
         default: ""
-      gitleaks_enabled:
-        description: "Run gitleaks secret scanning."
+      osv_lockfile_script:
+        description: "Repo-relative bash script printing an OSV-Scanner custom lockfile for vendored code named by upstream commit. Empty for none."
+        required: false
+        type: string
+        default: ""
+      osv_allow_no_packages:
+        description: "The repository has no manifest OSV-Scanner reads, so 'no packages found' passes instead of failing. Say why at the call site."
         required: false
         type: boolean
-        default: true
+        default: false
+      gitleaks_config:
+        description: "Repo-relative gitleaks config. It must exist."
+        required: false
+        type: string
+        default: ".gitleaks.toml"
       dependency_review_enabled:
-        description: "Run actions/dependency-review-action (PR-only)."
-        required: false
-        type: boolean
-        default: true
-      action_pin_lint_enabled:
-        description: "Lint .github/workflows/** for 40-char SHA pins on every uses: line."
-        required: false
-        type: boolean
-        default: true
-      allowlist_expiry_enabled:
-        description: "Fail if any entry in .security/allowlist.yaml has an expired `expires:` date."
+        description: "Run actions/dependency-review-action on pull requests. Needs the repository's Dependency graph setting on; the job blocks on a high-severity finding."
         required: false
         type: boolean
         default: true
 
+# A called workflow cannot hold more than its caller granted, and asking for more fails the
+# run at startup, so this is the grant every caller (security.yml, release.yml `gates`) gives:
+#   contents: read       checkout, and the dependency-graph comparison dependency review reads
+#   pull-requests: read  dependency review reads the pull request it runs for
+# Nothing uploads to code scanning (the gitleaks SARIF is a workflow artifact), so there is
+# no security-events scope.
 permissions:
   contents: read
   pull-requests: read
-  security-events: write
 
 jobs:
   action-pin-lint:
-    if: ${{ inputs.action_pin_lint_enabled }}
     name: Action pin lint (40-char SHA required)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - name: Verify every uses reference is a 40-char commit SHA
+      - name: Check every uses reference
         shell: bash
-        run: |
-          set -euo pipefail
-          fail=0
-          while IFS= read -r -d '' file; do
-            # Strip trailing comments before parsing so `# v1.2.3` tag hints are fine.
-            # Match only YAML mapping keys: optional indent, optional list dash, then `uses:`.
-            # This avoids false positives from string literals inside `run: |` blocks.
-            awk '
-              /^[[:space:]]*#/ { next }
-              {
-                sub(/[[:space:]]+#.*$/, "", $0)
-              }
-              /^[[:space:]]*-?[[:space:]]*uses:[[:space:]]+[^[:space:]]+/ {
-                line = $0
-                sub(/^[[:space:]]*-?[[:space:]]*uses:[[:space:]]+/, "", line)
-                if (line ~ /^\.\//) { next }
-                if (line ~ /^docker:\/\/[^@]+@sha256:[0-9a-f]{64}$/) { next }
-                # SLSA builders resolve their release binary by tag; OIDC identity covers integrity.
-                if (line ~ /^slsa-framework\/slsa-github-generator\/\.github\/workflows\/[^@]+@v[0-9]+\.[0-9]+\.[0-9]+$/) { next }
-                if (line !~ /@[0-9a-f]{40}([[:space:]]|$)/) {
-                  printf "%s: %s\n", FILENAME, line
-                  exit 2
-                }
-                if (line ~ /@0{40}([[:space:]]|$)/) {
-                  printf "%s: %s (forbidden all-zero placeholder pin)\n", FILENAME, line
-                  exit 2
-                }
-              }
-            ' "$file" || fail=1
-          done < <(find .github/workflows -type f \( -name '*.yml' -o -name '*.yaml' \) -print0)
-          if [ "$fail" -ne 0 ]; then
-            echo
-            echo "::error::One or more workflow files reference an action without a 40-char SHA pin."
-            echo "Replace floating tags (e.g. @v4) with the matching commit SHA:"
-            echo "  gh api repos/<owner>/<repo>/git/ref/tags/<tag> -q .object.sha"
-            exit 1
-          fi
-          echo "All action references are pinned to 40-char SHAs."
+        run: sh scripts/check-action-pins.sh
 
   allowlist-expiry:
-    if: ${{ inputs.allowlist_expiry_enabled }}
     name: Vulnerability allowlist expiry check
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
-      - name: Validate .security/allowlist.yaml
+      - name: Install PyYAML
         shell: bash
+        env:
+          PYYAML_VERSION: "6.0.4"
+          # pyyaml-6.0.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl,
+          # from https://pypi.org/pypi/PyYAML/6.0.4/json
+          PYYAML_SHA256: "93bfb2459195406a518e2f487a9bbf01df240175f31e06f5a252ac6734c7bbf0"
         run: |
           set -euo pipefail
-          if [ ! -f .security/allowlist.yaml ]; then
-            echo "::warning::.security/allowlist.yaml not found, skipping expiry check."
-            exit 0
-          fi
-          python -m pip install --quiet 'pyyaml==6.0.2'
-          python - <<'PY'
-          import datetime, sys, yaml, pathlib
-          p = pathlib.Path('.security/allowlist.yaml')
-          data = yaml.safe_load(p.read_text()) or {}
-          today = datetime.date.today()
-          fail = False
-          for i, entry in enumerate(data.get('exceptions', []) or []):
-              cve = entry.get('cve', f'<entry #{i}>')
-              for required in ('cve', 'reason', 'owner', 'expires'):
-                  if not entry.get(required):
-                      print(f"::error file=.security/allowlist.yaml::{cve}: missing required field '{required}'")
-                      fail = True
-              expires = entry.get('expires')
-              if isinstance(expires, str):
-                  expires = datetime.date.fromisoformat(expires)
-              if isinstance(expires, datetime.date) and expires < today:
-                  print(f"::error file=.security/allowlist.yaml::{cve}: expired on {expires}. Re-evaluate or remove.")
-                  fail = True
-          sys.exit(1 if fail else 0)
-          PY
+          printf 'pyyaml==%s --hash=sha256:%s\n' "$PYYAML_VERSION" "$PYYAML_SHA256" > "$RUNNER_TEMP/requirements.txt"
+          python -m pip install --quiet --disable-pip-version-check --only-binary :all: \
+            --require-hashes -r "$RUNNER_TEMP/requirements.txt"
+
+      - name: Validate .security/allowlist.yaml
+        shell: bash
+        run: python scripts/security-allowlist.py check
 
   osv-scanner:
-    if: ${{ inputs.osv_scan_paths != '' || inputs.osv_config != '' }}
+    if: ${{ inputs.osv_scan_paths != '' || inputs.osv_lockfile_script != '' }}
     name: OSV-Scanner (vendored + manifest deps)
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      # Install OSV-Scanner directly from upstream release rather than via a
-      # third-party action wrapper. This avoids action-interface drift and
-      # keeps the supply-chain surface minimal.
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        shell: bash
+        env:
+          PYYAML_VERSION: "6.0.4"
+          # Same wheel and source as the allowlist-expiry job.
+          PYYAML_SHA256: "93bfb2459195406a518e2f487a9bbf01df240175f31e06f5a252ac6734c7bbf0"
+        run: |
+          set -euo pipefail
+          printf 'pyyaml==%s --hash=sha256:%s\n' "$PYYAML_VERSION" "$PYYAML_SHA256" > "$RUNNER_TEMP/requirements.txt"
+          python -m pip install --quiet --disable-pip-version-check --only-binary :all: \
+            --require-hashes -r "$RUNNER_TEMP/requirements.txt"
+
+      # From the upstream release rather than an action wrapper, to keep the supply-chain
+      # surface to one checksummed binary.
       - name: Install OSV-Scanner
         shell: bash
         env:
-          OSV_SCANNER_VERSION: "1.9.0"
-          # SHA-256 of osv-scanner_linux_amd64 from the upstream release.
-          # Update in lockstep with OSV_SCANNER_VERSION; verify against
-          # `osv-scanner_SHA256SUMS` on the release page.
-          OSV_SCANNER_SHA256: "d9c1deedc23372a25049458e1e2f2bb9ad4098e2e2038118b9fec42f28f93ffb" # osv-scanner_linux_amd64 v1.9.0
+          OSV_SCANNER_VERSION: "2.7.1"
+          # osv-scanner_linux_amd64, from osv-scanner_SHA256SUMS on the v2.7.1 release.
+          OSV_SCANNER_SHA256: "fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8"
         run: |
           set -euo pipefail
-          url="https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
-          curl -fsSL -o /tmp/osv-scanner "$url"
-          echo "${OSV_SCANNER_SHA256}  /tmp/osv-scanner" | sha256sum -c -
-          chmod +x /tmp/osv-scanner
-          sudo mv /tmp/osv-scanner /usr/local/bin/osv-scanner
-          osv-scanner --version
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          curl -fsSL -o "$bin/osv-scanner" \
+            "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
+          echo "${OSV_SCANNER_SHA256}  $bin/osv-scanner" | sha256sum -c -
+          chmod +x "$bin/osv-scanner"
+          echo "$bin" >> "$GITHUB_PATH"
+          "$bin/osv-scanner" --version
 
       - name: Run OSV-Scanner
         shell: bash
+        env:
+          SCAN_PATHS: ${{ inputs.osv_scan_paths }}
+          OSV_CONFIG: ${{ inputs.osv_config }}
+          LOCKFILE_SCRIPT: ${{ inputs.osv_lockfile_script }}
+          ALLOW_NO_PACKAGES: ${{ inputs.osv_allow_no_packages }}
         run: |
-          set -uo pipefail
-          args=(--recursive --skip-git)
-          if [ -n "${{ inputs.osv_config }}" ] && [ -f "${{ inputs.osv_config }}" ]; then
-            args+=("--config=${{ inputs.osv_config }}")
-          fi
-          paths_input=$(printf '%s' "${{ inputs.osv_scan_paths }}")
-          while IFS= read -r p; do
-            p="${p%%#*}"; p="${p%%[[:space:]]}"; p="${p##[[:space:]]}"
-            [ -n "$p" ] || continue
-            IFS=',' read -ra parts <<< "$p"
-            for q in "${parts[@]}"; do
-              q="${q##[[:space:]]}"; q="${q%%[[:space:]]}"
-              [ -n "$q" ] && args+=("$q")
-            done
-          done <<< "$paths_input"
-          echo "+ osv-scanner ${args[*]}"
-          set +e
-          out=$(osv-scanner "${args[@]}" 2>&1)
-          rc=$?
-          set -e
-          printf '%s\n' "$out"
-          # OSV-Scanner exit codes:
-          #   0   - no vulnerabilities found
-          #   1   - vulnerabilities found
-          #   128 - no package sources discovered (e.g. C/C++ vendored headers
-          #         without a manifest). Treat as a non-fatal warning so the
-          #         scanner can be wired in incrementally per repo.
-          if [ "$rc" -eq 128 ] || \
-             { [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'No package sources found'; }; then
-            echo "::warning::OSV-Scanner found no package sources in the requested paths, treating as non-fatal."
-            exit 0
-          fi
-          exit "$rc"
+          set -euo pipefail
+          args=()
+          if [ -n "$OSV_CONFIG" ]; then args+=(--config "$OSV_CONFIG"); fi
+          if [ -n "$LOCKFILE_SCRIPT" ]; then args+=(--lockfile-script "$LOCKFILE_SCRIPT"); fi
+          if [ "$ALLOW_NO_PACKAGES" = "true" ]; then args+=(--allow-no-packages); fi
+          paths=()
+          while IFS= read -r item; do
+            item="${item#"${item%%[![:space:]]*}"}"
+            item="${item%"${item##*[![:space:]]}"}"
+            if [ -n "$item" ]; then paths+=("$item"); fi
+          done < <(printf '%s\n' "$SCAN_PATHS" | tr ',' '\n')
+          bash scripts/osv-scan.sh "${args[@]}" -- "${paths[@]}"
 
   dependency-review:
     if: ${{ inputs.dependency_review_enabled && github.event_name == 'pull_request' }}
@@ -231,65 +183,66 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      # Dependency review requires GitHub Advanced Security on private
-      # repositories. Until GHAS is enabled this step is best-effort and
-      # surfaces as a warning.
+      # Blocking. It reads the repository's dependency graph, which must be switched on
+      # (Settings, Code security, Dependency graph); without it the action fails, so a
+      # repository with the setting off passes dependency_review_enabled: false.
       - name: Review changed dependencies
-        continue-on-error: true
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1
         with:
           fail-on-severity: high
-          comment-summary-in-pr: on-failure
 
   gitleaks:
-    if: ${{ inputs.gitleaks_enabled }}
     name: Secret scan (gitleaks)
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout (full history)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      # Install gitleaks directly from the upstream release rather than via
-      # gitleaks/gitleaks-action, which now requires a paid license for
-      # org accounts. Pin both the version and the binary SHA-256.
+      # Not gitleaks/gitleaks-action: that needs a paid licence for organisation accounts.
       - name: Install gitleaks
         shell: bash
         env:
           GITLEAKS_VERSION: "8.30.1"
-          # SHA-256 of gitleaks_<version>_linux_x64.tar.gz from the upstream
-          # release; verify with `gitleaks_<version>_checksums.txt`.
-          GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb" # gitleaks_8.30.1_linux_x64.tar.gz
+          # gitleaks_8.30.1_linux_x64.tar.gz, from gitleaks_8.30.1_checksums.txt on the release.
+          GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
         run: |
           set -euo pipefail
-          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -fsSL -o /tmp/gitleaks.tar.gz "$url"
-          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tar.gz" | sha256sum -c -
-          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
-          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
-          gitleaks version
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          archive="$RUNNER_TEMP/gitleaks.tar.gz"
+          curl -fsSL -o "$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$bin" gitleaks
+          echo "$bin" >> "$GITHUB_PATH"
+          "$bin/gitleaks" version
 
-      - name: Run gitleaks
+      - name: Run gitleaks over the full history
         shell: bash
+        env:
+          GITLEAKS_CONFIG: ${{ inputs.gitleaks_config }}
         run: |
           set -euo pipefail
-          # `detect` scans the full git history; `--redact` keeps secrets out
-          # of the log; non-zero exit code if any leak is found.
-          gitleaks detect \
-            --source=. \
+          if [ ! -f "$GITLEAKS_CONFIG" ]; then
+            echo "::error::gitleaks config '$GITLEAKS_CONFIG' does not exist"
+            exit 1
+          fi
+          # --redact keeps any hit out of the public run log.
+          gitleaks git \
+            --config="$GITLEAKS_CONFIG" \
             --redact \
             --verbose \
             --exit-code=1 \
             --report-format=sarif \
-            --report-path=gitleaks-report.sarif
+            --report-path=gitleaks-report.sarif \
+            .
 
       - name: Upload gitleaks SARIF
-        if: always()
+        if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: gitleaks-report

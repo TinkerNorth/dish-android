@@ -55,7 +55,10 @@ jobs:
           printf '%s' "${PLAY_SERVICE_ACCOUNT_JSON}" > "${RUNNER_TEMP}/play-key.json"
 
       - name: Install fastlane
-        run: sudo gem install fastlane -N -v "~> 2.226"
+        run: |
+          bundle config set --local frozen true
+          bundle config set --local path vendor/bundle
+          bundle install --jobs 4 --retry 3
 
       - name: Promote
         env:
@@ -69,7 +72,7 @@ jobs:
           extra=()
           [ -n "${VERSION_CODE}" ] && extra+=(--version_code "${VERSION_CODE}")
           [ -n "${ROLLOUT}" ] && extra+=(--rollout "${ROLLOUT}")
-          fastlane supply \
+          bundle exec fastlane supply \
             --json_key "${RUNNER_TEMP}/play-key.json" \
             --package_name com.tinkernorth.dish \
             --track "${FROM_TRACK}" \

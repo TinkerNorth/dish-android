@@ -10,14 +10,22 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
+# scripts/ci-local.sh runs the same gates, through the same scripts, in the same order; its header
+# says which jobs below it cannot run and why.
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: Build, test, lint, format
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
 
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up JDK 17
         uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
@@ -36,26 +44,24 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Pinned to match satellite + dish-linux + dish-mac so all four repos
-      # share one canonical clang-format ruleset and tool version.
-      - name: Install clang-format (pinned 22.1.4)
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install 'clang-format==22.1.4'
-
+      # The formatter is pinned once, in scripts/tools.sh, with the other C++ repos of the fleet.
       - name: clang-format (JNI, check only)
-        run: |
-          FILES=$(find app/src/main/cpp -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.c' \))
-          [ -z "$FILES" ] || echo "$FILES" | xargs clang-format --dry-run --Werror
+        run: scripts/check-format.sh
 
       - name: Play metadata lint (lengths, counts, dimensions)
         run: python scripts/check_play_metadata.py
+
+      - name: Translations are complete in every locale
+        run: python scripts/check-translations.py
 
       - name: Release script tests
         run: python -m unittest discover -s scripts -p '*_test.py' -t scripts
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
+
+      - name: Dependency locks are current (app/gradle.lockfile)
+        run: scripts/check-dependency-locks.sh
 
       - name: ktlint check
         run: ./gradlew ktlintCheck
@@ -72,24 +78,36 @@ jobs:
       - name: Run native unit tests
         run: ./gradlew :app:nativeTest
 
-      - name: Build debug APKs (all three distribution flavors)
-        run: ./gradlew assembleGithubDebug assemblePlayDebug assembleAmazonDebug
+      - name: Build the debug APKs (all three distribution flavors); each carries its flavor's ABIs
+        run: scripts/check-builds.sh debug
 
-      - name: Each APK carries its flavor's ABIs
-        run: |
-          python scripts/check_apk_abis.py app/build/outputs/apk/github/debug/app-github-debug.apk armeabi-v7a arm64-v8a x86_64
-          python scripts/check_apk_abis.py app/build/outputs/apk/play/debug/app-play-debug.apk armeabi-v7a arm64-v8a x86_64
-          python scripts/check_apk_abis.py app/build/outputs/apk/amazon/debug/app-amazon-debug.apk armeabi-v7a arm64-v8a x86_64
+      # The pinned clang-tidy (scripts/tools.sh) over the JNI layer, against the compile database the debug
+      # build above just wrote, so it checks what the NDK compiles.
+      - name: clang-tidy (JNI)
+        env:
+          JOBS: 4
+        run: scripts/check-tidy.sh
 
-      # Debug builds are not minified, so only a release build shows whether R8 kept every
-      # member native code resolves by name; the release workflow runs the same check.
-      - name: A minified build keeps every member native code resolves by name
-        run: |
-          ./gradlew :app:assembleGithubRelease
-          python scripts/check_jni_keeps.py app/build/outputs/apk/github/release/app-github-release-unsigned.apk
+      # Debug builds are not minified, so only a release build shows whether R8 kept every member
+      # native code resolves by name. This builds what the tag builds, unsigned: the GitHub APK, the
+      # Play APK and bundle, and the Amazon APK, each checked for its ABIs and for the kept members.
+      - name: Build the release variants, unsigned; check their ABIs and kept members
+        run: scripts/check-builds.sh release
 
       - name: libsodium uses 128-bit arithmetic on 64-bit ABIs only
         run: python scripts/check_sodium_ti_mode.py app/.cxx
+
+      # The files release.yml uploads as `android`, built unsigned, for the hardening dry run below.
+      - name: Stage the release files for the hardening dry run
+        run: scripts/check-builds.sh stage
+
+      - name: Upload the staged release files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -114,13 +132,29 @@ jobs:
           path: app/build/reports/tests/
           retention-days: 7
 
+  # The tag's scan, SBOM, checksum and signing path on the files just built: Grype, Syft, SHA256SUMS
+  # and a Sigstore bundle per file, signed with a key made in the run (nothing is published). It
+  # cannot exercise the keyless identity, the code-scanning upload or the SLSA generator.
+  release-dry-run:
+    name: Release hardening (dry run)
+    needs: [build]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/_release_harden.yml
+    with:
+      artifact-pattern: android
+      product: dish-android
+      dry-run: true
+
   instrumented:
     name: Integration tests (emulator)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up JDK 17
         uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
@@ -151,7 +185,7 @@ jobs:
         # Same emulator path the screenshots workflow uses (google_apis, KVM):
         # a known-good CI image for this app's GameActivity. Scoped to the
         # integration package. The pixel6Api34 managed device stays for local
-        # runs (scripts/ci_local.sh --gmd).
+        # runs (scripts/ci-local.sh --with-gmd).
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 35
@@ -176,79 +210,49 @@ jobs:
 
   native-armv7:
     name: C++ host tests (32-bit ARM, qemu)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install the armhf cross compiler and qemu-user
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends g++-arm-linux-gnueabihf qemu-user
 
-      # NEON is part of Android's armeabi-v7a baseline, but this compiler defaults to VFPv3-D16
-      # alone, which opus's NEON sources cannot build against.
-      - name: Configure for armv7
-        run: >-
-          cmake -S app/src/test/cpp -B build/native-test-armv7
-          -DCMAKE_SYSTEM_NAME=Linux
-          -DCMAKE_SYSTEM_PROCESSOR=arm
-          -DCMAKE_C_COMPILER=arm-linux-gnueabihf-gcc
-          -DCMAKE_CXX_COMPILER=arm-linux-gnueabihf-g++
-          -DCMAKE_C_FLAGS=-mfpu=neon
-          -DCMAKE_CXX_FLAGS=-mfpu=neon
-          "-DCMAKE_CROSSCOMPILING_EMULATOR=qemu-arm;-L;/usr/arm-linux-gnueabihf"
-
-      - name: Build
-        run: cmake --build build/native-test-armv7 --parallel
-
-      - name: The test binaries are 32-bit ARM
-        run: |
-          file build/native-test-armv7/gamepad_input_test
-          file build/native-test-armv7/gamepad_input_test | grep -q 'ELF 32-bit LSB .* ARM'
-
-      - name: Run under qemu-arm
-        run: ctest --test-dir build/native-test-armv7 --output-on-failure --no-tests=error
+      - name: Build and run under qemu-arm
+        run: scripts/native-tests.sh armv7
 
   # The host tests and the host bench with the runner's own g++, the lock-statistics build
   # included, so the lock laws and both bench smokes run on x86_64 as well as under qemu.
   native-x86_64:
     name: C++ host tests and bench smoke (x86_64)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - name: Configure
-        run: cmake -S app/src/test/cpp -B build/native-test -DDISH_BENCH_LOCKSTATS=ON
-
-      - name: Build
-        run: cmake --build build/native-test --parallel
-
-      - name: Run the host tests
-        run: ctest --test-dir build/native-test --output-on-failure --no-tests=error
-
-      - name: Bench smoke
-        run: build/native-test/bench_send_path --smoke
-
-      # measurements.yml's report, also read against the JSON both smokes under ctest wrote.
-      - name: Measurements report tests
-        env:
-          DISH_BENCH_JSON: build/native-test/send_path_bench_smoke.json:build/native-test/send_path_bench_lockstats_smoke.json
-        run: python3 -m unittest discover -s scripts -p 'measurements_report_test.py' -t scripts
+      - name: Build, run the host tests and the bench smoke, then the measurements report tests
+        run: scripts/native-tests.sh host
 
   # The amazon APK has no 32-bit x86 library, so this x86 image (ABIs x86, armeabi-v7a, armeabi)
   # installs it as armeabi-v7a and runs libsatellite.so through its ARM translation, as on a 32-bit
   # Fire tablet.
   instrumented-arm-translation:
     name: Integration tests (API 28, armeabi-v7a through ARM translation)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up JDK 17
         uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0

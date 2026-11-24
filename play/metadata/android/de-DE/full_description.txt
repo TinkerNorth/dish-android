@@ -24,7 +24,7 @@ FÜRS GAMING ENTWORFEN
 
 SATELLITE HOLEN
 
-Der kostenlose Satellite-Helfer ist für Windows, macOS und Linux unter https://dish.tinkernorth.com/downloads/satellite verfügbar. Der Bluetooth-Host-Modus funktioniert ohne Satellite, aber der Wi-Fi-Pfad bietet das beste Erlebnis.
+Der kostenlose Satellite-Helfer ist für Windows und Linux unter https://dish.tinkernorth.com/downloads/satellite verfügbar. Der Bluetooth-Host-Modus funktioniert ohne Satellite, aber der Wi-Fi-Pfad bietet das beste Erlebnis.
 
 
 FÜR BASTLER

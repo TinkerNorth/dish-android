@@ -12,8 +12,9 @@ find_package(game-activity REQUIRED CONFIG)
 include(FetchContent)
 FetchContent_Declare(
     libsodium
-    URL      https://download.libsodium.org/libsodium/releases/libsodium-1.0.20-stable.tar.gz
-    URL_HASH SHA256=b6b1d2a8802cd8bfa611638c0e9ce31d14ef324e16062c39a76854091cba6d7f
+    URL      https://download.libsodium.org/libsodium/releases/libsodium-1.0.22.tar.gz
+             https://github.com/jedisct1/libsodium/releases/download/1.0.22-RELEASE/libsodium-1.0.22.tar.gz
+    URL_HASH SHA256=adbdd8f16149e81ac6078a03aca6fc03b592b89ef7b5ed83841c086191be3349
 )
 FetchContent_MakeAvailable(libsodium)
 
@@ -26,9 +27,9 @@ file(WRITE ${SODIUM_SRC}/include/sodium/version.h
 "#ifndef sodium_version_H\n\
 #define sodium_version_H\n\
 #include \"export.h\"\n\
-#define SODIUM_VERSION_STRING \"1.0.20\"\n\
+#define SODIUM_VERSION_STRING \"1.0.22\"\n\
 #define SODIUM_LIBRARY_VERSION_MAJOR 26\n\
-#define SODIUM_LIBRARY_VERSION_MINOR 2\n\
+#define SODIUM_LIBRARY_VERSION_MINOR 4\n\
 SODIUM_EXPORT const char *sodium_version_string(void);\n\
 SODIUM_EXPORT int sodium_library_version_major(void);\n\
 SODIUM_EXPORT int sodium_library_version_minor(void);\n\
@@ -115,9 +116,9 @@ target_compile_options(sodium_static PRIVATE
 # never installs anything.
 FetchContent_Declare(
     opus
-    URL      https://downloads.xiph.org/releases/opus/opus-1.5.2.tar.gz
-             https://github.com/xiph/opus/releases/download/v1.5.2/opus-1.5.2.tar.gz
-    URL_HASH SHA256=65c1d2f78b9f2fb20082c38cbe47c951ad5839345876e46941612ee87f9a7ce1
+    URL      https://downloads.xiph.org/releases/opus/opus-1.6.1.tar.gz
+             https://ftp.osuosl.org/pub/xiph/releases/opus/opus-1.6.1.tar.gz
+    URL_HASH SHA256=6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1
 )
 set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
 set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)

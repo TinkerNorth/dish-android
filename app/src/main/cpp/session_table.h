@@ -12,6 +12,7 @@
 
 #include "audio_codec.h"
 #include "audio_jitter.h"
+#include "bits.h"
 #include "heartbeat_thread.h"
 #include "hotpath_latency.h"
 #include "message_tally.h"
@@ -22,7 +23,12 @@ namespace dish_session {
 
 // A session addresses its pads by a 4-bit controller index (contract §Session).
 inline constexpr int MAX_CONTROLLERS = 16;
-inline constexpr int CTRL_INDEX_MASK = MAX_CONTROLLERS - 1;
+inline constexpr uint32_t CTRL_INDEX_MASK = static_cast<uint32_t>(MAX_CONTROLLERS) - 1U;
+
+// The controller slot an index from Kotlin lands on: its low bits, whatever its sign.
+inline constexpr uint32_t controllerSlot(const int32_t index) {
+    return dish_bits::asUint32(index) & CTRL_INDEX_MASK;
+}
 
 // The sessions the app holds at once: one per satellite it streams to.
 inline constexpr size_t MAX_SESSIONS = 8;
@@ -150,7 +156,7 @@ Material readMaterial(const Session& s);
 
 // A new (token, key) pair: the counters, the replay guard, the ack state and the audio streams
 // restart with it (contract §Crypto).
-void setConnectionParams(const SessionRef& s, const uint8_t token[4], const uint8_t key[32],
+void setConnectionParams(const SessionRef& ref, const uint8_t token[4], const uint8_t key[32],
                          int32_t protocolVersion);
 
 // MAX_SESSIONS fixed entries and a packed line of their handles that find scans without a lock.

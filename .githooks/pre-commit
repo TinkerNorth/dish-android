@@ -21,14 +21,19 @@ staged_jni=$(git diff --cached --name-only --diff-filter=ACM -z \
     | tr '\0' '\n' | sed '/^$/d')
 
 if [ -n "$staged_jni" ]; then
-    if command -v clang-format >/dev/null 2>&1; then
-        echo "▶ clang-format (staged JNI files)"
+    # The pinned formatter CI and scripts/ci-local.sh use (scripts/tools.sh), so a
+    # commit here is never reformatted by a different clang-format there.
+    cd "$REPO_ROOT"
+    # shellcheck source=scripts/tools.sh
+    . scripts/tools.sh
+    if ensure_clang_format; then
+        echo "▶ clang-format $CLANG_FORMAT_VERSION (staged JNI files)"
         echo "$staged_jni" | while IFS= read -r file; do
-            clang-format -i "$file"
+            "$CLANG_FORMAT" -i "$file"
             git add "$file"
         done
     else
-        echo "⚠  clang-format not installed, skipping (install clang-format)"
+        echo "⚠  could not install the pinned clang-format, skipping (CI will check)"
     fi
 fi
 

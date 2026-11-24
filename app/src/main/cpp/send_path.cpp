@@ -9,6 +9,7 @@
 #include <sodium.h>
 
 #include "audio_codec.h"
+#include "bits.h"
 #include "hotpath_latency.h"
 #include "log_port.h"
 #include "message_tally.h"
@@ -23,18 +24,6 @@ using dish_session::Session;
 using dish_session::SessionRef;
 
 namespace {
-
-void putBE16(uint8_t* dst, uint16_t v) {
-    dst[0] = (uint8_t)(v >> 8);
-    dst[1] = (uint8_t)(v);
-}
-
-void putBE32(uint8_t* dst, uint32_t v) {
-    dst[0] = (uint8_t)(v >> 24);
-    dst[1] = (uint8_t)(v >> 16);
-    dst[2] = (uint8_t)(v >> 8);
-    dst[3] = (uint8_t)(v);
-}
 
 // stage-2: the round-trip clock starts here, on this session's own clock.
 void armLatencyPing(Session& s) {
@@ -70,7 +59,7 @@ void count(std::atomic<uint32_t>& tally) {
 }
 
 void countFor(Session& s, const Framed& d) {
-    const size_t controller = d.controller & CTRL_INDEX_MASK;
+    const size_t controller = dish_bits::u32(d.controller) & CTRL_INDEX_MASK;
     if (d.tally == Tally::Gamepad) count(s.sentByCtrl[controller]);
     if (d.tally == Tally::Motion) count(s.motionByCtrl[controller]);
     const int kind = dish_tally::sentKindOf(d.msgType);
@@ -85,7 +74,7 @@ bool sealAndSend(Session& s, const Material& m, const uint32_t counter, const Fr
     // direction's nonces disjoint from the server's under the shared key.
     uint8_t nonce[12] = {};
     nonce[0] = dish_wire::CRYPTO_DIR_CLIENT_TO_SERVER;
-    putBE32(nonce + 8, counter);
+    dish_bits::storeBe32(nonce + 8, counter);
 
     uint8_t packet[dish_wire::MAX_DATAGRAM_BYTES];
     // The ceiling made structural: a full-size inner payload plus header and
@@ -93,7 +82,7 @@ bool sealAndSend(Session& s, const Material& m, const uint32_t counter, const Fr
     static_assert(8 + sizeof(d.inner) + crypto_aead_chacha20poly1305_ietf_ABYTES == sizeof(packet),
                   "send buffer must be exactly the contract's datagram ceiling");
     memcpy(packet, m.token, 4);
-    putBE32(packet + 4, counter);
+    dish_bits::storeBe32(packet + 4, counter);
     unsigned long long cipherLen = 0;
     crypto_aead_chacha20poly1305_ietf_encrypt(packet + 8, &cipherLen, d.inner, d.innerLen, m.token,
                                               4, nullptr, nonce, m.key);
@@ -113,8 +102,8 @@ bool frame(Framed& out, const uint16_t msgType, const uint8_t* payload, const ui
     // MSG_MIC_AUDIO carries a whole Opus packet, and the bound has to hold
     // structurally rather than by what today's senders happen to emit.
     if (!dish_wire::innerPayloadFits(payloadLen)) return false;
-    putBE16(out.inner, msgType);
-    putBE16(out.inner + 2, payloadLen);
+    dish_bits::storeBe16(out.inner, msgType);
+    dish_bits::storeBe16(out.inner + 2, payloadLen);
     if (payloadLen > 0) memcpy(out.inner + 4, payload, payloadLen);
     out.msgType = msgType;
     out.innerLen = static_cast<uint16_t>(dish_wire::INNER_HEADER_BYTES + payloadLen);
@@ -168,12 +157,12 @@ XUSB_REPORT xusbReportOf(const gamepad::DeviceState& s) {
 void frameGamepadReport(Framed& out, const int32_t protocolVersion, const int controllerIndex,
                         const XUSB_REPORT& report, const uint32_t extButtons) {
     uint8_t payload[dish_wire::GAMEPAD_V4_PAYLOAD_BYTES];
-    payload[0] = (uint8_t)(controllerIndex & 0xFF);
+    payload[0] = dish_bits::lowByte(controllerIndex);
     memcpy(payload + 1, &report, sizeof(report));
     const size_t payloadLen = dish_wire::encodeGamepadTail(payload, protocolVersion, extButtons);
     frame(out, dish_wire::MSG_GAMEPAD_DATA, payload, (uint16_t)payloadLen);
     out.tally = Tally::Gamepad;
-    out.controller = (uint8_t)(controllerIndex & CTRL_INDEX_MASK);
+    out.controller = dish_bits::lowByte(dish_session::controllerSlot(controllerIndex));
 }
 
 bool sendGamepadReport(const SessionRef& session, const int controllerIndex,
@@ -187,12 +176,12 @@ bool sendGamepadReport(const SessionRef& session, const int controllerIndex,
 
 void frameMotion(Framed& out, const int controllerIndex, const MotionSample& m) {
     uint8_t payload[dish_wire::MOTION_PAYLOAD_BYTES];
-    dish_wire::encodeMotionPayload(payload, (uint8_t)(controllerIndex & 0xFF), m.gyro[0], m.gyro[1],
-                                   m.gyro[2], m.accel[0], m.accel[1], m.accel[2],
+    dish_wire::encodeMotionPayload(payload, dish_bits::lowByte(controllerIndex), m.gyro[0],
+                                   m.gyro[1], m.gyro[2], m.accel[0], m.accel[1], m.accel[2],
                                    m.timestampDeltaUs);
     frame(out, dish_wire::MSG_MOTION, payload, sizeof(payload));
     out.tally = Tally::Motion;
-    out.controller = (uint8_t)(controllerIndex & CTRL_INDEX_MASK);
+    out.controller = dish_bits::lowByte(dish_session::controllerSlot(controllerIndex));
 }
 
 void sendMotion(const SessionRef& session, const int controllerIndex, const MotionSample& m) {
@@ -204,8 +193,8 @@ void sendMotion(const SessionRef& session, const int controllerIndex, const Moti
 void sendBattery(const SessionRef& session, const int controllerIndex, const int level,
                  const int status) {
     uint8_t payload[dish_wire::BATTERY_PAYLOAD_BYTES];
-    dish_wire::encodeBatteryPayload(payload, (uint8_t)(controllerIndex & 0xFF),
-                                    (uint8_t)(level & 0xFF), (uint8_t)(status & 0xFF));
+    dish_wire::encodeBatteryPayload(payload, dish_bits::lowByte(controllerIndex),
+                                    dish_bits::lowByte(level), dish_bits::lowByte(status));
     sendEncrypted(session, dish_wire::MSG_BATTERY, payload, sizeof(payload));
 }
 
@@ -267,8 +256,7 @@ bool sendMicFrame(const SessionRef& session, const uint8_t idx, const int16_t* p
         seq = ca.micSeq++; // u16, wraps by design (contract §Controller audio)
     }
     dish_wire::encodeAudioFrameHeader(payload, idx, seq);
-    const uint16_t payloadLen =
-        static_cast<uint16_t>(dish_wire::AUDIO_WIRE_HEADER_BYTES + opusBytes);
+    const auto payloadLen = static_cast<uint16_t>(dish_wire::AUDIO_WIRE_HEADER_BYTES + opusBytes);
     return sendEncrypted(session, dish_wire::MSG_MIC_AUDIO, payload, payloadLen);
 }
 

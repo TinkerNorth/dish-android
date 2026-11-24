@@ -44,7 +44,7 @@ inline constexpr int AUDIO_SPEAKER_FRAME_SAMPLES = AUDIO_FRAME_SAMPLES * AUDIO_S
 // not just channel count: the mic runs Opus's VOIP application at a bitrate
 // where in-band FEC exists, the speaker runs the AUDIO application at a bitrate
 // where fidelity matters more (audio_codec.cpp carries the numbers and why).
-enum class Stream { Mic, Speaker };
+enum class Stream : uint8_t { Mic, Speaker };
 
 // Declared here, defined in audio_codec.cpp, so the unique_ptrs below work
 // against the incomplete handle types above.

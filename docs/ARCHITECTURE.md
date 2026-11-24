@@ -3,7 +3,7 @@
 A map of the codebase aimed at people working in it. The protocol contract
 lives in `satellite/docs/contract.md` (Android-side mapping:
 [`contract.md`](contract.md)); the design-system tokens are in
-[`design-system.md`](design-system.md).
+[`DESIGN.md`](../DESIGN.md).
 
 ## Pipeline
 
@@ -67,8 +67,11 @@ heartbeat ack and the close-notify.
 com.tinkernorth.dish/
   DishApplication           Hilt entry point
   architecture/             base classes + interface contracts
+  bench/                    the hot-path latency bench's one controller
   composer/                 pure derivations from one or more sources
-  core/                     input mapping, JNI bindings, models, net helpers
+  core/                     input mapping, JNI bindings, models, net helpers,
+                            the controller database (controllerdb/) and the
+                            write verdict (diagnostics/)
   di/                       Hilt modules
   hotpath/                  per-event code that must not allocate or block
   repository/               SharedPreferences-backed CRUD
@@ -76,9 +79,42 @@ com.tinkernorth.dish/
   ui/                       Activities, adapters, custom views
 ```
 
+`source/controllerdb/` fetches and stores the controller database;
+`composer/` also holds the diagnostics bundle (`DiagnosticsBundle.kt` and the
+`Bundle*Json.kt` writers).
+
 `source/` and `composer/` together carry the state graph. `core/` is
 the boundary to the satellite (JNI, HTTPS, wire types). `hotpath/`
 holds the bits that have to honour the no-allocation rule.
+
+## The controller database, diagnostics and the benches
+
+**Controller database.** What the app knows about each controller (its USB and
+Bluetooth ids, how it talks, its known issues, the words a person reads) is one
+data set shared with every Dish client and Satellite, specified in
+`dish-website/docs/controller-db.md`. The app ships a copy under
+`app/src/main/assets/controllers/v1/`. `core/controllerdb/` reads whichever copy
+is active (`ActiveControllerDb`) and holds the pure decisions (`ControllerDbIndex`,
+`ControllerDbDecisions`, `ExpectCheck`); `source/controllerdb/` is the only code
+that touches the network or the stored download (`HttpsControllerDbGateway`,
+`ControllerDbUpdater`). The native recognition tables are not hand-written:
+`scripts/gen_controller_tables.py` turns `controllers.json` into
+`known_devices.generated.h` at build time, so the Kotlin and C++ sides read the
+same records.
+
+**Diagnostics.** The Diagnostics screens (`ui/diagnostics/`) show what the app
+knows about each controller and path. A support report is built in
+`composer/DiagnosticsBundle.kt` as the fleet's `dish-diagnostics.v1` file
+(`dish-website/docs/diagnostics-bundle.md`): the app's own view, plus each
+connected Satellite's redacted view fetched over the paired connection. The
+write verdict (`core/diagnostics/WriteVerdict.kt`) decides what an output test
+proved. Nothing is sent by the app: the file goes to the user's own mail app.
+
+**Two benches share the word.** The hot-path latency bench
+(`bench/HotPathBenchController.kt`, the host bench under `app/src/test/cpp`,
+`tools/bench/README.md`) measures how long a report takes to leave the phone. The
+inspector bench is the Diagnostics screen's test of every item of a controller
+(inputs, outputs, microphone, speaker) and has nothing to do with latency.
 
 ## The hot path
 
@@ -293,7 +329,7 @@ A pure function from domain state to a UI or value shape, with no
 Android view types. Mappers are the testable seam under the
 humble-object Activities and Views.
 
-- `PathCardMapper`, `motionIndicatorFor`, `satelliteLinkState`,
+- `mapPathCard`, `motionIndicatorFor`, `satelliteLinkState`,
   `connectionsVisibleInPicker`.
 
 Rule: a mapper takes data in and returns data out. The moment it
@@ -390,7 +426,7 @@ health from the apply response). `composer/CapabilityComposer.kt` is the
 `AbstractComposer` that feeds the live inputs per slot; its live map is the
 reactive surface for bound-slot consumers, while `capabilityForCandidate(...)`
 answers "what if the type/host were X" for the draft-editing setup and configure
-screens. The setup type-card table renders through the `CapabilityRows` mapper.
+screens. The setup type-card table renders through `bindCapabilityRows` (`ui/setup/SetupCapabilityView.kt`) over `SetupCapabilityRow`.
 
 The wire caps the satellite is told (`ControllerDescriptor` via
 `CapabilityResolver.wireCaps` / `CapabilityComposer.motionWireBit`) are a

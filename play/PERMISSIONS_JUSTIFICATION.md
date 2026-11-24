@@ -46,7 +46,11 @@ These are the user-facing explanations for the Play Console "Sensitive Permissio
 
 ## INTERNET / ACCESS_NETWORK_STATE / ACCESS_WIFI_STATE
 
-**Why we declare it**: Standard "we send and receive UDP packets on the local network" permissions. Dish makes no off-LAN internet connections except for crash diagnostics (opt-out). The HTTPS pairing handshake and the UDP gamepad stream both target the user's own LAN Satellite.
+**Why we declare it**: Standard "we send and receive UDP packets on the local network" permissions. The HTTPS pairing handshake and the UDP gamepad stream both target the user's own LAN Satellite. The connections that leave the local network are few and each is listed in `PRIVACY.md`: crash diagnostics to Firebase Crashlytics (opt-out), the check for newer controller definitions against `dish.tinkernorth.com` (every build, data only, opt-out in Settings), Google Play Billing for tips in the Play build, and, in the GitHub build only, an update check against github.com.
+
+## ACCESS_LOCAL_NETWORK
+
+**Why we declare it**: Android 17 (API 37) gates connections to devices on the local network behind this permission, and Dish's whole purpose is talking to a Satellite or a Moonlight host on the user's own Wi-Fi: mDNS discovery, the pairing handshake and the UDP stream. On older Android versions the permission does nothing and `INTERNET` implies the access. It is requested at runtime on Android 17 and later, when Dish first needs to reach a host on the network. Declining leaves the app running but unable to find or reach a host on the network. Dish uses it for nothing but reaching the user's own hosts.
 
 ## Permissions Dish does NOT request (deliberate)
 

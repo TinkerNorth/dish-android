@@ -67,6 +67,7 @@ val resolvedVersion = resolveVersion()
 android {
     namespace = "com.tinkernorth.dish"
     compileSdk = 37
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "com.tinkernorth.dish"
@@ -413,15 +414,70 @@ val generateControllerTablesForTests =
 tasks.withType<Test>().configureEach {
     dependsOn(generateControllerTablesForTests)
     systemProperty("dish.controllerTablesHeader", controllerTablesHeader.get().asFile.absolutePath)
+    // The documents and build files DocumentationAgreesWithCodeTest reads back, so a change to
+    // one of them re-runs the test instead of being served from the up-to-date check.
+    inputs
+        .files(
+            rootProject.layout.projectDirectory.files(
+                "THIRD_PARTY.md",
+                "DESIGN.md",
+                "docs/contract.md",
+                "README.md",
+                "CHANGELOG.md",
+            ),
+            layout.projectDirectory.files(
+                "src/main/cpp/CMakeLists.txt",
+                "src/test/cpp/CMakeLists.txt",
+                "src/main/res/navigation/nav_graph.xml",
+            ),
+        ).withPropertyName("documentedFacts")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
     maxHeapSize = "1g"
     // An OOM in a test worker must kill the worker loudly, not wedge the
     // JVM mid-instrumentation and hang the build until a CI timeout.
     jvmArgs("-XX:+ExitOnOutOfMemoryError")
+    // mockk's inline agent appends to the bootstrap class path, which the JVM's class data
+    // sharing archive cannot be used with, and the JVM says so on stderr once per worker.
+    // The test JVM starts without the archive instead of starting with a warning.
+    jvmArgs("-Xshare:off")
     // No escape analysis, so compiled code allocates everything the source does: C2 would remove a
     // short-lived object that ART, whose own analysis is weaker, may still make, and an allocation
     // test whose code earlier test classes had warmed would pass on a path the phone allocates on
     // (ThreadAllocationTest).
     jvmArgs("-XX:-DoEscapeAnalysis")
+}
+
+// Dependency locking for what ships: the three flavors' release runtime classpaths, whose resolved
+// versions are committed in app/gradle.lockfile, where OSV-Scanner reads them (security.yml). A build
+// resolves exactly the locked versions, and one that resolves another version or a module the lock
+// lacks fails. kotlin-stdlib-common is ignored: kotlin-stdlib 2.4 lists it only as a constraint (its
+// classes live in kotlin-stdlib now), so no artifact comes from it and Gradle never writes it to a
+// lockfile, yet it rejects the resolution that mentions it. scripts/check-dependency-locks.sh also
+// regenerates the lock and fails on a difference. CONTRIBUTING.md, "Dependency locking", has the
+// --write-locks step.
+dependencyLocking {
+    lockMode = LockMode.STRICT
+    ignoredDependencies.add("org.jetbrains.kotlin:kotlin-stdlib-common")
+}
+
+configurations.configureEach {
+    if (Regex("(github|play|amazon)ReleaseRuntimeClasspath").matches(name)) {
+        resolutionStrategy.activateDependencyLocking()
+    }
+}
+
+// Resolves the locked configurations and nothing else: `./gradlew :app:resolveShippedDependencies
+// --write-locks` rewrites app/gradle.lockfile, and the same task without the flag fails on a stale one
+// (scripts/check-dependency-locks.sh).
+tasks.register("resolveShippedDependencies") {
+    group = "verification"
+    description = "Resolves the flavors' release runtime classpaths against app/gradle.lockfile."
+    notCompatibleWithConfigurationCache("Resolves configurations at execution time.")
+    doLast {
+        listOf("github", "play", "amazon").forEach { flavor ->
+            configurations.getByName("${flavor}ReleaseRuntimeClasspath").resolve()
+        }
+    }
 }
 
 val licensesOutputFile =
@@ -441,7 +497,7 @@ val knownLicenseOverrides: Map<String, List<Map<String, String?>>> =
 tasks.register("generateLicenseManifest") {
     group = "build"
     description =
-        "Generate src/main/assets/licenses/licenses.json from the release runtime classpath POMs."
+        "Generate src/main/assets/licenses/licenses.json from the release runtime classpath POMs of every flavor."
     // Resolves dependency POM metadata at execution time: degrade gracefully (skip the cache for this
     // build) rather than failing config-cache, leaving the license/resource generation logic untouched.
     notCompatibleWithConfigurationCache("Resolves dependency POM metadata at execution time.")
@@ -450,12 +506,14 @@ tasks.register("generateLicenseManifest") {
 
     doLast {
         val moduleIds =
-            configurations
-                .getByName("releaseRuntimeClasspath")
-                .incoming
-                .resolutionResult
-                .allComponents
-                .mapNotNull { it.id as? org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+            listOf("github", "play", "amazon")
+                .flatMap { flavor ->
+                    configurations
+                        .getByName("${flavor}ReleaseRuntimeClasspath")
+                        .incoming
+                        .resolutionResult
+                        .allComponents
+                }.mapNotNull { it.id as? org.gradle.api.artifacts.component.ModuleComponentIdentifier }
                 .distinctBy { "${it.group}:${it.module}:${it.version}" }
                 .sortedBy { "${it.group}:${it.module}:${it.version}" }
 
@@ -494,10 +552,9 @@ tasks.register("generateLicenseManifest") {
     }
 }
 
-// Release-scoped (matched lazily; AGP registers preReleaseBuild after this script runs): keeps
-// debug/test/lint builds configuration-cache eligible while the shipped APK still gets a freshly
-// generated license manifest. The task itself is not config-cache compatible.
-tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn("generateLicenseManifest") }
+// Not wired into the release builds: it is not configuration-cache compatible, and a build that
+// rewrote a tracked file would differ from the commit it was built from. scripts/check-dependency-locks.sh
+// regenerates it with the lock and fails on a difference, so the committed list always matches what ships.
 
 fun parsePomFile(pomFile: java.io.File): Map<String, Any?>? {
     return try {

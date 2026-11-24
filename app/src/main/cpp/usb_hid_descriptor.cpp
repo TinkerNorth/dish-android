@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 #include "usb_hid_descriptor.h"
+#include "bits.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -72,7 +73,7 @@ int32_t signExtend(const uint32_t v, const uint8_t bytes) {
     const bool isAlreadyFullWidth = bytes == 0 || bytes >= kBytesPerU32;
     if (isAlreadyFullWidth) return (int32_t)v;
     const uint32_t bits = bytes * kBitsPerByte;
-    const uint32_t signBit = 1u << (bits - 1);
+    const uint32_t signBit = 1U << (bits - 1U);
     const bool isNegative = (v & signBit) != 0;
     if (isNegative) return (int32_t)(v | ~((1u << bits) - 1u));
     return (int32_t)v;
@@ -85,7 +86,7 @@ uint32_t extractBits(const uint8_t* d, const size_t dlen, const uint32_t bitOff,
         const uint32_t bi = bitOff + i;
         const size_t byteIndex = bi / kBitsPerByte;
         if (byteIndex >= dlen) break;
-        const bool isSet = ((d[byteIndex] >> (bi % kBitsPerByte)) & 1u) != 0;
+        const bool isSet = ((dish_bits::u32(d[byteIndex]) >> (bi % kBitsPerByte)) & 1U) != 0U;
         if (isSet) v |= (1u << i);
     }
     return v;
@@ -99,7 +100,7 @@ int64_t toSigned(const uint32_t raw, const uint8_t bits, const int32_t logicalMi
     if (isAnUnsignedField) return raw;
     const bool isFullWidth = bits == 0 || bits >= kBitsPerU32;
     if (isFullWidth) return (int32_t)raw;
-    const uint32_t signBit = 1u << (bits - 1);
+    const uint32_t signBit = 1U << (bits - 1U);
     const bool isNegative = (raw & signBit) != 0;
     if (isNegative) return (int32_t)(raw | ~((1u << bits) - 1u));
     return (int32_t)raw;
@@ -318,14 +319,15 @@ HidItem readShortItem(const uint8_t* desc, const size_t len, const uint8_t prefi
     HidItem item = {0, 0, 0, 0, false, false};
     const uint8_t bSize = prefix & kItemSizeMask;
     item.dataLen = bSize == kItemSizeFourBytes ? kBytesPerU32 : bSize;
-    item.type = (prefix >> kItemTypeShift) & kItemTypeMask;
-    item.tag = (prefix >> kItemTagShift) & kItemTagMask;
+    item.type = dish_bits::lowByte((dish_bits::u32(prefix) >> kItemTypeShift) & kItemTypeMask);
+    item.tag = dish_bits::lowByte((dish_bits::u32(prefix) >> kItemTagShift) & kItemTagMask);
     if (i + item.dataLen > len) {
         item.truncated = true;
         return item;
     }
     for (uint8_t k = 0; k < item.dataLen; k++) {
-        item.data |= (uint32_t)desc[i + k] << (kBitsPerByte * k);
+        const uint32_t shift = 1U * kBitsPerByte * k;
+        item.data |= dish_bits::u32(desc[i + k]) << shift;
     }
     i += item.dataLen;
     return item;
@@ -591,10 +593,12 @@ uint16_t decodeLayoutAxes(const uint8_t* d, const size_t dlen, const HidLayout& 
     } else if (L.ly.present) {
         s.sLY = scaleAxis16(extractBits(d, dlen, L.ly.bitOffset, L.ly.bitSize), L.ly, true);
     }
-    if (L.rx.present)
+    if (L.rx.present) {
         s.sRX = scaleAxis16(extractBits(d, dlen, L.rx.bitOffset, L.rx.bitSize), L.rx, false);
-    if (L.ry.present)
+    }
+    if (L.ry.present) {
         s.sRY = scaleAxis16(extractBits(d, dlen, L.ry.bitOffset, L.ry.bitSize), L.ry, true);
+    }
     if (L.lt.present) s.bLT = scaleTrig8(extractBits(d, dlen, L.lt.bitOffset, L.lt.bitSize), L.lt);
     if (L.rt.present) s.bRT = scaleTrig8(extractBits(d, dlen, L.rt.bitOffset, L.rt.bitSize), L.rt);
     return directions;
@@ -673,7 +677,8 @@ bool decodeFromLayout(const uint8_t* buf, const size_t len, DeviceState& s, cons
 
     const uint16_t hatBits = decodeLayoutHat(d, dlen, L);
     const uint16_t buttonBits = decodeOrderedButtons(d, dlen, L, s);
-    s.wButtons = (uint16_t)(axisDpadBits | hatBits | buttonBits);
+    s.wButtons = dish_bits::low16(dish_bits::u32(axisDpadBits) | dish_bits::u32(hatBits) |
+                                  dish_bits::u32(buttonBits));
     return true;
 }
 

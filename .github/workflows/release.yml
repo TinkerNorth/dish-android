@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - '[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]*.[0-9]*.[0-9]*'
   workflow_dispatch:
     inputs:
       tag:
@@ -88,12 +88,12 @@ on:
 #                                 device targeting stay console-only too.
 #                                 Unset, the job is skipped.
 #
-# cosign is installed directly from upstream (see harden job).
+# Scanning, SBOMs and cosign signing (one Sigstore bundle per file) are the shared
+# _release_harden.yml, with its tools pinned there. A dispatch must run on the tag ref:
+#   gh workflow run release.yml --ref X.Y.Z -f tag=X.Y.Z
 
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -106,15 +106,30 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-      security-events: write
     uses: ./.github/workflows/_security.yml
     with:
-      osv_scan_paths: |
-        .
-      gitleaks_enabled: true
-      dependency_review_enabled: false
-      action_pin_lint_enabled: true
-      allowlist_expiry_enabled: true
+      osv_scan_paths: .
+      dependency_review_enabled: true
+
+  version:
+    name: Tag matches the CHANGELOG and the Play release notes
+    needs: [gates]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Compare the tag with the version mirrors
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          code="$(python3 scripts/check_version_consistency.py "$TAG")"
+          EXPECTED_VERSION_CODE="$code" python3 scripts/check_play_metadata.py
 
   required-secrets:
     name: Required release secrets gate
@@ -148,8 +163,8 @@ jobs:
 
   release:
     name: Build + sign APK/AAB
-    needs: [gates, required-secrets]
-    runs-on: ubuntu-latest
+    needs: [gates, version, required-secrets]
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     outputs:
       version_code: ${{ steps.ver.outputs.code }}
@@ -157,6 +172,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Set up JDK 17
@@ -206,22 +222,27 @@ jobs:
         run: |
           set -euo pipefail
           tag="${TAG_INPUT:-${GITHUB_REF_NAME}}"
-          name="${tag#v}"
-          # X.Y.Z → versionCode = max(1, X*10000 + Y*100 + Z). Re-derive locally with
-          # `git describe --tags` if changing this scheme.
-          if [[ "$name" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-            major="${BASH_REMATCH[1]}"
-            minor="${BASH_REMATCH[2]}"
-            patch="${BASH_REMATCH[3]}"
-            code=$((major * 10000 + minor * 100 + patch))
-            [ "$code" -lt 1 ] && code=1
-          else
-            echo "::warning::Tag '$tag' does not match MAJOR.MINOR.PATCH, falling back to versionCode=1."
-            code=1
+          # Tags are bare X.Y.Z. Anything else is not a release: stop here rather than ship a
+          # build whose versionCode is not the one Play and the changelog files expect.
+          if ! [[ "$tag" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Tag '$tag' is not X.Y.Z; a release tag is three numbers with no prefix."
+            exit 1
+          fi
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          patch="${BASH_REMATCH[3]}"
+          if [ "$minor" -gt 99 ] || [ "$patch" -gt 99 ]; then
+            echo "::error::Tag '$tag' has a minor or patch above 99; versionCode = X*10000 + Y*100 + Z would collide."
+            exit 1
+          fi
+          code=$((major * 10000 + minor * 100 + patch))
+          if [ "$code" -lt 1 ]; then
+            echo "::error::Tag '$tag' gives versionCode $code; Play needs at least 1."
+            exit 1
           fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
-          echo "name=$name" >> "$GITHUB_OUTPUT"
-          echo "Resolved versionCode=$code versionName=$name"
+          echo "name=$tag" >> "$GITHUB_OUTPUT"
+          echo "Resolved versionCode=$code versionName=$tag"
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -295,6 +316,18 @@ jobs:
           [ -n "$symbols" ] && cp "$symbols" "dist/dish-${tag}${suffix}-native-debug-symbols.zip"
           ls -l dist/
 
+      # The components SBOM: every locked library with its version and licence, and libsodium and Opus,
+      # written from app/gradle.lockfile and CMake. It rides in dist/ with the APK and the bundle, so the
+      # hardening folds it into the product SBOM and Grype scans it (Syft sees almost nothing inside an
+      # APK or a bundle).
+      - name: Write the components SBOM
+        env:
+          VERSION_NAME: ${{ steps.ver.outputs.name }}
+        run: |
+          set -euo pipefail
+          python3 scripts/sbom.py write dist/dish-android-components.spdx.json --version "$VERSION_NAME"
+          python3 scripts/sbom.py check dist/dish-android-components.spdx.json
+
       # The Amazon Appstore build goes up through Amazon's App Submission API
       # (publish-amazon) or by hand in the developer console, never through
       # GitHub: it stays out of dist/, is never dish.apk, and never appears in
@@ -352,7 +385,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="${TAG_INPUT:-${GITHUB_REF_NAME}}"
-          version="${tag#v}"
+          version="$tag"
           [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] \
             || { echo "::error::tag '$tag' is not MAJOR.MINOR.PATCH"; exit 1; }
           [ "$VERSION_NAME" = "$version" ] \
@@ -404,6 +437,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           ref: ${{ inputs.tag || github.ref }}
 
       # Secrets cannot be read from a job-level `if`, so the capture job keys
@@ -481,6 +515,7 @@ jobs:
         if: ${{ steps.gate.outputs.enabled == 'true' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Download release artifacts
@@ -572,7 +607,10 @@ jobs:
 
       - name: Install fastlane
         if: ${{ steps.gate.outputs.enabled == 'true' && steps.artifacts.outputs.ready == 'true' }}
-        run: sudo gem install fastlane -N -v "~> 2.226"
+        run: |
+          bundle config set --local frozen true
+          bundle config set --local path vendor/bundle
+          bundle install --jobs 4 --retry 3
 
       - name: Upload to Play (AAB + store listing)
         if: ${{ steps.gate.outputs.enabled == 'true' && steps.artifacts.outputs.ready == 'true' }}
@@ -586,7 +624,7 @@ jobs:
           set -euo pipefail
           mapping_args=()
           [ -n "${MAPPING}" ] && mapping_args=(--mapping "${MAPPING}")
-          fastlane supply \
+          bundle exec fastlane supply \
             --json_key "${RUNNER_TEMP}/play-key.json" \
             --package_name com.tinkernorth.dish \
             --track "${PLAY_TRACK}" \
@@ -628,6 +666,7 @@ jobs:
         if: ${{ steps.gate.outputs.enabled == 'true' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Download the Amazon Appstore build
@@ -656,124 +695,14 @@ jobs:
   harden:
     name: Harden artifacts (scan, SBOM, sign)
     needs: [release]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
     permissions:
       contents: read
       id-token: write
       security-events: write
-    outputs:
-      hashes: ${{ steps.hashes.outputs.hashes }}
-    steps:
-      - name: Download release artifacts
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: android
-          path: release
-
-      - name: Vulnerability scan (Grype)
-        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
-        id: grype
-        with:
-          path: release/
-          severity-cutoff: high
-          fail-build: true
-          only-fixed: false
-          add-cpes-if-none: true
-          output-format: sarif
-
-      - name: Upload Grype SARIF to code scanning
-        # Soft-fail: the grype step above is the gate, this is observability.
-        if: ${{ always() && steps.grype.outputs.sarif != '' }}
-        continue-on-error: true
-        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
-        with:
-          sarif_file: ${{ steps.grype.outputs.sarif }}
-          category: release-grype
-
-      - name: Generate SBOM (SPDX)
-        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
-        with:
-          path: release/
-          format: spdx-json
-          output-file: release/dish-android.sbom.spdx.json
-          upload-artifact: false
-          upload-release-assets: false
-
-      - name: Generate SBOM (CycloneDX)
-        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
-        with:
-          path: release/
-          format: cyclonedx-json
-          output-file: release/dish-android.sbom.cdx.json
-          upload-artifact: false
-          upload-release-assets: false
-
-      - name: Install cosign (upstream binary)
-        shell: bash
-        env:
-          COSIGN_VERSION: "2.6.5"
-          COSIGN_SHA256: "c3b4f5410e608af03a5eb0aaac84a4313d8da131248e08ff1759ac70c79d1644" # cosign-linux-amd64 v2.6.5
-        run: |
-          set -euo pipefail
-          curl -fsSL -o /tmp/cosign \
-            "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64"
-          if [ "${COSIGN_SHA256}" != "TODO_REPLACE_WITH_UPSTREAM_SHA256" ]; then
-            echo "${COSIGN_SHA256}  /tmp/cosign" | sha256sum -c -
-          else
-            echo "::warning::COSIGN_SHA256 is unset. Replace with the upstream SHA-256 to enforce binary integrity."
-          fi
-          chmod +x /tmp/cosign
-          sudo mv /tmp/cosign /usr/local/bin/cosign
-          cosign version
-
-      - name: Generate SHA256SUMS
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd release
-          find . -maxdepth 1 -type f ! -name 'SHA256SUMS*' -printf '%f\n' \
-            | LC_ALL=C sort \
-            | xargs -d '\n' sha256sum --binary > SHA256SUMS
-          cat SHA256SUMS
-
-      - name: Cosign-sign each artifact + SHA256SUMS (keyless)
-        shell: bash
-        env:
-          COSIGN_EXPERIMENTAL: "1"
-        run: |
-          set -euo pipefail
-          cd release
-          for f in *; do
-            case "$f" in
-              *.sig|*.crt|SHA256SUMS.sig|SHA256SUMS.crt) continue ;;
-            esac
-            cosign sign-blob --yes \
-              --output-signature "${f}.sig" \
-              --output-certificate "${f}.crt" \
-              "$f"
-          done
-          ls -l
-
-      - name: Compute base64 SHA256 hashes for SLSA provenance
-        id: hashes
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd release
-          h=$(find . -maxdepth 1 -type f ! -name '*.sig' ! -name '*.crt' \
-                  -printf '%f\n' \
-                | LC_ALL=C sort \
-                | xargs -d '\n' sha256sum \
-                | base64 -w0)
-          echo "hashes=${h}" >> "$GITHUB_OUTPUT"
-
-      - name: Upload hardened bundle
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: release-bundle
-          path: release/
-          retention-days: 14
+    uses: ./.github/workflows/_release_harden.yml
+    with:
+      artifact-pattern: android
+      product: dish-android
 
   provenance:
     name: SLSA L3 provenance
@@ -782,14 +711,13 @@ jobs:
       id-token: write
       contents: write
       actions: read
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0 # f7dd8c54c2067bafc12ca7a55595d5ee9b75204a
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
     with:
       base64-subjects: ${{ needs.harden.outputs.hashes }}
       provenance-name: dish-android.intoto.jsonl
       upload-assets: false
-      # The repo is public now; the flag only mattered while it was private
-      # (signing posts the repo name to the public Rekor log).
-      private-repository: false
+      # A SHA-pinned call cannot resolve the prebuilt builder's release; build it from source.
+      compile-generator: true
 
   # Needs no build output, so it measures beside the build; publish attaches what it writes.
   measurements:

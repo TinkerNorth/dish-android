@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 #include "hotpath_latency.h"
+#include "text_format.h"
 
 #include <algorithm>
 #include <atomic>
@@ -71,7 +72,7 @@ class Ring {
 
     // 0 = accumulate to kCap (bench-dump semantics); >0 = sliding window of the
     // last N samples so percentiles answer "now", not "since arming".
-    explicit Ring(const size_t window = 0) : window_(window) {}
+    explicit Ring(const size_t window = 0) noexcept : window_(window) {}
 
     void add(const double v) {
         std::lock_guard<std::mutex> lk(mtx_);
@@ -158,42 +159,38 @@ std::vector<double> rttWindowInOrder(RttStats& session) {
 void appendRecentSamples(std::string& out, const char* name, const double* us, const size_t n) {
     const size_t take = std::min(n, kRecentSamples);
     const size_t first = n - take;
-    out += "\"";
+    out += '\"';
     out += name;
     out += "\":[";
-    char num[kNumberScratch];
     for (size_t i = first; i < n; i++) {
-        snprintf(num, sizeof(num), "%.0f", us[i]);
-        if (i != first) out += ",";
-        out += num;
+        if (i != first) out += ',';
+        dish_text::appendFormatted<kNumberScratch>(out, "%.0f", us[i]);
     }
-    out += "]";
+    out += ']';
 }
 
 // The sample at rank p of a sorted window, the rank rounded half up.
 double percentileAt(const std::vector<double>& sorted, const double p) {
     const size_t last = sorted.size() - 1;
-    const size_t rank = (size_t)(p * (double)last + kRoundHalfUp);
+    const auto rank = static_cast<size_t>(p * static_cast<double>(last) + kRoundHalfUp);
     return sorted[std::min(rank, last)];
 }
 
 void appendPctlValues(std::string& out, const char* name, std::vector<double> v) {
-    char buf[kPctlScratch];
     if (v.empty()) {
-        snprintf(buf, sizeof(buf), "\"%s\":{\"n\":0}", name);
-        out += buf;
+        dish_text::appendFormatted<kPctlScratch>(out, "\"%s\":{\"n\":0}", name);
         return;
     }
     std::sort(v.begin(), v.end());
     double sum = 0;
     for (const double x : v) sum += x;
     const double mean = sum / (double)v.size();
-    snprintf(buf, sizeof(buf),
-             "\"%s\":{\"n\":%zu,\"min\":%.2f,\"p50\":%.2f,\"p90\":%.2f,\"p99\":%.2f,"
-             "\"max\":%.2f,\"mean\":%.2f}",
-             name, v.size(), v.front(), percentileAt(v, kP50), percentileAt(v, kP90),
-             percentileAt(v, kP99), v.back(), mean);
-    out += buf;
+    dish_text::appendFormatted<kPctlScratch>(
+        out,
+        "\"%s\":{\"n\":%zu,\"min\":%.2f,\"p50\":%.2f,\"p90\":%.2f,\"p99\":%.2f,"
+        "\"max\":%.2f,\"mean\":%.2f}",
+        name, v.size(), v.front(), percentileAt(v, kP50), percentileAt(v, kP90),
+        percentileAt(v, kP99), v.back(), mean);
 }
 
 void appendPctl(std::string& out, const char* name, Ring& r, const bool reset) {
@@ -255,9 +252,9 @@ std::string deviceLatencyJson(const int32_t deviceId) {
 
     std::string out = "{";
     appendPctlValues(out, "stage1_hotpath_us", std::move(stage1));
-    out += ",";
+    out += ',';
     appendPctlValues(out, "urb_gap_us", std::move(gap));
-    out += "}";
+    out += '}';
     return out;
 }
 
@@ -297,13 +294,12 @@ std::string sessionStatsJson(RttStats& session, const int missedAcks) {
     std::vector<double> ordered = rttWindowInOrder(session);
     std::string out = "{";
     appendRecentSamples(out, "rtt_recent_us", ordered.data(), ordered.size());
-    out += ",";
+    out += ',';
     appendPctlValues(out, "rtt_us", std::move(ordered));
-    char num[kTallyScratch];
-    snprintf(num, sizeof(num), ",\"pings\":%u,\"acks\":%u,\"missed\":%d}",
-             session.pings.load(std::memory_order_relaxed),
-             session.acks.load(std::memory_order_relaxed), missedAcks);
-    out += num;
+    dish_text::appendFormatted<kTallyScratch>(out, ",\"pings\":%u,\"acks\":%u,\"missed\":%d}",
+                                              session.pings.load(std::memory_order_relaxed),
+                                              session.acks.load(std::memory_order_relaxed),
+                                              missedAcks);
     return out;
 }
 
@@ -312,16 +308,16 @@ void resetRttWindow() { g_rtt.clear(); }
 std::string statsJson(const bool reset) {
     std::string out = "{\"enabled\":";
     out += enabled() ? "true" : "false";
-    out += ",";
+    out += ',';
     appendPctl(out, "stage1_hotpath_us", g_stage1, reset);
-    out += ",";
+    out += ',';
     appendPctl(out, "urb_gap_us", g_urbGap, reset);
-    out += ",";
+    out += ',';
     const std::vector<double> recent = g_rtt.snapshot(false);
     appendRecentSamples(out, "rtt_recent_us", recent.data(), recent.size());
-    out += ",";
+    out += ',';
     appendPctl(out, "rtt_us", g_rtt, reset);
-    out += "}";
+    out += '}';
     return out;
 }
 

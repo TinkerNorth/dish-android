@@ -17,10 +17,9 @@ struct AttachResult {
 
 // A receiver slot is claimed to listen: no init and no probe, its controller set up once one is
 // there.
-AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumber,
-                          uint8_t endpointIn, uint16_t endpointInMaxPacket, uint8_t endpointOut,
-                          uint8_t interfaceClass, uint8_t interfaceSubclass,
-                          uint8_t interfaceProtocol, bool receiverSlot);
+AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumber, uint8_t epIn,
+                          uint16_t epInMaxPacket, uint8_t epOut, uint8_t ifClass,
+                          uint8_t ifSubclass, uint8_t ifProtocol, bool receiverSlot);
 
 void detachDevice(int32_t syntheticDeviceId);
 

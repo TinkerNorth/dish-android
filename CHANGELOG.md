@@ -5,7 +5,76 @@ What's new in each version of Dish, in plain language. Newest first.
 Some updates need the matching version of the free Satellite app on your
 computer. Those lines say "update Satellite too".
 
+The version number comes from the git tag, `X.Y.Z` with no prefix, and nothing
+else: `release.yml` derives versionName and versionCode (`X*10000 + Y*100 + Z`)
+from it. `version-consistency.yml` fails a pull request whose newest heading
+below lacks its Play release notes in every locale, and `release.yml` fails the
+tag build when the tag and the newest heading disagree.
+
+Cross-repo coordination: a change to the wire protocol or the pairing flow that
+needs a matching update in `satellite` or in another Dish client (`dish-ios`,
+`dish-mac`, `dish-windows`, `dish-linux`) is marked `[wire-coordinated]`. The
+clients are tagged in the order the fleet's release procedure lists, not in
+lockstep, and do not share a version number.
+
 ---
+
+## [Unreleased]
+
+## [2.8.0] - 2026-11-23
+
+The licence list in Settings is correct again, the audio codec and the encryption library are
+current, and every release is built, checked and signed in a way anyone can verify.
+
+### Fixed
+
+- **A Switch Pro Controller on USB Direct no longer gets claimed and then sends nothing.**
+  On phones whose system had already set the controller up (seen on a Pixel 8
+  with Android 17), Dish's start sequence silenced it. Dish now looks at what the
+  controller sends: one that is already streaming is left alone, and one that
+  stays silent is started step by step, the way Linux's driver does it.
+- **Settings, Licenses lists what the app really contains.** The list had stopped
+  updating when the app grew its three builds, so it still named older versions
+  of several libraries and left out Google Play Billing. It is regenerated from
+  the libraries each build ships, and a pull request that changes one without
+  regenerating the list now fails.
+- **The Google Play listing no longer says Satellite runs on macOS.** It runs on
+  Windows and Linux; on macOS it is a stub that creates no controllers.
+
+### Changed
+
+- **Newer building blocks.** The audio codec (Opus 1.6.1) and the encryption
+  library (libsodium 1.0.22) are updated, along with Android Gradle Plugin
+  9.5.2 and the Android lifecycle libraries 2.11.1.
+- **A README for people who want to use Dish.** It starts with where to get
+  it (Google Play, or the APK from GitHub), how to get a controller working on
+  your PC, what the app does, what it needs, and what leaves your device; the
+  build instructions moved to the end. It also says what is known about the
+  signing keys of the Google Play build and the GitHub APK, and that the Amazon
+  Appstore build is not published.
+- **The Play and Amazon builds are now built and checked on every pull request**
+  (unsigned), including the check that the release build keeps every method the
+  native code calls, so a problem that only showed at release time shows
+  earlier.
+- **The native code is held to clang-tidy.** Every source of the native layer now passes clang-tidy
+  23.1.4 with the fleet's checks, run on every pull request. The byte-level assembly in the wire
+  codecs, the USB report decoders and the HID reader takes no signed operand any more, and the
+  tests pin it at the values a wrong shift or sign extension gets wrong. Nothing a user can see
+  changed.
+
+### Added
+
+- **The dependencies the app ships are pinned and scanned.** Their exact versions
+  are committed in `app/gradle.lockfile`, a vulnerability scanner reads that
+  file on every pull request, and a pull request that changes a dependency
+  without updating it fails.
+- **Releases are signed one file at a time with cosign 3.** Each file in a
+  release has its own `<file>.sigstore.json` instead of a `.sig` and a `.crt`,
+  and the signing identity is the shared `_release_harden.yml` at the tag;
+  `SECURITY.md` has both forms of the check, the new one and the one for
+  releases up to 2.7.0. Each release also carries `dish-android-components.spdx.json`, a bill of
+  materials of every library in the app (its Gradle lockfile) and the two C libraries it builds in,
+  with versions and licences, which the vulnerability scan reads.
 
 ## [2.7.0] - 2026-11-23
 

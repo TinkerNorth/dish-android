@@ -20,7 +20,7 @@ PROJETADO PARA JOGAR
 
 OBTENHA O SATELLITE
 
-O auxiliar gratuito Satellite está disponível para Windows, macOS e Linux em https://dish.tinkernorth.com/downloads/satellite. O modo Bluetooth-host funciona sem o Satellite, mas o caminho Wi-Fi oferece a melhor experiência.
+O auxiliar gratuito Satellite está disponível para Windows e Linux em https://dish.tinkernorth.com/downloads/satellite. O modo Bluetooth-host funciona sem o Satellite, mas o caminho Wi-Fi oferece a melhor experiência.
 
 PARA QUEM GOSTA DE EXPLORAR
 

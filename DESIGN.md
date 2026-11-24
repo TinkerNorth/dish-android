@@ -98,11 +98,14 @@ values file holds the registry index + any state-list-only semantic aliases.
 
 | Selector (`res/color/`) | Default → State |
 |---|---|
-| `chip_pickable_text.xml` | `colorOnSurface` → `state_selected` `colorOnPrimary` |
+| `chip_dish_text.xml` | `colorOnSurface` → `state_checked` `colorOnPrimary` (the label of `Widget.Dish.Chip`) |
+| `chip_dish_background.xml` | flat chip fill → `state_checked` `colorPrimary` |
+| `type_card_background.xml` | `colorSurface` → `state_checked` `colorIconContainerFill` (the picked controller-type card) |
+| `type_card_stroke.xml` | `colorCardStroke` → `state_checked` `colorPrimary` |
 | `icon_secondary.xml` | always `colorMuted` (selector-shaped for naming clarity) |
 
 Disabled-state selectors (`text_disabled.xml` / `icon_interactive.xml`) are
-intentionally absent: they were dropped in the post-Phase-4 cleanup. Add
+intentionally absent: they were dropped in the an earlier cleanup. Add
 them back the first time a layout actually needs to toggle `isEnabled` on a
 text/icon view (the recipe is a one-line `<selector>` in `res/color/`).
 
@@ -141,7 +144,7 @@ values so a global shadow-depth adjustment is one file.
 | `elevation_floating` | 6dp | Snackbars, FABs (`notification_elevation` aliases this) |
 
 `elevation_raised` (2dp) and `elevation_modal` (12dp) used to exist but
-were dropped in the post-Phase-4 cleanup: no current callsite needed
+were dropped in the an earlier cleanup: no current callsite needed
 them. Re-introduce when a surface needs to pin to the canonical scale
 (see "When to add a new token").
 
@@ -179,7 +182,7 @@ sibling tokens together as a paired set so the scale stays coherent.
 | `dish_ease_standard.xml` | cubic-bezier(0.4, 0.0, 0.2, 1.0) | default UI transitions (used by `ic_battery_charging` bolt-pulse loop + activity fade-through) |
 
 The `dish_ease_in.xml` / `dish_ease_out.xml` / `dish_ease_linear.xml`
-interpolators were dropped in the post-Phase-4 cleanup: no animation
+interpolators were dropped in the an earlier cleanup: no animation
 consumes them today. Re-introduce when an AVD or ObjectAnimator needs
 a curve other than the standard easing.
 
@@ -297,10 +300,9 @@ wires `materialButtonStyle = Widget.Dish.Button` as the global default):
 |---|---|---|---|
 | `Widget.Dish.Card` | `Widget.Material3.CardView.Outlined` | `colorSurface` bg, `corner_card` radius, `elevation_none`, `colorCardStroke` stroke (`border_thin`) | every `MaterialCardView` in the app |
 | `Widget.Dish.Toolbar` | `Widget.Material3.Toolbar` | `colorBackground` bg, `colorOnSurface` title, `ic_chevron_left` nav icon, action-bar height | both Activity toolbars (Settings + Connections) |
-| `Widget.Dish.StatusDot.Small` | `""` | `icon_dot` size + `dot_circle` background | overlay status indicators |
+| `Widget.Dish.StatusDot.Small` | `""` | `icon_dot` size + `dot_circle` background | small status indicators |
 | `Widget.Dish.StatusDot.Large` | `""` | `icon_dot_lg` size + `dot_circle` background | slot-card / row status indicators |
 | `Widget.Dish.EmptyStateText` | `""` | base: `match_parent` width, `TextAppearance.Dish.BodySmall` | never used directly; pick a variant |
-| `Widget.Dish.EmptyStateText.Picker` | `Widget.Dish.EmptyStateText` | + `spacing_xs` top margin | `picker_empty_label.xml` (slot-card empty picker) |
 | `Widget.Dish.EmptyStateText.Section` | `Widget.Dish.EmptyStateText` | + `spacing_xl` vertical padding | `tvSatelliteEmpty` + `tvBtEmpty` in `activity_connections.xml` (standalone empty-state row inside a section, no surrounding card) |
 | `Widget.Dish.Switch` | `Widget.Material3.CompoundButton.MaterialSwitch` | hides side labels (`textOn`/`textOff` empty, `showText=false`); thumb + track colors come from the Material theme | every `com.google.android.material.materialswitch.MaterialSwitch` in the app (M3 widget class, different from the M2 `SwitchMaterial` the codebase used pre-migration) |
 | `Widget.Dish.EditText.Pin` | `Widget.AppCompat.EditText` | numeric input, center gravity, `text_display` size, `colorOnSurface`, monospace, 0.30 spacing, `bg_pair_pin_field` drawable, `card_padding` padding | pair-PIN entry field (API 26+ `autofillHints` + `importantForAutofill` stay inline at the callsite; style items can't carry `tools:targetApi`) |
@@ -319,9 +321,10 @@ inner ids; include sites reach those ids through View Binding (e.g.
 | Composite | Callsites | What's inside | What's NOT inside |
 |---|---|---|---|
 | `section_header.xml` | dashboard CONNECTIONS + CONTROLLERS, Connections SATELLITES + BLUETOOTH, Settings DIAGNOSTICS + ABOUT (6) | horizontal row: `iconSection` (Icon.Section, `gone` by default) + `labelSection` (Label.Accent, `weight=1`) + `btnSectionAction` (Button.Outlined, `gone` by default) | per-callsite vertical spacing, applied via the `<include>` tag's `layout_marginTop/Bottom` |
-| `status_pill.xml` | gamepad-overlay connection pill, gamepad-overlay motion pill, touchpad-overlay connection pill (3) | `bg_pill` background, 85% alpha, padding 16dp h × 6dp v: `statusPillDot` (StatusDot.Small) + `statusPillLabel` (Label + `colorOnSurface` override for pill contrast) | nothing: pills are uniform across callsites |
+| `binding_pill.xml` | `binding_section_destination.xml`, `setup_host_row.xml`, `setup_review_card.xml`, and `section_header.xml`, which includes it | one `TextView` (`tvPillText`, `Widget.Dish.Pill.Label`): a label, sometimes with a glyph as a compound drawable, on a toned background | the tone, which the code sets per state |
 | `card_row_icon_label_value.xml` | Settings Crash card, Settings Privacy card (2) | leading 36dp `bg_icon_container` FrameLayout hosting `cardRowIcon` (Icon.Card) + vertical title/subtitle column (`cardRowTitle` = Title, `cardRowSubtitle` = Body) | the `MaterialCardView` wrapper, the outer row's `gravity` (top vs center_vertical), the trailing affordance (Switch vs chevron) |
-| `picker_empty_label.xml` | `ControllerAdapter.addLabel` (no-connections empty state in the slot picker) | single TextView with `Widget.Dish.EmptyStateText` style | nothing: adapter only sets `.text` |
+| `item_connection_empty.xml` | the Satellite, Bluetooth and Moonlight list adapters' empty row | single `TextView` in `Widget.Dish.EmptyStateText.Section` | the text, which the adapter sets |
+| `view_donate_pill.xml`, `view_update_pill.xml` | the main and Connections screens (donate), the main screen (update) | one `MaterialCardView` pill with a badge glyph and a label; the update pill docks above the donate pill with the same silhouette and the primary colour in place of the donation pulse | the text and the taps, which `DonatePill.kt` and `UpdatePill.kt` wire |
 
 `section_header.xml` is single-layout with code-driven content: `<include>`
 overrides only support root-level `android:id`/layout_*/`android:visibility`,
@@ -329,10 +332,6 @@ so child ids carry canonical names and Activity code sets icon/label/button
 content. Eyebrow callsites leave the icon + button at `gone` and only set
 the label text; full-section callsites flip visibility + assign content.
 
-`status_pill.xml`'s default text is `overlay_status_streaming`: the motion
-pill's first frame would briefly read "STREAMING" instead of "MOTION: NO
-GYROSCOPE", but `repaintFrom(currentMotionPaint())` runs synchronously in
-`GamepadOverlayActivity.onCreate` before the first frame is presented.
 
 `card_row_icon_label_value.xml` does NOT cover `item_controller.xml`'s
 slot-card header: the slot card uses a bare 36dp tinted ImageView (no
@@ -375,12 +374,19 @@ nav.toTouchpad(connectionId = cid, slotId = slotId)
 | `setupInputActivity` | `SetupInputActivity` | none |
 | `setupUsbActivity` | `SetupUsbActivity` | none |
 | `setupBluetoothControllerActivity` | `SetupBluetoothControllerActivity` | none |
-| `setupConnectionActivity` | `SetupConnectionActivity` | `extra_setup_input_type`, `extra_setup_slot_id` |
-| `setupBluetoothHostActivity` | `SetupBluetoothHostActivity` | `extra_setup_input_type`, `extra_setup_slot_id` |
-| `setupConfigureActivity` | `SetupConfigureActivity` | `extra_setup_slot_id`, `extra_setup_connection_id` |
+| `setupConnectionActivity` | `SetupConnectionActivity` | `extra_setup_input_type` |
+| `setupBluetoothHostActivity` | `SetupBluetoothHostActivity` | `extra_setup_input_type` |
+| `setupConfigureActivity` | `SetupConfigureActivity` | `extra_setup_slot_id` |
 | `helpActivity` | `HelpActivity` | none |
-| `gamepadOverlayActivity` | `GamepadOverlayActivity` | `extra_connection_id`, `extra_use_ps_layout` |
-| `touchpadOverlayActivity` | `TouchpadOverlayActivity` | `extra_connection_id`, `extra_slot_id` |
+| `touchpadOverlayActivity` | `TouchpadOverlayActivity` | `extra_connection_id` |
+| `mouseOverlayActivity` | `MouseOverlayActivity` | `extra_connection_id` |
+| `gamepadOverlayActivity` | `GamepadOverlayActivity` | `extra_connection_id` |
+| `diagnosticsActivity` | `DiagnosticsActivity` | none |
+| `supportReportActivity` | `SupportReportActivity` | `extra_question` |
+| `inputInspectorActivity` | `InputInspectorActivity` | `extra_slot_id` |
+| `hostInspectorActivity` | `HostInspectorActivity` | `extra_connection_id` |
+| `bindingInspectorActivity` | `BindingInspectorActivity` | `extra_slot_id` |
+| `licensesActivity` | `LicensesActivity` | none |
 | `nativeUnavailableActivity` | `NativeUnavailableActivity` | none |
 | `donateActivity` | `DonateActivity` (one per flavor) | none |
 
@@ -535,7 +541,7 @@ A new TextView in the app:
   to `tools:targetApi="26"`. See `Widget.Dish.EditText.Pin`'s callsite in
   `dialog_pair_pin.xml`.
 - **Pre-baked disabled-state selectors**. The `text_disabled.xml` /
-  `icon_interactive.xml` opt-in selectors were dropped in the post-Phase-4
+  `icon_interactive.xml` opt-in selectors were dropped in an earlier
   cleanup: nothing in the app currently toggles `isEnabled` on a text or
   icon view in a way the selectors would catch. Re-add them when the first
   real callsite needs the fade (one-line `<selector>` in `res/color/` plus
@@ -543,7 +549,7 @@ A new TextView in the app:
   for one). The chevron in `item_controller.xml` adopts `icon_secondary`
   (always-muted) for naming clarity even though the value is the same as
   inline `colorMuted`.
-- **`scaffold_toolbar_scroll.xml`**. The Phase 4 spec offered this as a
+- **`scaffold_toolbar_scroll.xml`**. An earlier spec offered this as a
   deferred composite shared between Settings and Connections. Their bodies
   have diverged enough (Connections has an inter-section divider + a
   low-power overlay include, Settings doesn't; their NestedScrollView
@@ -641,7 +647,7 @@ deeper), the error red can drop below AA. Compute before adopting.
 | TextAppearance styles | `app/src/main/res/values/text_appearance.xml` |
 | Widget styles (non-button) | `app/src/main/res/values/styles_widgets.xml` |
 | Button styles + themes | `app/src/main/res/values/themes.xml` (+ `values-night/themes.xml` for dark-mode overrides) |
-| Layout composites | `app/src/main/res/layout/section_header.xml`, `status_pill.xml`, `card_row_icon_label_value.xml`, `picker_empty_label.xml` |
+| Layout composites | `app/src/main/res/layout/section_header.xml`, `binding_pill.xml`, `card_row_icon_label_value.xml`, `item_connection_empty.xml` |
 | Activity extensions | `app/src/main/java/com/tinkernorth/dish/ui/common/ActivityExtensions.kt` |
 | Activity transitions | `app/src/main/res/anim/fade_through_enter.xml`, `fade_through_exit.xml` |
 | Navigation graph | `app/src/main/res/navigation/nav_graph.xml` |

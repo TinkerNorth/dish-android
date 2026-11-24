@@ -29,6 +29,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   sync-listing:
     name: Sync listing to Play
@@ -50,6 +54,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Lint metadata before upload
         run: python3 scripts/check_play_metadata.py
@@ -71,7 +77,10 @@ jobs:
           find play/metadata -maxdepth 4 \( -name 'featureGraphic.png' -o -name 'icon.png' \)
 
       - name: Install fastlane
-        run: sudo gem install fastlane -N -v "~> 2.226"
+        run: |
+          bundle config set --local frozen true
+          bundle config set --local path vendor/bundle
+          bundle install --jobs 4 --retry 3
 
       - name: Sync listing
         env:
@@ -84,7 +93,7 @@ jobs:
           if [ "${UPLOAD_IMAGES}" = "true" ]; then
             image_args=(--skip_upload_images false --skip_upload_screenshots false)
           fi
-          fastlane supply \
+          bundle exec fastlane supply \
             --json_key "${RUNNER_TEMP}/play-key.json" \
             --package_name com.tinkernorth.dish \
             --metadata_path play/metadata/android \
