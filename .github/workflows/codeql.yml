@@ -60,7 +60,9 @@ jobs:
       - name: Build
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew --no-daemon --no-build-cache --no-configuration-cache \
+            clean :app:assembleGithubDebug \
+            --rerun-tasks
 
       - name: Stop the build's daemons
         # Their heaps would otherwise sit beside an analysis told it may take 14 GB of the runner's 16.
